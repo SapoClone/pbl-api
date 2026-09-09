@@ -61,7 +61,9 @@ function generateModulesSet() {
           password: configService.getOrThrow('redis.password', {
             infer: true,
           }),
-          tls: configService.get('redis.tlsEnabled', { infer: true }),
+          tls: configService.get('redis.tlsEnabled', { infer: true })
+            ? {}
+            : undefined,
         },
       };
     },
@@ -116,7 +118,9 @@ function generateModulesSet() {
           password: configService.getOrThrow('redis.password', {
             infer: true,
           }),
-          tls: configService.get('redis.tlsEnabled', { infer: true }),
+          tls: configService.get('redis.tlsEnabled', { infer: true })
+            ? {}
+            : undefined,
         }),
       };
     },
@@ -158,6 +162,7 @@ function generateModulesSet() {
         dbModule,
         i18nModule,
         loggerModule,
+        MailModule,
       ];
       break;
     default:

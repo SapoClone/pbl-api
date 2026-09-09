@@ -81,6 +81,7 @@ describe('generateModulesSet', () => {
         expect.any(Object), // TypeOrmModule
         expect.any(Object), // I18nModule
         expect.any(Object), // LoggerModule
+        MailModule, // required by EmailQueueService in BackgroundModule
       ]),
     );
   });

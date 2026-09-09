@@ -70,3 +70,6 @@ docs/.vuepress/.temp
 docs/.vuepress/.cache
 # VuePress default build output directory
 docs/.vuepress/dist
+
+# Local-only planning docs (specs/plans) — never committed
+docs/superpowers/

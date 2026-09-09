@@ -64,7 +64,13 @@ async function bootstrap() {
     type: VersioningType.URI,
   });
 
-  app.useGlobalGuards(new AuthGuard(reflector, app.get(AuthService)));
+  // AuthModule (and therefore AuthService) is only loaded when ApiModule is
+  // part of the active MODULES_SET — skip wiring the guard for a
+  // background-only worker process, which has no HTTP routes to guard.
+  const modulesSet = process.env.MODULES_SET || 'monolith';
+  if (modulesSet === 'monolith' || modulesSet === 'api') {
+    app.useGlobalGuards(new AuthGuard(reflector, app.get(AuthService)));
+  }
   app.useGlobalFilters(new GlobalExceptionFilter(configService));
   app.useGlobalPipes(
     new ValidationPipe({
