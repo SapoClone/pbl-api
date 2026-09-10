@@ -12,33 +12,37 @@ describe('QueueConfig', () => {
   });
 
   it('should return the queue configuration', async () => {
-    process.env.QSTASH_TOKEN = 'qstash-test-token';
-    process.env.MAIL_SERVICE_URL = 'https://pbl-mail-service.example.com';
+    process.env.SQS_QUEUE_URL =
+      'https://sqs.ap-southeast-1.amazonaws.com/123456789012/email-verification';
+    process.env.AWS_REGION = 'ap-southeast-1';
 
     const config = await queueConfig();
 
-    expect(config.qstashToken).toBe('qstash-test-token');
-    expect(config.mailServiceUrl).toBe('https://pbl-mail-service.example.com');
+    expect(config.queueUrl).toBe(
+      'https://sqs.ap-southeast-1.amazonaws.com/123456789012/email-verification',
+    );
+    expect(config.region).toBe('ap-southeast-1');
   });
 
-  describe('qstashToken', () => {
-    it('should throw an error if QSTASH_TOKEN is not set', async () => {
-      delete process.env.QSTASH_TOKEN;
-      process.env.MAIL_SERVICE_URL = 'https://pbl-mail-service.example.com';
+  describe('queueUrl', () => {
+    it('should throw an error if SQS_QUEUE_URL is not a valid URL', async () => {
+      process.env.SQS_QUEUE_URL = 'not-a-url';
+      process.env.AWS_REGION = 'ap-southeast-1';
+      await expect(async () => await queueConfig()).rejects.toThrow(Error);
+    });
+
+    it('should throw an error if SQS_QUEUE_URL is not set', async () => {
+      delete process.env.SQS_QUEUE_URL;
+      process.env.AWS_REGION = 'ap-southeast-1';
       await expect(async () => await queueConfig()).rejects.toThrow(Error);
     });
   });
 
-  describe('mailServiceUrl', () => {
-    it('should throw an error if MAIL_SERVICE_URL is not a valid URL', async () => {
-      process.env.QSTASH_TOKEN = 'qstash-test-token';
-      process.env.MAIL_SERVICE_URL = 'not-a-url';
-      await expect(async () => await queueConfig()).rejects.toThrow(Error);
-    });
-
-    it('should throw an error if MAIL_SERVICE_URL is not set', async () => {
-      process.env.QSTASH_TOKEN = 'qstash-test-token';
-      delete process.env.MAIL_SERVICE_URL;
+  describe('region', () => {
+    it('should throw an error if AWS_REGION is not set', async () => {
+      process.env.SQS_QUEUE_URL =
+        'https://sqs.ap-southeast-1.amazonaws.com/123456789012/email-verification';
+      delete process.env.AWS_REGION;
       await expect(async () => await queueConfig()).rejects.toThrow(Error);
     });
   });

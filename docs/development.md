@@ -94,11 +94,11 @@ AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN=1d
 
 > Note: Background job dispatch (e.g. sending verification emails) no longer
 > goes through an in-process queue (BullMQ). pbl-api publishes a message to
-> **Upstash QStash**, which pushes it to pbl-mail-service's
-> `/tasks/email-verification` endpoint over HTTP; pbl-mail-service is a
-> separate service/repo responsible for actually sending mail. See the
-> `Queue variables` section below and the `pbl-mail-service`/`pbl-infra`
-> repos for the other half of this flow.
+> an **AWS SQS** queue; pbl-mail-service is a separate Lambda function,
+> triggered directly by SQS (not an HTTP call — there's no endpoint to
+> point at), responsible for actually sending mail. See the `Queue
+> variables` section below and the `pbl-mail-service`/`pbl-infra` repos for
+> the other half of this flow.
 
 #### Application variables
 
@@ -152,25 +152,27 @@ Follow the [Docker](#running-additional-services) section to set up Redis using 
 > `cache-manager` to v6 (and rewriting the `.store` usage in
 > `AuthService.logout()`) reintroduces a `store.set is not a function`
 > crash at logout — this was found and fixed during the background-dispatch
-> migration work in this project (first onto Google Cloud Tasks, later
-> replaced by Upstash QStash — the bug itself predated and was unrelated to
-> either).
+> migration work in this project (Google Cloud Tasks, then Upstash QStash,
+> now AWS SQS — the bug itself predated and was unrelated to any of them).
 
 #### Queue variables
 
-pbl-api dispatches verification emails by publishing a message to Upstash
-QStash, which pushes it to pbl-mail-service over HTTP — pbl-api does not
-send mail itself.
+pbl-api dispatches verification emails by sending a message to an AWS SQS
+queue — pbl-api does not send mail itself, and doesn't need to know
+pbl-mail-service's address at all (SQS triggers the Lambda directly).
 
-- `QSTASH_TOKEN`: Upstash QStash API token, used to publish messages. From the Upstash console → QStash → your instance.
-- `MAIL_SERVICE_URL`: pbl-mail-service's base URL (its `/tasks/email-verification` endpoint is appended to this).
+- `SQS_QUEUE_URL`: The full SQS queue URL (e.g. `https://sqs.<region>.amazonaws.com/<account-id>/email-verification`). From the SQS console, or `pbl-infra`'s Terraform output.
+- `AWS_REGION`: The AWS region the queue lives in.
 
-For local development, run pbl-mail-service locally (default port 3001) and
-point `MAIL_SERVICE_URL` at it. Note `QSTASH_TOKEN` must be a real Upstash
-token even for local testing — QStash has no local emulator, so publishing
-a message always goes out to the real service, which then pushes back to
-whatever `MAIL_SERVICE_URL` you configured (use a tunnel like ngrok if you
-need QStash itself, not just a direct curl, to reach a local instance).
+Authentication to AWS itself isn't a separate env var — the AWS SDK picks
+up credentials automatically from the environment (an IAM task role on
+ECS in production, or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/a
+configured `aws configure` profile for local development).
+
+For local development, SQS has no emulator equivalent to Maildev — sending
+a message always goes to the real queue, and a real Lambda (or your local
+pbl-mail-service, manually polling/invoked) is needed to actually process
+it. See `pbl-infra`'s README for the full local-testing story.
 
 #### Observe variables
 

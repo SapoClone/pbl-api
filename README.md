@@ -48,7 +48,7 @@ $ pnpm start:prod
 - [x] Database. Support [TypeORM](https://www.npmjs.com/package/typeorm)
 - [x] Seeding ([Typeorm Extension](https://www.npmjs.com/package/typeorm-extension)).
 - [x] Config Service ([@nestjs/config](https://www.npmjs.com/package/@nestjs/config)).
-- [x] Background job dispatch (Upstash QStash) — sending emails is delegated to the separate `pbl-mail-service` over HTTP.
+- [x] Background job dispatch (AWS SQS) — sending emails is delegated to the separate `pbl-mail-service` Lambda function, triggered directly by the queue.
 - [x] Sign in and sign up via email.
 - [ ] Social sign in (Apple, Facebook, Google, Twitter).
 - [ ] Admin and User roles.

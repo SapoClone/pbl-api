@@ -2,24 +2,26 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { QueueService } from './queue.service';
 
-const publishJSONMock = jest.fn();
+const sendMock = jest.fn();
 
-jest.mock('@upstash/qstash', () => ({
-  Client: jest.fn().mockImplementation(() => ({
-    publishJSON: publishJSONMock,
+jest.mock('@aws-sdk/client-sqs', () => ({
+  SQSClient: jest.fn().mockImplementation(() => ({
+    send: sendMock,
   })),
+  SendMessageCommand: jest.fn().mockImplementation((input) => ({ input })),
 }));
 
 describe('QueueService', () => {
   let service: QueueService;
 
   beforeEach(async () => {
-    publishJSONMock.mockReset();
-    publishJSONMock.mockResolvedValue({ messageId: 'msg_test123' });
+    sendMock.mockReset();
+    sendMock.mockResolvedValue({ MessageId: 'msg-test-123' });
 
     const configValues: Record<string, string> = {
-      'queue.qstashToken': 'qstash-test-token',
-      'queue.mailServiceUrl': 'https://pbl-mail-service.example.com',
+      'queue.queueUrl':
+        'https://sqs.ap-southeast-1.amazonaws.com/123456789012/email-verification',
+      'queue.region': 'ap-southeast-1',
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -39,12 +41,18 @@ describe('QueueService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should publish an email-verification message to the mail service', async () => {
+  it('should send an email-verification message to the SQS queue', async () => {
     await service.enqueueEmailVerification('user@example.com', 'tok123');
 
-    expect(publishJSONMock).toHaveBeenCalledWith({
-      url: 'https://pbl-mail-service.example.com/tasks/email-verification',
-      body: { email: 'user@example.com', token: 'tok123' },
+    expect(sendMock).toHaveBeenCalledWith({
+      input: {
+        QueueUrl:
+          'https://sqs.ap-southeast-1.amazonaws.com/123456789012/email-verification',
+        MessageBody: JSON.stringify({
+          email: 'user@example.com',
+          token: 'tok123',
+        }),
+      },
     });
   });
 });

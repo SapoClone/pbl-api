@@ -1,4 +1,4 @@
 export type QueueConfig = {
-  qstashToken: string;
-  mailServiceUrl: string;
+  queueUrl: string;
+  region: string;
 };

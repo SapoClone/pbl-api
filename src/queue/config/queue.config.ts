@@ -4,12 +4,12 @@ import { IsNotEmpty, IsString, IsUrl } from 'class-validator';
 import { QueueConfig } from './queue-config.type';
 
 class EnvironmentVariablesValidator {
+  @IsUrl({ require_tld: false, require_protocol: true })
+  SQS_QUEUE_URL: string;
+
   @IsString()
   @IsNotEmpty()
-  QSTASH_TOKEN: string;
-
-  @IsUrl({ require_tld: false, require_protocol: true })
-  MAIL_SERVICE_URL: string;
+  AWS_REGION: string;
 }
 
 export default registerAs<QueueConfig>('queue', () => {
@@ -17,7 +17,7 @@ export default registerAs<QueueConfig>('queue', () => {
   validateConfig(process.env, EnvironmentVariablesValidator);
 
   return {
-    qstashToken: process.env.QSTASH_TOKEN,
-    mailServiceUrl: process.env.MAIL_SERVICE_URL,
+    queueUrl: process.env.SQS_QUEUE_URL,
+    region: process.env.AWS_REGION,
   };
 });
