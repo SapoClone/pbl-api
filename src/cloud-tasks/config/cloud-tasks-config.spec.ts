@@ -14,8 +14,7 @@ describe('CloudTasksConfig', () => {
   it('should return the cloud tasks configuration', async () => {
     process.env.GCP_PROJECT_ID = 'test-project';
     process.env.CLOUD_TASKS_LOCATION = 'asia-southeast1';
-    process.env.CLOUD_TASKS_QUEUE_NAME =
-      'projects/test-project/locations/asia-southeast1/queues/email-verification';
+    process.env.CLOUD_TASKS_QUEUE_NAME = 'email-verification';
     process.env.CLOUD_TASKS_MAIL_SERVICE_URL =
       'https://pbl-mail-service.example.run.app';
     process.env.CLOUD_TASKS_INVOKER_SA_EMAIL =
@@ -25,6 +24,7 @@ describe('CloudTasksConfig', () => {
 
     expect(config.projectId).toBe('test-project');
     expect(config.location).toBe('asia-southeast1');
+    expect(config.queueName).toBe('email-verification');
     expect(config.mailServiceUrl).toBe(
       'https://pbl-mail-service.example.run.app',
     );

@@ -33,7 +33,6 @@ cp .env.example .env
 ```env
 ##== Environment
 NODE_ENV=development
-MODULES_SET=monolith
 
 ##== Application
 APP_NAME="NestJS API"
@@ -62,17 +61,22 @@ DATABASE_CA=
 DATABASE_KEY=
 DATABASE_CERT=
 
-##== Mailer
-MAIL_HOST=localhost
-MAIL_PORT=1025
-MAIL_USER=
-MAIL_PASSWORD=
-MAIL_IGNORE_TLS=true
-MAIL_SECURE=false
-MAIL_REQUIRE_TLS=false
-MAIL_DEFAULT_EMAIL=noreply@example.com
-MAIL_DEFAULT_NAME=No Reply
-MAIL_CLIENT_PORT=1080
+##== Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=redispass
+REDIS_TLS_ENABLED=false
+
+##== Cloud Tasks (pbl-mail-service dispatch)
+GCP_PROJECT_ID=
+CLOUD_TASKS_LOCATION=asia-southeast1
+CLOUD_TASKS_QUEUE_NAME=email-verification
+CLOUD_TASKS_MAIL_SERVICE_URL=http://localhost:3001
+CLOUD_TASKS_INVOKER_SA_EMAIL=local-dev-placeholder@example.iam.gserviceaccount.com
+
+##== Observe (observe.nestjs.com)
+OBSERVE_APP_KEY=
+OBSERVE_APP_SECRET=
 
 ##== Authentication
 AUTH_JWT_SECRET=secret
@@ -90,7 +94,14 @@ AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN=1d
 #### Environment variables
 
 - `NODE_ENV`: The environment mode. Options: `local`, `development`, `staging`, `production`, `test`.
-- `MODULES_SET`: The modules set to load. Options: `monolith`, `api`.
+
+> Note: Background job dispatch (e.g. sending verification emails) no longer
+> goes through an in-process queue (BullMQ). pbl-api enqueues a **Google
+> Cloud Task** that calls pbl-mail-service's `/tasks/email-verification`
+> endpoint over HTTP; pbl-mail-service is a separate service/repo
+> responsible for actually sending mail. See the `Cloud Tasks variables`
+> section below and the `pbl-mail-service`/`pbl-infra` repos for the other
+> half of this flow.
 
 #### Application variables
 
@@ -125,20 +136,45 @@ AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN=1d
 
 Follow the [Docker](#running-additional-services) section to set up the database using Docker.
 
-#### Mailer variables
+#### Redis variables
 
-- `MAIL_HOST`: The mail server host.
-- `MAIL_PORT`: The mail server port.
-- `MAIL_USER`: The mail server username.
-- `MAIL_PASSWORD`: The mail server password.
-- `MAIL_IGNORE_TLS`: Ignore TLS for the mail server. Options: `true`, `false`.
-- `MAIL_SECURE`: Secure the mail server connection. Options: `true`, `false`.
-- `MAIL_REQUIRE_TLS`: Require TLS for the mail server. Options: `true`, `false`.
-- `MAIL_DEFAULT_EMAIL`: The default email address.
-- `MAIL_DEFAULT_NAME`: The default email name.
-- `MAIL_CLIENT_PORT`: The mail client port. Used for testing with maildev.
+- `REDIS_HOST`: The Redis host.
+- `REDIS_PORT`: The Redis port.
+- `REDIS_PASSWORD`: The Redis password.
+- `REDIS_TLS_ENABLED`: Enable TLS for the Redis connection. Options: `true`, `false`.
 
-For local development, you can use [MailDev](https://github.com/maildev/maildev) as a fake SMTP server. It's included in the Docker Compose file. Follow the [Docker](#running-additional-services) section to set up MailDev.
+Follow the [Docker](#running-additional-services) section to set up Redis using Docker.
+
+> **Note: `@nestjs/cache-manager` is pinned to `^2.3.0`.** This is older than
+> the Nest peer range that package itself declares, and it's intentional —
+> do not bump it without also doing the migration below. It must match the
+> API shape of the installed `cache-manager@5.7.6` (specifically, the
+> `.store.set()` call used in `AuthService.logout()` to blacklist a token).
+> `@nestjs/cache-manager@3+` targets `cache-manager@6`, which changed that
+> store API. Bumping only `@nestjs/cache-manager` without also migrating
+> `cache-manager` to v6 (and rewriting the `.store` usage in
+> `AuthService.logout()`) reintroduces a `store.set is not a function`
+> crash at logout — this was found and fixed during the Cloud Tasks
+> migration work in this project.
+
+#### Cloud Tasks variables
+
+pbl-api dispatches verification emails by enqueueing a Google Cloud Task
+that calls pbl-mail-service over HTTP — it does not send mail itself.
+
+- `GCP_PROJECT_ID`: The GCP project id the Cloud Tasks queue lives in.
+- `CLOUD_TASKS_LOCATION`: The GCP region of the Cloud Tasks queue.
+- `CLOUD_TASKS_QUEUE_NAME`: The bare queue id (not a full resource path) — `CloudTasksService` builds the full path from the pieces above.
+- `CLOUD_TASKS_MAIL_SERVICE_URL`: pbl-mail-service's base URL (its `/tasks/email-verification` endpoint is appended to this).
+- `CLOUD_TASKS_INVOKER_SA_EMAIL`: The OIDC identity Cloud Tasks presents when it calls pbl-mail-service.
+
+For local development, run pbl-mail-service locally (default port 3001) and
+point `CLOUD_TASKS_MAIL_SERVICE_URL` at it — an emulator or a real GCP
+Cloud Tasks queue is required since there's no local capture substitute.
+
+#### Observe variables
+
+- `OBSERVE_APP_KEY`/`OBSERVE_APP_SECRET`: Credentials for observe.nestjs.com monitoring. If unset, the app logs a loud startup warning and monitoring is disabled rather than failing to boot.
 
 #### Authentication variables
 
@@ -182,10 +218,10 @@ Download Docker Compose from [official website](https://docs.docker.com/compose/
 
 ### Running additional services
 
-To run additional services like the database, mail server, pgadmin, etc., use the `docker-compose` command:
+To run additional services like the database, Redis, pgadmin, etc., use the `docker-compose` command:
 
 ```bash
-docker compose up -d db maildev pgadmin
+docker compose up -d db redis pgadmin
 ```
 
 ### Quick run

@@ -48,7 +48,7 @@ $ pnpm start:prod
 - [x] Database. Support [TypeORM](https://www.npmjs.com/package/typeorm)
 - [x] Seeding ([Typeorm Extension](https://www.npmjs.com/package/typeorm-extension)).
 - [x] Config Service ([@nestjs/config](https://www.npmjs.com/package/@nestjs/config)).
-- [x] Mailing ([@nestjs-modules/mailer](https://www.npmjs.com/package/@nestjs-modules/mailer) & [nodemailer](https://www.npmjs.com/package/nodemailer)).
+- [x] Background job dispatch (Google Cloud Tasks) — sending emails is delegated to the separate `pbl-mail-service` over HTTP.
 - [x] Sign in and sign up via email.
 - [ ] Social sign in (Apple, Facebook, Google, Twitter).
 - [ ] Admin and User roles.

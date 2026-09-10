@@ -4,6 +4,7 @@ import { CloudTasksModule } from '@/cloud-tasks/cloud-tasks.module';
 import cloudTasksConfig from '@/cloud-tasks/config/cloud-tasks.config';
 import appConfig from '@/config/app.config';
 import { AllConfigType } from '@/config/config.type';
+import { Environment } from '@/constants/app.constant';
 import databaseConfig from '@/database/config/database.config';
 import { TypeOrmConfigService } from '@/database/typeorm-config.service';
 import redisConfig from '@/redis/config/redis.config';
@@ -63,13 +64,13 @@ function generateModulesSet() {
         }),
         loaderOptions: {
           path: path.join(__dirname, '/../i18n/'),
-          watch: env === 'local',
+          watch: env === Environment.LOCAL,
         },
         typesOutputPath: path.join(
           __dirname,
           '../../src/generated/i18n.generated.ts',
         ),
-        logging: env === 'local' || env === 'development',
+        logging: env === Environment.LOCAL || env === Environment.DEVELOPMENT,
       };
     },
     inject: [ConfigService],

@@ -44,6 +44,18 @@ async function bootstrap() {
     logger.error(reason, 'unhandledRejection');
   });
 
+  // OBSERVE_APP_KEY/OBSERVE_APP_SECRET are read straight off process.env in
+  // app.module.ts's createObserveModule() call, bypassing the class-validator
+  // validateConfig pattern used elsewhere — so a missing/empty value fails
+  // silently (monitoring just stops working) instead of crashing the app.
+  // Warn loudly at boot so this doesn't go unnoticed.
+  if (!process.env.OBSERVE_APP_KEY || !process.env.OBSERVE_APP_SECRET) {
+    logger.warn(
+      'OBSERVE_APP_KEY and/or OBSERVE_APP_SECRET is unset — Observe monitoring is disabled/broken.',
+      'ObserveConfig',
+    );
+  }
+
   // Setup security headers
   app.use(helmet());
 
