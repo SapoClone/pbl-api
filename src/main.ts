@@ -19,6 +19,16 @@ import { GlobalExceptionFilter } from './filters/global-exception.filter';
 import { AuthGuard } from './guards/auth.guard';
 import setupSwagger from './utils/setup-swagger';
 
+// Defense-in-depth: a well-behaved app shouldn't produce unhandled rejections
+// (see the @google-cloud/tasks patch in patches/ for the root cause we closed
+// off), but third-party client libraries can still introduce floating
+// promises outside our control. Log and keep serving instead of letting
+// Node's default behavior (crashing the whole process) take down every
+// in-flight request over one library-internal rejection.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
