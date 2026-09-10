@@ -75,10 +75,3 @@ jobs:
           service: ${{ vars.GCP_API_SERVICE_NAME || 'pbl-api' }}
           region: ${{ vars.GCP_REGION }}
           image: ${{ needs.build-and-push.outputs.image }}
-
-      - name: Deploy worker service
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ vars.GCP_WORKER_SERVICE_NAME || 'pbl-api-worker' }}
-          region: ${{ vars.GCP_REGION }}
-          image: ${{ needs.build-and-push.outputs.image }}
