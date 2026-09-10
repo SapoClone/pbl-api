@@ -33,7 +33,7 @@
     "docs:build": "vuepress build docs"
   },
   "dependencies": {
-    "@google-cloud/tasks": "^7.1.0",
+    "@google-cloud/tasks": "7.1.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/cache-manager": "^2.3.0",
     "@nestjs/common": "^11.2.3",
@@ -115,6 +115,7 @@
   "pnpm": {
     "patchedDependencies": {
       "@google-cloud/tasks@7.1.0": "patches/@google-cloud__tasks@7.1.0.patch"
-    }
+    },
+    "allowUnusedPatches": false
   }
 }

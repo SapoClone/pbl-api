@@ -19,23 +19,30 @@ import { GlobalExceptionFilter } from './filters/global-exception.filter';
 import { AuthGuard } from './guards/auth.guard';
 import setupSwagger from './utils/setup-swagger';
 
-// Defense-in-depth: a well-behaved app shouldn't produce unhandled rejections
-// (see the @google-cloud/tasks patch in patches/ for the root cause we closed
-// off), but third-party client libraries can still introduce floating
-// promises outside our control. Log and keep serving instead of letting
-// Node's default behavior (crashing the whole process) take down every
-// in-flight request over one library-internal rejection.
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled promise rejection:', reason);
-});
-
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
     instrument: ObserveInstrument,
   });
 
-  app.useLogger(app.get(Logger));
+  const logger = app.get(Logger);
+  app.useLogger(logger);
+
+  // Defense-in-depth: a well-behaved app shouldn't produce unhandled
+  // rejections (see the @google-cloud/tasks patch in patches/ for the root
+  // cause we closed off), but third-party client libraries can still
+  // introduce floating promises outside our control. Log through the app's
+  // structured (pino) logger and keep serving, instead of letting Node's
+  // default behavior (crashing the whole process) take down every in-flight
+  // request over one library-internal rejection, and instead of a raw
+  // console.error line that bypasses the normal log stream/aggregation.
+  // Registered here (after app.useLogger) rather than at module scope so it
+  // shares the same structured logger as the rest of the app; this means it
+  // won't catch a rejection during the NestFactory.create(...) call above,
+  // which is an acceptable trade-off for keeping all crash logs consistent.
+  process.on('unhandledRejection', (reason) => {
+    logger.error(reason, 'unhandledRejection');
+  });
 
   // Setup security headers
   app.use(helmet());

@@ -14,7 +14,7 @@ importers:
   .:
     dependencies:
       '@google-cloud/tasks':
-        specifier: ^7.1.0
+        specifier: 7.1.0
         version: 7.1.0(patch_hash=ihwwt7j6fa4uuews3aa25rijv4)
       '@nestjs/axios':
         specifier: ^4.0.1
