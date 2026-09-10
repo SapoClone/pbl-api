@@ -1,10 +1,10 @@
-import { CloudTasksService } from '@/cloud-tasks/cloud-tasks.service';
 import { Branded } from '@/common/types/types';
 import { AllConfigType } from '@/config/config.type';
 import { SYSTEM_USER_ID } from '@/constants/app.constant';
 import { CacheKey } from '@/constants/cache.constant';
 import { ErrorCode } from '@/constants/error-code.constant';
 import { ValidationException } from '@/exceptions/validation.exception';
+import { QueueService } from '@/queue/queue.service';
 import { createCacheKey } from '@/utils/cache.util';
 import { verifyPassword } from '@/utils/password.util';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -45,7 +45,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
-    private readonly cloudTasksService: CloudTasksService,
+    private readonly queueService: QueueService,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
   ) {}
@@ -127,7 +127,7 @@ export class AuthService {
       token,
       ms(tokenExpiresIn),
     );
-    await this.cloudTasksService.enqueueEmailVerification(dto.email, token);
+    await this.queueService.enqueueEmailVerification(dto.email, token);
 
     return plainToInstance(RegisterResDto, {
       userId: user.id,

@@ -67,12 +67,9 @@ REDIS_PORT=6379
 REDIS_PASSWORD=redispass
 REDIS_TLS_ENABLED=false
 
-##== Cloud Tasks (pbl-mail-service dispatch)
-GCP_PROJECT_ID=
-CLOUD_TASKS_LOCATION=asia-southeast1
-CLOUD_TASKS_QUEUE_NAME=email-verification
-CLOUD_TASKS_MAIL_SERVICE_URL=http://localhost:3001
-CLOUD_TASKS_INVOKER_SA_EMAIL=local-dev-placeholder@example.iam.gserviceaccount.com
+##== Queue (Upstash QStash — dispatches to pbl-mail-service)
+QSTASH_TOKEN=
+MAIL_SERVICE_URL=http://localhost:3001
 
 ##== Observe (observe.nestjs.com)
 OBSERVE_APP_KEY=
@@ -96,12 +93,12 @@ AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN=1d
 - `NODE_ENV`: The environment mode. Options: `local`, `development`, `staging`, `production`, `test`.
 
 > Note: Background job dispatch (e.g. sending verification emails) no longer
-> goes through an in-process queue (BullMQ). pbl-api enqueues a **Google
-> Cloud Task** that calls pbl-mail-service's `/tasks/email-verification`
-> endpoint over HTTP; pbl-mail-service is a separate service/repo
-> responsible for actually sending mail. See the `Cloud Tasks variables`
-> section below and the `pbl-mail-service`/`pbl-infra` repos for the other
-> half of this flow.
+> goes through an in-process queue (BullMQ). pbl-api publishes a message to
+> **Upstash QStash**, which pushes it to pbl-mail-service's
+> `/tasks/email-verification` endpoint over HTTP; pbl-mail-service is a
+> separate service/repo responsible for actually sending mail. See the
+> `Queue variables` section below and the `pbl-mail-service`/`pbl-infra`
+> repos for the other half of this flow.
 
 #### Application variables
 
@@ -154,23 +151,26 @@ Follow the [Docker](#running-additional-services) section to set up Redis using 
 > store API. Bumping only `@nestjs/cache-manager` without also migrating
 > `cache-manager` to v6 (and rewriting the `.store` usage in
 > `AuthService.logout()`) reintroduces a `store.set is not a function`
-> crash at logout — this was found and fixed during the Cloud Tasks
-> migration work in this project.
+> crash at logout — this was found and fixed during the background-dispatch
+> migration work in this project (first onto Google Cloud Tasks, later
+> replaced by Upstash QStash — the bug itself predated and was unrelated to
+> either).
 
-#### Cloud Tasks variables
+#### Queue variables
 
-pbl-api dispatches verification emails by enqueueing a Google Cloud Task
-that calls pbl-mail-service over HTTP — it does not send mail itself.
+pbl-api dispatches verification emails by publishing a message to Upstash
+QStash, which pushes it to pbl-mail-service over HTTP — pbl-api does not
+send mail itself.
 
-- `GCP_PROJECT_ID`: The GCP project id the Cloud Tasks queue lives in.
-- `CLOUD_TASKS_LOCATION`: The GCP region of the Cloud Tasks queue.
-- `CLOUD_TASKS_QUEUE_NAME`: The bare queue id (not a full resource path) — `CloudTasksService` builds the full path from the pieces above.
-- `CLOUD_TASKS_MAIL_SERVICE_URL`: pbl-mail-service's base URL (its `/tasks/email-verification` endpoint is appended to this).
-- `CLOUD_TASKS_INVOKER_SA_EMAIL`: The OIDC identity Cloud Tasks presents when it calls pbl-mail-service.
+- `QSTASH_TOKEN`: Upstash QStash API token, used to publish messages. From the Upstash console → QStash → your instance.
+- `MAIL_SERVICE_URL`: pbl-mail-service's base URL (its `/tasks/email-verification` endpoint is appended to this).
 
 For local development, run pbl-mail-service locally (default port 3001) and
-point `CLOUD_TASKS_MAIL_SERVICE_URL` at it — an emulator or a real GCP
-Cloud Tasks queue is required since there's no local capture substitute.
+point `MAIL_SERVICE_URL` at it. Note `QSTASH_TOKEN` must be a real Upstash
+token even for local testing — QStash has no local emulator, so publishing
+a message always goes out to the real service, which then pushes back to
+whatever `MAIL_SERVICE_URL` you configured (use a tunnel like ngrok if you
+need QStash itself, not just a direct curl, to reach a local instance).
 
 #### Observe variables
 

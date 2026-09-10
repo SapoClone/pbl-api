@@ -1,12 +1,12 @@
 import { ApiModule } from '@/api/api.module';
 import authConfig from '@/api/auth/config/auth.config';
-import { CloudTasksModule } from '@/cloud-tasks/cloud-tasks.module';
-import cloudTasksConfig from '@/cloud-tasks/config/cloud-tasks.config';
 import appConfig from '@/config/app.config';
 import { AllConfigType } from '@/config/config.type';
 import { Environment } from '@/constants/app.constant';
 import databaseConfig from '@/database/config/database.config';
 import { TypeOrmConfigService } from '@/database/typeorm-config.service';
+import queueConfig from '@/queue/config/queue.config';
+import { QueueModule } from '@/queue/queue.module';
 import redisConfig from '@/redis/config/redis.config';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ModuleMetadata } from '@nestjs/common';
@@ -28,13 +28,7 @@ function generateModulesSet() {
   const imports: ModuleMetadata['imports'] = [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [
-        appConfig,
-        databaseConfig,
-        redisConfig,
-        authConfig,
-        cloudTasksConfig,
-      ],
+      load: [appConfig, databaseConfig, redisConfig, authConfig, queueConfig],
       envFilePath: ['.env'],
     }),
   ];
@@ -112,7 +106,7 @@ function generateModulesSet() {
     dbModule,
     i18nModule,
     loggerModule,
-    CloudTasksModule,
+    QueueModule,
   ]);
 }
 

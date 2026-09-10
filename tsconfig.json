@@ -24,7 +24,7 @@
     "importHelpers": true,
     "paths": {
       "@/api/*": ["src/api/*"],
-      "@/cloud-tasks/*": ["src/cloud-tasks/*"],
+      "@/queue/*": ["src/queue/*"],
       "@/common/*": ["src/common/*"],
       "@/config/*": ["src/config/*"],
       "@/constants/*": ["src/constants/*"],

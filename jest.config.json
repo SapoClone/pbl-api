@@ -16,7 +16,7 @@
   "testEnvironment": "node",
   "moduleNameMapper": {
     "^@/api(.*)$": "<rootDir>/api$1",
-    "^@/cloud-tasks(.*)$": "<rootDir>/cloud-tasks$1",
+    "^@/queue(.*)$": "<rootDir>/queue$1",
     "^@/common(.*)$": "<rootDir>/common$1",
     "^@/config(.*)$": "<rootDir>/config$1",
     "^@/constants(.*)$": "<rootDir>/constants$1",

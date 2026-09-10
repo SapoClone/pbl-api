@@ -29,9 +29,10 @@ async function bootstrap() {
   app.useLogger(logger);
 
   // Defense-in-depth: a well-behaved app shouldn't produce unhandled
-  // rejections (see the @google-cloud/tasks patch in patches/ for the root
-  // cause we closed off), but third-party client libraries can still
-  // introduce floating promises outside our control. Log through the app's
+  // rejections, but third-party client libraries can still introduce
+  // floating promises outside our control (this was hit for real with an
+  // earlier @google-cloud/tasks integration, now replaced by QStash — kept
+  // as a general safeguard). Log through the app's
   // structured (pino) logger and keep serving, instead of letting Node's
   // default behavior (crashing the whole process) take down every in-flight
   // request over one library-internal rejection, and instead of a raw

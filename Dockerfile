@@ -16,7 +16,6 @@ WORKDIR /app
 RUN chown -R node:node /app
 
 COPY --chown=node:node package*.json pnpm-lock.yaml ./
-COPY --chown=node:node patches ./patches
 
 # Install all dependencies (including devDependencies)
 RUN pnpm install
@@ -35,7 +34,6 @@ FROM base AS builder
 WORKDIR /app
 
 COPY --chown=node:node package*.json pnpm-lock.yaml ./
-COPY --chown=node:node patches ./patches
 COPY --chown=node:node --from=development /app/node_modules ./node_modules
 COPY --chown=node:node --from=development /app/src ./src
 COPY --chown=node:node --from=development /app/tsconfig.json ./tsconfig.json

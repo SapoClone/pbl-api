@@ -1,5 +1,5 @@
 import { ApiModule } from '@/api/api.module';
-import { CloudTasksModule } from '@/cloud-tasks/cloud-tasks.module';
+import { QueueModule } from '@/queue/queue.module';
 import { ConfigModule } from '@nestjs/config';
 import generateModulesSet from './modules-set';
 
@@ -18,7 +18,7 @@ describe('generateModulesSet', () => {
         expect.any(Object), // TypeOrmModule
         expect.any(Object), // I18nModule
         expect.any(Object), // LoggerModule
-        CloudTasksModule,
+        QueueModule,
       ]),
     );
   });

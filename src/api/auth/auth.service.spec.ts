@@ -1,4 +1,4 @@
-import { CloudTasksService } from '@/cloud-tasks/cloud-tasks.service';
+import { QueueService } from '@/queue/queue.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -16,9 +16,7 @@ describe('AuthService', () => {
   let userRepositoryValue: Partial<
     Record<keyof Repository<UserEntity>, jest.Mock>
   >;
-  let cloudTasksServiceValue: Partial<
-    Record<keyof CloudTasksService, jest.Mock>
-  >;
+  let queueServiceValue: Partial<Record<keyof QueueService, jest.Mock>>;
   let cacheManagerValue: { set: jest.Mock };
 
   beforeAll(async () => {
@@ -43,7 +41,7 @@ describe('AuthService', () => {
       findOne: jest.fn(),
     };
 
-    cloudTasksServiceValue = {
+    queueServiceValue = {
       enqueueEmailVerification: jest.fn(),
     };
 
@@ -67,8 +65,8 @@ describe('AuthService', () => {
           useValue: userRepositoryValue,
         },
         {
-          provide: CloudTasksService,
-          useValue: cloudTasksServiceValue,
+          provide: QueueService,
+          useValue: queueServiceValue,
         },
         {
           provide: CACHE_MANAGER,
@@ -118,9 +116,10 @@ describe('AuthService', () => {
         verificationToken,
         expect.any(Number),
       );
-      expect(
-        cloudTasksServiceValue.enqueueEmailVerification,
-      ).toHaveBeenCalledWith(dto.email, verificationToken);
+      expect(queueServiceValue.enqueueEmailVerification).toHaveBeenCalledWith(
+        dto.email,
+        verificationToken,
+      );
       expect(result.userId).toBe('user-id-1');
 
       (UserEntity.exists as jest.Mock).mockRestore();

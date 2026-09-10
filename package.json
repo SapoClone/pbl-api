@@ -33,7 +33,6 @@
     "docs:build": "vuepress build docs"
   },
   "dependencies": {
-    "@google-cloud/tasks": "7.1.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/cache-manager": "^2.3.0",
     "@nestjs/common": "^11.2.3",
@@ -46,6 +45,7 @@
     "@nestjs/swagger": "^11.4.7",
     "@nestjs/terminus": "^11.1.1",
     "@nestjs/typeorm": "^11.0.3",
+    "@upstash/qstash": "^2.11.3",
     "argon2": "^0.41.1",
     "axios": "^1.7.7",
     "cache-manager": "^5.7.6",
@@ -111,11 +111,5 @@
     "vuepress": "2.0.0-rc.17",
     "vuepress-plugin-md-enhance": "2.0.0-rc.59"
   },
-  "packageManager": "pnpm@9.12.3+sha512.cce0f9de9c5a7c95bef944169cc5dfe8741abfb145078c0d508b868056848a87c81e626246cb60967cbd7fd29a6c062ef73ff840d96b3c86c40ac92cf4a813ee",
-  "pnpm": {
-    "patchedDependencies": {
-      "@google-cloud/tasks@7.1.0": "patches/@google-cloud__tasks@7.1.0.patch"
-    },
-    "allowUnusedPatches": false
-  }
+  "packageManager": "pnpm@9.12.3+sha512.cce0f9de9c5a7c95bef944169cc5dfe8741abfb145078c0d508b868056848a87c81e626246cb60967cbd7fd29a6c062ef73ff840d96b3c86c40ac92cf4a813ee"
 }
