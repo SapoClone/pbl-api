@@ -1,4 +1,4 @@
-import { getQueueToken } from '@nestjs/bullmq';
+import { CloudTasksService } from '@/cloud-tasks/cloud-tasks.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -46,9 +46,9 @@ describe('AuthService', () => {
           useValue: userRepositoryValue,
         },
         {
-          provide: getQueueToken('email'),
+          provide: CloudTasksService,
           useValue: {
-            add: jest.fn(),
+            enqueueEmailVerification: jest.fn(),
           },
         },
         {
