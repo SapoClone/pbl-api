@@ -4,8 +4,8 @@
 
 FROM node:20-alpine AS base
 
-# Install and use pnpm
-RUN npm install -g pnpm
+# Install and use the pnpm version pinned in package.json's "packageManager" field
+RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
 
 #############################
 # BUILD FOR LOCAL DEVELOPMENT

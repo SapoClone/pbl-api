@@ -33,7 +33,6 @@ cp .env.example .env
 ```env
 ##== Environment
 NODE_ENV=development
-MODULES_SET=monolith
 
 ##== Application
 APP_NAME="NestJS API"
@@ -62,17 +61,19 @@ DATABASE_CA=
 DATABASE_KEY=
 DATABASE_CERT=
 
-##== Mailer
-MAIL_HOST=localhost
-MAIL_PORT=1025
-MAIL_USER=
-MAIL_PASSWORD=
-MAIL_IGNORE_TLS=true
-MAIL_SECURE=false
-MAIL_REQUIRE_TLS=false
-MAIL_DEFAULT_EMAIL=noreply@example.com
-MAIL_DEFAULT_NAME=No Reply
-MAIL_CLIENT_PORT=1080
+##== Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=redispass
+REDIS_TLS_ENABLED=false
+
+##== Queue (Upstash QStash — dispatches to pbl-mail-service)
+QSTASH_TOKEN=
+MAIL_SERVICE_URL=http://localhost:3001
+
+##== Observe (observe.nestjs.com)
+OBSERVE_APP_KEY=
+OBSERVE_APP_SECRET=
 
 ##== Authentication
 AUTH_JWT_SECRET=secret
@@ -90,7 +91,14 @@ AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN=1d
 #### Environment variables
 
 - `NODE_ENV`: The environment mode. Options: `local`, `development`, `staging`, `production`, `test`.
-- `MODULES_SET`: The modules set to load. Options: `monolith`, `api`.
+
+> Note: Background job dispatch (e.g. sending verification emails) no longer
+> goes through an in-process queue (BullMQ). pbl-api publishes a message to
+> an **AWS SQS** queue; pbl-mail-service is a separate Lambda function,
+> triggered directly by SQS (not an HTTP call — there's no endpoint to
+> point at), responsible for actually sending mail. See the `Queue
+> variables` section below and the `pbl-mail-service`/`pbl-infra` repos for
+> the other half of this flow.
 
 #### Application variables
 
@@ -125,20 +133,50 @@ AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN=1d
 
 Follow the [Docker](#running-additional-services) section to set up the database using Docker.
 
-#### Mailer variables
+#### Redis variables
 
-- `MAIL_HOST`: The mail server host.
-- `MAIL_PORT`: The mail server port.
-- `MAIL_USER`: The mail server username.
-- `MAIL_PASSWORD`: The mail server password.
-- `MAIL_IGNORE_TLS`: Ignore TLS for the mail server. Options: `true`, `false`.
-- `MAIL_SECURE`: Secure the mail server connection. Options: `true`, `false`.
-- `MAIL_REQUIRE_TLS`: Require TLS for the mail server. Options: `true`, `false`.
-- `MAIL_DEFAULT_EMAIL`: The default email address.
-- `MAIL_DEFAULT_NAME`: The default email name.
-- `MAIL_CLIENT_PORT`: The mail client port. Used for testing with maildev.
+- `REDIS_HOST`: The Redis host.
+- `REDIS_PORT`: The Redis port.
+- `REDIS_PASSWORD`: The Redis password.
+- `REDIS_TLS_ENABLED`: Enable TLS for the Redis connection. Options: `true`, `false`.
 
-For local development, you can use [MailDev](https://github.com/maildev/maildev) as a fake SMTP server. It's included in the Docker Compose file. Follow the [Docker](#running-additional-services) section to set up MailDev.
+Follow the [Docker](#running-additional-services) section to set up Redis using Docker.
+
+> **Note: `@nestjs/cache-manager` is pinned to `^2.3.0`.** This is older than
+> the Nest peer range that package itself declares, and it's intentional —
+> do not bump it without also doing the migration below. It must match the
+> API shape of the installed `cache-manager@5.7.6` (specifically, the
+> `.store.set()` call used in `AuthService.logout()` to blacklist a token).
+> `@nestjs/cache-manager@3+` targets `cache-manager@6`, which changed that
+> store API. Bumping only `@nestjs/cache-manager` without also migrating
+> `cache-manager` to v6 (and rewriting the `.store` usage in
+> `AuthService.logout()`) reintroduces a `store.set is not a function`
+> crash at logout — this was found and fixed during the background-dispatch
+> migration work in this project (Google Cloud Tasks, then Upstash QStash,
+> now AWS SQS — the bug itself predated and was unrelated to any of them).
+
+#### Queue variables
+
+pbl-api dispatches verification emails by sending a message to an AWS SQS
+queue — pbl-api does not send mail itself, and doesn't need to know
+pbl-mail-service's address at all (SQS triggers the Lambda directly).
+
+- `SQS_QUEUE_URL`: The full SQS queue URL (e.g. `https://sqs.<region>.amazonaws.com/<account-id>/email-verification`). From the SQS console, or `pbl-infra`'s Terraform output.
+- `AWS_REGION`: The AWS region the queue lives in.
+
+Authentication to AWS itself isn't a separate env var — the AWS SDK picks
+up credentials automatically from the environment (an IAM task role on
+ECS in production, or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/a
+configured `aws configure` profile for local development).
+
+For local development, SQS has no emulator equivalent to Maildev — sending
+a message always goes to the real queue, and a real Lambda (or your local
+pbl-mail-service, manually polling/invoked) is needed to actually process
+it. See `pbl-infra`'s README for the full local-testing story.
+
+#### Observe variables
+
+- `OBSERVE_APP_KEY`/`OBSERVE_APP_SECRET`: Credentials for observe.nestjs.com monitoring. If unset, the app logs a loud startup warning and monitoring is disabled rather than failing to boot.
 
 #### Authentication variables
 
@@ -182,10 +220,10 @@ Download Docker Compose from [official website](https://docs.docker.com/compose/
 
 ### Running additional services
 
-To run additional services like the database, mail server, pgadmin, etc., use the `docker-compose` command:
+To run additional services like the database, Redis, pgadmin, etc., use the `docker-compose` command:
 
 ```bash
-docker compose up -d db maildev pgadmin
+docker compose up -d db redis pgadmin
 ```
 
 ### Quick run

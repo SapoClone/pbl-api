@@ -17,13 +17,13 @@ Except for Hotfixes, we want our codes to follow a one-way merge starting from *
 ## Branch names must be matched by the following regex
 
 ```js
-/^(feature|bugfix|hotfix|chore|release|merge)\.([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*)$/;
+/^(feature|bugfix|hotfix|chore|release|merge)\/([a-zA-Z0-9-]+(\/[a-zA-Z0-9-]+)*)$/;
 ```
 
 ## Format
 
 ```txt
-<type>(.<ticket>?).<subject>
+<type>(/<ticket>?)/<subject>
 ```
 
 1. `"type"` must be one of the following types
@@ -47,60 +47,60 @@ Except for Hotfixes, we want our codes to follow a one-way merge starting from *
 
    - use the imperative, present tense (use "add" instead of "added" or "adds")
    - don't capitalize the first letter
-   - no dot (.) at the end
+   - no slash (/) at the end
 
 ## Example
 
 ```bash
-feature.jira-1234
+feature/jira-1234
 
-feature.jira-1234.support-dark-theme
+feature/jira-1234/support-dark-theme
 
-feature.1234.support-dark-theme
+feature/1234/support-dark-theme
 
-feature.1234.new
+feature/1234/new
 
-feature.1234.refactor
+feature/1234/refactor
 
-feature.1234.ut
+feature/1234/ut
 
-feature.integrate-swagger
+feature/integrate-swagger
 ```
 
 ```bash
-bugfix.jira-1234
+bugfix/jira-1234
 
-bugfix.jira-1234.registration-form-not-working
+bugfix/jira-1234/registration-form-not-working
 
-bugfix.1234.registration-form-not-working
+bugfix/1234/registration-form-not-working
 
-bugfix.registration-form-not-working
+bugfix/registration-form-not-working
 ```
 
 ```bash
-chore.jira-1234
+chore/jira-1234
 
-chore.jira-1234.registration-form-not-working
+chore/jira-1234/registration-form-not-working
 
-chore.1234.registration-form-not-working
+chore/1234/registration-form-not-working
 
-chore.registration-form-not-working
+chore/registration-form-not-working
 ```
 
 ```bash
-bugfix.jira-1234
+bugfix/jira-1234
 
-bugfix.jira-1234.registration-form-not-working
+bugfix/jira-1234/registration-form-not-working
 
-bugfix.1234.registration-form-not-working
+bugfix/1234/registration-form-not-working
 
-bugfix.registration-form-not-working
+bugfix/registration-form-not-working
 ```
 
 ```bash
-release.myapp-1.01.123
+release/myapp-1.01.123
 ```
 
 ```bash
-merge.dev.lombok-refactoring
+merge/dev/lombok-refactoring
 ```
