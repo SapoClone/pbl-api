@@ -45,6 +45,11 @@ APP_LOG_LEVEL=debug
 APP_LOG_SERVICE=console
 APP_CORS_ORIGIN=http://localhost:3000,http://example.com
 
+##== Swagger (/api-docs)
+APP_SWAGGER_ENABLED=false
+APP_SWAGGER_USER=
+APP_SWAGGER_PASSWORD=
+
 ##== Database
 DATABASE_TYPE=postgres
 DATABASE_HOST=localhost
@@ -111,6 +116,8 @@ AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN=1d
 - `APP_LOG_LEVEL`: The log level. Options: `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`.
 - `APP_LOG_SERVICE`: The log service. Options: `console`, `google_logging`, `aws_cloudwatch`.
 - `APP_CORS_ORIGIN`: The CORS origin, allowing requests from specified origins. Options: comma-separated string (e.g., `http://localhost:3000,http://example.com`), `true`, `false`, `*`.
+- `APP_SWAGGER_ENABLED`: Exposes `/api-docs` outside development (always on in development regardless of this flag). Options: `true`, `false`.
+- `APP_SWAGGER_USER` / `APP_SWAGGER_PASSWORD`: When both are set, `/api-docs` and `/api-docs-json` require HTTP Basic Auth with these credentials. Only takes effect when Swagger is actually being served (development, or `APP_SWAGGER_ENABLED=true`) — leaving both unset (the local-dev default) serves Swagger with no prompt, same as before this existed. Set both whenever `APP_SWAGGER_ENABLED=true`, or the API's full route/schema list is unauthenticated and public.
 
 #### Database variables
 

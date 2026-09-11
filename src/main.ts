@@ -108,7 +108,10 @@ async function bootstrap() {
   );
   app.useGlobalInterceptors(new ClassSerializerInterceptor(reflector));
 
-  if (isDevelopment) {
+  const swaggerEnabled = configService.getOrThrow('app.swaggerEnabled', {
+    infer: true,
+  });
+  if (isDevelopment || swaggerEnabled) {
     setupSwagger(app);
   }
 

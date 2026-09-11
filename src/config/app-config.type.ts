@@ -9,4 +9,7 @@ export type AppConfig = {
   logLevel: string;
   logService: string;
   corsOrigin: boolean | string | RegExp | (string | RegExp)[];
+  swaggerEnabled: boolean;
+  swaggerUser?: string;
+  swaggerPassword?: string;
 };

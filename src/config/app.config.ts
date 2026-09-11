@@ -67,6 +67,18 @@ class EnvironmentVariablesValidator {
   )
   @IsOptional()
   APP_CORS_ORIGIN: string;
+
+  @IsBoolean()
+  @IsOptional()
+  APP_SWAGGER_ENABLED: boolean;
+
+  @IsString()
+  @IsOptional()
+  APP_SWAGGER_USER: string;
+
+  @IsString()
+  @IsOptional()
+  APP_SWAGGER_PASSWORD: string;
 }
 
 export default registerAs<AppConfig>('app', () => {
@@ -90,6 +102,9 @@ export default registerAs<AppConfig>('app', () => {
     logLevel: process.env.APP_LOG_LEVEL || 'warn',
     logService: process.env.APP_LOG_SERVICE || LogService.CONSOLE,
     corsOrigin: getCorsOrigin(),
+    swaggerEnabled: process.env.APP_SWAGGER_ENABLED === 'true',
+    swaggerUser: process.env.APP_SWAGGER_USER,
+    swaggerPassword: process.env.APP_SWAGGER_PASSWORD,
   };
 });
 
