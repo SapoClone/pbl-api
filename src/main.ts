@@ -57,14 +57,33 @@ async function bootstrap() {
     );
   }
 
-  // Setup security headers
-  app.use(helmet());
+  const configService = app.get(ConfigService<AllConfigType>);
+  const reflector = app.get(Reflector);
+
+  // Setup security headers. "upgrade-insecure-requests" (one of helmet's
+  // default CSP directives) tells the browser to transparently retry every
+  // subresource request over HTTPS — harmless when the app is actually
+  // served over HTTPS, but fatal when it isn't yet (e.g. the ALB here has
+  // no HTTPS listener configured): every asset request silently gets
+  // upgraded to a port the load balancer isn't listening on and just hangs,
+  // which is exactly what broke Swagger's UI loading blank/forever. Drop
+  // the directive whenever app.url isn't itself https.
+  const appUrl = configService.getOrThrow('app.url', { infer: true });
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          ...(appUrl.startsWith('https://')
+            ? {}
+            : { 'upgrade-insecure-requests': null }),
+        },
+      },
+    }),
+  );
 
   // For high-traffic websites in production, it is strongly recommended to offload compression from the application server - typically in a reverse proxy (e.g., Nginx). In that case, you should not use compression middleware.
   app.use(compression());
-
-  const configService = app.get(ConfigService<AllConfigType>);
-  const reflector = app.get(Reflector);
   const isDevelopment =
     configService.getOrThrow('app.nodeEnv', { infer: true }) === 'development';
   const corsOrigin = configService.getOrThrow('app.corsOrigin', {
