@@ -21,7 +21,7 @@ jobs:
     environment: production
     strategy:
       matrix:
-        node-version: [20.16.0]
+        node-version: [24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

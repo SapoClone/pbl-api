@@ -8,7 +8,7 @@ This guide explains how to set up the project and start the development server.
 
 Ensure you have the following installed:
 
-- [Node.js](https://nodejs.org/en) version >= `20.10.0`
+- [Node.js](https://nodejs.org/en) version >= `24.0.0`
 - [Pnpm](https://pnpm.io/installation) version >= `9.5.0`
 
 ## Installation
