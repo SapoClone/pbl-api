@@ -44,16 +44,6 @@ services:
     networks:
       - nestjs-boilerplate-network
 
-  maildev:
-    build:
-      context: .
-      dockerfile: maildev.Dockerfile
-    ports:
-      - ${MAIL_CLIENT_PORT}:1080
-      - ${MAIL_PORT}:1025
-    networks:
-      - nestjs-boilerplate-network
-
   pgadmin:
     container_name: pgadmin
     image: dpage/pgadmin4

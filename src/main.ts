@@ -13,7 +13,7 @@ import compression from 'compression';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AuthService } from './api/auth/auth.service';
-import { AppModule } from './app.module';
+import { AppModule, ObserveInstrument } from './app.module';
 import { type AllConfigType } from './config/config.type';
 import { GlobalExceptionFilter } from './filters/global-exception.filter';
 import { AuthGuard } from './guards/auth.guard';
@@ -22,9 +22,40 @@ import setupSwagger from './utils/setup-swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
+    instrument: ObserveInstrument,
   });
 
-  app.useLogger(app.get(Logger));
+  const logger = app.get(Logger);
+  app.useLogger(logger);
+
+  // Defense-in-depth: a well-behaved app shouldn't produce unhandled
+  // rejections, but third-party client libraries can still introduce
+  // floating promises outside our control (this was hit for real with an
+  // earlier @google-cloud/tasks integration, now replaced by QStash — kept
+  // as a general safeguard). Log through the app's
+  // structured (pino) logger and keep serving, instead of letting Node's
+  // default behavior (crashing the whole process) take down every in-flight
+  // request over one library-internal rejection, and instead of a raw
+  // console.error line that bypasses the normal log stream/aggregation.
+  // Registered here (after app.useLogger) rather than at module scope so it
+  // shares the same structured logger as the rest of the app; this means it
+  // won't catch a rejection during the NestFactory.create(...) call above,
+  // which is an acceptable trade-off for keeping all crash logs consistent.
+  process.on('unhandledRejection', (reason) => {
+    logger.error(reason, 'unhandledRejection');
+  });
+
+  // OBSERVE_APP_KEY/OBSERVE_APP_SECRET are read straight off process.env in
+  // app.module.ts's createObserveModule() call, bypassing the class-validator
+  // validateConfig pattern used elsewhere — so a missing/empty value fails
+  // silently (monitoring just stops working) instead of crashing the app.
+  // Warn loudly at boot so this doesn't go unnoticed.
+  if (!process.env.OBSERVE_APP_KEY || !process.env.OBSERVE_APP_SECRET) {
+    logger.warn(
+      'OBSERVE_APP_KEY and/or OBSERVE_APP_SECRET is unset — Observe monitoring is disabled/broken.',
+      'ObserveConfig',
+    );
+  }
 
   // Setup security headers
   app.use(helmet());

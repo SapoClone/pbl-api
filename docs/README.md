@@ -26,7 +26,7 @@ This is a boilerplate for NestJS projects. It is a starting point for building a
 - [x] Database. Support [TypeORM](https://www.npmjs.com/package/typeorm)
 - [x] Seeding ([Typeorm Extension](https://www.npmjs.com/package/typeorm-extension)).
 - [x] Config Service ([@nestjs/config](https://www.npmjs.com/package/@nestjs/config)).
-- [x] Mailing ([@nestjs-modules/mailer](https://www.npmjs.com/package/@nestjs-modules/mailer) & [nodemailer](https://www.npmjs.com/package/nodemailer)).
+- [x] Background job dispatch (Google Cloud Tasks) — sending emails is delegated to the separate `pbl-mail-service` over HTTP.
 - [x] Sign in and sign up via email.
 - [ ] Social sign in (Apple, Facebook, Google, Twitter).
 - [ ] Admin and User roles.
@@ -45,8 +45,6 @@ This is a boilerplate for NestJS projects. It is a starting point for building a
 - [NestJS I18n](https://nestjs-i18n.com/)
 - [TypeORM](https://typeorm.io/)
 - [TypeORM Extension](https://typeorm-extension.tada5hi.net/)
-- [Nodemailer](https://nodemailer.com/)
-- [NestJS Mailer](https://nest-modules.github.io/mailer/)
 - [Jest](https://jestjs.io/)
 - [PNPM](https://pnpm.io/)
 - [ESLint](https://eslint.org/)
