@@ -6,8 +6,7 @@ on:
     branches: ["main"]
     paths:
       - 'docs/**'
-      - '!src/**'
-      - '!test/**'
+      - '!apps/**'
       - '!README.md'
 
   # Allows you to run this workflow manually from the Actions tab

@@ -35,7 +35,7 @@ WORKDIR /app
 
 COPY --chown=node:node package*.json pnpm-lock.yaml ./
 COPY --chown=node:node --from=development /app/node_modules ./node_modules
-COPY --chown=node:node --from=development /app/src ./src
+COPY --chown=node:node --from=development /app/apps ./apps
 COPY --chown=node:node --from=development /app/tsconfig.json ./tsconfig.json
 COPY --chown=node:node --from=development /app/tsconfig.build.json ./tsconfig.build.json
 COPY --chown=node:node --from=development /app/nest-cli.json ./nest-cli.json
@@ -56,10 +56,10 @@ USER node
 FROM node:24-alpine AS production
 WORKDIR /app
 
-RUN mkdir -p src/generated && chown -R node:node src
+RUN mkdir -p apps/platform/src/generated && chown -R node:node apps
 
 # Copy the bundled code from the build stage to the production image
-COPY --chown=node:node --from=builder /app/src/generated/i18n.generated.ts ./src/generated/i18n.generated.ts
+COPY --chown=node:node --from=builder /app/apps/platform/src/generated/i18n.generated.ts ./apps/platform/src/generated/i18n.generated.ts
 COPY --chown=node:node --from=builder /app/node_modules ./node_modules
 COPY --chown=node:node --from=builder /app/dist ./dist
 COPY --chown=node:node --from=builder /app/package.json ./
@@ -67,4 +67,4 @@ COPY --chown=node:node --from=builder /app/package.json ./
 USER node
 
 # Start the server using the production build
-CMD [ "node", "dist/main.js" ]
+CMD [ "node", "dist/apps/platform/main.js" ]

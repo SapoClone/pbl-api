@@ -61,8 +61,8 @@ function generateModulesSet() {
           watch: env === Environment.LOCAL,
         },
         typesOutputPath: path.join(
-          __dirname,
-          '../../src/generated/i18n.generated.ts',
+          process.cwd(),
+          'apps/platform/src/generated/i18n.generated.ts',
         ),
         logging: env === Environment.LOCAL || env === Environment.DEVELOPMENT,
       };
