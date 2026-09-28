@@ -42,6 +42,35 @@ $ pnpm start:dev
 $ pnpm start:prod
 ```
 
+## Running the full local stack (monorepo)
+
+This repo is a Nest CLI monorepo: `apps/platform` (real business logic) plus
+5 stub services (`catalog`, `commerce`, `finance`, `integration`, `insight`)
+that currently only expose `GET /health`. Bring up the whole thing —
+6 services + Postgres (one schema per service) + Redis + a KrakenD gateway —
+with:
+
+```bash
+docker compose up --build
+```
+
+Then verify every service is reachable through the gateway:
+
+```bash
+./scripts/verify-local-stack.sh
+```
+
+Individual services, outside Docker, for day-to-day development on `platform`:
+
+```bash
+pnpm start:dev            # platform, with hot reload
+pnpm start:dev:catalog    # any stub app, with hot reload
+```
+
+See `docs/superpowers/specs/2026-09-28-monorepo-service-split-design.md` for
+the design rationale (why KrakenD, why one Postgres project with per-service
+schemas, why the event bus and inter-service REST calls aren't wired up yet).
+
 ## Features
 
 - [x] Fastify support. (Checkout the [`feature.fastify`](https://github.com/vndevteam/nestjs-boilerplate/tree/feature.fastify) branch)
