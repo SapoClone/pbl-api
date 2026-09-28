@@ -95,6 +95,23 @@ services:
     networks:
       - pbl-network
 
+  krakend:
+    image: devopsfaith/krakend:2.6
+    command: ["run", "-c", "/etc/krakend/krakend.json"]
+    volumes:
+      - ./krakend/krakend.json:/etc/krakend/krakend.json:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - platform
+      - catalog
+      - commerce
+      - finance
+      - integration
+      - insight
+    networks:
+      - pbl-network
+
 networks:
   pbl-network:
     driver: bridge
