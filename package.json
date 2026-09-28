@@ -30,7 +30,22 @@
     "seed:create": "env-cmd ts-node ./node_modules/typeorm-extension/bin/cli.cjs seed:create",
     "prepare": "husky || true",
     "docs:dev": "vuepress dev docs",
-    "docs:build": "vuepress build docs"
+    "docs:build": "vuepress build docs",
+    "start:dev:catalog": "nest start catalog --watch",
+    "build:catalog": "nest build catalog",
+    "test:catalog": "jest --rootDir apps/catalog/src --testMatch '**/*.spec.ts'",
+    "start:dev:commerce": "nest start commerce --watch",
+    "build:commerce": "nest build commerce",
+    "test:commerce": "jest --rootDir apps/commerce/src --testMatch '**/*.spec.ts'",
+    "start:dev:finance": "nest start finance --watch",
+    "build:finance": "nest build finance",
+    "test:finance": "jest --rootDir apps/finance/src --testMatch '**/*.spec.ts'",
+    "start:dev:integration": "nest start integration --watch",
+    "build:integration": "nest build integration",
+    "test:integration": "jest --rootDir apps/integration/src --testMatch '**/*.spec.ts'",
+    "start:dev:insight": "nest start insight --watch",
+    "build:insight": "nest build insight",
+    "test:insight": "jest --rootDir apps/insight/src --testMatch '**/*.spec.ts'"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1129.0",
@@ -111,5 +126,12 @@
     "vuepress": "2.0.0-rc.17",
     "vuepress-plugin-md-enhance": "2.0.0-rc.59"
   },
-  "packageManager": "pnpm@9.12.3+sha512.cce0f9de9c5a7c95bef944169cc5dfe8741abfb145078c0d508b868056848a87c81e626246cb60967cbd7fd29a6c062ef73ff840d96b3c86c40ac92cf4a813ee"
+  "packageManager": "pnpm@9.12.3+sha512.cce0f9de9c5a7c95bef944169cc5dfe8741abfb145078c0d508b868056848a87c81e626246cb60967cbd7fd29a6c062ef73ff840d96b3c86c40ac92cf4a813ee",
+  "jest": {
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "testEnvironment": "node",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    }
+  }
 }
