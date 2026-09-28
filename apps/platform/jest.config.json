@@ -12,7 +12,7 @@
     "<rootDir>/main.ts",
     "(.+).module.ts"
   ],
-  "coverageDirectory": "../coverage",
+  "coverageDirectory": "../../../coverage/platform",
   "testEnvironment": "node",
   "moduleNameMapper": {
     "^@/api(.*)$": "<rootDir>/api$1",
@@ -32,7 +32,7 @@
     "^@/shared(.*)$": "<rootDir>/shared$1",
     "^@/utils(.*)$": "<rootDir>/utils$1"
   },
-  "setupFiles": ["../setup-jest.mjs"],
-  "cacheDirectory": "../.jest-cache",
+  "setupFiles": ["../../../setup-jest.mjs"],
+  "cacheDirectory": "../../../.jest-cache",
   "testTimeout": 120000
 }
