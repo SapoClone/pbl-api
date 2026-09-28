@@ -5,6 +5,7 @@ export type DatabaseConfig = {
   password: string;
   name: string;
   username: string;
+  schema?: string;
   logging: boolean;
   synchronize: boolean;
   maxConnections: number;
