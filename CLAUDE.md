@@ -258,9 +258,10 @@ Local SQS is ElasticMQ; queued messages:
   without a verification email and there is no working resend.
 - Access tokens still live `1d` (pbl-web has no refresh logic yet), so the
   Redis logout deny-list stays (ADR-0004 §7).
-- pbl-infra still provisions `AUTH_JWT_SECRET`/`AUTH_REFRESH_SECRET`; before
-  the next deploy it must provision `AUTH_JWT_PRIVATE_KEY` + `AUTH_JWT_KEY_ID`
-  (SSM) for platform and `AUTH_JWKS_URL` for the other services.
+- Production is not yet updated for the auth/gateway changes (pbl-infra
+  still provisions `AUTH_JWT_SECRET`/`AUTH_REFRESH_SECRET`, no gateway or
+  stub services in AWS). The ordered checklist is
+  [docs/deploy-actions.md](docs/deploy-actions.md); tick items off there.
 
 ## Recording decisions
 
