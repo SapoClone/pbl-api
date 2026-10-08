@@ -1,6 +1,6 @@
 import { ApiPublic } from '@/decorators/http.decorators';
-import { Public } from '@/decorators/public.decorator';
 import { Controller, Get } from '@nestjs/common';
+import { Public } from '@pbl/auth';
 
 @Controller('/')
 export class HomeController {
