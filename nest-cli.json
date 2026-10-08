@@ -1,14 +1,64 @@
 {
   "$schema": "https://json.schemastore.org/nest-cli",
   "collection": "@nestjs/schematics",
-  "sourceRoot": "src",
+  "monorepo": true,
+  "root": "apps/platform",
+  "sourceRoot": "apps/platform/src",
   "compilerOptions": {
-    "builder": "swc",
+    "builder": "tsc",
     "typeCheck": true,
     "deleteOutDir": true,
-    "assets": [
-      { "include": "i18n/**/*", "watchAssets": true },
-      { "include": "**/*.hbs", "watchAssets": true }
-    ]
+    "webpack": false,
+    "tsConfigPath": "apps/platform/tsconfig.app.json"
+  },
+  "projects": {
+    "platform": {
+      "type": "application",
+      "root": "apps/platform",
+      "entryFile": "main",
+      "sourceRoot": "apps/platform/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/platform/tsconfig.app.json",
+        "assets": [
+          { "include": "i18n/**/*", "watchAssets": true },
+          { "include": "**/*.hbs", "watchAssets": true }
+        ]
+      }
+    },
+    "catalog": {
+      "type": "application",
+      "root": "apps/catalog",
+      "entryFile": "main",
+      "sourceRoot": "apps/catalog/src",
+      "compilerOptions": { "tsConfigPath": "apps/catalog/tsconfig.app.json" }
+    },
+    "commerce": {
+      "type": "application",
+      "root": "apps/commerce",
+      "entryFile": "main",
+      "sourceRoot": "apps/commerce/src",
+      "compilerOptions": { "tsConfigPath": "apps/commerce/tsconfig.app.json" }
+    },
+    "finance": {
+      "type": "application",
+      "root": "apps/finance",
+      "entryFile": "main",
+      "sourceRoot": "apps/finance/src",
+      "compilerOptions": { "tsConfigPath": "apps/finance/tsconfig.app.json" }
+    },
+    "integration": {
+      "type": "application",
+      "root": "apps/integration",
+      "entryFile": "main",
+      "sourceRoot": "apps/integration/src",
+      "compilerOptions": { "tsConfigPath": "apps/integration/tsconfig.app.json" }
+    },
+    "insight": {
+      "type": "application",
+      "root": "apps/insight",
+      "entryFile": "main",
+      "sourceRoot": "apps/insight/src",
+      "compilerOptions": { "tsConfigPath": "apps/insight/tsconfig.app.json" }
+    }
   }
 }

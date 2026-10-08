@@ -1,0 +1,7 @@
+-- docker/postgres-init-schemas.sql
+CREATE SCHEMA IF NOT EXISTS platform;
+CREATE SCHEMA IF NOT EXISTS catalog;
+CREATE SCHEMA IF NOT EXISTS commerce;
+CREATE SCHEMA IF NOT EXISTS finance;
+CREATE SCHEMA IF NOT EXISTS integration;
+CREATE SCHEMA IF NOT EXISTS insight;

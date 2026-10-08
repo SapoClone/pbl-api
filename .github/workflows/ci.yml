@@ -4,20 +4,20 @@ on:
   push:
     branches: [ 'main' ]
     paths:
-      - 'src/**'
-      - 'test/**'
+      - 'apps/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - '.github/workflows/ci.yml'
       - '!**/README*.md'
       - '!docs/**'
   pull_request:
     branches: [ 'main' ]
     types: [opened, synchronize]
     paths:
-      - 'src/**'
-      - 'test/**'
+      - 'apps/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - '.github/workflows/ci.yml'
       - '!**/README*.md'
       - '!docs/**'
 
@@ -25,27 +25,21 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
-    name: Build and test
+  lint:
+    name: Lint
     timeout-minutes: 15
     # skip ci if PR has label 'skip-ci' or 'skip-actions'
     if: |
       !contains(github.event.pull_request.labels.*.name, 'skip-ci') &&
       !contains(github.event.pull_request.labels.*.name, 'skip-actions')
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./
-    strategy:
-      matrix:
-        node-version: [24]
     steps:
       - name: Copy repository
         uses: actions/checkout@v4
-      - name: Install Node.js ${{ matrix.node-version }}
+      - name: Install Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 24
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -66,16 +60,93 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Lint code
-        run: pnpm lint
+        run: pnpm lint:check
 
-      - name: Build project
-        run: pnpm build
+  service:
+    # one independent job per service: a failure in one does not cancel the others
+    name: ${{ matrix.service }} (build and test)
+    timeout-minutes: 15
+    if: |
+      !contains(github.event.pull_request.labels.*.name, 'skip-ci') &&
+      !contains(github.event.pull_request.labels.*.name, 'skip-actions')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [platform, catalog, commerce, finance, integration, insight]
+    steps:
+      - name: Copy repository
+        uses: actions/checkout@v4
+      - name: Install Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build ${{ matrix.service }}
+        run: pnpm build:${{ matrix.service }}
+
+      - name: Run UT tests for ${{ matrix.service }}
+        run: pnpm test:${{ matrix.service }}
+
+  docs:
+    name: Build docs
+    timeout-minutes: 15
+    if: |
+      !contains(github.event.pull_request.labels.*.name, 'skip-ci') &&
+      !contains(github.event.pull_request.labels.*.name, 'skip-actions')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy repository
+        uses: actions/checkout@v4
+      - name: Install Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build docs
         run: pnpm docs:build
-
-      - name: Run UT tests
-        run: pnpm test

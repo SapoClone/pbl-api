@@ -75,6 +75,10 @@ class EnvironmentVariablesValidator {
   @IsString()
   @IsOptional()
   DATABASE_CERT: string;
+
+  @IsString()
+  @IsOptional()
+  DATABASE_SCHEMA: string;
 }
 
 export default registerAs<DatabaseConfig>('database', () => {
@@ -89,6 +93,7 @@ export default registerAs<DatabaseConfig>('database', () => {
       : 5432,
     password: process.env.DATABASE_PASSWORD,
     name: process.env.DATABASE_NAME,
+    schema: process.env.DATABASE_SCHEMA || undefined,
     username: process.env.DATABASE_USERNAME,
     logging: process.env.DATABASE_LOGGING === 'true',
     synchronize: process.env.DATABASE_SYNCHRONIZE === 'true',

@@ -1,69 +1,120 @@
 services:
-  nestjs-boilerplate-api:
-    image: nestjs-boilerplate-api
-    container_name: nestjs-boilerplate-api
-    restart: always
+  platform:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
+      args:
+        APP_NAME: platform
+    command: ["sh", "-c", "pnpm start:dev"]
     env_file:
-      - .env.docker
+      - .env.docker.platform
     ports:
       - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
     networks:
-      - nestjs-boilerplate-network
+      - pbl-network
 
-  db:
-    image: postgres:16
-    container_name: nestjs-boilerplate-postgres
-    restart: always
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+  catalog:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        APP_NAME: catalog
     environment:
-      POSTGRES_DB: nestjs_boilerplate
+      PORT: "3000"
+    networks:
+      - pbl-network
+
+  commerce:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        APP_NAME: commerce
+    environment:
+      PORT: "3000"
+    networks:
+      - pbl-network
+
+  finance:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        APP_NAME: finance
+    environment:
+      PORT: "3000"
+    networks:
+      - pbl-network
+
+  integration:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        APP_NAME: integration
+    environment:
+      PORT: "3000"
+    networks:
+      - pbl-network
+
+  insight:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        APP_NAME: insight
+    environment:
+      PORT: "3000"
+    networks:
+      - pbl-network
+
+  postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_DB: pbl
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       TZ: "UTC"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres-init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql
     ports:
       - "25432:5432"
     networks:
-      - nestjs-boilerplate-network
+      - pbl-network
 
   redis:
-    image: redis/redis-stack:latest
+    image: redis:7-alpine
     restart: always
     ports:
       - "6379:6379"
-      - "8001:8001"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
-    environment:
-      REDIS_ARGS: "--requirepass redispass"
     networks:
-      - nestjs-boilerplate-network
+      - pbl-network
 
-  pgadmin:
-    container_name: pgadmin
-    image: dpage/pgadmin4
-    ports:
-      - "18080:80"
+  krakend:
+    image: devopsfaith/krakend:2.6
+    command: ["run", "-c", "/etc/krakend/krakend.json"]
     volumes:
-      - pgadmin_data:/root/.pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: 12345678
-      PGADMIN_CONFIG_WTF_CSRF_ENABLED: "False"
-      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
+      - ./krakend/krakend.json:/etc/krakend/krakend.json:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - platform
+      - catalog
+      - commerce
+      - finance
+      - integration
+      - insight
     networks:
-      - nestjs-boilerplate-network
+      - pbl-network
+
+networks:
+  pbl-network:
+    driver: bridge
 
 volumes:
   postgres_data:
-  pgadmin_data:
-  redis_data:
-
-networks:
-  nestjs-boilerplate-network:
-    driver: bridge

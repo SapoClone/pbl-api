@@ -1,0 +1,15 @@
+FROM node:24-alpine
+
+RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
+
+WORKDIR /app
+ARG APP_NAME
+ENV APP_NAME=${APP_NAME}
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install
+
+COPY . .
+
+EXPOSE 3000
+CMD ["sh", "-c", "pnpm start:dev:${APP_NAME}"]

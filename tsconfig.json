@@ -23,22 +23,22 @@
     "esModuleInterop": true,
     "importHelpers": true,
     "paths": {
-      "@/api/*": ["src/api/*"],
-      "@/queue/*": ["src/queue/*"],
-      "@/common/*": ["src/common/*"],
-      "@/config/*": ["src/config/*"],
-      "@/constants/*": ["src/constants/*"],
-      "@/database/*": ["src/database/*"],
-      "@/decorators/*": ["src/decorators/*"],
-      "@/exceptions/*": ["src/exceptions/*"],
-      "@/filters/*": ["src/filters/*"],
-      "@/generated/*": ["src/generated/*"],
-      "@/guards/*": ["src/guards/*"],
-      "@/interceptors/*": ["src/interceptors/*"],
-      "@/libs/*": ["src/libs/*"],
-      "@/redis/*": ["src/redis/*"],
-      "@/shared/*": ["src/shared/*"],
-      "@/utils/*": ["src/utils/*"]
+      "@/api/*": ["apps/platform/src/api/*"],
+      "@/queue/*": ["apps/platform/src/queue/*"],
+      "@/common/*": ["apps/platform/src/common/*"],
+      "@/config/*": ["apps/platform/src/config/*"],
+      "@/constants/*": ["apps/platform/src/constants/*"],
+      "@/database/*": ["apps/platform/src/database/*"],
+      "@/decorators/*": ["apps/platform/src/decorators/*"],
+      "@/exceptions/*": ["apps/platform/src/exceptions/*"],
+      "@/filters/*": ["apps/platform/src/filters/*"],
+      "@/generated/*": ["apps/platform/src/generated/*"],
+      "@/guards/*": ["apps/platform/src/guards/*"],
+      "@/interceptors/*": ["apps/platform/src/interceptors/*"],
+      "@/libs/*": ["apps/platform/src/libs/*"],
+      "@/redis/*": ["apps/platform/src/redis/*"],
+      "@/shared/*": ["apps/platform/src/shared/*"],
+      "@/utils/*": ["apps/platform/src/utils/*"]
     }
   }
 }

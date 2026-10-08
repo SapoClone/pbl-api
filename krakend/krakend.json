@@ -1,0 +1,58 @@
+{
+  "version": 3,
+  "name": "pbl6-local-gateway",
+  "port": 8080,
+  "timeout": "3s",
+  "cache_ttl": "0s",
+  "output_encoding": "json",
+  "endpoints": [
+    {
+      "endpoint": "/platform/health",
+      "method": "GET",
+      "output_encoding": "json",
+      "backend": [
+        { "url_pattern": "/health", "host": ["http://platform:3000"] }
+      ]
+    },
+    {
+      "endpoint": "/catalog/health",
+      "method": "GET",
+      "output_encoding": "json",
+      "backend": [
+        { "url_pattern": "/health", "host": ["http://catalog:3000"] }
+      ]
+    },
+    {
+      "endpoint": "/commerce/health",
+      "method": "GET",
+      "output_encoding": "json",
+      "backend": [
+        { "url_pattern": "/health", "host": ["http://commerce:3000"] }
+      ]
+    },
+    {
+      "endpoint": "/finance/health",
+      "method": "GET",
+      "output_encoding": "json",
+      "backend": [
+        { "url_pattern": "/health", "host": ["http://finance:3000"] }
+      ]
+    },
+    {
+      "endpoint": "/integration/health",
+      "method": "GET",
+      "output_encoding": "json",
+      "backend": [
+        { "url_pattern": "/health", "host": ["http://integration:3000"] }
+      ]
+    },
+    {
+      "endpoint": "/insight/health",
+      "method": "GET",
+      "output_encoding": "json",
+      "backend": [
+        { "url_pattern": "/health", "host": ["http://insight:3000"] }
+      ]
+    }
+  ]
+}
