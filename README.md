@@ -60,6 +60,16 @@ Then verify every service is reachable through the gateway:
 ./scripts/verify-local-stack.sh
 ```
 
+Clients (pbl-web, pbl-mobile) call **only the gateway** on `:8080`, never a
+service port directly. A gateway path is the service name plus the
+service's own path — e.g. `POST /platform/api/v1/auth/email/login` reaches
+`platform:3000/api/v1/auth/email/login`, so the web/mobile base URL for
+platform is `http://localhost:8080/platform/api/v1`. KrakenD only forwards
+routes declared in `krakend/krakend.json`, so add an entry there for every
+new controller route (unknown paths return 404). Endpoints use `no-op`
+encoding, so status codes and bodies pass through unchanged, and CORS for
+the browser apps is answered by the gateway (`security/cors`).
+
 Notes on the local stack:
 
 - SQS is emulated by an ElasticMQ container (`docker/elasticmq.conf`), so

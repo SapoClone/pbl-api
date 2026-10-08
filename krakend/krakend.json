@@ -1,57 +1,734 @@
 {
+  "$schema": "https://www.krakend.io/schema/v2.6/krakend.json",
   "version": 3,
   "name": "pbl6-local-gateway",
   "port": 8080,
-  "timeout": "3s",
+  "timeout": "10s",
   "cache_ttl": "0s",
-  "output_encoding": "json",
+  "extra_config": {
+    "security/cors": {
+      "allow_origins": [
+        "http://localhost:5173",
+        "http://localhost:3000"
+      ],
+      "allow_methods": [
+        "GET",
+        "HEAD",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "allow_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "expose_headers": [
+        "Content-Length",
+        "Content-Type"
+      ],
+      "allow_credentials": true,
+      "max_age": "12h"
+    }
+  },
   "endpoints": [
+    {
+      "endpoint": "/platform",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
     {
       "endpoint": "/platform/health",
       "method": "GET",
-      "output_encoding": "json",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
       "backend": [
-        { "url_pattern": "/health", "host": ["http://platform:3000"] }
+        {
+          "url_pattern": "/health",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/auth/email/login",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/auth/email/login",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/auth/email/register",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/auth/email/register",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/auth/logout",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/auth/logout",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/auth/refresh",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/auth/refresh",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/auth/forgot-password",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/auth/forgot-password",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/auth/verify/forgot-password",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/auth/verify/forgot-password",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/auth/reset-password",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/auth/reset-password",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/auth/verify/email",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/auth/verify/email",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/auth/verify/email/resend",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/auth/verify/email/resend",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/users",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/users",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/users",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/users",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/users/me",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/users/me",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/users/me/change-password",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/users/me/change-password",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/users/load-more",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/users/load-more",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/users/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/users/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/users/{id}",
+      "method": "PATCH",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/users/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/users/{id}",
+      "method": "DELETE",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/users/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/posts",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/posts",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/posts",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/posts",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/posts/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/posts/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/posts/{id}",
+      "method": "PATCH",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/posts/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
+      "endpoint": "/platform/api/v1/posts/{id}",
+      "method": "DELETE",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/posts/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
       ]
     },
     {
       "endpoint": "/catalog/health",
       "method": "GET",
-      "output_encoding": "json",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
       "backend": [
-        { "url_pattern": "/health", "host": ["http://catalog:3000"] }
+        {
+          "url_pattern": "/health",
+          "encoding": "no-op",
+          "host": [
+            "http://catalog:3000"
+          ]
+        }
       ]
     },
     {
       "endpoint": "/commerce/health",
       "method": "GET",
-      "output_encoding": "json",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
       "backend": [
-        { "url_pattern": "/health", "host": ["http://commerce:3000"] }
+        {
+          "url_pattern": "/health",
+          "encoding": "no-op",
+          "host": [
+            "http://commerce:3000"
+          ]
+        }
       ]
     },
     {
       "endpoint": "/finance/health",
       "method": "GET",
-      "output_encoding": "json",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
       "backend": [
-        { "url_pattern": "/health", "host": ["http://finance:3000"] }
+        {
+          "url_pattern": "/health",
+          "encoding": "no-op",
+          "host": [
+            "http://finance:3000"
+          ]
+        }
       ]
     },
     {
       "endpoint": "/integration/health",
       "method": "GET",
-      "output_encoding": "json",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
       "backend": [
-        { "url_pattern": "/health", "host": ["http://integration:3000"] }
+        {
+          "url_pattern": "/health",
+          "encoding": "no-op",
+          "host": [
+            "http://integration:3000"
+          ]
+        }
       ]
     },
     {
       "endpoint": "/insight/health",
       "method": "GET",
-      "output_encoding": "json",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
       "backend": [
-        { "url_pattern": "/health", "host": ["http://insight:3000"] }
+        {
+          "url_pattern": "/health",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ]
+        }
       ]
     }
   ]
