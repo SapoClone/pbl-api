@@ -1,6 +1,6 @@
-import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { AccessTokenVerifier } from '@pbl/auth';
 import { generateKeyPairSync } from 'crypto';
 import { AccessTokenService } from './access-token.service';
 
@@ -90,14 +90,33 @@ describe('AccessTokenService', () => {
     });
   });
 
-  describe('verify', () => {
-    it('should return the authenticated user for a valid token', async () => {
+  describe("getPublicKey (platform's KeyResolver)", () => {
+    it('should return the public key for the current kid', async () => {
+      await expect(service.getPublicKey('test-key-1')).resolves.toContain(
+        'BEGIN PUBLIC KEY',
+      );
+    });
+
+    it('should reject an unknown kid', async () => {
+      await expect(service.getPublicKey('retired-key')).rejects.toThrow();
+    });
+  });
+
+  // Rejection cases (HS256, alg none, wrong key/iss/aud, expiry) are covered
+  // by @pbl/auth's AccessTokenVerifier spec.
+  describe('round trip with @pbl/auth', () => {
+    it('should produce tokens the shared verifier accepts', async () => {
+      const verifier = new AccessTokenVerifier({
+        issuer: 'platform',
+        audience: 'pbl6',
+        keyResolver: service,
+      });
       const token = await service.sign({
         userId: 'user-1',
         sessionId: 'session-1',
       });
 
-      await expect(service.verify(token)).resolves.toEqual({
+      await expect(verifier.verify(token)).resolves.toEqual({
         id: 'user-1',
         sessionId: 'session-1',
         subjectType: 'account',
@@ -105,105 +124,18 @@ describe('AccessTokenService', () => {
       });
     });
 
-    it('should reject an HS256 token even when signed with a known secret', async () => {
-      const token = await jwtService.signAsync(
-        { sub: 'user-1', sid: 'session-1', sub_type: 'account' },
-        {
-          secret: 'secret',
-          algorithm: 'HS256',
-          keyid: 'test-key-1',
-          issuer: 'platform',
-          audience: 'pbl6',
-        },
-      );
-
-      await expect(service.verify(token)).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should reject an unsigned token (alg none)', async () => {
-      const encode = (part: object) =>
-        Buffer.from(JSON.stringify(part)).toString('base64url');
-      const token = `${encode({ alg: 'none', typ: 'JWT', kid: 'test-key-1' })}.${encode(
-        {
-          sub: 'user-1',
-          sid: 'session-1',
-          iss: 'platform',
-          aud: 'pbl6',
-          exp: Math.floor(Date.now() / 1000) + 60,
-        },
-      )}.`;
-
-      await expect(service.verify(token)).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should reject a token signed by another key', async () => {
-      const otherService = createService({ 'auth.privateKey': rsaPem(2048) });
-      const token = await otherService.sign({
+    it('should not be accepted by a verifier expecting another issuer', async () => {
+      const verifier = new AccessTokenVerifier({
+        issuer: 'someone-else',
+        audience: 'pbl6',
+        keyResolver: service,
+      });
+      const token = await service.sign({
         userId: 'user-1',
         sessionId: 'session-1',
       });
 
-      await expect(service.verify(token)).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should reject a token with an unknown kid', async () => {
-      const otherKid = createService({ 'auth.keyId': 'retired-key' });
-      const token = await otherKid.sign({
-        userId: 'user-1',
-        sessionId: 'session-1',
-      });
-
-      await expect(service.verify(token)).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it.each([
-      ['issuer', { 'auth.issuer': 'someone-else' }],
-      ['audience', { 'auth.audience': 'another-app' }],
-    ])('should reject a token with the wrong %s', async (_, overrides) => {
-      const token = await createService(overrides).sign({
-        userId: 'user-1',
-        sessionId: 'session-1',
-      });
-
-      await expect(service.verify(token)).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should reject an expired token', async () => {
-      const token = await jwtService.signAsync(
-        {
-          sub: 'user-1',
-          sid: 'session-1',
-          sub_type: 'account',
-          exp: Math.floor(Date.now() / 1000) - 10,
-        },
-        {
-          privateKey,
-          algorithm: 'RS256',
-          keyid: 'test-key-1',
-          issuer: 'platform',
-          audience: 'pbl6',
-        },
-      );
-
-      await expect(service.verify(token)).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should reject garbage', async () => {
-      await expect(service.verify('not-a-jwt')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(verifier.verify(token)).rejects.toThrow();
     });
   });
 });

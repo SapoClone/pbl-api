@@ -1,13 +1,9 @@
 import { AllConfigType } from '@/config/config.type';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { AccessTokenSubjectType, KeyResolver } from '@pbl/auth';
 import { createPrivateKey, createPublicKey, JsonWebKey } from 'crypto';
-import {
-  AccessTokenClaims,
-  AccessTokenSubjectType,
-  AuthUser,
-} from './types/auth-user.type';
 
 const ALGORITHM = 'RS256';
 const MIN_RSA_MODULUS_BITS = 2048;
@@ -19,12 +15,13 @@ export type PublicJwk = JsonWebKey & {
 };
 
 /**
- * Signs and verifies access tokens. Platform is the only service holding the
- * private key; every other service verifies against the public keys published
- * at GET /.well-known/jwks.json (ADR-0004).
+ * Signs access tokens and publishes the matching public key. Platform is the
+ * only service holding the private key; verification lives in @pbl/auth,
+ * which other services feed from GET /.well-known/jwks.json and platform
+ * feeds directly from this class (it is platform's KeyResolver). ADR-0004.
  */
 @Injectable()
-export class AccessTokenService {
+export class AccessTokenService implements KeyResolver {
   private readonly privateKeyPem: string;
   private readonly publicKeyPem: string;
   private readonly publicJwk: PublicJwk;
@@ -89,30 +86,10 @@ export class AccessTokenService {
     );
   }
 
-  async verify(token: string): Promise<AuthUser> {
-    try {
-      const decoded = this.jwtService.decode(token, { complete: true });
-      if (decoded?.header?.kid !== this.keyId) {
-        throw new Error('unknown kid');
-      }
-      const claims = await this.jwtService.verifyAsync<AccessTokenClaims>(
-        token,
-        {
-          publicKey: this.publicKeyPem,
-          // Pin the algorithm: never let the token header choose it
-          algorithms: [ALGORITHM],
-          issuer: this.issuer,
-          audience: this.audience,
-        },
-      );
-      return {
-        id: claims.sub as AuthUser['id'],
-        sessionId: claims.sid as AuthUser['sessionId'],
-        subjectType: claims.sub_type,
-        exp: claims.exp,
-      };
-    } catch {
-      throw new UnauthorizedException();
+  async getPublicKey(kid: string): Promise<string> {
+    if (kid !== this.keyId) {
+      throw new Error(`Unknown key id "${kid}"`);
     }
+    return this.publicKeyPem;
   }
 }

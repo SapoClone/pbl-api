@@ -1,6 +1,5 @@
 import { AllConfigType } from '@/config/config.type';
 import { Environment } from '@/constants/app.constant';
-import { Public } from '@/decorators/public.decorator';
 import { Controller, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -11,6 +10,7 @@ import {
   HttpHealthIndicator,
   TypeOrmHealthIndicator,
 } from '@nestjs/terminus';
+import { Public } from '@pbl/auth';
 
 @ApiTags('health')
 @Controller('health')

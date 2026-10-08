@@ -2,8 +2,19 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/apps/finance",
-    "paths": {}
+    "paths": {
+      "@pbl/auth": [
+        "libs/auth/src"
+      ],
+      "@pbl/auth/*": [
+        "libs/auth/src/*"
+      ]
+    }
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.spec.ts"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/*.spec.ts"
+  ]
 }

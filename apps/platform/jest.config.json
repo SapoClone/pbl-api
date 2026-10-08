@@ -1,11 +1,18 @@
 {
-  "moduleFileExtensions": ["js", "json", "ts"],
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "ts"
+  ],
   "rootDir": "src",
   "testRegex": ".*\\.spec\\.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
-  "collectCoverageFrom": ["**/*.(t|j)s", "!**/*.spec.(t|j)s"],
+  "collectCoverageFrom": [
+    "**/*.(t|j)s",
+    "!**/*.spec.(t|j)s"
+  ],
   "coveragePathIgnorePatterns": [
     "/node_modules/",
     "<rootDir>/database/(factories|migrations|seeds)/",
@@ -15,6 +22,7 @@
   "coverageDirectory": "../../../coverage/platform",
   "testEnvironment": "node",
   "moduleNameMapper": {
+    "^@pbl/auth(|/.*)$": "<rootDir>/../../../libs/auth/src$1",
     "^@/api(.*)$": "<rootDir>/api$1",
     "^@/queue(.*)$": "<rootDir>/queue$1",
     "^@/common(.*)$": "<rootDir>/common$1",
@@ -32,7 +40,9 @@
     "^@/shared(.*)$": "<rootDir>/shared$1",
     "^@/utils(.*)$": "<rootDir>/utils$1"
   },
-  "setupFiles": ["../../../setup-jest.mjs"],
+  "setupFiles": [
+    "../../../setup-jest.mjs"
+  ],
   "cacheDirectory": "../../../.jest-cache",
   "testTimeout": 120000
 }

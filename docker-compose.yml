@@ -28,6 +28,7 @@ services:
         APP_NAME: catalog
     environment:
       PORT: "3000"
+      AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
     networks:
       - pbl-network
 
@@ -39,6 +40,7 @@ services:
         APP_NAME: commerce
     environment:
       PORT: "3000"
+      AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
     networks:
       - pbl-network
 
@@ -50,6 +52,7 @@ services:
         APP_NAME: finance
     environment:
       PORT: "3000"
+      AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
     networks:
       - pbl-network
 
@@ -61,6 +64,7 @@ services:
         APP_NAME: integration
     environment:
       PORT: "3000"
+      AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
     networks:
       - pbl-network
 
@@ -72,6 +76,7 @@ services:
         APP_NAME: insight
     environment:
       PORT: "3000"
+      AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
     networks:
       - pbl-network
 

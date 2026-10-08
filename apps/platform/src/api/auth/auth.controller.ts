@@ -1,7 +1,7 @@
-import { CurrentUser } from '@/decorators/current-user.decorator';
 import { ApiAuth, ApiPublic } from '@/decorators/http.decorators';
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { AuthUser, CurrentUser } from '@pbl/auth';
 import { AuthService } from './auth.service';
 import { LoginReqDto } from './dto/login.req.dto';
 import { LoginResDto } from './dto/login.res.dto';
@@ -9,7 +9,6 @@ import { RefreshReqDto } from './dto/refresh.req.dto';
 import { RefreshResDto } from './dto/refresh.res.dto';
 import { RegisterReqDto } from './dto/register.req.dto';
 import { RegisterResDto } from './dto/register.res.dto';
-import { AuthUser } from './types/auth-user.type';
 
 @ApiTags('auth')
 @Controller({

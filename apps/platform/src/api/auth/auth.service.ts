@@ -13,6 +13,7 @@ import { randomStringGenerator } from '@nestjs/common/utils/random-string-genera
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
+import { AuthUser } from '@pbl/auth';
 import { Cache } from 'cache-manager';
 import { plainToInstance } from 'class-transformer';
 import crypto from 'crypto';
@@ -27,7 +28,6 @@ import { RefreshReqDto } from './dto/refresh.req.dto';
 import { RefreshResDto } from './dto/refresh.res.dto';
 import { RegisterReqDto } from './dto/register.req.dto';
 import { RegisterResDto } from './dto/register.res.dto';
-import { AuthUser } from './types/auth-user.type';
 import { JwtRefreshPayloadType } from './types/jwt-refresh-payload.type';
 
 type Token = Branded<
@@ -170,21 +170,6 @@ export class AuthService {
       sessionId: session.id,
       hash: newHash,
     });
-  }
-
-  async verifyAccessToken(token: string): Promise<AuthUser> {
-    const user = await this.accessTokenService.verify(token);
-
-    // Force logout if the session is in the blacklist
-    const isSessionBlacklisted = await this.cacheManager.store.get<boolean>(
-      createCacheKey(CacheKey.SESSION_BLACKLIST, user.sessionId),
-    );
-
-    if (isSessionBlacklisted) {
-      throw new UnauthorizedException();
-    }
-
-    return user;
   }
 
   private verifyRefreshToken(token: string): JwtRefreshPayloadType {
