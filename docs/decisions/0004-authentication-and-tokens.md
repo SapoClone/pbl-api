@@ -1,8 +1,8 @@
 # ADR-0004: Platform is the sole token issuer; RS256 + JWKS verified at gateway and service
 
-- **Status:** Accepted (direction: pbl-infra architecture says "Auth hiện
-  dùng secret đối xứng; đích là RS256 + JWKS") · Proposed (the specifics
-  below, written 2026-10-08, pending team review)
+- **Status:** Accepted — steps 1–4 implemented on 2026-10-08 (see
+  "Implementation status"); step 5 pending. Direction from pbl-infra
+  architecture ("Auth hiện dùng secret đối xứng; đích là RS256 + JWKS").
 - **Date:** 2026-10-08
 - **Scope:** `apps/platform/src/api/auth`, `guards/`, `krakend/krakend.json`, every service
 
@@ -55,8 +55,8 @@ blacklist couples every service to platform's Redis.
 
 ## Migration plan (each step shippable on its own)
 
-1. Platform: RS256 key pair, JWKS endpoint, `kid` signing; accept HS256
-   and RS256 during the transition.
+1. Platform: RS256 key pair, JWKS endpoint, `kid` signing. (Planned: accept
+   HS256 and RS256 during a transition — dropped, see below.)
 2. KrakenD: `auth/validator` + `propagate_claims` on protected routes
    (`disable_jwk_security: true` only for the local http JWKS URL).
 3. Extract the guard into `libs/auth`; adopt it in all 6 apps; add
@@ -65,10 +65,44 @@ blacklist couples every service to platform's Redis.
    the Redis blacklist.
 5. Populate `tid`/`roles`/`perms` once Tenant/Staff/RBAC entities exist.
 
+## Implementation status
+
+| Step | State | Where |
+|---|---|---|
+| 1. RS256 + JWKS | Done | `apps/platform/src/api/auth/access-token.service.ts`, `jwks.controller.ts`; env `AUTH_JWT_PRIVATE_KEY` (base64 PEM, RSA ≥ 2048), `AUTH_JWT_KEY_ID`, `AUTH_JWT_ISSUER`, `AUTH_JWT_AUDIENCE` |
+| 2. Gateway validation | Done | `krakend/krakend.json` `auth/validator` on every protected route; claims → `X-User-Id`, `X-Session-Id`, `X-Subject-Type` |
+| 3. `libs/auth` in all apps | Done | `libs/auth` (`@pbl/auth`); platform: `PblAuthModule.forRootAsync` in `auth.module.ts`; others: `PblAuthModule.forRemoteJwks()` + `AUTH_JWKS_URL` |
+| 4. Opaque refresh tokens | Done | `refresh-token.service.ts`, `entities/refresh-token.entity.ts`, migration `1791476400000-replace-session-with-refresh-token.ts` |
+| 5. `tid`/`roles`/`perms` + `@RequirePermission` | **Pending** | Needs Tenant/Staff/RBAC entities first |
+
+Deliberate deviations from the plan above:
+
+- **No HS256 transition window.** The AWS deployment was torn down, so no
+  live HS256 tokens existed; accepting two algorithms would only have added
+  attack surface. Platform switched to RS256 in one step.
+- **`family_id` added to the ERD's `RefreshToken`.** Every token rotated out
+  of one login shares a `family_id`, and that id is the access token's
+  `sid`. This keeps `sid` stable across refreshes (logout kills every access
+  token of that login) and limits reuse revocation to the compromised login
+  instead of all of the user's sessions.
+- **Redis deny-list kept (§7).** Access tokens still live `1d` because
+  pbl-web has no refresh logic yet; without the deny-list logout would not
+  take effect for up to a day. Remove it once the TTL is 5–15 min. On
+  refresh-token reuse the family's `sid` is also denied, so an attacker's
+  live access tokens die immediately.
+- **Concurrent refreshes count as reuse.** Rotation is a conditional update;
+  of two simultaneous refreshes with the same token, the loser revokes the
+  family (the user logs in again). Clients must serialize refreshes.
+
+Production follow-ups: pbl-infra must provision `AUTH_JWT_PRIVATE_KEY` /
+`AUTH_JWT_KEY_ID` (SSM) and `AUTH_JWKS_URL`, and drop `AUTH_JWT_SECRET` /
+`AUTH_REFRESH_SECRET`; the production gateway must use an https JWKS URL
+without `disable_jwk_security`; key rotation (§9) currently supports one
+active key — publishing a "next" key needs a second key slot in
+`AccessTokenService`.
+
 ## Consequences
 
-- Until step 1 ships, keep the current HS256 flow working; don't add new
-  consumers of `AUTH_JWT_SECRET` outside platform.
 - New endpoints must take user/tenant identity from the token
   (`@CurrentUser()`), never from the request body/path.
 - KrakenD must reach platform's JWKS endpoint at startup and on cache expiry.

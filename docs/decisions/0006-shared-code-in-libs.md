@@ -1,6 +1,6 @@
 # ADR-0006: Code shared across services lives in Nest libraries under `libs/`
 
-- **Status:** Proposed
+- **Status:** Accepted (first library: `libs/auth`, 2026-10-08)
 - **Date:** 2026-10-08
 - **Scope:** monorepo structure, `nest-cli.json`, `tsconfig.json`
 
@@ -26,6 +26,17 @@ the JWT guard (ADR-0004) — and must not import from another app (ADR-0001).
   move it as-is (behavior-preserving refactor with tests), then switch
   platform to import from the library.
 - Libraries contain no service-specific entities or business rules.
+
+## Build layout (learned while adding `libs/auth`)
+
+With Nest's `tsc` builder, an app that imports from `libs/` is compiled
+with the repo root as common root, so output keeps repo-relative paths:
+`dist/apps/<app>/apps/<app>/src/main.js`. Hence `entryFile:
+apps/<app>/src/main` per app in `nest-cli.json`, platform's asset `outDir`
+(i18n) pointing at the same folder, and the Dockerfile `CMD`/`start:prod`
+using that path. The production Dockerfile also copies `libs/` into the
+builder stage. Stub apps keep `"paths"` limited to `@pbl/*` so they still
+cannot reach platform's `@/…` aliases.
 
 ## Consequences
 

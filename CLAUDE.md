@@ -26,9 +26,9 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 | Area | Today | Target (build toward this) |
 |---|---|---|
 | Services | `platform` has business logic; `catalog`, `commerce`, `finance`, `integration`, `insight` only expose `GET /health` | 6 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md)) |
-| Data | One Postgres DB `pbl`, one schema per service; platform has only `user`/`session`/`post` | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
-| Gateway | KrakenD routes every platform endpoint + each stub's `/health`; no token checks | Same, plus JWT validation at the edge ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
-| Auth | Platform signs/verifies HS256 with a shared secret; Redis session blacklist | Platform is sole issuer, RS256 + JWKS, verified by KrakenD **and** each service ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
+| Data | One Postgres DB `pbl`, one schema per service; platform has only `user`/`refresh_token`/`post` | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
+| Gateway | KrakenD routes every platform endpoint + each stub's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
+| Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry only `sub`/`sid`/`sub_type` | Step 5: `tid`/`roles`/`perms` claims + `@RequirePermission` once Tenant/Staff/RBAC exist; short access-token TTL, then drop the deny-list ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
 | Events | Only SQS `email-verification` → pbl-mail-service ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | SNS/SQS event bus, ~20 domain events, outbox/inbox — **not built** |
 | AWS | All AWS resources were deleted to save credits; pbl-infra keeps the Terraform | Re-apply pbl-infra when deploying |
 
@@ -41,6 +41,8 @@ back away from the target direction.
 apps/
   platform/src/        auth · users · (posts: boilerplate leftover) — the only app with logic
   catalog|commerce|finance|integration|insight/src/   main.ts, app.module.ts, health.controller(.spec).ts
+libs/
+  auth/src/            @pbl/auth — token verification, global AuthGuard, Public/AuthOptional/CurrentUser
 krakend/krakend.json   gateway routes (every client-facing route must be declared here)
 docker/                postgres-init-schemas.sql (creates the 6 schemas), elasticmq.conf (local SQS)
 docker-compose.yml     full local stack: 6 apps + postgres + redis + elasticmq + krakend
@@ -49,10 +51,19 @@ docs/decisions/        ADRs — add one for every new architectural decision
 ```
 
 The `@/...` path aliases in the root `tsconfig.json` resolve **only into
-`apps/platform/src`**. Stub apps use relative imports. Code shared by
-several services goes in a Nest library under `libs/` — see
-[ADR-0006](docs/decisions/0006-shared-code-in-libs.md); never import one app's
-code from another app.
+`apps/platform/src`**; stub apps reset `paths` to the `@pbl/*` libraries only.
+Code shared by several services goes in a Nest library under `libs/<name>`
+imported as `@pbl/<name>` — see [ADR-0006](docs/decisions/0006-shared-code-in-libs.md);
+never import one app's code from another app. A new library needs: a
+`nest-cli.json` project (type `library`), `@pbl/<name>` in the root
+`tsconfig.json` `paths` **and** in each stub's `tsconfig.app.json` `paths`,
+and a `moduleNameMapper` entry in `package.json` `jest` and
+`apps/platform/jest.config.json`.
+
+Because apps import from `libs/`, `tsc` keeps repo-relative paths: the
+entry is **`dist/apps/<app>/apps/<app>/src/main.js`** (`nest-cli.json`
+`entryFile`, `start:prod`, Dockerfile `CMD`), and platform's assets (i18n)
+are copied there via an explicit asset `outDir`.
 
 ## Service boundaries (from pbl-infra architecture)
 
@@ -81,6 +92,11 @@ Rules:
   KrakenD 404s anything undeclared. Copy an existing entry: keep
   `output_encoding`/backend `encoding` = `"no-op"`, the `input_headers`
   whitelist, and `input_query_strings: ["*"]`.
+- A route that is protected in the service **must also carry the
+  `auth/validator` block** in its gateway entry (copy one from a `users/*`
+  route, including the `X-User-Id`/`X-Session-Id`/`X-Subject-Type` headers in
+  `input_headers`). Public routes have no validator. Gateway and service must
+  agree on which routes are public.
 - Add a forwarded header to the gateway's `input_headers` **and** to
   `security/cors.allow_headers`, and to the service's `enableCors` list.
 - Validate after editing:
@@ -88,16 +104,24 @@ Rules:
 
 ## Auth rules — [ADR-0004](docs/decisions/0004-authentication-and-tokens.md)
 
-- Only `platform` creates tokens. No other service gets the signing secret/key.
-- Protected by default: the global `AuthGuard` (registered in `main.ts`)
-  rejects requests without a valid Bearer token. Mark endpoints with
-  `@ApiAuth(...)` (protected) or `@ApiPublic(...)` (public) from
-  `decorators/http.decorators.ts`; `@AuthOptional()` for mixed. Read the
-  caller with `@CurrentUser()`.
+- Only `platform` creates tokens (`AccessTokenService`, RS256, key from
+  `AUTH_JWT_PRIVATE_KEY` + `AUTH_JWT_KEY_ID`). No other service gets the
+  private key. Never add HS256, a shared secret, or an `alg` taken from the token.
+- Every app imports `PblAuthModule` from `@pbl/auth` exactly once: platform
+  via `forRootAsync` in `auth.module.ts` (local key + Redis deny-list), every
+  other app via `PblAuthModule.forRemoteJwks()` (needs `AUTH_JWKS_URL`). It
+  registers a **global** guard: every route is protected unless `@Public()`.
+- Platform handlers use `@ApiAuth(...)` (protected) / `@ApiPublic(...)`
+  (public) from `decorators/http.decorators.ts`; other apps use `@Public()` /
+  `@AuthOptional()` from `@pbl/auth`. Read the caller with `@CurrentUser()`
+  (an `AuthUser`: `id`, `sessionId`, `subjectType`, `exp`).
+- Services verify the token themselves; never trust `X-User-Id` etc.
+  forwarded by the gateway on their own.
 - Tenant/user identity comes **from the token**, never from body, query or path.
-- Moving to RS256/JWKS follows the ADR's migration steps; don't invent another scheme.
-- Known gap: `/users/:id` PATCH/DELETE have **no ownership or role
-  check** yet (`role: ''` TODO in tokens). Don't copy that pattern into new endpoints.
+- Refresh tokens are opaque and handled only by `RefreshTokenService`
+  (hashed, rotated, reuse ⇒ family revoked). Never put them in a JWT or log them.
+- Known gap: `/users/:id` PATCH/DELETE have **no ownership or role check**
+  yet; tokens carry no roles until step 5. Don't copy that pattern.
 
 ## Platform code conventions
 
@@ -172,9 +196,12 @@ docker compose up --build -d                 # whole stack; gateway on :8080, pl
 bash scripts/verify-local-stack.sh           # must print "Stack verified." before you claim success
 docker compose up -d --build platform        # REQUIRED after editing platform code: the container
                                              # has no source mount, so watch mode never sees your edit
-# run tests/lint inside the image with apps/ mounted (Git Bash on Windows: MSYS_NO_PATHCONV=1, $(pwd -W)):
-docker compose run --rm --no-deps -v "$PWD/apps:/app/apps" platform pnpm exec jest --config apps/platform/jest.config.json
-docker compose run --rm --no-deps -v "$PWD/apps:/app/apps" platform pnpm lint:check
+# run tests/lint inside the image: mount the repo at /work and borrow the image's node_modules
+# (Git Bash on Windows: MSYS_NO_PATHCONV=1 and $(pwd -W) instead of $PWD)
+docker compose run --rm --no-deps -v "$PWD:/work" -w /work platform sh -c \
+  "ln -s /app/node_modules node_modules; pnpm exec jest --config apps/platform/jest.config.json; rm node_modules"
+#   libs + stub apps: pnpm exec jest libs apps/catalog/src ...     lint: pnpm exec eslint <files>
+# after changing package.json / pnpm-lock.yaml: docker compose build (images bake node_modules)
 ```
 
 Local SQS is ElasticMQ; queued messages:
@@ -187,9 +214,11 @@ Local SQS is ElasticMQ; queued messages:
   `getRepositoryToken(Entity)` as in `user.service.spec.ts`.
 - New stub-service endpoints get a spec like `health.controller.spec.ts`.
 - CI (`.github/workflows/ci.yml`) runs lint once and build+test **per
-  service** in a matrix; a new app must be added to that matrix, to
-  `nest-cli.json`, `package.json` scripts, `docker-compose.yml`,
-  `docker/postgres-init-schemas.sql` (its schema), and `krakend.json`.
+  service** in a matrix (plus `libs`: `build:libs`/`test:libs`); a new app
+  must be added to that matrix, to `nest-cli.json` (with
+  `entryFile: apps/<app>/src/main`), `package.json` scripts,
+  `docker-compose.yml` (with `AUTH_JWKS_URL`), `docker/postgres-init-schemas.sql`
+  (its schema), `krakend.json`, and must import `PblAuthModule.forRemoteJwks()`.
 
 ## Git
 
@@ -210,6 +239,10 @@ Local SQS is ElasticMQ; queued messages:
   and `ConfigModule` would load a host `.env` inside the container.
 - KrakenD without `no-op` encoding turns backend 4xx into gateway 500s and
   drops bodies.
+- `.env.docker.platform` contains a **committed local-only RSA key**; tests
+  generate a throwaway key in `setup-jest.mjs`. Never reuse either elsewhere.
+- `krakend.json` uses `disable_jwk_security: true` (http JWKS URL) — valid
+  for the local stack only.
 - The README links `docs/superpowers/specs/…monorepo-service-split-design.md`,
   which is not in the repo; ADR-0001–0003 capture its decisions.
 
@@ -223,6 +256,11 @@ Local SQS is ElasticMQ; queued messages:
 - No rate limiting (despite `docs/security.md`), no ownership checks.
 - Register saves the user before enqueueing; if SQS fails the user exists
   without a verification email and there is no working resend.
+- Access tokens still live `1d` (pbl-web has no refresh logic yet), so the
+  Redis logout deny-list stays (ADR-0004 §7).
+- pbl-infra still provisions `AUTH_JWT_SECRET`/`AUTH_REFRESH_SECRET`; before
+  the next deploy it must provision `AUTH_JWT_PRIVATE_KEY` + `AUTH_JWT_KEY_ID`
+  (SSM) for platform and `AUTH_JWKS_URL` for the other services.
 
 ## Recording decisions
 
