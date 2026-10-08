@@ -6,6 +6,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
+import { AccessTokenService } from './access-token.service';
 import { AuthService } from './auth.service';
 import { RegisterReqDto } from './dto/register.req.dto';
 
@@ -67,6 +68,10 @@ describe('AuthService', () => {
         {
           provide: QueueService,
           useValue: queueServiceValue,
+        },
+        {
+          provide: AccessTokenService,
+          useValue: { sign: jest.fn(), verify: jest.fn() },
         },
         {
           provide: CACHE_MANAGER,

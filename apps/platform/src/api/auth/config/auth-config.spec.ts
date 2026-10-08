@@ -14,21 +14,54 @@ describe('AuthConfig', () => {
     jest.spyOn(console, 'info').mockImplementation();
   });
 
-  describe('secret', () => {
-    it('should return the value of AUTH_JWT_SECRET', async () => {
-      process.env.AUTH_JWT_SECRET = 'secret';
+  describe('privateKey', () => {
+    it('should decode AUTH_JWT_PRIVATE_KEY from base64 to the PEM key', async () => {
+      const pem =
+        '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n';
+      process.env.AUTH_JWT_PRIVATE_KEY = Buffer.from(pem).toString('base64');
       const config = await authConfig();
-      expect(config.secret).toBe('secret');
+      expect(config.privateKey).toBe(pem);
     });
 
-    it('should throw an error when AUTH_JWT_SECRET is an empty', async () => {
-      process.env.AUTH_JWT_SECRET = '';
+    it('should throw an error when AUTH_JWT_PRIVATE_KEY is not base64', async () => {
+      process.env.AUTH_JWT_PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----';
       await expect(async () => await authConfig()).rejects.toThrow(Error);
     });
 
-    it('should throw an error when AUTH_JWT_SECRET is not set', async () => {
-      delete process.env.AUTH_JWT_SECRET;
+    it('should throw an error when AUTH_JWT_PRIVATE_KEY is not set', async () => {
+      delete process.env.AUTH_JWT_PRIVATE_KEY;
       await expect(async () => await authConfig()).rejects.toThrow(Error);
+    });
+  });
+
+  describe('keyId', () => {
+    it('should return the value of AUTH_JWT_KEY_ID', async () => {
+      process.env.AUTH_JWT_KEY_ID = 'key-2026-10';
+      const config = await authConfig();
+      expect(config.keyId).toBe('key-2026-10');
+    });
+
+    it('should throw an error when AUTH_JWT_KEY_ID is not set', async () => {
+      delete process.env.AUTH_JWT_KEY_ID;
+      await expect(async () => await authConfig()).rejects.toThrow(Error);
+    });
+  });
+
+  describe('issuer and audience', () => {
+    it('should default to platform and pbl6', async () => {
+      delete process.env.AUTH_JWT_ISSUER;
+      delete process.env.AUTH_JWT_AUDIENCE;
+      const config = await authConfig();
+      expect(config.issuer).toBe('platform');
+      expect(config.audience).toBe('pbl6');
+    });
+
+    it('should use AUTH_JWT_ISSUER and AUTH_JWT_AUDIENCE when set', async () => {
+      process.env.AUTH_JWT_ISSUER = 'iss';
+      process.env.AUTH_JWT_AUDIENCE = 'aud';
+      const config = await authConfig();
+      expect(config.issuer).toBe('iss');
+      expect(config.audience).toBe('aud');
     });
   });
 

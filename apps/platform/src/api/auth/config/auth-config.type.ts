@@ -1,5 +1,8 @@
 export type AuthConfig = {
-  secret: string;
+  privateKey: string;
+  keyId: string;
+  issuer: string;
+  audience: string;
   expires: string;
   refreshSecret: string;
   refreshExpires: string;

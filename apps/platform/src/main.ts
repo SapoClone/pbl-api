@@ -108,6 +108,7 @@ async function bootstrap() {
       exclude: [
         { method: RequestMethod.GET, path: '/' },
         { method: RequestMethod.GET, path: 'health' },
+        { method: RequestMethod.GET, path: '.well-known/jwks.json' },
       ],
     },
   );

@@ -20,13 +20,14 @@ import ms from 'ms';
 import { Repository } from 'typeorm';
 import { SessionEntity } from '../user/entities/session.entity';
 import { UserEntity } from '../user/entities/user.entity';
+import { AccessTokenService } from './access-token.service';
 import { LoginReqDto } from './dto/login.req.dto';
 import { LoginResDto } from './dto/login.res.dto';
 import { RefreshReqDto } from './dto/refresh.req.dto';
 import { RefreshResDto } from './dto/refresh.res.dto';
 import { RegisterReqDto } from './dto/register.req.dto';
 import { RegisterResDto } from './dto/register.res.dto';
-import { JwtPayloadType } from './types/jwt-payload.type';
+import { AuthUser } from './types/auth-user.type';
 import { JwtRefreshPayloadType } from './types/jwt-refresh-payload.type';
 
 type Token = Branded<
@@ -46,6 +47,7 @@ export class AuthService {
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
     private readonly queueService: QueueService,
+    private readonly accessTokenService: AccessTokenService,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
   ) {}
@@ -134,7 +136,7 @@ export class AuthService {
     });
   }
 
-  async logout(userToken: JwtPayloadType): Promise<void> {
+  async logout(userToken: AuthUser): Promise<void> {
     await this.cacheManager.store.set<boolean>(
       createCacheKey(CacheKey.SESSION_BLACKLIST, userToken.sessionId),
       true,
@@ -170,26 +172,19 @@ export class AuthService {
     });
   }
 
-  async verifyAccessToken(token: string): Promise<JwtPayloadType> {
-    let payload: JwtPayloadType;
-    try {
-      payload = this.jwtService.verify(token, {
-        secret: this.configService.getOrThrow('auth.secret', { infer: true }),
-      });
-    } catch {
-      throw new UnauthorizedException();
-    }
+  async verifyAccessToken(token: string): Promise<AuthUser> {
+    const user = await this.accessTokenService.verify(token);
 
     // Force logout if the session is in the blacklist
     const isSessionBlacklisted = await this.cacheManager.store.get<boolean>(
-      createCacheKey(CacheKey.SESSION_BLACKLIST, payload.sessionId),
+      createCacheKey(CacheKey.SESSION_BLACKLIST, user.sessionId),
     );
 
     if (isSessionBlacklisted) {
       throw new UnauthorizedException();
     }
 
-    return payload;
+    return user;
   }
 
   private verifyRefreshToken(token: string): JwtRefreshPayloadType {
@@ -231,17 +226,10 @@ export class AuthService {
     const tokenExpires = Date.now() + ms(tokenExpiresIn);
 
     const [accessToken, refreshToken] = await Promise.all([
-      await this.jwtService.signAsync(
-        {
-          id: data.id,
-          role: '', // TODO: add role
-          sessionId: data.sessionId,
-        },
-        {
-          secret: this.configService.getOrThrow('auth.secret', { infer: true }),
-          expiresIn: tokenExpiresIn,
-        },
-      ),
+      await this.accessTokenService.sign({
+        userId: data.id,
+        sessionId: data.sessionId,
+      }),
       await this.jwtService.signAsync(
         {
           sessionId: data.sessionId,
