@@ -39,4 +39,15 @@ for step in register login; do
   echo "OK: POST /platform/api/v1/auth/email/$step -> 200"
 done
 
+token=$(curl -s -H "Content-Type: application/json" -d "$creds" "$api/auth/email/login"   | python3 -c "import json,sys; print(json.load(sys.stdin)['accessToken'])")
+for auth in "Bearer $token:200" "Bearer not-a-token:401"; do
+  expected=${auth##*:}
+  code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: ${auth%:*}" "$api/users/me")
+  if [[ "$code" != "$expected" ]]; then
+    echo "FAIL: GET $api/users/me returned $code (expected $expected)"
+    exit 1
+  fi
+  echo "OK: GET /platform/api/v1/users/me -> $expected"
+done
+
 echo "Stack verified."
