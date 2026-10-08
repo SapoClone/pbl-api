@@ -27,4 +27,16 @@ for svc in "${services[@]}"; do
   echo "OK: /${svc}/health -> 200"
 done
 
-echo "All 6 services reachable through KrakenD. Stack verified."
+echo "All 6 services reachable through KrakenD. Checking platform login through the gateway..."
+api="http://localhost:8080/platform/api/v1"
+creds="{\"email\":\"verify-$(date +%s)@example.com\",\"password\":\"Passw0rd!\"}"
+for step in register login; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -H "Content-Type: application/json" -d "$creds" "$api/auth/email/$step")
+  if [[ "$code" != "200" ]]; then
+    echo "FAIL: POST $api/auth/email/$step returned $code"
+    exit 1
+  fi
+  echo "OK: POST /platform/api/v1/auth/email/$step -> 200"
+done
+
+echo "Stack verified."

@@ -3,6 +3,7 @@ import { Uuid } from '@/common/types/common.type';
 import { AbstractEntity } from '@/database/entities/abstract.entity';
 import { hashPassword as hashPass } from '@/utils/password.util';
 import {
+  AfterLoad,
   BeforeInsert,
   BeforeUpdate,
   Column,
@@ -61,11 +62,21 @@ export class UserEntity extends AbstractEntity {
   @OneToMany(() => PostEntity, (post) => post.user)
   posts: Relation<PostEntity[]>;
 
+  // The hash as read from the database, so saving a loaded user (e.g. a
+  // profile update) doesn't hash the existing hash again.
+  private loadedPassword?: string;
+
+  @AfterLoad()
+  rememberLoadedPassword() {
+    this.loadedPassword = this.password;
+  }
+
   @BeforeInsert()
   @BeforeUpdate()
   async hashPassword() {
-    if (this.password) {
+    if (this.password && this.password !== this.loadedPassword) {
       this.password = await hashPass(this.password);
+      this.loadedPassword = this.password;
     }
   }
 }

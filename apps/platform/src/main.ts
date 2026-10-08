@@ -93,7 +93,10 @@ async function bootstrap() {
   app.enableCors({
     origin: corsOrigin,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    allowedHeaders: 'Content-Type, Accept',
+    // Authorization carries the Bearer access token; Accept-Language and
+    // x-lang are read by the i18n resolvers in modules-set.ts.
+    allowedHeaders:
+      'Content-Type, Accept, Authorization, Accept-Language, x-lang',
     credentials: true,
   });
   console.info('CORS Origin:', corsOrigin);
