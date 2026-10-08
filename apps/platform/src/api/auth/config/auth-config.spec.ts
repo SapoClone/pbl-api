@@ -88,24 +88,6 @@ describe('AuthConfig', () => {
     });
   });
 
-  describe('refreshSecret', () => {
-    it('should return the value of AUTH_REFRESH_SECRET', async () => {
-      process.env.AUTH_REFRESH_SECRET = 'secret';
-      const config = await authConfig();
-      expect(config.refreshSecret).toBe('secret');
-    });
-
-    it('should throw an error when AUTH_REFRESH_SECRET is an empty', async () => {
-      process.env.AUTH_REFRESH_SECRET = '';
-      await expect(async () => await authConfig()).rejects.toThrow(Error);
-    });
-
-    it('should throw an error when AUTH_REFRESH_SECRET is not set', async () => {
-      delete process.env.AUTH_REFRESH_SECRET;
-      await expect(async () => await authConfig()).rejects.toThrow(Error);
-    });
-  });
-
   describe('refreshExpires', () => {
     it('should return the value of AUTH_REFRESH_TOKEN_EXPIRES_IN', async () => {
       process.env.AUTH_REFRESH_TOKEN_EXPIRES_IN = '1d';

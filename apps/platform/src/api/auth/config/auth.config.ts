@@ -35,10 +35,6 @@ class EnvironmentVariablesValidator {
 
   @IsString()
   @IsNotEmpty()
-  AUTH_REFRESH_SECRET: string;
-
-  @IsString()
-  @IsNotEmpty()
   @IsMs()
   AUTH_REFRESH_TOKEN_EXPIRES_IN: string;
 
@@ -74,7 +70,6 @@ export default registerAs<AuthConfig>('auth', () => {
     issuer: process.env.AUTH_JWT_ISSUER || 'platform',
     audience: process.env.AUTH_JWT_AUDIENCE || 'pbl6',
     expires: process.env.AUTH_JWT_TOKEN_EXPIRES_IN,
-    refreshSecret: process.env.AUTH_REFRESH_SECRET,
     refreshExpires: process.env.AUTH_REFRESH_TOKEN_EXPIRES_IN,
     forgotSecret: process.env.AUTH_FORGOT_SECRET,
     forgotExpires: process.env.AUTH_FORGOT_TOKEN_EXPIRES_IN,

@@ -4,7 +4,6 @@ export type AuthConfig = {
   issuer: string;
   audience: string;
   expires: string;
-  refreshSecret: string;
   refreshExpires: string;
   forgotSecret: string;
   forgotExpires: string;

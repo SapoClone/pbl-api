@@ -9,17 +9,14 @@ import { createCacheKey } from '@/utils/cache.util';
 import { verifyPassword } from '@/utils/password.util';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { randomStringGenerator } from '@nestjs/common/utils/random-string-generator.util';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AuthUser } from '@pbl/auth';
 import { Cache } from 'cache-manager';
 import { plainToInstance } from 'class-transformer';
-import crypto from 'crypto';
 import ms from 'ms';
 import { Repository } from 'typeorm';
-import { SessionEntity } from '../user/entities/session.entity';
 import { UserEntity } from '../user/entities/user.entity';
 import { AccessTokenService } from './access-token.service';
 import { LoginReqDto } from './dto/login.req.dto';
@@ -28,7 +25,10 @@ import { RefreshReqDto } from './dto/refresh.req.dto';
 import { RefreshResDto } from './dto/refresh.res.dto';
 import { RegisterReqDto } from './dto/register.req.dto';
 import { RegisterResDto } from './dto/register.res.dto';
-import { JwtRefreshPayloadType } from './types/jwt-refresh-payload.type';
+import {
+  RefreshTokenReuseError,
+  RefreshTokenService,
+} from './refresh-token.service';
 
 type Token = Branded<
   {
@@ -48,6 +48,7 @@ export class AuthService {
     private readonly userRepository: Repository<UserEntity>,
     private readonly queueService: QueueService,
     private readonly accessTokenService: AccessTokenService,
+    private readonly refreshTokenService: RefreshTokenService,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
   ) {}
@@ -71,23 +72,13 @@ export class AuthService {
       throw new UnauthorizedException();
     }
 
-    const hash = crypto
-      .createHash('sha256')
-      .update(randomStringGenerator())
-      .digest('hex');
-
-    const session = new SessionEntity({
-      hash,
-      userId: user.id,
-      createdBy: SYSTEM_USER_ID,
-      updatedBy: SYSTEM_USER_ID,
-    });
-    await session.save();
-
+    // One refresh-token family per login; its id is the access token's sid
+    const { token: refreshToken, familyId } =
+      await this.refreshTokenService.issue(user.id);
     const token = await this.createToken({
       id: user.id,
-      sessionId: session.id,
-      hash,
+      sessionId: familyId,
+      refreshToken,
     });
 
     return plainToInstance(LoginResDto, {
@@ -137,51 +128,57 @@ export class AuthService {
   }
 
   async logout(userToken: AuthUser): Promise<void> {
-    await this.cacheManager.store.set<boolean>(
-      createCacheKey(CacheKey.SESSION_BLACKLIST, userToken.sessionId),
-      true,
+    await this.revokeSession(
+      userToken.sessionId,
       userToken.exp * 1000 - Date.now(),
     );
-    await SessionEntity.delete(userToken.sessionId);
   }
 
   async refreshToken(dto: RefreshReqDto): Promise<RefreshResDto> {
-    const { sessionId, hash } = this.verifyRefreshToken(dto.refreshToken);
-    const session = await SessionEntity.findOneBy({ id: sessionId });
-
-    if (!session || session.hash !== hash) {
-      throw new UnauthorizedException();
+    let rotated: Awaited<ReturnType<RefreshTokenService['rotate']>>;
+    try {
+      rotated = await this.refreshTokenService.rotate(dto.refreshToken);
+    } catch (err) {
+      if (err instanceof RefreshTokenReuseError) {
+        // The family is already revoked; also kill its live access tokens
+        const accessTokenLifetime: string = this.configService.getOrThrow(
+          'auth.expires',
+          { infer: true },
+        );
+        await this.revokeSession(err.familyId, ms(accessTokenLifetime));
+      }
+      throw err;
     }
 
-    const user = await this.userRepository.findOneOrFail({
-      where: { id: session.userId },
+    const user = await this.userRepository.findOne({
+      where: { id: rotated.subjectId },
       select: ['id'],
     });
-
-    const newHash = crypto
-      .createHash('sha256')
-      .update(randomStringGenerator())
-      .digest('hex');
-
-    SessionEntity.update(session.id, { hash: newHash });
+    if (!user) {
+      await this.refreshTokenService.revokeFamily(rotated.familyId);
+      throw new UnauthorizedException();
+    }
 
     return await this.createToken({
       id: user.id,
-      sessionId: session.id,
-      hash: newHash,
+      sessionId: rotated.familyId,
+      refreshToken: rotated.token,
     });
   }
 
-  private verifyRefreshToken(token: string): JwtRefreshPayloadType {
-    try {
-      return this.jwtService.verify(token, {
-        secret: this.configService.getOrThrow('auth.refreshSecret', {
-          infer: true,
-        }),
-      });
-    } catch {
-      throw new UnauthorizedException();
+  /**
+   * End a login: revoke its refresh tokens and deny its access tokens until
+   * they expire (instant revocation, ADR-0004 §7).
+   */
+  private async revokeSession(sessionId: string, ttlMs: number): Promise<void> {
+    if (ttlMs > 0) {
+      await this.cacheManager.store.set<boolean>(
+        createCacheKey(CacheKey.SESSION_BLACKLIST, sessionId),
+        true,
+        ttlMs,
+      );
     }
+    await this.refreshTokenService.revokeFamily(sessionId);
   }
 
   private async createVerificationToken(data: { id: string }): Promise<string> {
@@ -203,36 +200,20 @@ export class AuthService {
   private async createToken(data: {
     id: string;
     sessionId: string;
-    hash: string;
+    refreshToken: string;
   }): Promise<Token> {
     const tokenExpiresIn = this.configService.getOrThrow('auth.expires', {
       infer: true,
     });
     const tokenExpires = Date.now() + ms(tokenExpiresIn);
 
-    const [accessToken, refreshToken] = await Promise.all([
-      await this.accessTokenService.sign({
-        userId: data.id,
-        sessionId: data.sessionId,
-      }),
-      await this.jwtService.signAsync(
-        {
-          sessionId: data.sessionId,
-          hash: data.hash,
-        },
-        {
-          secret: this.configService.getOrThrow('auth.refreshSecret', {
-            infer: true,
-          }),
-          expiresIn: this.configService.getOrThrow('auth.refreshExpires', {
-            infer: true,
-          }),
-        },
-      ),
-    ]);
+    const accessToken = await this.accessTokenService.sign({
+      userId: data.id,
+      sessionId: data.sessionId,
+    });
     return {
       accessToken,
-      refreshToken,
+      refreshToken: data.refreshToken,
       tokenExpires,
     } as Token;
   }

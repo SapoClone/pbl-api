@@ -14,12 +14,14 @@ import { AccessTokenModule } from './access-token.module';
 import { AccessTokenService } from './access-token.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { JwksController } from './jwks.controller';
+import { RefreshTokenService } from './refresh-token.service';
 
 @Module({
   imports: [
     UserModule,
-    TypeOrmModule.forFeature([UserEntity]),
+    TypeOrmModule.forFeature([UserEntity, RefreshTokenEntity]),
     JwtModule.register({}),
     AccessTokenModule,
     // Global guard + verifier shared by all services (ADR-0006). Platform
@@ -46,6 +48,6 @@ import { JwksController } from './jwks.controller';
     }),
   ],
   controllers: [AuthController, JwksController],
-  providers: [AuthService],
+  providers: [AuthService, RefreshTokenService],
 })
 export class AuthModule {}

@@ -45,7 +45,6 @@ process.env.AUTH_JWT_PRIVATE_KEY = Buffer.from(
 ).toString('base64');
 process.env.AUTH_JWT_KEY_ID = 'test-key';
 process.env.AUTH_JWT_TOKEN_EXPIRES_IN = '1d';
-process.env.AUTH_REFRESH_SECRET = 'secret_for_refresh';
 process.env.AUTH_REFRESH_TOKEN_EXPIRES_IN = '365d';
 process.env.AUTH_FORGOT_SECRET = 'secret_for_forgot';
 process.env.AUTH_FORGOT_TOKEN_EXPIRES_IN = '7d';

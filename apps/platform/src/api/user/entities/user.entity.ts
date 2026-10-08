@@ -14,7 +14,6 @@ import {
   PrimaryGeneratedColumn,
   Relation,
 } from 'typeorm';
-import { SessionEntity } from './session.entity';
 
 @Entity('user')
 export class UserEntity extends AbstractEntity {
@@ -55,9 +54,6 @@ export class UserEntity extends AbstractEntity {
     default: null,
   })
   deletedAt: Date;
-
-  @OneToMany(() => SessionEntity, (session) => session.user)
-  sessions?: SessionEntity[];
 
   @OneToMany(() => PostEntity, (post) => post.user)
   posts: Relation<PostEntity[]>;
