@@ -60,6 +60,20 @@ Then verify every service is reachable through the gateway:
 ./scripts/verify-local-stack.sh
 ```
 
+Notes on the local stack:
+
+- SQS is emulated by an ElasticMQ container (`docker/elasticmq.conf`), so
+  `POST /api/v1/auth/email/register` works without AWS. Inspect queued
+  verification emails at
+  `http://localhost:9324/000000000000/email-verification?Action=ReceiveMessage`.
+- Postgres creates the `pbl` database and the 6 schemas only on an empty
+  volume. If `platform` logs `database "pbl" does not exist`, the volume
+  predates that init — reset it with `docker compose down -v`.
+- For `pnpm` commands run on the host (migrations, `start:dev`), copy
+  `.env.example` to `.env` and point it at the compose ports
+  (`DATABASE_PORT=25432`, `DATABASE_NAME=pbl`, `DATABASE_SCHEMA=platform`).
+  `.env` is excluded from Docker builds.
+
 Individual services, outside Docker, for day-to-day development on `platform`:
 
 ```bash

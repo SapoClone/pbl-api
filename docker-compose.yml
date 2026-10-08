@@ -11,8 +11,12 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      elasticmq:
+        condition: service_started
     networks:
       - pbl-network
 
@@ -79,8 +83,13 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       TZ: "UTC"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d pbl" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pbl_postgres_data:/var/lib/postgresql/data
       - ./docker/postgres-init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql
     ports:
       - "25432:5432"
@@ -92,6 +101,17 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    networks:
+      - pbl-network
+
+  # Local stand-in for AWS SQS (the email-verification queue) — see docker/elasticmq.conf
+  elasticmq:
+    image: softwaremill/elasticmq-native:latest
+    restart: always
+    ports:
+      - "9324:9324"
+    volumes:
+      - ./docker/elasticmq.conf:/opt/elasticmq.conf:ro
     networks:
       - pbl-network
 
@@ -117,4 +137,8 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
+  # Not "postgres_data": the pre-monorepo compose file (same project name)
+  # used that name for a cluster without the "pbl" database. Postgres only
+  # runs POSTGRES_DB + docker-entrypoint-initdb.d on an EMPTY volume, so
+  # reusing it left platform crash-looping on 'database "pbl" does not exist'.
+  pbl_postgres_data:
