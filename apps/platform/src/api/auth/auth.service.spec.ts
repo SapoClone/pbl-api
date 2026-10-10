@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserEntity } from '../user/entities/user.entity';
+import { AccountEntity } from '../account/entities/account.entity';
 import { AccessTokenService } from './access-token.service';
 import { AuthService } from './auth.service';
 import { RegisterReqDto } from './dto/register.req.dto';
@@ -19,7 +19,7 @@ describe('AuthService', () => {
   let configServiceValue: Partial<Record<keyof ConfigService, jest.Mock>>;
   let jwtServiceValue: Partial<Record<keyof JwtService, jest.Mock>>;
   let userRepositoryValue: Partial<
-    Record<keyof Repository<UserEntity>, jest.Mock>
+    Record<keyof Repository<AccountEntity>, jest.Mock>
   >;
   let queueServiceValue: Partial<Record<keyof QueueService, jest.Mock>>;
   let cacheManagerValue: { set: jest.Mock; store: { set: jest.Mock } };
@@ -81,7 +81,7 @@ describe('AuthService', () => {
           useValue: jwtServiceValue,
         },
         {
-          provide: getRepositoryToken(UserEntity),
+          provide: getRepositoryToken(AccountEntity),
           useValue: userRepositoryValue,
         },
         {
@@ -122,11 +122,11 @@ describe('AuthService', () => {
       };
       const verificationToken = 'signed.jwt.token';
 
-      jest.spyOn(UserEntity, 'exists').mockResolvedValue(false);
+      jest.spyOn(AccountEntity, 'exists').mockResolvedValue(false);
       jest
-        .spyOn(UserEntity.prototype, 'save')
-        .mockImplementation(async function (this: UserEntity) {
-          this.id = 'user-id-1' as UserEntity['id'];
+        .spyOn(AccountEntity.prototype, 'save')
+        .mockImplementation(async function (this: AccountEntity) {
+          this.id = 'user-id-1' as AccountEntity['id'];
           return this;
         });
       (jwtServiceValue.signAsync as jest.Mock).mockResolvedValue(
@@ -135,10 +135,10 @@ describe('AuthService', () => {
 
       const result = await service.register(dto);
 
-      expect(UserEntity.exists).toHaveBeenCalledWith({
+      expect(AccountEntity.exists).toHaveBeenCalledWith({
         where: { email: dto.email },
       });
-      expect(UserEntity.prototype.save).toHaveBeenCalled();
+      expect(AccountEntity.prototype.save).toHaveBeenCalled();
       expect(cacheManagerValue.set).toHaveBeenCalledWith(
         expect.any(String),
         verificationToken,
@@ -150,8 +150,8 @@ describe('AuthService', () => {
       );
       expect(result.userId).toBe('user-id-1');
 
-      (UserEntity.exists as jest.Mock).mockRestore();
-      (UserEntity.prototype.save as jest.Mock).mockRestore();
+      (AccountEntity.exists as jest.Mock).mockRestore();
+      (AccountEntity.prototype.save as jest.Mock).mockRestore();
     });
   });
 

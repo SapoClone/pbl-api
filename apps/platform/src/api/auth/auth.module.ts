@@ -8,8 +8,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthUser, PblAuthModule } from '@pbl/auth';
 import { Cache } from 'cache-manager';
-import { UserEntity } from '../user/entities/user.entity';
-import { UserModule } from '../user/user.module';
+import { AccountEntity } from '../account/entities/account.entity';
 import { AccessTokenModule } from './access-token.module';
 import { AccessTokenService } from './access-token.service';
 import { AuthController } from './auth.controller';
@@ -20,8 +19,7 @@ import { RefreshTokenService } from './refresh-token.service';
 
 @Module({
   imports: [
-    UserModule,
-    TypeOrmModule.forFeature([UserEntity, RefreshTokenEntity]),
+    TypeOrmModule.forFeature([AccountEntity, RefreshTokenEntity]),
     JwtModule.register({}),
     AccessTokenModule,
     // Global guard + verifier shared by all services (ADR-0006). Platform

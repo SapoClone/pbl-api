@@ -17,7 +17,7 @@ import { Cache } from 'cache-manager';
 import { plainToInstance } from 'class-transformer';
 import ms from 'ms';
 import { Repository } from 'typeorm';
-import { UserEntity } from '../user/entities/user.entity';
+import { AccountEntity } from '../account/entities/account.entity';
 import { AccessTokenService } from './access-token.service';
 import { LoginReqDto } from './dto/login.req.dto';
 import { LoginResDto } from './dto/login.res.dto';
@@ -44,8 +44,8 @@ export class AuthService {
   constructor(
     private readonly configService: ConfigService<AllConfigType>,
     private readonly jwtService: JwtService,
-    @InjectRepository(UserEntity)
-    private readonly userRepository: Repository<UserEntity>,
+    @InjectRepository(AccountEntity)
+    private readonly accountRepository: Repository<AccountEntity>,
     private readonly queueService: QueueService,
     private readonly accessTokenService: AccessTokenService,
     private readonly refreshTokenService: RefreshTokenService,
@@ -60,7 +60,7 @@ export class AuthService {
    */
   async signIn(dto: LoginReqDto): Promise<LoginResDto> {
     const { email, password } = dto;
-    const user = await this.userRepository.findOne({
+    const user = await this.accountRepository.findOne({
       where: { email },
       select: ['id', 'email', 'password'],
     });
@@ -89,7 +89,7 @@ export class AuthService {
 
   async register(dto: RegisterReqDto): Promise<RegisterResDto> {
     // Check if the user already exists
-    const isExistUser = await UserEntity.exists({
+    const isExistUser = await AccountEntity.exists({
       where: { email: dto.email },
     });
 
@@ -98,9 +98,10 @@ export class AuthService {
     }
 
     // Register user
-    const user = new UserEntity({
+    const user = new AccountEntity({
       email: dto.email,
       password: dto.password,
+      name: dto.name ?? '',
       createdBy: SYSTEM_USER_ID,
       updatedBy: SYSTEM_USER_ID,
     });
@@ -150,7 +151,7 @@ export class AuthService {
       throw err;
     }
 
-    const user = await this.userRepository.findOne({
+    const user = await this.accountRepository.findOne({
       where: { id: rotated.subjectId },
       select: ['id'],
     });
