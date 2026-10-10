@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code_exists": "Mã chi nhánh này đã tồn tại",
+    "last_branch": "Cửa hàng phải còn ít nhất một chi nhánh đang hoạt động"
+  }
+}

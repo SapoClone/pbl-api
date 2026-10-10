@@ -34,6 +34,12 @@ export type I18nTranslations = {
             "subdomain_exists": string;
         };
     };
+    "branch": {
+        "error": {
+            "code_exists": string;
+            "last_branch": string;
+        };
+    };
 };
 /* prettier-ignore */
 export type I18nPath = Path<I18nTranslations>;

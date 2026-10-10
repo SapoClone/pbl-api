@@ -13,4 +13,8 @@ export enum ErrorCode {
 
   // Tenant
   T001 = 'tenant.error.subdomain_exists',
+
+  // Branch
+  B001 = 'branch.error.code_exists',
+  B002 = 'branch.error.last_branch',
 }
