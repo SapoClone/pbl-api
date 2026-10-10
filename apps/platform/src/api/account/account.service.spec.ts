@@ -49,4 +49,10 @@ describe('AccountService', () => {
     expect(saved.updatedBy).toBe('a1');
     expect(me.name).toBe('New');
   });
+
+  it('clears the phone when null is sent', async () => {
+    await service.updateMe('a1', { phone: null });
+
+    expect(repository.save.mock.calls[0][0].phone).toBeNull();
+  });
 });

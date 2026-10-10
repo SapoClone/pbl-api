@@ -28,9 +28,16 @@ export class BranchService {
     const builder = this.repository
       .createQueryBuilder('branch')
       .where('branch.tenantId = :tenantId', { tenantId })
-      .orderBy('branch.createdAt', query.order);
+      .orderBy('branch.createdAt', query.order)
+      .addOrderBy('branch.id', query.order);
     if (query.status) {
       builder.andWhere('branch.status = :status', { status: query.status });
+    }
+    if (query.q) {
+      const pattern = `%${query.q.replace(/[\%_]/g, '$&')}%`;
+      builder.andWhere('(branch.name ILIKE :q OR branch.code ILIKE :q)', {
+        q: pattern,
+      });
     }
     const [branches, meta] = await paginate<BranchEntity>(builder, query, {
       skipCount: false,

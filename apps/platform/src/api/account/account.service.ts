@@ -27,7 +27,7 @@ export class AccountService {
       id: accountId as AccountEntity['id'],
     });
     if (dto.name !== undefined) account.name = dto.name;
-    if (dto.phone !== undefined) account.phone = dto.phone;
+    if (dto.phone !== undefined) account.phone = dto.phone; // null clears it
     account.updatedBy = accountId;
     const saved = await this.repository.save(account);
     return saved.toDto(AccountResDto);

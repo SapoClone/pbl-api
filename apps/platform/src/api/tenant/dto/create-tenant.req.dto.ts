@@ -34,13 +34,13 @@ export class CreateTenantReqDto {
   @IsNotIn(RESERVED_SUBDOMAINS)
   subdomain!: string;
 
-  @StringFieldOptional({ maxLength: 20 })
+  @StringFieldOptional({ maxLength: 20, nullable: true })
   @Matches(/^\+?[0-9]{8,15}$/)
-  phone?: string;
+  phone?: string | null;
 
-  @EmailFieldOptional()
-  email?: string;
+  @EmailFieldOptional({ nullable: true })
+  email?: string | null;
 
-  @StringFieldOptional({ maxLength: 255 })
-  address?: string;
+  @StringFieldOptional({ maxLength: 255, nullable: true })
+  address?: string | null;
 }

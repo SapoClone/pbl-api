@@ -5,7 +5,7 @@ export class UpdateAccountReqDto {
   @StringFieldOptional({ maxLength: 100 })
   name?: string;
 
-  @StringFieldOptional({ maxLength: 20 })
+  @StringFieldOptional({ maxLength: 20, nullable: true })
   @Matches(/^\+?[0-9]{8,15}$/)
-  phone?: string;
+  phone?: string | null;
 }

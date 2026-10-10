@@ -18,12 +18,12 @@ export class CreateBranchReqDto {
   @Matches(/^[A-Z0-9_-]{1,20}$/)
   code!: string;
 
-  @StringFieldOptional({ maxLength: 255 })
-  address?: string;
+  @StringFieldOptional({ maxLength: 255, nullable: true })
+  address?: string | null;
 
-  @StringFieldOptional({ maxLength: 20 })
+  @StringFieldOptional({ maxLength: 20, nullable: true })
   @Matches(/^\+?[0-9]{8,15}$/)
-  phone?: string;
+  phone?: string | null;
 
   @BooleanFieldOptional()
   isWarehouse?: boolean;
