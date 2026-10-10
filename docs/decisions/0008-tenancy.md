@@ -41,6 +41,10 @@ carries `tenant_id`. Platform had no Tenant/Branch, and tokens had no tenant
   create-store screen.
 - Cross-tenant tests (tenant B cannot see tenant A's data) are mandatory
   for every new resource.
+- Services other than platform do not check the logout deny-list, so a token
+  revoked by logout or by switching store, or a token for a store suspended
+  mid-session, stays valid in those services until it expires (ADR-0004 §7).
+  Short access-token TTLs close this, and so would a shared deny-list later.
 
 ## Alternatives considered
 
