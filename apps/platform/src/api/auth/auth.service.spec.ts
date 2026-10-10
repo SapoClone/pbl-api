@@ -384,11 +384,15 @@ describe('AuthService', () => {
       });
 
       await expect(login()).rejects.toThrow(UnauthorizedException);
+      expect(refreshTokenServiceValue.issue).not.toHaveBeenCalled();
     });
   });
 
   describe('switchTenant', () => {
     beforeEach(() => {
+      userRepositoryValue.findOne = jest
+        .fn()
+        .mockResolvedValue({ id: 'a1', status: AccountStatus.ACTIVE });
       refreshTokenServiceValue.issue.mockResolvedValue({
         token: 'rt2',
         familyId: 'family-2',
@@ -424,6 +428,33 @@ describe('AuthService', () => {
       );
       expect(refreshTokenServiceValue.revokeFamily).not.toHaveBeenCalled();
     });
+
+    it.each([
+      ['disabled', { id: 'a1', status: AccountStatus.DISABLED }],
+      ['missing', null],
+    ])(
+      'answers 401 and ends the session for a %s account',
+      async (_label, account) => {
+        userRepositoryValue.findOne = jest.fn().mockResolvedValue(account);
+        membershipServiceValue.findActiveMemberships.mockResolvedValue([
+          alpha,
+          beta,
+        ]);
+
+        await expect(service.switchTenant(caller, 't2')).rejects.toThrow(
+          UnauthorizedException,
+        );
+        expect(cacheManagerValue.store.set).toHaveBeenCalledWith(
+          expect.stringContaining('family-old'),
+          true,
+          expect.any(Number),
+        );
+        expect(refreshTokenServiceValue.revokeFamily).toHaveBeenCalledWith(
+          'family-old',
+        );
+        expect(refreshTokenServiceValue.issue).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('refreshToken with a store', () => {
@@ -463,6 +494,11 @@ describe('AuthService', () => {
       await expect(
         service.refreshToken({ refreshToken: 'presented' }),
       ).rejects.toThrow(UnauthorizedException);
+      expect(cacheManagerValue.store.set).toHaveBeenCalledWith(
+        expect.stringContaining('family-1'),
+        true,
+        expect.any(Number),
+      );
       expect(refreshTokenServiceValue.revokeFamily).toHaveBeenCalledWith(
         'family-1',
       );
@@ -477,6 +513,11 @@ describe('AuthService', () => {
       await expect(
         service.refreshToken({ refreshToken: 'presented' }),
       ).rejects.toThrow(UnauthorizedException);
+      expect(cacheManagerValue.store.set).toHaveBeenCalledWith(
+        expect.stringContaining('family-1'),
+        true,
+        expect.any(Number),
+      );
       expect(refreshTokenServiceValue.revokeFamily).toHaveBeenCalledWith(
         'family-1',
       );

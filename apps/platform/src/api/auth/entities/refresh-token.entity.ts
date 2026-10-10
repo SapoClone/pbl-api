@@ -28,7 +28,7 @@ export class RefreshTokenEntity extends AbstractEntity {
   @Column({ name: 'subject_type', type: 'varchar', length: 32 })
   subjectType!: AccessTokenSubjectType;
 
-  /** Soft FK, meaning depends on subject_type (account → user.id for now) */
+  /** Soft FK, meaning depends on subject_type (account → account.id for now) */
   @Column({ name: 'subject_id', type: 'uuid' })
   subjectId!: Uuid;
 

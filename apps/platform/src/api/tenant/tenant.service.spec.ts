@@ -1,6 +1,8 @@
 import { ErrorCode } from '@/constants/error-code.constant';
 import { ValidationException } from '@/exceptions/validation.exception';
+import { UnauthorizedException } from '@nestjs/common';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { AccountStatus } from '../account/entities/account.entity';
 import { BranchEntity } from '../branch/entities/branch.entity';
 import { AccountTenantEntity } from './entities/account-tenant.entity';
 import { TenantEntity } from './entities/tenant.entity';
@@ -11,7 +13,8 @@ describe('TenantService.create', () => {
   const dto = { name: 'My Shop', subdomain: 'my-shop' };
   let tenantRepository: { exists: jest.Mock };
   let saved: unknown[];
-  let dataSource: { transaction: jest.Mock };
+  let dataSource: { transaction: jest.Mock; getRepository: jest.Mock };
+  let accountRepository: { findOne: jest.Mock };
   let service: TenantService;
 
   beforeEach(() => {
@@ -25,7 +28,15 @@ describe('TenantService.create', () => {
         return entity;
       }),
     };
-    dataSource = { transaction: jest.fn((work) => work(em)) };
+    accountRepository = {
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ id: 'a1', status: AccountStatus.ACTIVE }),
+    };
+    dataSource = {
+      transaction: jest.fn((work) => work(em)),
+      getRepository: jest.fn(() => accountRepository),
+    };
     service = new TenantService(
       tenantRepository as unknown as Repository<TenantEntity>,
       dataSource as unknown as DataSource,
@@ -60,6 +71,21 @@ describe('TenantService.create', () => {
       status: 'active',
     });
   });
+
+  it.each([
+    ['disabled', { id: 'a1', status: AccountStatus.DISABLED }],
+    ['missing', null],
+  ])(
+    'answers 401 and creates nothing for a %s account',
+    async (_l, account) => {
+      accountRepository.findOne.mockResolvedValue(account);
+
+      await expect(service.create('a1', dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects a taken subdomain with T001', async () => {
     tenantRepository.exists.mockResolvedValue(true);

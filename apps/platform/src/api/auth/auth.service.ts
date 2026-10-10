@@ -98,6 +98,15 @@ export class AuthService {
    * working immediately) and start one bound to the store (P0 spec, flow 4).
    */
   async switchTenant(user: AuthUser, tenantId: string): Promise<LoginResDto> {
+    const account = await this.accountRepository.findOne({
+      where: { id: user.id as AccountEntity['id'] },
+      select: ['id', 'status'],
+    });
+    if (!account || account.status !== AccountStatus.ACTIVE) {
+      // A disabled account must not mint new sessions; end this one too
+      await this.revokeSession(user.sessionId, user.exp * 1000 - Date.now());
+      throw new UnauthorizedException();
+    }
     const memberships = await this.membershipService.findActiveMemberships(
       user.id,
     );
@@ -208,7 +217,11 @@ export class AuthService {
       select: ['id', 'status'],
     });
     if (!account || account.status !== AccountStatus.ACTIVE) {
-      await this.refreshTokenService.revokeFamily(rotated.familyId);
+      const accessTokenLifetime: string = this.configService.getOrThrow(
+        'auth.expires',
+        { infer: true },
+      );
+      await this.revokeSession(rotated.familyId, ms(accessTokenLifetime));
       throw new UnauthorizedException();
     }
 

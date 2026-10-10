@@ -1,9 +1,13 @@
 import { ErrorCode } from '@/constants/error-code.constant';
 import { ValidationException } from '@/exceptions/validation.exception';
 import { isUniqueViolation } from '@/utils/db-errors';
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import {
+  AccountEntity,
+  AccountStatus,
+} from '../account/entities/account.entity';
 import {
   BranchEntity,
   BranchStatus,
@@ -45,6 +49,16 @@ export class TenantService {
     accountId: string,
     dto: CreateTenantReqDto,
   ): Promise<TenantEntity> {
+    // Only an active account may open a store (it would otherwise get a session)
+    const account = await this.dataSource
+      .getRepository(AccountEntity)
+      .findOne({
+        where: { id: accountId as AccountEntity['id'] },
+        select: ['id', 'status'],
+      });
+    if (account?.status !== AccountStatus.ACTIVE) {
+      throw new UnauthorizedException();
+    }
     if (
       await this.tenantRepository.exists({
         where: { subdomain: dto.subdomain },
