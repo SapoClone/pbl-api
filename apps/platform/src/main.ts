@@ -12,11 +12,9 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import compression from 'compression';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
-import { AuthService } from './api/auth/auth.service';
 import { AppModule, ObserveInstrument } from './app.module';
 import { type AllConfigType } from './config/config.type';
 import { GlobalExceptionFilter } from './filters/global-exception.filter';
-import { AuthGuard } from './guards/auth.guard';
 import setupSwagger from './utils/setup-swagger';
 
 async function bootstrap() {
@@ -108,6 +106,7 @@ async function bootstrap() {
       exclude: [
         { method: RequestMethod.GET, path: '/' },
         { method: RequestMethod.GET, path: 'health' },
+        { method: RequestMethod.GET, path: '.well-known/jwks.json' },
       ],
     },
   );
@@ -116,7 +115,6 @@ async function bootstrap() {
     type: VersioningType.URI,
   });
 
-  app.useGlobalGuards(new AuthGuard(reflector, app.get(AuthService)));
   app.useGlobalFilters(new GlobalExceptionFilter(configService));
   app.useGlobalPipes(
     new ValidationPipe({

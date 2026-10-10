@@ -15,50 +15,77 @@
     "platform": {
       "type": "application",
       "root": "apps/platform",
-      "entryFile": "main",
+      "entryFile": "apps/platform/src/main",
       "sourceRoot": "apps/platform/src",
       "compilerOptions": {
         "tsConfigPath": "apps/platform/tsconfig.app.json",
         "assets": [
-          { "include": "i18n/**/*", "watchAssets": true },
-          { "include": "**/*.hbs", "watchAssets": true }
+          {
+            "include": "i18n/**/*",
+            "watchAssets": true,
+            "outDir": "dist/apps/platform/apps/platform/src"
+          },
+          {
+            "include": "**/*.hbs",
+            "watchAssets": true,
+            "outDir": "dist/apps/platform/apps/platform/src"
+          }
         ]
       }
     },
     "catalog": {
       "type": "application",
       "root": "apps/catalog",
-      "entryFile": "main",
+      "entryFile": "apps/catalog/src/main",
       "sourceRoot": "apps/catalog/src",
-      "compilerOptions": { "tsConfigPath": "apps/catalog/tsconfig.app.json" }
+      "compilerOptions": {
+        "tsConfigPath": "apps/catalog/tsconfig.app.json"
+      }
     },
     "commerce": {
       "type": "application",
       "root": "apps/commerce",
-      "entryFile": "main",
+      "entryFile": "apps/commerce/src/main",
       "sourceRoot": "apps/commerce/src",
-      "compilerOptions": { "tsConfigPath": "apps/commerce/tsconfig.app.json" }
+      "compilerOptions": {
+        "tsConfigPath": "apps/commerce/tsconfig.app.json"
+      }
     },
     "finance": {
       "type": "application",
       "root": "apps/finance",
-      "entryFile": "main",
+      "entryFile": "apps/finance/src/main",
       "sourceRoot": "apps/finance/src",
-      "compilerOptions": { "tsConfigPath": "apps/finance/tsconfig.app.json" }
+      "compilerOptions": {
+        "tsConfigPath": "apps/finance/tsconfig.app.json"
+      }
     },
     "integration": {
       "type": "application",
       "root": "apps/integration",
-      "entryFile": "main",
+      "entryFile": "apps/integration/src/main",
       "sourceRoot": "apps/integration/src",
-      "compilerOptions": { "tsConfigPath": "apps/integration/tsconfig.app.json" }
+      "compilerOptions": {
+        "tsConfigPath": "apps/integration/tsconfig.app.json"
+      }
     },
     "insight": {
       "type": "application",
       "root": "apps/insight",
-      "entryFile": "main",
+      "entryFile": "apps/insight/src/main",
       "sourceRoot": "apps/insight/src",
-      "compilerOptions": { "tsConfigPath": "apps/insight/tsconfig.app.json" }
+      "compilerOptions": {
+        "tsConfigPath": "apps/insight/tsconfig.app.json"
+      }
+    },
+    "auth": {
+      "type": "library",
+      "root": "libs/auth",
+      "entryFile": "index",
+      "sourceRoot": "libs/auth/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/auth/tsconfig.lib.json"
+      }
     }
   }
 }

@@ -14,8 +14,8 @@ import {
   ApiResponse,
   ApiSecurity,
 } from '@nestjs/swagger';
+import { Public } from '@pbl/auth';
 import { STATUS_CODES } from 'http';
-import { Public } from './public.decorator';
 import { ApiPaginatedResponse } from './swagger.decorators';
 
 type ApiResponseType = number;
