@@ -36,6 +36,7 @@ WORKDIR /app
 COPY --chown=node:node package*.json pnpm-lock.yaml ./
 COPY --chown=node:node --from=development /app/node_modules ./node_modules
 COPY --chown=node:node --from=development /app/apps ./apps
+COPY --chown=node:node --from=development /app/libs ./libs
 COPY --chown=node:node --from=development /app/tsconfig.json ./tsconfig.json
 COPY --chown=node:node --from=development /app/tsconfig.build.json ./tsconfig.build.json
 COPY --chown=node:node --from=development /app/nest-cli.json ./nest-cli.json
@@ -67,4 +68,5 @@ COPY --chown=node:node --from=builder /app/package.json ./
 USER node
 
 # Start the server using the production build
-CMD [ "node", "dist/apps/platform/main.js" ]
+# Apps import shared code from libs/, so tsc keeps the repo-relative path
+CMD [ "node", "dist/apps/platform/apps/platform/src/main.js" ]

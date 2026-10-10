@@ -1,4 +1,7 @@
 /* eslint-disable no-undef */
+// Jest runs setupFiles as a CommonJS script despite the .mjs extension
+const { generateKeyPairSync } = require('crypto');
+
 process.env.NODE_ENV = 'test';
 process.env.MODULES_SET = 'monolith';
 process.env.APP_NAME = 'NestJS API';
@@ -33,9 +36,15 @@ process.env.MAIL_REQUIRE_TLS = 'false';
 process.env.MAIL_DEFAULT_EMAIL = 'noreply@example.com';
 process.env.MAIL_DEFAULT_NAME = 'No Reply';
 process.env.MAIL_CLIENT_PORT = '1080';
-process.env.AUTH_JWT_SECRET = 'secret';
+// Throwaway RSA key per test run — no test key is committed (ADR-0004)
+process.env.AUTH_JWT_PRIVATE_KEY = Buffer.from(
+  generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
+    type: 'pkcs8',
+    format: 'pem',
+  }),
+).toString('base64');
+process.env.AUTH_JWT_KEY_ID = 'test-key';
 process.env.AUTH_JWT_TOKEN_EXPIRES_IN = '1d';
-process.env.AUTH_REFRESH_SECRET = 'secret_for_refresh';
 process.env.AUTH_REFRESH_TOKEN_EXPIRES_IN = '365d';
 process.env.AUTH_FORGOT_SECRET = 'secret_for_forgot';
 process.env.AUTH_FORGOT_TOKEN_EXPIRES_IN = '7d';

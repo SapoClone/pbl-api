@@ -84,6 +84,30 @@
       ]
     },
     {
+      "endpoint": "/platform/.well-known/jwks.json",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/.well-known/jwks.json",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ]
+        }
+      ]
+    },
+    {
       "endpoint": "/platform/api/v1/auth/email/login",
       "method": "POST",
       "output_encoding": "no-op",
@@ -140,7 +164,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -153,7 +180,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/auth/refresh",
@@ -308,7 +362,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -321,7 +378,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/users",
@@ -332,7 +416,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -345,7 +432,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/users/me",
@@ -356,7 +470,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -369,7 +486,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/users/me/change-password",
@@ -380,7 +524,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -393,7 +540,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/users/load-more",
@@ -404,7 +578,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -417,7 +594,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/users/{id}",
@@ -428,7 +632,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -441,7 +648,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/users/{id}",
@@ -452,7 +686,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -465,7 +702,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/users/{id}",
@@ -476,7 +740,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -489,7 +756,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/posts",
@@ -500,7 +794,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -513,7 +810,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/posts",
@@ -524,7 +848,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -537,7 +864,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/posts/{id}",
@@ -548,7 +902,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -561,7 +918,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/posts/{id}",
@@ -572,7 +956,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -585,7 +972,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/platform/api/v1/posts/{id}",
@@ -596,7 +1010,10 @@
         "Content-Type",
         "Accept",
         "Accept-Language",
-        "x-lang"
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type"
       ],
       "input_query_strings": [
         "*"
@@ -609,7 +1026,34 @@
             "http://platform:3000"
           ]
         }
-      ]
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/catalog/health",

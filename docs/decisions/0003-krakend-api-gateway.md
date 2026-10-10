@@ -45,7 +45,10 @@ and its Community Edition covers what we need. Initially only
 - Validate config with `krakend check -t` (command in CLAUDE.md).
 - Production allowed origins must be added to `security/cors.allow_origins`
   (and per-environment config introduced) before deploying the web app.
-- Next step: JWT validation at the gateway (ADR-0004).
+- Protected routes carry `auth/validator` (RS256 against platform's JWKS,
+  issuer/audience checked) and propagate `X-User-Id`, `X-Session-Id`,
+  `X-Subject-Type`; KrakenD overwrites client-sent values for those headers.
+  A route's public/protected status must match the service (ADR-0004).
 
 ## Alternatives considered
 

@@ -82,7 +82,14 @@ Notes on the local stack:
 - For `pnpm` commands run on the host (migrations, `start:dev`), copy
   `.env.example` to `.env` and point it at the compose ports
   (`DATABASE_PORT=25432`, `DATABASE_NAME=pbl`, `DATABASE_SCHEMA=platform`).
-  `.env` is excluded from Docker builds.
+  `.env` is excluded from Docker builds. Set `AUTH_JWT_PRIVATE_KEY` to a
+  base64 RSA key (`openssl genpkey -algorithm RSA -pkeyopt
+  rsa_keygen_bits:2048 | base64 -w0`) or copy the local-only one from
+  `.env.docker.platform`.
+- Access tokens are RS256; their public keys are at
+  `http://localhost:8080/platform/.well-known/jwks.json`. KrakenD rejects
+  invalid tokens on protected routes, and every service re-verifies them
+  through `@pbl/auth` (see `docs/decisions/0004-authentication-and-tokens.md`).
 
 Individual services, outside Docker, for day-to-day development on `platform`:
 
