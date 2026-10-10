@@ -124,6 +124,13 @@ Rules:
 - Known gap: `/users/:id` PATCH/DELETE have **no ownership or role check**
   yet; tokens carry no roles until step 5. Don't copy that pattern.
 
+## API conventions
+
+Every endpoint follows [docs/conventions/api-conventions.md](docs/conventions/api-conventions.md):
+URLs, status codes, JSON (camelCase, ISO UTC timestamps, integer VND,
+snake_case enums), `{ data, pagination }` lists (`limit` max 100), the error
+shape and status table, headers, tenancy and the new-endpoint checklist.
+
 ## Platform code conventions
 
 **Feature module** (`apps/platform/src/api/<feature>/`): `<feature>.module.ts`,

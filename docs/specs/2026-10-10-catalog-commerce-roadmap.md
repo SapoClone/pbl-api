@@ -68,10 +68,10 @@ non-owners.
    table, and events carry `tenantId`, `eventId`, `occurredAt`, `version`.
 4. **Ownership follows the service boundaries** in CLAUDE.md. The dashboard
    belongs to insight, built from events, not by reading commerce tables.
-5. **API conventions:** gateway path `/<service>/api/v1/<resource>`, every
-   route in `krakend.json` with `auth/validator` when protected, `@pbl/auth`
-   in every service, Swagger per service, offset pagination
-   (`PageOptionsDto`) for lists.
+5. **API conventions:** [docs/conventions/api-conventions.md](../conventions/api-conventions.md):
+   gateway path `/<service>/api/v1/<resource>`, every route in `krakend.json`
+   with `auth/validator` when protected, `@pbl/auth` in every service,
+   Swagger per service, offset pagination (`PageOptionsDto`) for lists.
 6. **Money** is stored as integer VND (`bigint`), matching the mobile's
    `int` amounts. There are no fractional currencies in scope.
 
