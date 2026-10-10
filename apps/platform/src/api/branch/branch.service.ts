@@ -34,7 +34,7 @@ export class BranchService {
       builder.andWhere('branch.status = :status', { status: query.status });
     }
     if (query.q) {
-      const pattern = `%${query.q.replace(/[\%_]/g, '$&')}%`;
+      const pattern = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
       builder.andWhere('(branch.name ILIKE :q OR branch.code ILIKE :q)', {
         q: pattern,
       });

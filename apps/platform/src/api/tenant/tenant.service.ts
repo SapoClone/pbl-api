@@ -50,12 +50,10 @@ export class TenantService {
     dto: CreateTenantReqDto,
   ): Promise<TenantEntity> {
     // Only an active account may open a store (it would otherwise get a session)
-    const account = await this.dataSource
-      .getRepository(AccountEntity)
-      .findOne({
-        where: { id: accountId as AccountEntity['id'] },
-        select: ['id', 'status'],
-      });
+    const account = await this.dataSource.getRepository(AccountEntity).findOne({
+      where: { id: accountId as AccountEntity['id'] },
+      select: ['id', 'status'],
+    });
     if (account?.status !== AccountStatus.ACTIVE) {
       throw new UnauthorizedException();
     }

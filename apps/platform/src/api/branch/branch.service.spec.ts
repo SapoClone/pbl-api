@@ -180,7 +180,7 @@ describe('BranchService', () => {
 
       expect(builder.andWhere).toHaveBeenCalledWith(
         '(branch.name ILIKE :q OR branch.code ILIKE :q)',
-        { q: '%kho%%' },
+        { q: '%kho\\%%' },
       );
     });
   });
