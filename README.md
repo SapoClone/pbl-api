@@ -58,6 +58,13 @@ Try it:
 curl -s -H 'Content-Type: application/json' \
   -d '{"email":"me@example.com","password":"Passw0rd!"}' \
   http://localhost:8080/platform/api/v1/auth/email/register
+
+# log in, create a store (the response carries a token bound to it)
+TOKEN=$(curl -s -H 'Content-Type: application/json' \
+  -d '{"email":"me@example.com","password":"Passw0rd!"}' \
+  http://localhost:8080/platform/api/v1/auth/email/login | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"My Shop","subdomain":"my-shop"}' http://localhost:8080/platform/api/v1/tenants
 ```
 
 ### After changing code
@@ -86,6 +93,7 @@ docker compose down -v     # stop and delete all local data (fresh database)
 | `Bind for 0.0.0.0:6379 failed: port is already allocated` (or 8080, 3000, …) | Another project uses that port. Stop it, or pick other host ports: `REDIS_HOST_PORT=6380 GATEWAY_HOST_PORT=8081 docker compose up --build -d` (also `PLATFORM_HOST_PORT`, `POSTGRES_HOST_PORT`, `ELASTICMQ_HOST_PORT`; run the check script with the same variables). |
 | `platform` logs `database "pbl" does not exist` | The Postgres volume predates the init script — `docker compose down -v`, then start again. |
 | Gateway returns 404 for a route | The route is not declared in `krakend/krakend.json` (every route must be). |
+| A new or changed route returns 404 through the gateway after pulling | KrakenD does not reload `krakend/krakend.json` while running: `docker compose restart krakend`. |
 | Your code change has no effect | Rebuild the service (see above). |
 
 ## How the local stack works

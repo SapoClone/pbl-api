@@ -26,10 +26,10 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 | Area | Today | Target (build toward this) |
 |---|---|---|
 | Services | `platform` has business logic; `catalog`, `commerce`, `finance`, `integration`, `insight` only expose `GET /health` | 6 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md)) |
-| Tenancy | No Tenant/Branch; tokens have no `tid` | `account`/`tenant`/`account_tenant`/`branch`, `tid` + `roles` in tokens, `@CurrentTenant()` ([ADR-0008](docs/decisions/0008-tenancy.md)) — roadmap P0 |
-| Data | One Postgres DB `pbl`, one schema per service; platform has only `user`/`refresh_token`/`post` | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
+| Tenancy | Implemented (P0): stores, branches, `tid` + `roles` in tokens, `@CurrentTenant()`/`@RequireRoles()` ([ADR-0008](docs/decisions/0008-tenancy.md)) | Staff logins, RBAC `perms`, plans/subscriptions |
+| Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token` | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every platform endpoint + each stub's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
-| Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry only `sub`/`sid`/`sub_type` | Step 5: `tid`/`roles`/`perms` claims + `@RequirePermission` once Tenant/Staff/RBAC exist; short access-token TTL, then drop the deny-list ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
+| Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles` | Step 5: `tid`/`roles`/`perms` claims + `@RequirePermission` once Tenant/Staff/RBAC exist; short access-token TTL, then drop the deny-list ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
 | Events | Only SQS `email-verification` → pbl-mail-service ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | Outbox → SNS → SQS with idempotent inboxes; services share data only through events and read models ([ADR-0007](docs/decisions/0007-event-bus.md)) — **not built** (roadmap P1) |
 | AWS | All AWS resources were deleted to save credits; pbl-infra keeps the Terraform | Re-apply pbl-infra when deploying |
 
@@ -116,13 +116,12 @@ Rules:
   (public) from `decorators/http.decorators.ts`; other apps use `@Public()` /
   `@AuthOptional()` from `@pbl/auth`. Read the caller with `@CurrentUser()`
   (an `AuthUser`: `id`, `sessionId`, `subjectType`, `exp`).
+- `PblAuthModule` tenant mode: other services are `required` (a token without `tid` gets 403 unless `@TenantOptional()`); platform is `optional` and uses `@CurrentTenant()` on store routes.
 - Services verify the token themselves; never trust `X-User-Id` etc.
   forwarded by the gateway on their own.
 - Tenant/user identity comes **from the token**, never from body, query or path.
 - Refresh tokens are opaque and handled only by `RefreshTokenService`
   (hashed, rotated, reuse ⇒ family revoked). Never put them in a JWT or log them.
-- Known gap: `/users/:id` PATCH/DELETE have **no ownership or role check**
-  yet; tokens carry no roles until step 5. Don't copy that pattern.
 
 ## API conventions
 

@@ -1,7 +1,7 @@
 # ADR-0004: Platform is the sole token issuer; RS256 + JWKS verified at gateway and service
 
 - **Status:** Accepted — steps 1–4 implemented on 2026-10-08 (see
-  "Implementation status"); step 5 pending. Direction from pbl-infra
+  "Implementation status"); step 5 partly done (`tid`/`roles`). Direction from pbl-infra
   architecture ("Auth hiện dùng secret đối xứng; đích là RS256 + JWKS").
 - **Date:** 2026-10-08
 - **Scope:** `apps/platform/src/api/auth`, `guards/`, `krakend/krakend.json`, every service
@@ -73,7 +73,7 @@ blacklist couples every service to platform's Redis.
 | 2. Gateway validation | Done | `krakend/krakend.json` `auth/validator` on every protected route; claims → `X-User-Id`, `X-Session-Id`, `X-Subject-Type` |
 | 3. `libs/auth` in all apps | Done | `libs/auth` (`@pbl/auth`); platform: `PblAuthModule.forRootAsync` in `auth.module.ts`; others: `PblAuthModule.forRemoteJwks()` + `AUTH_JWKS_URL` |
 | 4. Opaque refresh tokens | Done | `refresh-token.service.ts`, `entities/refresh-token.entity.ts`, migration `1791476400000-replace-session-with-refresh-token.ts` |
-| 5. `tid`/`roles`/`perms` + `@RequirePermission` | **Pending** | Needs Tenant/Staff/RBAC entities first |
+| 5. `tid`/`roles`/`perms` + `@RequirePermission` | **Partly done**: `tid` and `roles` (P0); `perms` + `@RequirePermission` wait for Staff/RBAC | Needs Staff/RBAC entities for the rest |
 
 Deliberate deviations from the plan above:
 

@@ -58,6 +58,8 @@ Migration `1791476400000-replace-session-with-refresh-token` creates
   a local `.env` (same procedure as the pbl-infra README, step 7).
 - [ ] Expect every user to be logged out once: existing sessions and refresh
   tokens stop working and users must sign in again.
+- [ ] The P0 migration `1791563000000-introduce-tenancy` renames `user` to `account` and **drops `post`**. Take a database backup first; existing accounts keep working and have no store until they create one.
+- [ ] Migrations use unqualified table names (as all earlier ones do) and TypeORM does not set `search_path`, so they always create tables in `public`. Do **not** set `DATABASE_SCHEMA` in production until migrations are made schema-aware; otherwise the app looks for tables in a schema the migrations never created. (Local Docker is unaffected: it uses `DATABASE_SYNCHRONIZE=true`.)
 
 ## 4. Deploy the platform image (pbl-api) — blocking
 
