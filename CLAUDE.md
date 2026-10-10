@@ -40,7 +40,7 @@ back away from the target direction.
 
 ```
 apps/
-  platform/src/        auth · users · (posts: boilerplate leftover) — the only app with logic
+  platform/src/        auth · accounts · tenants · branches — the only app with logic
   catalog|commerce|finance|integration|insight/src/   main.ts, app.module.ts, health.controller(.spec).ts
 libs/
   auth/src/            @pbl/auth — token verification, global AuthGuard, Public/AuthOptional/CurrentUser
@@ -94,7 +94,7 @@ Rules:
   `output_encoding`/backend `encoding` = `"no-op"`, the `input_headers`
   whitelist, and `input_query_strings: ["*"]`.
 - A route that is protected in the service **must also carry the
-  `auth/validator` block** in its gateway entry (copy one from a `users/*`
+  `auth/validator` block** in its gateway entry (copy one from a `branches/*`
   route, including the `X-User-Id`/`X-Session-Id`/`X-Subject-Type` headers in
   `input_headers`). Public routes have no validator. Gateway and service must
   agree on which routes are public.
@@ -165,7 +165,7 @@ catch-and-reformat in controllers. `findOneByOrFail` → 404 automatically.
 unique indexes partial on `"deleted_at" IS NULL`. Constructor pattern
 `constructor(data?: Partial<X>) { super(); Object.assign(this, data); }`.
 Entity lifecycle hooks must be idempotent on **loaded** entities (see the
-password-hash `@AfterLoad` guard in `user.entity.ts` — a past bug).
+password-hash `@AfterLoad` guard in `account/entities/account.entity.ts` — a past bug).
 
 **Migrations**: hand-written, reversible SQL in `database/migrations/`
 (`<timestamp>-<verb>-<thing>.ts`), `up` and `down` both required.
@@ -218,7 +218,7 @@ Local SQS is ElasticMQ; queued messages:
 
 - Bug fix → first a failing test that reproduces it, then the fix.
 - Unit specs live next to the code (`*.spec.ts`); mock repositories with
-  `getRepositoryToken(Entity)` as in `user.service.spec.ts`.
+  `getRepositoryToken(Entity)` as in `auth.service.spec.ts`.
 - New stub-service endpoints get a spec like `health.controller.spec.ts`.
 - CI (`.github/workflows/ci.yml`) runs lint once and build+test **per
   service** in a matrix (plus `libs`: `build:libs`/`test:libs`); a new app
@@ -256,12 +256,10 @@ Local SQS is ElasticMQ; queued messages:
 ## Known open work (don't rediscover, don't depend on)
 
 - Auth endpoints `forgot-password`, `verify/forgot-password`,
-  `reset-password`, `verify/email`, `verify/email/resend`,
-  `users/me/change-password` are placeholders returning a string.
-- `posts` create/update/delete throw "not implemented"; `post`/`user` are
-  boilerplate, to be replaced by the platform ERD (Account, Staff, …).
-- No rate limiting (despite `docs/security.md`), no ownership checks.
-- Register saves the user before enqueueing; if SQS fails the user exists
+  `reset-password`, `verify/email`, `verify/email/resend`
+  are placeholders returning a string.
+- No rate limiting (despite `docs/security.md`).
+- Register saves the account before enqueueing; if SQS fails the account exists
   without a verification email and there is no working resend.
 - Access tokens still live `1d` (pbl-web has no refresh logic yet), so the
   Redis logout deny-list stays (ADR-0004 §7).

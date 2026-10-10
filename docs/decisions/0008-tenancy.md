@@ -1,6 +1,6 @@
 # ADR-0008: Tenant comes from the token; every business row is tenant-scoped
 
-- **Status:** Accepted and implemented (P0, 2026-10-10). Implemented by P0 of the [catalog & commerce roadmap](../specs/2026-10-10-catalog-commerce-roadmap.md) ([P0 design](../specs/2026-10-10-p0-platform-tenancy-design.md)).
+- **Status:** Accepted (2026-10-10); implemented by P0 of the [catalog & commerce roadmap](../specs/2026-10-10-catalog-commerce-roadmap.md) ([P0 design](../specs/2026-10-10-p0-platform-tenancy-design.md)).
 - **Date:** 2026-10-10
 - **Scope:** all services, `@pbl/auth`, every business table
 
