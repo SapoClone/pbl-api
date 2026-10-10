@@ -13,5 +13,7 @@ large changes are built on them. Summary rules live in [`/CLAUDE.md`](../../CLAU
 | [0004](0004-authentication-and-tokens.md) | Platform is the sole token issuer; RS256 + JWKS verified at gateway and service; opaque rotating refresh tokens | Accepted (steps 1–4 done, step 5 pending) |
 | [0005](0005-async-work-via-sqs.md) | Side effects such as email go through SQS to separate workers | Accepted |
 | [0006](0006-shared-code-in-libs.md) | Code shared across services lives in Nest libraries under `libs/` | Accepted |
+| [0007](0007-event-bus.md) | Services share data through an event bus (outbox → SNS → SQS), no runtime REST for business data | Accepted (direction; built in P1) |
+| [0008](0008-tenancy.md) | Tenant comes from the token; every business row is tenant-scoped | Accepted (built in P0) |
 
 New record: copy [0000-template.md](0000-template.md), take the next number.

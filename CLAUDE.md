@@ -26,10 +26,11 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 | Area | Today | Target (build toward this) |
 |---|---|---|
 | Services | `platform` has business logic; `catalog`, `commerce`, `finance`, `integration`, `insight` only expose `GET /health` | 6 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md)) |
+| Tenancy | No Tenant/Branch; tokens have no `tid` | `account`/`tenant`/`account_tenant`/`branch`, `tid` + `roles` in tokens, `@CurrentTenant()` ([ADR-0008](docs/decisions/0008-tenancy.md)) — roadmap P0 |
 | Data | One Postgres DB `pbl`, one schema per service; platform has only `user`/`refresh_token`/`post` | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every platform endpoint + each stub's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
 | Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry only `sub`/`sid`/`sub_type` | Step 5: `tid`/`roles`/`perms` claims + `@RequirePermission` once Tenant/Staff/RBAC exist; short access-token TTL, then drop the deny-list ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
-| Events | Only SQS `email-verification` → pbl-mail-service ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | SNS/SQS event bus, ~20 domain events, outbox/inbox — **not built** |
+| Events | Only SQS `email-verification` → pbl-mail-service ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | Outbox → SNS → SQS with idempotent inboxes; services share data only through events and read models ([ADR-0007](docs/decisions/0007-event-bus.md)) — **not built** (roadmap P1) |
 | AWS | All AWS resources were deleted to save credits; pbl-infra keeps the Terraform | Re-apply pbl-infra when deploying |
 
 Never describe a target item as implemented, and never "simplify" code
@@ -243,7 +244,7 @@ Local SQS is ElasticMQ; queued messages:
   generate a throwaway key in `setup-jest.mjs`. Never reuse either elsewhere.
 - `krakend.json` uses `disable_jwk_security: true` (http JWKS URL) — valid
   for the local stack only.
-- The README links `docs/superpowers/specs/…monorepo-service-split-design.md`,
+- The README links `docs/specs/…monorepo-service-split-design.md`,
   which is not in the repo; ADR-0001–0003 capture its decisions.
 
 ## Known open work (don't rediscover, don't depend on)
@@ -262,6 +263,16 @@ Local SQS is ElasticMQ; queued messages:
   still provisions `AUTH_JWT_SECRET`/`AUTH_REFRESH_SECRET`, no gateway or
   stub services in AWS). The ordered checklist is
   [docs/deploy-actions.md](docs/deploy-actions.md); tick items off there.
+
+## Roadmap
+
+Catalog/commerce work follows [docs/specs/2026-10-10-catalog-commerce-roadmap.md](docs/specs/2026-10-10-catalog-commerce-roadmap.md)
+(P0 tenancy → P1 event bus → P2 catalog → P3–P5 commerce → P6 insight → P7–P9).
+Each sub-project needs its own approved design spec in `docs/specs/`
+(committed; `docs/superpowers/` is gitignored for personal drafts only)
+before implementation; do not start a later sub-project's code early, and
+apply the roadmap's cross-cutting rules (tenant from token, data across
+services only via events, integer VND money).
 
 ## Recording decisions
 
