@@ -40,7 +40,7 @@ back away from the target direction.
 
 ```
 apps/
-  platform/src/        auth · accounts · tenants · branches — the only app with logic
+  platform/src/        auth · account · tenant · branch — the only app with logic
   catalog|commerce|finance|integration|insight/src/   main.ts, app.module.ts, health.controller(.spec).ts
 libs/
   auth/src/            @pbl/auth — token verification, global AuthGuard, Public/AuthOptional/CurrentUser
