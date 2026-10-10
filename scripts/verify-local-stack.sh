@@ -44,14 +44,43 @@ for step in register login; do
   echo "OK: POST /platform/api/v1/auth/email/$step -> 200"
 done
 
-token=$(curl -s -H "Content-Type: application/json" -d "$creds" "$api/auth/email/login" \
-  | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+json_field() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }
+login_token() { curl -s -H "Content-Type: application/json" -d "$1" "$api/auth/email/login" | json_field accessToken; }
+expect_code() { # expected method url token
+  local code
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X "$2" -H "Authorization: Bearer $4" "$3")
+  [[ "$code" == "$1" ]] || fail "$2 $3 returned $code (expected $1)"
+  echo "OK: $2 ${3#"$gateway"} -> $1"
+}
+
+token=$(login_token "$creds")
 [[ -n "$token" ]] || fail "login response had no accessToken"
-for auth in "Bearer $token:200" "Bearer not-a-token:401"; do
-  expected=${auth##*:}
-  code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: ${auth%:*}" "$api/users/me")
-  [[ "$code" == "$expected" ]] || fail "GET $api/users/me returned $code (expected $expected)"
-  echo "OK: GET /platform/api/v1/users/me -> $expected"
-done
+expect_code 200 GET "$api/accounts/me" "$token"
+expect_code 401 GET "$api/accounts/me" "not-a-token"
+expect_code 403 GET "$api/branches" "$token"   # no store selected yet
+
+echo "Creating a store through the gateway..."
+sub="verify-$(date +%s)"
+created=$(curl -s -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+  -d "{\"name\":\"Verify\",\"subdomain\":\"$sub\"}" "$api/tenants")
+store_token=$(echo "$created" | json_field accessToken)
+[[ -n "$store_token" ]] || fail "POST /tenants returned no token: $created"
+echo "OK: POST /platform/api/v1/tenants -> store with token"
+expect_code 401 GET "$api/accounts/me" "$token"   # the pre-store session was ended
+branch=$(curl -s -H "Authorization: Bearer $store_token" -H "Content-Type: application/json" \
+  -d '{"name":"Kho 2","code":"KHO2"}' "$api/branches")
+branch_id=$(echo "$branch" | sed -n 's/^{"id":"\([^"]*\)".*/\1/p')
+[[ -n "$branch_id" ]] || fail "POST /branches returned no id: $branch"
+echo "OK: POST /platform/api/v1/branches -> $branch_id"
+expect_code 200 GET "$api/branches" "$store_token"
+expect_code 200 GET "$api/branches/$branch_id" "$store_token"
+
+echo "Checking that another store cannot see it..."
+other="{\"email\":\"verify-other-$(date +%s)@example.com\",\"password\":\"Passw0rd!\"}"
+curl -s -o /dev/null -H "Content-Type: application/json" -d "$other" "$api/auth/email/register"
+other_token=$(curl -s -H "Authorization: Bearer $(login_token "$other")" -H "Content-Type: application/json" \
+  -d "{\"name\":\"Other\",\"subdomain\":\"$sub-b\"}" "$api/tenants" | json_field accessToken)
+[[ -n "$other_token" ]] || fail "second store was not created"
+expect_code 404 GET "$api/branches/$branch_id" "$other_token"
 
 echo "Stack verified."
