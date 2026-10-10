@@ -30,6 +30,7 @@ describe('RefreshTokenService', () => {
       tokenHash: sha256('presented-token'),
       expiresAt: new Date(Date.now() + 60_000),
       revokedAt: null,
+      tenantId: null,
       ...overrides,
     }) as RefreshTokenEntity;
 
@@ -75,6 +76,14 @@ describe('RefreshTokenService', () => {
       expect(ttl).toBeLessThanOrEqual(30 * 24 * 3600 * 1000);
     });
 
+    it('should store the selected store on the token row', async () => {
+      await service.issue('user-1', 'tenant-1');
+
+      expect(repository.save.mock.calls[0][0]).toMatchObject({
+        tenantId: 'tenant-1',
+      });
+    });
+
     it('should start a different family for every login', async () => {
       const first = await service.issue('user-1');
       const second = await service.issue('user-1');
@@ -108,6 +117,7 @@ describe('RefreshTokenService', () => {
         token: expect.any(String),
         familyId: 'family-1',
         subjectId: 'user-1',
+        tenantId: null,
       });
       expect(rotated.token).not.toBe('presented-token');
     });
@@ -170,6 +180,21 @@ describe('RefreshTokenService', () => {
 
       expect(error).toBeInstanceOf(UnauthorizedException);
       expect(error.familyId).toBe('family-1');
+    });
+  });
+
+  describe('rotate store', () => {
+    it('should keep the store when rotating', async () => {
+      repository.findOneBy.mockResolvedValue(
+        storedRow({ tenantId: 'tenant-1' as never }),
+      );
+
+      const rotated = await service.rotate('presented-token');
+
+      expect(transactionManager.save.mock.calls[0][0]).toMatchObject({
+        tenantId: 'tenant-1',
+      });
+      expect(rotated.tenantId).toBe('tenant-1');
     });
   });
 

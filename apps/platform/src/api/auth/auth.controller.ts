@@ -9,6 +9,7 @@ import { RefreshReqDto } from './dto/refresh.req.dto';
 import { RefreshResDto } from './dto/refresh.res.dto';
 import { RegisterReqDto } from './dto/register.req.dto';
 import { RegisterResDto } from './dto/register.res.dto';
+import { SwitchTenantReqDto } from './dto/switch-tenant.req.dto';
 
 @ApiTags('auth')
 @Controller({
@@ -49,6 +50,19 @@ export class AuthController {
   @Post('refresh')
   async refresh(@Body() dto: RefreshReqDto): Promise<RefreshResDto> {
     return await this.authService.refreshToken(dto);
+  }
+
+  @ApiAuth({
+    type: LoginResDto,
+    summary: 'Switch to another store (new token pair)',
+    errorResponses: [401, 404, 422],
+  })
+  @Post('switch-tenant')
+  async switchTenant(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SwitchTenantReqDto,
+  ): Promise<LoginResDto> {
+    return await this.authService.switchTenant(user, dto.tenantId);
   }
 
   @ApiPublic()

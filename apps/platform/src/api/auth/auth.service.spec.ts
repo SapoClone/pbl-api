@@ -1,11 +1,17 @@
 import { QueueService } from '@/queue/queue.service';
+import { verifyPassword } from '@/utils/password.util';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AccountEntity } from '../account/entities/account.entity';
+import {
+  AccountEntity,
+  AccountStatus,
+} from '../account/entities/account.entity';
+import { MembershipService } from '../tenant/membership.service';
 import { AccessTokenService } from './access-token.service';
 import { AuthService } from './auth.service';
 import { RegisterReqDto } from './dto/register.req.dto';
@@ -13,6 +19,8 @@ import {
   RefreshTokenReuseError,
   RefreshTokenService,
 } from './refresh-token.service';
+
+jest.mock('@/utils/password.util', () => ({ verifyPassword: jest.fn() }));
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -28,6 +36,10 @@ describe('AuthService', () => {
     jest.Mock
   >;
   let accessTokenServiceValue: { sign: jest.Mock };
+  let membershipServiceValue: {
+    findActiveMemberships: jest.Mock;
+    findActiveMembership: jest.Mock;
+  };
 
   beforeAll(async () => {
     configServiceValue = {
@@ -68,6 +80,10 @@ describe('AuthService', () => {
     };
 
     accessTokenServiceValue = { sign: jest.fn() };
+    membershipServiceValue = {
+      findActiveMemberships: jest.fn(),
+      findActiveMembership: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -96,6 +112,7 @@ describe('AuthService', () => {
           provide: AccessTokenService,
           useValue: accessTokenServiceValue,
         },
+        { provide: MembershipService, useValue: membershipServiceValue },
         {
           provide: CACHE_MANAGER,
           useValue: cacheManagerValue,
@@ -187,8 +204,12 @@ describe('AuthService', () => {
         token: 'next-refresh-token',
         familyId: 'family-1',
         subjectId: 'user-1',
+        tenantId: null,
       });
-      userRepositoryValue.findOne.mockResolvedValue({ id: 'user-1' });
+      userRepositoryValue.findOne.mockResolvedValue({
+        id: 'user-1',
+        status: AccountStatus.ACTIVE,
+      });
       accessTokenServiceValue.sign.mockResolvedValue('access-token');
 
       const result = await service.refreshToken({
@@ -199,6 +220,8 @@ describe('AuthService', () => {
       expect(accessTokenServiceValue.sign).toHaveBeenCalledWith({
         userId: 'user-1',
         sessionId: 'family-1',
+        tenantId: undefined,
+        roles: [],
       });
       expect(result).toMatchObject({
         accessToken: 'access-token',
@@ -230,6 +253,7 @@ describe('AuthService', () => {
         token: 'next',
         familyId: 'family-1',
         subjectId: 'deleted-user',
+        tenantId: null,
       });
       userRepositoryValue.findOne.mockResolvedValue(null);
 
@@ -240,6 +264,222 @@ describe('AuthService', () => {
         'family-1',
       );
       expect(accessTokenServiceValue.sign).not.toHaveBeenCalled();
+    });
+  });
+
+  const alpha = {
+    tenantId: 't1',
+    name: 'Alpha',
+    subdomain: 'alpha',
+    role: 'owner',
+  };
+  const beta = {
+    tenantId: 't2',
+    name: 'Beta',
+    subdomain: 'beta',
+    role: 'owner',
+  };
+  const caller = {
+    id: 'a1',
+    sessionId: 'family-old',
+    subjectType: 'account' as const,
+    roles: [],
+    exp: Math.floor(Date.now() / 1000) + 600,
+  };
+
+  describe('signIn', () => {
+    const login = (tenantId?: string) =>
+      service.signIn({
+        email: 'me@example.com',
+        password: 'Passw0rd!',
+        tenantId,
+      });
+
+    beforeEach(() => {
+      userRepositoryValue.findOne = jest.fn().mockResolvedValue({
+        id: 'a1',
+        password: 'hash',
+        status: AccountStatus.ACTIVE,
+      });
+      (verifyPassword as jest.Mock).mockResolvedValue(true);
+      refreshTokenServiceValue.issue.mockResolvedValue({
+        token: 'rt',
+        familyId: 'family-1',
+      });
+      accessTokenServiceValue.sign.mockResolvedValue('at');
+    });
+
+    it('selects the only store automatically', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([alpha]);
+
+      const res = await login();
+
+      expect(refreshTokenServiceValue.issue).toHaveBeenCalledWith('a1', 't1');
+      expect(accessTokenServiceValue.sign).toHaveBeenCalledWith({
+        userId: 'a1',
+        sessionId: 'family-1',
+        tenantId: 't1',
+        roles: ['owner'],
+      });
+      expect(res).toMatchObject({
+        userId: 'a1',
+        accessToken: 'at',
+        refreshToken: 'rt',
+        tenantId: 't1',
+      });
+      expect(res.tenants).toEqual([
+        { id: 't1', name: 'Alpha', subdomain: 'alpha', role: 'owner' },
+      ]);
+    });
+
+    it('selects none with several stores and returns the list', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([
+        alpha,
+        beta,
+      ]);
+
+      const res = await login();
+
+      expect(refreshTokenServiceValue.issue).toHaveBeenCalledWith('a1', null);
+      expect(accessTokenServiceValue.sign).toHaveBeenCalledWith({
+        userId: 'a1',
+        sessionId: 'family-1',
+        tenantId: undefined,
+        roles: [],
+      });
+      expect(res.tenantId).toBeNull();
+      expect(res.tenants).toHaveLength(2);
+    });
+
+    it('selects none without stores', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([]);
+
+      await expect(login()).resolves.toMatchObject({
+        tenantId: null,
+        tenants: [],
+      });
+    });
+
+    it('selects the requested store', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([
+        alpha,
+        beta,
+      ]);
+
+      await expect(login('t2')).resolves.toMatchObject({ tenantId: 't2' });
+    });
+
+    it('answers 404 for a store the account cannot use (non-member, suspended or deleted)', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([alpha]);
+
+      await expect(login('t9')).rejects.toThrow(NotFoundException);
+      expect(refreshTokenServiceValue.issue).not.toHaveBeenCalled();
+    });
+
+    it('rejects a disabled account like a wrong password', async () => {
+      userRepositoryValue.findOne = jest.fn().mockResolvedValue({
+        id: 'a1',
+        password: 'hash',
+        status: AccountStatus.DISABLED,
+      });
+
+      await expect(login()).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('switchTenant', () => {
+    beforeEach(() => {
+      refreshTokenServiceValue.issue.mockResolvedValue({
+        token: 'rt2',
+        familyId: 'family-2',
+      });
+      accessTokenServiceValue.sign.mockResolvedValue('at2');
+    });
+
+    it('revokes the current session and starts one in the requested store', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([
+        alpha,
+        beta,
+      ]);
+
+      const res = await service.switchTenant(caller, 't2');
+
+      expect(cacheManagerValue.store.set).toHaveBeenCalledWith(
+        expect.stringContaining('family-old'),
+        true,
+        expect.any(Number),
+      );
+      expect(refreshTokenServiceValue.revokeFamily).toHaveBeenCalledWith(
+        'family-old',
+      );
+      expect(refreshTokenServiceValue.issue).toHaveBeenCalledWith('a1', 't2');
+      expect(res).toMatchObject({ accessToken: 'at2', tenantId: 't2' });
+    });
+
+    it('answers 404 for a store the caller cannot use, and keeps the current session', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([alpha]);
+
+      await expect(service.switchTenant(caller, 't9')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(refreshTokenServiceValue.revokeFamily).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('refreshToken with a store', () => {
+    beforeEach(() => {
+      refreshTokenServiceValue.rotate.mockResolvedValue({
+        token: 'next',
+        familyId: 'family-1',
+        subjectId: 'a1',
+        tenantId: 't1',
+      });
+      userRepositoryValue.findOne = jest
+        .fn()
+        .mockResolvedValue({ id: 'a1', status: AccountStatus.ACTIVE });
+      accessTokenServiceValue.sign.mockResolvedValue('at');
+    });
+
+    it('keeps the store and re-reads the role', async () => {
+      membershipServiceValue.findActiveMembership.mockResolvedValue(alpha);
+
+      await service.refreshToken({ refreshToken: 'presented' });
+
+      expect(membershipServiceValue.findActiveMembership).toHaveBeenCalledWith(
+        'a1',
+        't1',
+      );
+      expect(accessTokenServiceValue.sign).toHaveBeenCalledWith({
+        userId: 'a1',
+        sessionId: 'family-1',
+        tenantId: 't1',
+        roles: ['owner'],
+      });
+    });
+
+    it('ends the session when the membership is gone', async () => {
+      membershipServiceValue.findActiveMembership.mockResolvedValue(null);
+
+      await expect(
+        service.refreshToken({ refreshToken: 'presented' }),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(refreshTokenServiceValue.revokeFamily).toHaveBeenCalledWith(
+        'family-1',
+      );
+      expect(accessTokenServiceValue.sign).not.toHaveBeenCalled();
+    });
+
+    it('ends the session for a disabled account', async () => {
+      userRepositoryValue.findOne = jest
+        .fn()
+        .mockResolvedValue({ id: 'a1', status: AccountStatus.DISABLED });
+
+      await expect(
+        service.refreshToken({ refreshToken: 'presented' }),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(refreshTokenServiceValue.revokeFamily).toHaveBeenCalledWith(
+        'family-1',
+      );
     });
   });
 });

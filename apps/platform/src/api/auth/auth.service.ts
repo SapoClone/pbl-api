@@ -8,7 +8,12 @@ import { QueueService } from '@/queue/queue.service';
 import { createCacheKey } from '@/utils/cache.util';
 import { verifyPassword } from '@/utils/password.util';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -17,7 +22,11 @@ import { Cache } from 'cache-manager';
 import { plainToInstance } from 'class-transformer';
 import ms from 'ms';
 import { Repository } from 'typeorm';
-import { AccountEntity } from '../account/entities/account.entity';
+import {
+  AccountEntity,
+  AccountStatus,
+} from '../account/entities/account.entity';
+import { Membership, MembershipService } from '../tenant/membership.service';
 import { AccessTokenService } from './access-token.service';
 import { LoginReqDto } from './dto/login.req.dto';
 import { LoginResDto } from './dto/login.res.dto';
@@ -49,6 +58,7 @@ export class AuthService {
     private readonly queueService: QueueService,
     private readonly accessTokenService: AccessTokenService,
     private readonly refreshTokenService: RefreshTokenService,
+    private readonly membershipService: MembershipService,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
   ) {}
@@ -59,31 +69,73 @@ export class AuthService {
    * @returns LoginResDto
    */
   async signIn(dto: LoginReqDto): Promise<LoginResDto> {
-    const { email, password } = dto;
-    const user = await this.accountRepository.findOne({
-      where: { email },
-      select: ['id', 'email', 'password'],
+    const account = await this.accountRepository.findOne({
+      where: { email: dto.email },
+      select: ['id', 'email', 'password', 'status'],
     });
-
-    const isPasswordValid =
-      user && (await verifyPassword(password, user.password));
-
-    if (!isPasswordValid) {
+    const isValid =
+      account?.status === AccountStatus.ACTIVE &&
+      (await verifyPassword(dto.password, account.password));
+    if (!isValid) {
       throw new UnauthorizedException();
     }
 
+    const memberships = await this.membershipService.findActiveMemberships(
+      account.id,
+    );
+    let selected: Membership | null = null;
+    if (dto.tenantId) {
+      selected = memberships.find((m) => m.tenantId === dto.tenantId) ?? null;
+      if (!selected) throw new NotFoundException();
+    } else if (memberships.length === 1) {
+      selected = memberships[0];
+    }
+    return this.startSession(account.id, selected, memberships);
+  }
+
+  /**
+   * Select another store: end the current session (its access tokens stop
+   * working immediately) and start one bound to the store (P0 spec, flow 4).
+   */
+  async switchTenant(user: AuthUser, tenantId: string): Promise<LoginResDto> {
+    const memberships = await this.membershipService.findActiveMemberships(
+      user.id,
+    );
+    const selected = memberships.find((m) => m.tenantId === tenantId);
+    if (!selected) {
+      throw new NotFoundException();
+    }
+    await this.revokeSession(user.sessionId, user.exp * 1000 - Date.now());
+    return this.startSession(user.id, selected, memberships);
+  }
+
+  private async startSession(
+    accountId: string,
+    selected: Membership | null,
+    memberships: Membership[],
+  ): Promise<LoginResDto> {
     // One refresh-token family per login; its id is the access token's sid
     const { token: refreshToken, familyId } =
-      await this.refreshTokenService.issue(user.id);
+      await this.refreshTokenService.issue(
+        accountId,
+        selected?.tenantId ?? null,
+      );
     const token = await this.createToken({
-      id: user.id,
+      id: accountId,
       sessionId: familyId,
       refreshToken,
+      membership: selected,
     });
-
     return plainToInstance(LoginResDto, {
-      userId: user.id,
+      userId: accountId,
       ...token,
+      tenantId: selected?.tenantId ?? null,
+      tenants: memberships.map((m) => ({
+        id: m.tenantId,
+        name: m.name,
+        subdomain: m.subdomain,
+        role: m.role,
+      })),
     });
   }
 
@@ -151,19 +203,37 @@ export class AuthService {
       throw err;
     }
 
-    const user = await this.accountRepository.findOne({
+    const account = await this.accountRepository.findOne({
       where: { id: rotated.subjectId },
-      select: ['id'],
+      select: ['id', 'status'],
     });
-    if (!user) {
+    if (!account || account.status !== AccountStatus.ACTIVE) {
       await this.refreshTokenService.revokeFamily(rotated.familyId);
       throw new UnauthorizedException();
     }
 
+    let membership: Membership | null = null;
+    if (rotated.tenantId) {
+      membership = await this.membershipService.findActiveMembership(
+        account.id,
+        rotated.tenantId,
+      );
+      if (!membership) {
+        // Removed from the store, or the store was suspended: end the session
+        const accessTokenLifetime: string = this.configService.getOrThrow(
+          'auth.expires',
+          { infer: true },
+        );
+        await this.revokeSession(rotated.familyId, ms(accessTokenLifetime));
+        throw new UnauthorizedException();
+      }
+    }
+
     return await this.createToken({
-      id: user.id,
+      id: account.id,
       sessionId: rotated.familyId,
       refreshToken: rotated.token,
+      membership,
     });
   }
 
@@ -202,6 +272,7 @@ export class AuthService {
     id: string;
     sessionId: string;
     refreshToken: string;
+    membership: Membership | null;
   }): Promise<Token> {
     const tokenExpiresIn = this.configService.getOrThrow('auth.expires', {
       infer: true,
@@ -211,6 +282,8 @@ export class AuthService {
     const accessToken = await this.accessTokenService.sign({
       userId: data.id,
       sessionId: data.sessionId,
+      tenantId: data.membership?.tenantId,
+      roles: data.membership ? [data.membership.role] : [],
     });
     return {
       accessToken,

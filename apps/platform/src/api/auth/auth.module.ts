@@ -9,6 +9,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthUser, PblAuthModule } from '@pbl/auth';
 import { Cache } from 'cache-manager';
 import { AccountEntity } from '../account/entities/account.entity';
+import { MembershipModule } from '../tenant/membership.module';
 import { AccessTokenModule } from './access-token.module';
 import { AccessTokenService } from './access-token.service';
 import { AuthController } from './auth.controller';
@@ -22,6 +23,7 @@ import { RefreshTokenService } from './refresh-token.service';
     TypeOrmModule.forFeature([AccountEntity, RefreshTokenEntity]),
     JwtModule.register({}),
     AccessTokenModule,
+    MembershipModule,
     // Global guard + verifier shared by all services (ADR-0006). Platform
     // resolves keys locally instead of fetching its own JWKS, and keeps the
     // Redis logout deny-list for instant revocation (ADR-0004 §7).
@@ -50,5 +52,6 @@ import { RefreshTokenService } from './refresh-token.service';
   ],
   controllers: [AuthController, JwksController],
   providers: [AuthService, RefreshTokenService],
+  exports: [AuthService],
 })
 export class AuthModule {}
