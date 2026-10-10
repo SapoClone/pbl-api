@@ -30,14 +30,15 @@ export class OffsetPaginationDto {
   constructor(totalRecords: number, pageOptions: PageOptionsDto) {
     this.limit = pageOptions.limit;
     this.currentPage = pageOptions.page;
+    this.totalRecords = totalRecords;
+    // totalPages must be known before nextPage/previousPage are derived
+    this.totalPages =
+      this.limit > 0 ? Math.ceil(totalRecords / pageOptions.limit) : 0;
     this.nextPage =
       this.currentPage < this.totalPages ? this.currentPage + 1 : undefined;
     this.previousPage =
-      this.currentPage > 1 && this.currentPage - 1 < this.totalPages
+      this.currentPage > 1 && this.currentPage - 1 <= this.totalPages
         ? this.currentPage - 1
         : undefined;
-    this.totalRecords = totalRecords;
-    this.totalPages =
-      this.limit > 0 ? Math.ceil(totalRecords / pageOptions.limit) : 0;
   }
 }

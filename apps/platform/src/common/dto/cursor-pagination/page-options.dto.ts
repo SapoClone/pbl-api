@@ -1,4 +1,4 @@
-import { DEFAULT_PAGE_LIMIT } from '@/constants/app.constant';
+import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT } from '@/constants/app.constant';
 import {
   NumberFieldOptional,
   StringFieldOptional,
@@ -13,6 +13,7 @@ export class PageOptionsDto {
 
   @NumberFieldOptional({
     min: 1,
+    max: MAX_PAGE_LIMIT,
     default: DEFAULT_PAGE_LIMIT,
     int: true,
   })
