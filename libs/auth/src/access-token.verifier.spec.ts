@@ -53,13 +53,32 @@ describe('AccessTokenVerifier', () => {
 
   const verifier = createVerifier();
 
-  it('should return the caller for a valid token', async () => {
+  it('should return the caller for a valid token without a tenant', async () => {
     await expect(verifier.verify(await sign())).resolves.toEqual({
       id: 'user-1',
       sessionId: 'session-1',
       subjectType: 'account',
+      tenantId: undefined,
+      roles: [],
       exp: expect.any(Number),
     });
+  });
+
+  it('should map tid and roles', async () => {
+    const token = await sign({
+      payload: { ...claims, tid: 'tenant-1', roles: ['owner'] },
+    });
+
+    await expect(verifier.verify(token)).resolves.toMatchObject({
+      tenantId: 'tenant-1',
+      roles: ['owner'],
+    });
+  });
+
+  it('should treat a non-array roles claim as no roles', async () => {
+    const token = await sign({ payload: { ...claims, roles: 'owner' } });
+
+    await expect(verifier.verify(token)).resolves.toMatchObject({ roles: [] });
   });
 
   describe('should reject', () => {

@@ -5,7 +5,14 @@ import { createPublicKey, generateKeyPairSync } from 'crypto';
 import { createServer, Server } from 'http';
 import { AddressInfo } from 'net';
 import request from 'supertest';
-import { AuthOptional, CurrentUser, Public } from './auth.decorators';
+import {
+  AuthOptional,
+  CurrentTenant,
+  CurrentUser,
+  Public,
+  RequireRoles,
+  TenantOptional,
+} from './auth.decorators';
 import { AuthUser } from './auth.types';
 import { PblAuthModule } from './pbl-auth.module';
 
@@ -27,6 +34,23 @@ class ProbeController {
   maybe(@CurrentUser('id') id?: string) {
     return { id: id ?? null };
   }
+
+  @TenantOptional()
+  @Get('account-level')
+  accountLevel(@CurrentUser('id') id: string) {
+    return { id };
+  }
+
+  @Get('tenant')
+  tenant(@CurrentTenant() tenantId: string) {
+    return { tenantId };
+  }
+
+  @RequireRoles('owner')
+  @Get('owner')
+  owner() {
+    return { ok: true };
+  }
 }
 
 /** How a non-platform service uses the library: PblAuthModule.forRemoteJwks() */
@@ -37,9 +61,9 @@ describe('PblAuthModule.forRemoteJwks', () => {
   let app: INestApplication;
   const originalEnv = { ...process.env };
 
-  const sign = (key = privateKey) =>
+  const sign = (extra: object = {}, key = privateKey) =>
     jwtService.signAsync(
-      { sub: 'user-1', sid: 'session-1', sub_type: 'account' },
+      { sub: 'user-1', sid: 'session-1', sub_type: 'account', ...extra },
       {
         privateKey: key.export({ type: 'pkcs8', format: 'pem' }),
         algorithm: 'RS256',
@@ -86,24 +110,67 @@ describe('PblAuthModule.forRemoteJwks', () => {
     await request(app.getHttpServer()).get('/closed').expect(401);
   });
 
-  it('should accept a token signed with the published key and expose the caller', async () => {
+  it('should accept a token with a tenant and expose the caller', async () => {
     const res = await request(app.getHttpServer())
       .get('/closed')
-      .set('Authorization', `Bearer ${await sign()}`)
+      .set(
+        'Authorization',
+        `Bearer ${await sign({ tid: 'tenant-1', roles: ['owner'] })}`,
+      )
       .expect(200);
 
     expect(res.body).toMatchObject({
       id: 'user-1',
       sessionId: 'session-1',
       subjectType: 'account',
+      tenantId: 'tenant-1',
+      roles: ['owner'],
     });
+  });
+
+  it('should reject a token without a tenant on a normal route (403)', async () => {
+    await request(app.getHttpServer())
+      .get('/closed')
+      .set('Authorization', `Bearer ${await sign()}`)
+      .expect(403);
+  });
+
+  it('should accept a token without a tenant on a @TenantOptional() route', async () => {
+    await request(app.getHttpServer())
+      .get('/account-level')
+      .set('Authorization', `Bearer ${await sign()}`)
+      .expect(200, { id: 'user-1' });
+  });
+
+  it('should inject the tenant with @CurrentTenant()', async () => {
+    await request(app.getHttpServer())
+      .get('/tenant')
+      .set('Authorization', `Bearer ${await sign({ tid: 'tenant-9' })}`)
+      .expect(200, { tenantId: 'tenant-9' });
+  });
+
+  it('should enforce @RequireRoles()', async () => {
+    await request(app.getHttpServer())
+      .get('/owner')
+      .set(
+        'Authorization',
+        `Bearer ${await sign({ tid: 't', roles: ['staff'] })}`,
+      )
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/owner')
+      .set(
+        'Authorization',
+        `Bearer ${await sign({ tid: 't', roles: ['owner'] })}`,
+      )
+      .expect(200);
   });
 
   it('should reject a token signed with a key that is not published', async () => {
     const stranger = generateKeyPairSync('rsa', { modulusLength: 2048 });
     await request(app.getHttpServer())
       .get('/closed')
-      .set('Authorization', `Bearer ${await sign(stranger.privateKey)}`)
+      .set('Authorization', `Bearer ${await sign({}, stranger.privateKey)}`)
       .expect(401);
   });
 

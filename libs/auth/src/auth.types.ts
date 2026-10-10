@@ -9,6 +9,8 @@ export type AccessTokenClaims = {
   sub: string;
   sid: string;
   sub_type: AccessTokenSubjectType;
+  tid?: string;
+  roles?: string[];
   iss: string;
   aud: string;
   iat: number;
@@ -20,9 +22,20 @@ export type AuthUser = {
   id: string;
   sessionId: string;
   subjectType: AccessTokenSubjectType;
+  /** Selected store (`tid` claim); absent until the caller selects one */
+  tenantId?: string;
+  /** Roles in the selected store (`roles` claim); [] without a store */
+  roles: string[];
   /** Expiry of the access token, seconds since epoch */
   exp: number;
 };
+
+/**
+ * `required`: protected routes need a token with `tid` unless marked
+ * @TenantOptional(). `optional`: only @CurrentTenant()/@RequireRoles() need
+ * one (platform, where account-level routes run before a store is chosen).
+ */
+export type TenantMode = 'required' | 'optional';
 
 /** Finds the public key (PEM) that verifies tokens signed with `kid`. */
 export interface KeyResolver {
@@ -41,4 +54,6 @@ export interface PblAuthOptions {
    * caller.
    */
   isSessionRevoked?: (user: AuthUser) => Promise<boolean>;
+  /** Default 'required' (ADR-0008) */
+  tenant?: TenantMode;
 }

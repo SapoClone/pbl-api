@@ -38,7 +38,7 @@ export class PblAuthModule {
   /**
    * For every service except platform: verify against platform's JWKS.
    * Env: AUTH_JWKS_URL (required), AUTH_JWT_ISSUER (default "platform"),
-   * AUTH_JWT_AUDIENCE (default "pbl6").
+   * AUTH_JWT_AUDIENCE (default "pbl6"). Tenant mode: required (ADR-0008).
    */
   static forRemoteJwks(): DynamicModule {
     return PblAuthModule.forRootAsync({
@@ -47,6 +47,7 @@ export class PblAuthModule {
       useFactory: (config: ConfigService) => ({
         issuer: config.get<string>('AUTH_JWT_ISSUER') || 'platform',
         audience: config.get<string>('AUTH_JWT_AUDIENCE') || 'pbl6',
+        tenant: 'required',
         keyResolver: new JwksKeyResolver(
           config.getOrThrow<string>('AUTH_JWKS_URL'),
         ),

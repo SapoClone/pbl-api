@@ -120,6 +120,7 @@ describe('AccessTokenService', () => {
         id: 'user-1',
         sessionId: 'session-1',
         subjectType: 'account',
+        roles: [],
         exp: expect.any(Number),
       });
     });

@@ -72,6 +72,8 @@ export class AccessTokenVerifier {
       id: claims.sub,
       sessionId: claims.sid,
       subjectType: claims.sub_type,
+      tenantId: claims.tid || undefined,
+      roles: Array.isArray(claims.roles) ? claims.roles : [],
       exp: claims.exp,
     };
   }

@@ -163,6 +163,7 @@ describe('AuthService', () => {
         id: 'user-1',
         sessionId: 'family-1',
         subjectType: 'account',
+        roles: [],
         exp,
       });
 

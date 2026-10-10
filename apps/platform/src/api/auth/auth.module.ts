@@ -38,6 +38,9 @@ import { RefreshTokenService } from './refresh-token.service';
         issuer: config.getOrThrow('auth.issuer', { infer: true }),
         audience: config.getOrThrow('auth.audience', { infer: true }),
         keyResolver: accessTokenService,
+        // Register, create store and switch run before a store is chosen;
+        // tenant routes use @CurrentTenant()/@RequireRoles() (ADR-0008).
+        tenant: 'optional',
         isSessionRevoked: async (user: AuthUser) =>
           Boolean(
             await cacheManager.store.get<boolean>(
