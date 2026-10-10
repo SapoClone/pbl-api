@@ -29,6 +29,11 @@ export type I18nTranslations = {
             "invalid_token": string;
         };
     };
+    "tenant": {
+        "error": {
+            "subdomain_exists": string;
+        };
+    };
 };
 /* prettier-ignore */
 export type I18nPath = Path<I18nTranslations>;
