@@ -11,54 +11,84 @@
 
 ## Description
 
-NestJS API for Sapo Clone
+Backend for **Sapo Clone** (PBL6): a Nest CLI monorepo with one app per
+microservice — `platform` (auth, accounts; the only one with business logic
+so far) and `catalog`, `commerce`, `finance`, `integration`, `insight` —
+behind a KrakenD API gateway. Architecture rules and decisions:
+[`CLAUDE.md`](CLAUDE.md) and [`docs/decisions/`](docs/decisions/).
 
-Demo: <https://nestjs-boilerplate-diuf.onrender.com/api-docs>
+## Quick start
 
-## Getting started
-using yarn/pnpm/npm/npw at your choice, rcm pnpm for packages syncronization 
+### Prerequisites
 
-```bash
-# Clone the repository
-git clone https://github.com/vndevteam/nestjs-boilerplate.git
+- **Docker Desktop** (or Docker Engine with Compose v2), **running**.
+- **bash + curl** for the check script — on Windows use **Git Bash**.
+- Free host ports **8080** (gateway), **3000** (platform), **25432**
+  (Postgres), **6379** (Redis), **9324** (ElasticMQ). If one is taken, see
+  [Troubleshooting](#troubleshooting).
 
-# Create environment variables file.
-cp .env.example .env
+Nothing else: no Node/pnpm on the host and no `.env` to create — the local
+configuration (including a local-only signing key) is committed in
+`.env.docker.platform`.
 
-# Install dependences.
-pnpm install
-```
-
-## Running the app
-
-```bash
-# development
-$ pnpm start
-
-# watch mode
-$ pnpm start:dev
-
-# production mode
-$ pnpm start:prod
-```
-
-## Running the full local stack (monorepo)
-
-This repo is a Nest CLI monorepo: `apps/platform` (real business logic) plus
-5 stub services (`catalog`, `commerce`, `finance`, `integration`, `insight`)
-that currently only expose `GET /health`. Bring up the whole thing —
-6 services + Postgres (one schema per service) + Redis + a KrakenD gateway —
-with:
+### Run
 
 ```bash
-docker compose up --build
+git clone https://github.com/SapoClone/pbl-api.git
+cd pbl-api
+docker compose up --build -d          # first build takes ~2–3 minutes
+bash scripts/verify-local-stack.sh    # must end with "Stack verified."
 ```
 
-Then verify every service is reachable through the gateway:
+### What is running
+
+| URL | What |
+|---|---|
+| `http://localhost:8080/platform/api/v1/...` | **API through the gateway — what web/mobile use** |
+| `http://localhost:8080/<service>/health` | Health of each service through the gateway |
+| `http://localhost:3000/api-docs` | Swagger for platform (direct, for development) |
+| `http://localhost:8080/platform/.well-known/jwks.json` | Public keys for access tokens |
+| `localhost:25432` | Postgres — db `pbl`, user/password `postgres`, one schema per service |
+| `localhost:6379` | Redis (no password) |
+| `http://localhost:9324/000000000000/email-verification?Action=ReceiveMessage` | Queued verification emails (ElasticMQ) |
+
+Try it:
 
 ```bash
-./scripts/verify-local-stack.sh
+curl -s -H 'Content-Type: application/json' \
+  -d '{"email":"me@example.com","password":"Passw0rd!"}' \
+  http://localhost:8080/platform/api/v1/auth/email/register
 ```
+
+### After changing code
+
+There is no hot reload yet. Rebuild the service you changed:
+
+```bash
+docker compose up -d --build platform     # or catalog, commerce, ...
+```
+
+Tests and lint run inside the image (see the "Running and verifying"
+section of [`CLAUDE.md`](CLAUDE.md)).
+
+### Stop / reset
+
+```bash
+docker compose down        # stop, keep data
+docker compose down -v     # stop and delete all local data (fresh database)
+```
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `error during connect … dockerDesktopLinuxEngine` / `Cannot connect to the Docker daemon` | Docker Desktop is not running — start it and wait until it is ready. |
+| `Bind for 0.0.0.0:6379 failed: port is already allocated` (or 8080, 3000, …) | Another project uses that port. Stop it, or pick other host ports: `REDIS_HOST_PORT=6380 GATEWAY_HOST_PORT=8081 docker compose up --build -d` (also `PLATFORM_HOST_PORT`, `POSTGRES_HOST_PORT`, `ELASTICMQ_HOST_PORT`; run the check script with the same variables). |
+| `platform` logs `database "pbl" does not exist` | The Postgres volume predates the init script — `docker compose down -v`, then start again. |
+| Gateway returns 404 for a route | The route is not declared in `krakend/krakend.json` (every route must be). |
+| Your code change has no effect | Rebuild the service (see above). |
+
+## How the local stack works
 
 Clients (pbl-web, pbl-mobile) call **only the gateway** on `:8080`, never a
 service port directly. A gateway path is the service name plus the

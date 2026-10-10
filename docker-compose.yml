@@ -1,3 +1,8 @@
+# Host ports can be overridden without editing this file, e.g.
+#   REDIS_HOST_PORT=6380 GATEWAY_HOST_PORT=8081 docker compose up --build -d
+# (PLATFORM_HOST_PORT, POSTGRES_HOST_PORT, REDIS_HOST_PORT, ELASTICMQ_HOST_PORT,
+# GATEWAY_HOST_PORT). Containers talk to each other on the internal network,
+# so only what you reach from the host changes.
 services:
   platform:
     build:
@@ -9,7 +14,7 @@ services:
     env_file:
       - .env.docker.platform
     ports:
-      - "3000:3000"
+      - "${PLATFORM_HOST_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,7 +102,7 @@ services:
       - pbl_postgres_data:/var/lib/postgresql/data
       - ./docker/postgres-init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql
     ports:
-      - "25432:5432"
+      - "${POSTGRES_HOST_PORT:-25432}:5432"
     networks:
       - pbl-network
 
@@ -105,7 +110,7 @@ services:
     image: redis:7-alpine
     restart: always
     ports:
-      - "6379:6379"
+      - "${REDIS_HOST_PORT:-6379}:6379"
     networks:
       - pbl-network
 
@@ -114,7 +119,7 @@ services:
     image: softwaremill/elasticmq-native:latest
     restart: always
     ports:
-      - "9324:9324"
+      - "${ELASTICMQ_HOST_PORT:-9324}:9324"
     volumes:
       - ./docker/elasticmq.conf:/opt/elasticmq.conf:ro
     networks:
@@ -126,7 +131,7 @@ services:
     volumes:
       - ./krakend/krakend.json:/etc/krakend/krakend.json:ro
     ports:
-      - "8080:8080"
+      - "${GATEWAY_HOST_PORT:-8080}:8080"
     depends_on:
       - platform
       - catalog

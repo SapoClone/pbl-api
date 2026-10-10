@@ -235,29 +235,17 @@ docker compose up -d db redis pgadmin
 
 ### Quick run
 
-#### Running the app in Watch Mode (Local Development)
-
-To start the application in watch mode for local development:
-
-1. Open your terminal and navigate to the project directory.
-2. Run the command:
-
-```bash
-docker compose -f docker-compose.local.yml up --build -d
-```
-
-#### Running the app in Development Mode
-
-To run the application on a development server:
-
-1. Open your terminal and navigate to the project directory.
-2. Run the command:
+The whole stack (6 services, Postgres, Redis, ElasticMQ and the KrakenD
+gateway) runs with one command; see **Quick start** in the
+[README](../README.md#quick-start) for prerequisites, URLs and troubleshooting.
 
 ```bash
 docker compose up --build -d
+bash scripts/verify-local-stack.sh
 ```
 
-> Note: The application will run on port 3000 (<http://localhost:3000>)
+There is no hot reload yet: after changing code, rebuild the affected
+service, e.g. `docker compose up -d --build platform`.
 
 ## Upgrade
 
