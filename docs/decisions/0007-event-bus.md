@@ -33,15 +33,42 @@ architecture is an SNS/SQS bus with outbox/inbox (~20 domain events).
   `version` while consumers migrate.
 - **Ordering:** consumers must not assume global ordering. Read models keep
   the source's `updatedAt`/version and ignore stale updates.
-- **Local:** LocalStack (SNS + SQS) replaces ElasticMQ in docker-compose. The
-  existing `email-verification` queue moves there too.
+- **Retry and dead-letter queues:**
+  - **Consumer retry** uses SQS redelivery. A message that is not deleted
+    reappears after the queue's visibility timeout. Consumers report
+    per-message failures (`batchItemFailures`) so one bad message does not
+    retry the whole batch.
+  - **Backoff:** consumers that need longer gaps raise the message's
+    visibility with `ChangeMessageVisibility`; SQS has no native exponential
+    backoff.
+  - **Dead-letter queue:** every queue has a `-dlq` with a redrive policy,
+    `maxReceiveCount = 3` (same as pbl-infra's `sqs_queue` module), and
+    14-day retention. Each SNS→SQS subscription also has a DLQ for failed
+    deliveries.
+  - **Redrive:** a documented script moves fixed messages from a DLQ back to
+    its queue.
+  - **Publish retry** is the relay's job: an outbox row stays pending, and is
+    retried with backoff, until SNS accepts it. A row that keeps failing is
+    flagged, not dropped.
+- **Local parity (required):** LocalStack (SNS + SQS) replaces ElasticMQ in
+  docker-compose. It is created from the same queue/topic/DLQ/redrive
+  definitions as production, so retries and dead-lettering behave the same
+  locally. The existing `email-verification` queue moves there too, with its
+  DLQ, and pbl-mail-service runs locally as a LocalStack Lambda behind the
+  queue. Automated tests must cover:
+  - a failing consumer → the message is retried, then lands in the DLQ after
+    3 receives;
+  - redrive from the DLQ → it is processed;
+  - a duplicate delivery → the inbox ignores it;
+  - SNS unavailable → outbox rows are published once it is back.
 
 ## Consequences
 
 - Read models are eventually consistent (normally sub-second locally). A new
   variant can take a moment to appear in commerce.
 - Every producer needs an outbox table and relay. Every consumer needs an
-  inbox table and a DLQ, plus replay tooling for rebuilding a read model.
+  inbox table, a DLQ with an alarm in production, and replay tooling for
+  rebuilding a read model.
 - pbl-infra must add SNS topics, per-service queues, DLQs and subscriptions.
 - Order lines still snapshot name/SKU/price at sale time (ERD `OrderItem`),
   so later catalog edits never change past orders.
