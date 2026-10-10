@@ -725,7 +725,7 @@ import { AccountStatus } from '../entities/account.entity';
 export class AccountResDto {
   @StringField() @Expose() id: string;
   @StringField() @Expose() email: string;
-  @StringField({ minLength: 0 }) @Expose() name: string;
+  @StringField() @Expose() name: string;
   @StringFieldOptional({ nullable: true }) @Expose() phone: string | null;
   @EnumField(() => AccountStatus) @Expose() status: AccountStatus;
   @ClassField(() => Date) @Expose() createdAt: Date;
@@ -2910,10 +2910,9 @@ In `scripts/verify-local-stack.sh`, replace everything from the line `token=$(cu
 ```bash
 json_field() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }
 login_token() { curl -s -H "Content-Type: application/json" -d "$1" "$api/auth/email/login" | json_field accessToken; }
-expect_code() { # expected method url token [body]
+expect_code() { # expected method url token
   local code
-  code=$(curl -s -o /dev/null -w "%{http_code}" -X "$2" -H "Authorization: Bearer $4" \
-    -H "Content-Type: application/json" ${5:+-d "$5"} "$3")
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X "$2" -H "Authorization: Bearer $4" "$3")
   [[ "$code" == "$1" ]] || fail "$2 $3 returned $code (expected $1)"
   echo "OK: $2 ${3#"$gateway"} -> $1"
 }
