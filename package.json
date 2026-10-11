@@ -49,7 +49,9 @@
     "start:dev:insight": "nest start insight --watch",
     "build:insight": "nest build insight",
     "test:insight": "jest apps/insight/src",
-    "build:libs": "tsc -p libs/auth/tsconfig.lib.json --noEmit && tsc -p libs/common/tsconfig.lib.json --noEmit",
+    "build:libs": "node scripts/build-libs.mjs",
+    "pack:libs": "pnpm build:libs && pnpm --dir libs/common pack --pack-destination ../../dist/packs && pnpm --dir libs/auth pack --pack-destination ../../dist/packs",
+    "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "test:libs": "jest libs"
   },
   "dependencies": {

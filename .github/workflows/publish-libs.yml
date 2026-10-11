@@ -1,0 +1,59 @@
+name: Publish shared libraries
+
+# Tag pbl-auth-vX.Y.Z or pbl-common-vX.Y.Z (the tag must equal the lib's
+# package.json version and have a CHANGELOG.md section) to publish that one
+# package to GitHub Packages. See docs/decisions/0009-shared-libraries-and-versioning.md.
+on:
+  push:
+    tags:
+      - 'pbl-auth-v*'
+      - 'pbl-common-v*'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Copy repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@sapoclone'
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check tag, package.json version and CHANGELOG
+        run: node scripts/check-lib-version.mjs --tag "$GITHUB_REF_NAME"
+
+      - name: Build libraries
+        run: pnpm build:libs
+
+      - name: Test libraries and release scripts
+        run: |
+          pnpm test:libs -- --maxWorkers=2
+          pnpm test:scripts
+
+      - name: Publish
+        # pbl-auth-v1.2.3 -> libs/auth, pbl-common-v1.2.3 -> libs/common
+        run: |
+          lib="${GITHUB_REF_NAME%%-v*}"
+          lib="${lib#pbl-}"
+          cd "libs/$lib"
+          pnpm publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

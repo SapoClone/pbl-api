@@ -205,6 +205,25 @@ add sensitive request fields to `loggingRedactPaths` in `constants/app.constant.
 (`QueueService`) and let `pbl-mail-service` render and send —
 [ADR-0005](docs/decisions/0005-async-work-via-sqs.md).
 
+## Shared libraries
+
+`libs/auth` and `libs/common` are also published to GitHub Packages as
+`@sapoclone/pbl-auth` and `@sapoclone/pbl-common`
+([ADR-0009](docs/decisions/0009-shared-libraries-and-versioning.md)). Apps in this
+repo keep importing `@pbl/*`; only the lib build rewrites `@pbl/common` to the
+published name.
+
+- Semver. Removing or renaming an export of a lib's `src/index.ts` is a **major**
+  bump (CI fails the PR otherwise); other breaking changes (signatures, behaviour,
+  peer ranges) also bump the major, enforced by the CHANGELOG and review.
+- Every version needs a `## [X.Y.Z]` section in `libs/<name>/CHANGELOG.md`.
+- Release by pushing tag `pbl-auth-vX.Y.Z` / `pbl-common-vX.Y.Z` (workflow
+  `publish-libs.yml`); never publish by hand. `pnpm pack:libs` and
+  `npm publish --dry-run` in the lib folder check a tarball locally.
+- `@pbl/common` must not import `@pbl/auth` at runtime. A new third-party import
+  in a lib goes into that lib's `package.json` (`dependencies` or `peerDependencies`).
+- Tests of the release scripts: `pnpm test:scripts` (node:test).
+
 ## Adding a service
 
 Do not copy a stub by hand: run `node scripts/new-service.mjs <name> [--port N] [--dry-run]`.

@@ -2,7 +2,14 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "declaration": true,
-    "outDir": "../../dist/libs/auth"
+    "declarationMap": false,
+    "sourceMap": false,
+    "incremental": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "paths": {
+      "@pbl/common": ["libs/common/dist"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
