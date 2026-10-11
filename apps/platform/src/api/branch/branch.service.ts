@@ -142,7 +142,7 @@ export class BranchService {
   ): Promise<void> {
     await em
       .createQueryBuilder(TenantEntity, 'tenant')
-      .setLock('pessimistic_write')
+      .setLock('for_no_key_update')
       .where('tenant.id = :tenantId', { tenantId })
       .getOne();
     if (

@@ -162,7 +162,7 @@ describe('BranchService', () => {
     await service.remove('t1', 'b1');
 
     expect(em.createQueryBuilder).toHaveBeenCalledWith(TenantEntity, 'tenant');
-    expect(lockBuilder.setLock).toHaveBeenCalledWith('pessimistic_write');
+    expect(lockBuilder.setLock).toHaveBeenCalledWith('for_no_key_update');
     expect(lockBuilder.where).toHaveBeenCalledWith('tenant.id = :tenantId', {
       tenantId: 't1',
     });
@@ -184,7 +184,7 @@ describe('BranchService', () => {
 
     await service.update('t1', 'a1', 'b1', { status: BranchStatus.INACTIVE });
 
-    expect(lockBuilder.setLock).toHaveBeenCalledWith('pessimistic_write');
+    expect(lockBuilder.setLock).toHaveBeenCalledWith('for_no_key_update');
     expect(lockBuilder.getOne.mock.invocationCallOrder[0]).toBeLessThan(
       em.count.mock.invocationCallOrder[0],
     );
