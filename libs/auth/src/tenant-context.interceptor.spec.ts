@@ -266,7 +266,7 @@ describe('Tenant context interceptor — PblAuthModule.forRootAsync (tenant opti
   });
 });
 
-describe('Tenant context interceptor � request id sources', () => {
+describe('Tenant context interceptor - request id sources', () => {
   const run = (req: object, headers: Record<string, string> = {}) => {
     const http = {
       getRequest: () => req,

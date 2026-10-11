@@ -115,8 +115,10 @@ Rules:
 - Gateway-generated errors (any empty-body response with status >= 400: bad token 401,
   bodiless 500 -> 503 "Upstream service unavailable") get
   `{timestamp, statusCode, error, message}` from the `pbl-error-body` plugin; 404/405 use
-  `router.error_body` (`{error, message}` only). A response that already has a body
-  (a service's own error) passes through untouched.
+  `router.error_body` (`{error, message}` only). A rewritten response also gets the
+  request's `X-Request-Id` when the response has none. A response that already has a body
+  (a service's own error) passes through untouched; a service's own bodiless error is
+  rewritten too (a bodiless 500 becomes 503).
 - `X-Request-Id` is in `input_headers` of every endpoint and in CORS
   `allow_headers`/`expose_headers`. Keep it there when you add a route or header.
 
@@ -137,8 +139,8 @@ Rules:
   (an `AuthUser`: `id`, `sessionId`, `subjectType`, `exp`).
 - `PblAuthModule` also registers a `TenantContextInterceptor` (`APP_INTERCEPTOR`) that
   enters the `@pbl/common` request context (`tenantId`, `requestId`, `authorization`,
-  `actor`) from the **verified** token, after the guards. That is the only place the
-  tenant is set.
+  `actor`) from the **verified** token, after the guards. For HTTP requests that is the
+  only place the tenant is set (`consumeEvent` sets it for events).
 - `PblAuthModule` tenant mode: other services are `required` (a token without `tid` gets 403 unless `@TenantOptional()`); platform is `optional` and uses `@CurrentTenant()` on store routes.
 - In `tenant: 'required'` services an `@AuthOptional()` route still answers 403 when a token *without* `tid` is sent; add `@TenantOptional()` too if the route must accept such tokens.
 - Services verify the token themselves; never trust `X-User-Id` etc.
@@ -226,8 +228,8 @@ add sensitive request fields to `loggingRedactPaths` in `constants/app.constant.
 - **errors:** `PblExceptionFilter` + `validationExceptionFactory` (422 with `details`);
   platform keeps its own i18n `GlobalExceptionFilter`.
 - **logging:** `PblLoggingModule.forRoot(name)` (pino, `genReqId`): `X-Request-Id` is
-  accepted from the client or generated (uuid v4), echoed in the response and logged
-  as `req.id`.
+  accepted from the client only if it is 1-128 chars of `[A-Za-z0-9_.:-]`, otherwise
+  generated (uuid v4); echoed in the response and logged as `req.id`.
 - **health:** `PblHealthModule.forRoot({ service, … })` → `GET /health` and `GET /health/ready`.
 - **bootstrap:** `bootstrapService(AppModule, { name })` for `main.ts`.
 - **context:** one AsyncLocalStorage request context (`RequestContext`: `tenantId`,
@@ -235,8 +237,11 @@ add sensitive request fields to `loggingRedactPaths` in `constants/app.constant.
 - **tenancy:** `TenantContext` and `TenantScopedRepository` (see below).
 - **propagation:** `InternalHttpClient` (service-to-service REST; forwards the caller's
   `Authorization` and `X-Request-Id`, never a tenant or user header, so the callee
-  verifies the token itself) and `EventEnvelope` (`createEvent` takes `tenantId` and
+  verifies the token itself; it forwards `Authorization` only to the `baseURL` /
+  `allowedHosts` given to `PblPropagationModule.forRoot(...)` and throws otherwise) and `EventEnvelope` (`createEvent` takes `tenantId` and
   `traceId` from the context; `consumeEvent` restores them).
+- `TenantContext.run` / `RequestContext.run`: only the `@pbl/auth` interceptor and
+  `consumeEvent` may call them, never with a value derived from request input.
 
 **Tenant-scoped data access (ADR-0008).** A repository of a tenant-owned entity (one with
 a `tenantId` column) is a `TenantScopedRepository`, not a raw TypeORM `Repository`

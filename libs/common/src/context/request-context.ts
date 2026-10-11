@@ -27,7 +27,11 @@ export interface RequestContextState {
 const storage = new AsyncLocalStorage<RequestContextState>();
 
 export const RequestContext = {
-  /** Runs `fn` (and everything it awaits or schedules) with `state` */
+  /**
+   * Runs `fn` (and everything it awaits or schedules) with `state`.
+   * Only the @pbl/auth interceptor and `consumeEvent` may call this; never
+   * with a value derived from request input (header, body, query, path).
+   */
   run<T>(state: RequestContextState, fn: () => T): T {
     return storage.run(state, fn);
   },

@@ -18,7 +18,11 @@ export class MissingTenantContextError extends Error {
  * Set only by @pbl/auth's interceptor from the verified token (ADR-0008).
  */
 export const TenantContext = {
-  /** Runs `fn` with `tenantId`, keeping the other request-context fields */
+  /**
+   * Runs `fn` with `tenantId`, keeping the other request-context fields.
+   * Only the @pbl/auth interceptor and `consumeEvent` may call this; never
+   * with a value derived from request input (header, body, query, path).
+   */
   run<T>(tenantId: string | null, fn: () => T): T {
     return RequestContext.run({ ...RequestContext.get(), tenantId }, fn);
   },

@@ -85,6 +85,10 @@ export class TenantService {
             role: TenantRole.OWNER,
           }),
         );
+        // Written with the raw EntityManager, not TenantScopedRepository: the
+        // tenant was created just above, so no tenant exists in the request
+        // context yet (the caller's token has none) and the scoped repository
+        // would refuse to run. The tenantId is set explicitly from the new row.
         await em.save(
           new BranchEntity({
             tenantId: tenant.id,

@@ -29,8 +29,7 @@ carries `tenant_id`. Platform had no Tenant/Branch, and tokens had no tenant
   throws outside a tenant context). The context is entered by `@pbl/auth` from the
   verified token only. Internal REST calls forward the caller's `Authorization`, and
   events carry `tenantId` from the context; no header or body field names a tenant.
-  Unique constraints that
-  are per store include `tenant_id`, e.g. branch `code`, product `sku_code`.
+  Unique constraints that are per store include `tenant_id`, e.g. branch `code`, product `sku_code`.
 - **Isolation answers 404**, not 403, so other stores' ids are not revealed.
 - **Non-platform services require a tenant by default**
   (`PblAuthModule.forRemoteJwks()` → `tenant: 'required'`).
@@ -49,8 +48,7 @@ carries `tenant_id`. Platform had no Tenant/Branch, and tokens had no tenant
 - Every service checks the logout deny-list through `@pbl/auth` (ADR-0004 §7),
   so revocation by logout or by switching store is immediate in every service
   that has `REDIS_HOST` set (all deployed services); without it a service
-  skips the check. Only
-  a token for a store suspended mid-session stays valid until it is refreshed
+  skips the check. Only a token for a store suspended mid-session stays valid until it is refreshed
   or expires.
 
 ## Alternatives considered

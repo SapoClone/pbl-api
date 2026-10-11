@@ -167,7 +167,9 @@ The base URL is `<gateway>/platform/api/v1`.
   authenticates to GitHub Packages with the workflow's built-in `GITHUB_TOKEN`
   (`packages: write`). Release by pushing a tag `pbl-auth-vX.Y.Z` or
   `pbl-common-vX.Y.Z` ([ADR-0009](decisions/0009-shared-libraries-and-versioning.md)).
-  Consumers outside the org need a token with `read:packages`.
+  GitHub Packages (npm) needs authentication to install even inside the org,
+  so every consumer (services here, the `pbl-*` sibling repos, CI) needs a
+  token with `read:packages` in its `.npmrc`.
 - [ ] When both clients refresh correctly: lower
   `AUTH_JWT_TOKEN_EXPIRES_IN` from `1d` to 5–15 min. Keep the Redis logout
   deny-list: every service now checks it, which gives immediate logout and

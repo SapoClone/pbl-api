@@ -16,6 +16,7 @@ import {
   SelectQueryBuilder,
   UpdateResult,
 } from 'typeorm';
+// typeorm's root index does not re-export this type, hence the deep import
 import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { TenantContext } from './tenant-context';
 
