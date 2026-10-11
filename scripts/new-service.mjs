@@ -25,9 +25,23 @@ for (let i = 0; i < args.length; i++) {
   else die(`unexpected argument ${args[i]}`);
 }
 if (!name) die('usage: node scripts/new-service.mjs <name> [--port <host port>] [--dry-run]');
-if (!/^[a-z][a-z0-9-]{1,30}$/.test(name)) die(`invalid name "${name}" (must match ^[a-z][a-z0-9-]{1,30}$)`);
+if (name.length < 2 || name.length > 31 || !/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(name))
+  die(`invalid name "${name}" (lowercase letters/digits, single dashes between parts, 2-31 chars, starts with a letter)`);
+const RESERVED = ['redis', 'postgres', 'krakend', 'elasticmq', 'libs', 'platform', 'auth', 'common', 'docker', 'node', 'dist'];
+if (RESERVED.includes(name)) die(`"${name}" is a reserved name`);
 if (port !== undefined && !(/^\d+$/.test(port) && +port >= 1 && +port <= 65535)) die(`invalid --port "${port}"`);
 if (existsSync(join(root, 'apps', name))) die(`apps/${name} already exists`);
+{
+  const rd = (p) => readFileSync(join(root, p), 'utf8');
+  const compose = rd('docker-compose.yml');
+  if (new RegExp(`^  ${name}:`, 'm').test(compose)) die(`docker-compose.yml already has a service "${name}"`);
+  const m = rd('.github/workflows/ci.yml').match(/service: \[([^\]]*)\]/);
+  if (m && m[1].split(',').map((x) => x.trim()).includes(name)) die(`the CI matrix already lists "${name}"`);
+  if (Object.keys(JSON.parse(rd('package.json')).scripts).some((k) => k.endsWith(`:${name}`)))
+    die(`package.json already has scripts for "${name}"`);
+  if (port && new RegExp(`^\\s*- "?(?:[\\d.]+:)?(?:\\$\\{[^}:]*:-)?${port}[:}]`, 'm').test(compose))
+    die(`host port ${port} is already published in docker-compose.yml`);
+}
 
 const Name = name
   .split('-')
@@ -117,12 +131,16 @@ anchored('docker-compose.yml', 'service block', (t) => {
   const m = t.match(/^ {2}catalog:\n(?: {4}.*\n|\n(?= {4}))*/m);
   if (!m || !t.includes('\n  postgres:\n')) return null;
   let block = m[0].replaceAll('catalog', name);
-  if (port) block = block.replace(/\n( {4}networks:)/, `\n    ports:\n      - "${port}:3000"\n$1`);
-  return t.replace('\n  postgres:\n', `\n${block}\n  postgres:\n`);
+  if (port) {
+    const withPort = block.replace(/\n( {4}networks:)/, (_, g) => `\n    ports:\n      - "${port}:3000"\n${g}`);
+    if (withPort === block) die('docker-compose.yml: networks anchor not found in the catalog block, cannot add --port');
+    block = withPort;
+  }
+  return t.replace('\n  postgres:\n', () => `\n${block}\n  postgres:\n`);
 });
 anchored('docker-compose.yml', 'krakend depends_on', (t) => {
   const m = t.match(/( {2}krakend:\n[\s\S]*? {4}depends_on:\n(?: {6}- .*\n)+)/);
-  return m ? t.replace(m[1], `${m[1]}      - ${name}\n`) : null;
+  return m ? t.replace(m[1], () => `${m[1]}      - ${name}\n`) : null;
 });
 
 editJson('krakend/krakend.json', '/health route + circuit breaker', (d) => {
@@ -136,7 +154,7 @@ editJson('krakend/krakend.json', '/health route + circuit breaker', (d) => {
 });
 
 anchored('.github/workflows/ci.yml', 'service matrix', (t) =>
-  /service: \[[^\]]*, libs\]/.test(t) ? t.replace(/(service: \[[^\]]*), libs\]/, `$1, ${name}, libs]`) : null,
+  /service: \[[^\]]*, libs\]/.test(t) ? t.replace(/(service: \[[^\]]*), libs\]/, (_, g) => `${g}, ${name}, libs]`) : null,
 );
 
 anchored('docker/postgres-init-schemas.sql', 'schema', (t) => {
@@ -149,7 +167,7 @@ anchored('docker/postgres-init-schemas.sql', 'schema', (t) => {
 });
 
 anchored('scripts/verify-local-stack.sh', 'services list', (t) =>
-  /^services=\(([^)]*)\)$/m.test(t) ? t.replace(/^services=\(([^)]*)\)$/m, `services=($1 ${name})`) : null,
+  /^services=\(([^)]*)\)$/m.test(t) ? t.replace(/^services=\(([^)]*)\)$/m, (_, g) => `services=(${g} ${name})`) : null,
 );
 
 if (dryRun) {
