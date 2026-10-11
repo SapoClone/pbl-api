@@ -6,3 +6,4 @@ export * from './auth.types';
 export * from './jwks-key-resolver';
 export * from './pbl-auth.module';
 export * from './redis-session-revocation';
+export * from './tenant-context.interceptor';

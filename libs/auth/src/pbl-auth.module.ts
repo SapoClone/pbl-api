@@ -5,13 +5,14 @@ import {
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { AccessTokenVerifier } from './access-token.verifier';
 import { PBL_AUTH_OPTIONS } from './auth.constants';
 import { AuthGuard } from './auth.guard';
 import { PblAuthOptions } from './auth.types';
 import { JwksKeyResolver } from './jwks-key-resolver';
 import { RedisSessionRevocation } from './redis-session-revocation';
+import { TenantContextInterceptor } from './tenant-context.interceptor';
 
 const SESSION_REVOCATION = Symbol('SESSION_REVOCATION');
 
@@ -31,8 +32,9 @@ interface PblAuthAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
 }
 
 /**
- * Registers the global AuthGuard and AccessTokenVerifier (ADR-0004,
- * ADR-0006). Import exactly once per app.
+ * Registers the global AuthGuard, AccessTokenVerifier and
+ * TenantContextInterceptor (ADR-0004, ADR-0006, ADR-0008): handlers run in
+ * TenantContext with the verified token's tenant. Import exactly once per app.
  */
 @Module({})
 export class PblAuthModule {
@@ -49,6 +51,7 @@ export class PblAuthModule {
         ...(options.extraProviders ?? []),
         AccessTokenVerifier,
         { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_INTERCEPTOR, useClass: TenantContextInterceptor },
       ],
       exports: [AccessTokenVerifier],
     };

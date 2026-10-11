@@ -5,5 +5,11 @@
   "testRegex": ".e2e-spec.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
-  }
+  },
+  "moduleNameMapper": {
+    "^@pbl/auth(|/.*)$": "<rootDir>/../../../libs/auth/src$1",
+    "^@pbl/common(|/.*)$": "<rootDir>/../../../libs/common/src$1",
+    "^@/(api|queue|common|config|constants|database|decorators|exceptions|filters|generated|guards|interceptors|libs|redis|shared|utils)(.*)$": "<rootDir>/../src/$1$2"
+  },
+  "testTimeout": 60000
 }

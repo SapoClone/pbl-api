@@ -5,6 +5,7 @@ import {
   Inject,
   Module,
   OnApplicationShutdown,
+  SetMetadata,
 } from '@nestjs/common';
 import {
   HealthCheck,
@@ -14,8 +15,15 @@ import {
   HealthIndicatorResult,
   TerminusModule,
 } from '@nestjs/terminus';
-import { Public } from '@pbl/auth';
 import Redis from 'ioredis';
+
+/**
+ * Same metadata as @pbl/auth's @Public() (IS_PUBLIC = 'isPublic'), set
+ * directly: @pbl/common must not import @pbl/auth, which imports
+ * @pbl/common. Pinned by "is public: reachable with the auth guard
+ * installed" in the spec.
+ */
+const Public = () => SetMetadata('isPublic', true);
 
 const HEALTH_OPTIONS = Symbol('PBL_HEALTH_OPTIONS');
 const HEALTH_REDIS = Symbol('PBL_HEALTH_REDIS');
