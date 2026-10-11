@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { HealthCheckError } from '@nestjs/terminus';
 import { Test } from '@nestjs/testing';
 import { PblAuthModule } from '@pbl/auth';
+import Redis from 'ioredis';
 import request from 'supertest';
 import { PblHealthModule } from './pbl-health.module';
 
@@ -66,6 +67,20 @@ describe('PblHealthModule', () => {
       .expect(503);
     expect(res.body.error.redis.status).toBe('down');
     delete process.env.REDIS_PORT;
+  });
+
+  it('reports Redis down when the ping never resolves (timeout)', async () => {
+    jest
+      .spyOn(Redis.prototype, 'ping')
+      .mockImplementation(() => new Promise(() => undefined) as any);
+    process.env.REDIS_HOST = '127.0.0.1';
+    await boot({ service: 'catalog', redisFromEnv: true, redisTimeoutMs: 50 });
+    const res = await request(app.getHttpServer())
+      .get('/health/ready')
+      .expect(503);
+    expect(res.body.error.redis.status).toBe('down');
+    expect(res.body.error.redis.message).toMatch(/timed out/);
+    jest.restoreAllMocks();
   });
 
   it('is public: reachable with the auth guard installed', async () => {

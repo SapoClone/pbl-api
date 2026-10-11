@@ -134,8 +134,8 @@ To add a new service from the template (registers it in compose, the gateway,
 CI and the verify script), run `node scripts/new-service.mjs <name>`; see
 [`docs/guides/new-service.md`](docs/guides/new-service.md).
 
-Every request carries an `X-Request-Id` (send your own, or the service generates one);
-it is echoed in the response and appears as `req.id` in the logs, which makes a failed
+Every request carries an `X-Request-Id` (send your own, 1-128 characters of
+`[A-Za-z0-9_.:-]`, or the service generates one); it is echoed in the response and appears as `req.id` in the logs, which makes a failed
 call easy to trace across the gateway and services. Errors the gateway itself
 generates (bad token, unreachable service) use the same JSON shape as service
 errors: `{ timestamp, statusCode, error, message }`.

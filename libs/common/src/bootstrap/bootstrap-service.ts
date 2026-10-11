@@ -25,11 +25,22 @@ export async function bootstrapService(
   appModule: Type<unknown> | DynamicModule,
   options: BootstrapOptions,
 ): Promise<INestApplication> {
-  const app = await NestFactory.create(appModule, { bufferLogs: true });
+  // abortOnError: false makes a failure reject instead of process.exit(1)
+  // inside Nest's exception zone. That is what lets the probe below be a
+  // plain try/catch; a start-up failure still ends the process, as an
+  // unhandled rejection.
+  const app = await NestFactory.create(appModule, {
+    bufferLogs: true,
+    abortOnError: false,
+  });
 
-  // The module tree imports PblLoggingModule; tolerate its absence.
-  const logger = app.get(Logger, { strict: false });
-  if (logger) app.useLogger(logger);
+  // The module tree normally imports PblLoggingModule. Without it, keep
+  // Nest's default logger and release the logs buffered during start-up.
+  try {
+    app.useLogger(app.get(Logger, { strict: false }));
+  } catch {
+    app.flushLogs();
+  }
 
   app.enableShutdownHooks();
   app.useGlobalPipes(

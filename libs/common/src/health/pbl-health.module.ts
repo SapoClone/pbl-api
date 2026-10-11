@@ -37,6 +37,8 @@ export interface PblHealthOptions {
   readiness?: ReadinessCheck[];
   /** Add a Redis ping when REDIS_HOST is set */
   redisFromEnv?: boolean;
+  /** Readiness gives up on the Redis ping after this long (default 2000 ms) */
+  redisTimeoutMs?: number;
 }
 
 @Public()
@@ -68,9 +70,23 @@ class HealthRedisShutdown implements OnApplicationShutdown {
   }
 }
 
-async function pingRedis(redis: Redis): Promise<HealthIndicatorResult> {
+const DEFAULT_REDIS_TIMEOUT_MS = 2000;
+
+async function pingRedis(
+  redis: Redis,
+  timeoutMs: number,
+): Promise<HealthIndicatorResult> {
+  let timer: NodeJS.Timeout | undefined;
   try {
-    await redis.ping();
+    await Promise.race([
+      redis.ping(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Redis ping timed out after ${timeoutMs} ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
     return { redis: { status: 'up' } };
   } catch (err) {
     // terminus turns a HealthCheckError into a 503 listing the failure
@@ -80,6 +96,8 @@ async function pingRedis(redis: Redis): Promise<HealthIndicatorResult> {
         message: err instanceof Error ? err.message : String(err),
       },
     });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -114,7 +132,15 @@ export class PblHealthModule {
             service: options.service,
             checks: [
               ...(options.readiness ?? []),
-              ...(redis ? [() => pingRedis(redis)] : []),
+              ...(redis
+                ? [
+                    () =>
+                      pingRedis(
+                        redis,
+                        options.redisTimeoutMs ?? DEFAULT_REDIS_TIMEOUT_MS,
+                      ),
+                  ]
+                : []),
             ],
           }),
         },

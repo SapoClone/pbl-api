@@ -133,5 +133,26 @@ describe('HealthController', () => {
         causes: { redis: { status: 'down' } },
       });
     });
+
+    it('reports redis down when the ping never resolves', async () => {
+      jest.useFakeTimers();
+      try {
+        dbUseValue.pingCheck.mockResolvedValue({ database: { status: 'up' } });
+        redisPing.mockReturnValue(new Promise(() => undefined));
+        healthCheckServiceValue.check.mockImplementation(async (checks) =>
+          Promise.all(checks.map((c) => c())),
+        );
+
+        const pending = controller.ready();
+        const assertion = expect(pending).rejects.toMatchObject({
+          causes: { redis: { status: 'down' } },
+        });
+        await jest.advanceTimersByTimeAsync(2100);
+        await assertion;
+        expect(jest.getTimerCount()).toBe(0);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
   });
 });

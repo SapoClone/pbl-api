@@ -15,6 +15,8 @@ import {
 import { Public } from '@pbl/auth';
 import { Cache } from 'cache-manager';
 
+const REDIS_PING_TIMEOUT_MS = 2000;
+
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
@@ -55,9 +57,24 @@ export class HealthController {
     return this.health.check([
       () => this.db.pingCheck('database'),
       async () => {
+        let timer: NodeJS.Timeout | undefined;
         try {
           // The cache store is the ioredis client platform already holds.
-          await (this.cache.store as any).client.ping();
+          // A hung connection must not hang the probe: give up after 2 s.
+          await Promise.race([
+            (this.cache.store as any).client.ping(),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `Redis ping timed out after ${REDIS_PING_TIMEOUT_MS} ms`,
+                    ),
+                  ),
+                REDIS_PING_TIMEOUT_MS,
+              );
+            }),
+          ]);
           return { redis: { status: 'up' } };
         } catch (err) {
           throw new HealthCheckError('Redis check failed', {
@@ -66,6 +83,8 @@ export class HealthController {
               message: err instanceof Error ? err.message : String(err),
             },
           });
+        } finally {
+          clearTimeout(timer);
         }
       },
     ]);

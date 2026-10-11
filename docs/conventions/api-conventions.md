@@ -170,7 +170,7 @@ Rules:
 | `Authorization: Bearer <accessToken>` | request | every protected route |
 | `Content-Type: application/json` | request | bodies are JSON only |
 | `x-lang` / `Accept-Language` (or `?lang=`) | request | `en` (default), `vi`, `jp`: localises error messages |
-| `X-Request-Id: <id>` | request and response | optional on requests (any non-empty value; otherwise the service generates a uuid v4). Always echoed in the response, logged on every line as `req.id`, forwarded on internal HTTP calls and carried in events as `traceId`. Quote it when reporting a problem |
+| `X-Request-Id: <id>` | request and response | optional on requests (accepted only if it is 1-128 characters of `[A-Za-z0-9_.:-]`; otherwise the service generates a uuid v4). Echoed in the response (also on errors the gateway rewrites, which copy the request's id), logged on every line as `req.id`, forwarded on internal HTTP calls and carried in events as `traceId`. Quote it when reporting a problem |
 | `Idempotency-Key: <uuid>` **(new, P5)** | request | **required** on order creation and payments; the same key returns the first result instead of creating twice (mobile retries on bad networks) |
 
 Every new request header must be added in three places: the gateway's

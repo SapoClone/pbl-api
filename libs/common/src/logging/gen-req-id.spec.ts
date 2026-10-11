@@ -31,6 +31,38 @@ describe('genReqId', () => {
     expect(res.headers['X-Request-Id']).toBe('abc-123');
   });
 
+  it.each([
+    ['too long', 'a'.repeat(129)],
+    ['invalid characters', 'abc 123\r\nX-Evil: 1'],
+    ['a slash', 'a/b'],
+  ])('replaces an id that is %s with a uuid v4', (_label, value) => {
+    const res = fakeRes();
+    const id = genReqId({ headers: { 'x-request-id': value } } as any, res);
+    expect(String(id)).toMatch(UUID_V4);
+    expect(res.headers['X-Request-Id']).toBe(String(id));
+  });
+
+  it('accepts the maximum length and the allowed punctuation', () => {
+    const value = `${'a'.repeat(100)}.:_-${'b'.repeat(24)}`;
+    expect(
+      genReqId({ headers: { 'x-request-id': value } } as any, fakeRes()),
+    ).toBe(value);
+  });
+
+  it('uses the first value of an array header when valid, else a uuid', () => {
+    expect(
+      genReqId(
+        { headers: { 'x-request-id': ['one', 'two'] } } as any,
+        fakeRes(),
+      ),
+    ).toBe('one');
+    expect(
+      String(
+        genReqId({ headers: { 'x-request-id': ['b d'] } } as any, fakeRes()),
+      ),
+    ).toMatch(UUID_V4);
+  });
+
   it('generates a uuid v4 when absent and echoes it', () => {
     const res = fakeRes();
     const id = genReqId({ headers: {} } as any, res);
