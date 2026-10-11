@@ -119,6 +119,7 @@ Rules:
   `@AuthOptional()` from `@pbl/auth`. Read the caller with `@CurrentUser()`
   (an `AuthUser`: `id`, `sessionId`, `subjectType`, `exp`).
 - `PblAuthModule` tenant mode: other services are `required` (a token without `tid` gets 403 unless `@TenantOptional()`); platform is `optional` and uses `@CurrentTenant()` on store routes.
+- In `tenant: 'required'` services an `@AuthOptional()` route still answers 403 when a token *without* `tid` is sent; add `@TenantOptional()` too if the route must accept such tokens.
 - Services verify the token themselves; never trust `X-User-Id` etc.
   forwarded by the gateway on their own.
 - Tenant/user identity comes **from the token**, never from body, query or path.

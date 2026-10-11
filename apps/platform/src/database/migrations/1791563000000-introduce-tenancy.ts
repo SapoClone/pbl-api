@@ -4,6 +4,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * P0 tenancy: user → account (name, phone, status), add tenant,
  * account_tenant and branch, and drop the post boilerplate. Existing
  * accounts keep working and simply have no store yet.
+ *
+ * down() restores the schema but not the data: usernames, bios, images and
+ * posts are lost.
  */
 export class IntroduceTenancy1791563000000 implements MigrationInterface {
   name = 'IntroduceTenancy1791563000000';
