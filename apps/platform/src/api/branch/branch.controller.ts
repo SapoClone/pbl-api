@@ -21,6 +21,13 @@ import { CreateBranchReqDto } from './dto/create-branch.req.dto';
 import { ListBranchReqDto } from './dto/list-branch.req.dto';
 import { UpdateBranchReqDto } from './dto/update-branch.req.dto';
 
+/**
+ * Every route takes an unused `@CurrentTenant() _tenantId`: platform runs
+ * PblAuthModule in tenant 'optional' mode, and this decorator is what answers
+ * 403 "A store must be selected" for a token without `tid`. The service reads
+ * the tenant from TenantContext (the scoped repository), which would
+ * otherwise fail with a 500. Pinned by branch.controller.spec.ts.
+ */
 @ApiTags('branches')
 @Controller({ path: 'branches', version: '1' })
 export class BranchController {

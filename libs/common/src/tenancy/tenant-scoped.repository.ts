@@ -72,13 +72,21 @@ const EMPTY_WRITE = { raw: [], affected: 0, generatedMaps: [] };
  *   every where object, including each object of an OR array;
  * - `save` sets `tenantId` when absent, refuses another tenant's, and refuses
  *   an id that exists in another tenant (TypeORM would UPDATE that row);
+ * - `save` and `update` also refuse a relation mapped to the tenant column
+ *   (e.g. `tenant` with `@JoinColumn({ name: 'tenant_id' })`) that points to
+ *   another tenant: TypeORM takes the column value from the relation first;
  * - `createQueryBuilder(alias)` returns a builder whose tenant condition is
- *   ANDed outside the caller's where/orWhere, so neither replaces it;
+ *   ANDed outside the caller's where/orWhere, so neither replaces it. With a
+ *   join plus skip/take TypeORM pages through a distinct-ids query built from
+ *   this builder, so the ids are already tenant-filtered (pinned by e2e);
  * - outside a tenant context (or with a null tenant) every method throws
  *   MissingTenantContextError instead of reaching all tenants' rows.
  *
- * Use `withManager(em)` inside a transaction. Joined relations are not
- * filtered: join only through tenant-owned foreign keys, or scope them.
+ * Use `transaction(fn)` (or `withManager(em)` with your own EntityManager)
+ * inside a transaction. Joined relations are not filtered: join only through
+ * tenant-owned foreign keys, or scope them. `Raw(...)` where fragments must
+ * be parenthesised (`Raw((a) => `(${a} = 1 OR ${a} = 2)`)`): TypeORM does not
+ * wrap them before ANDing the tenant condition.
  */
 export class TenantScopedRepository<T extends TenantOwned> {
   constructor(private readonly repository: Repository<T>) {}
@@ -97,9 +105,17 @@ export class TenantScopedRepository<T extends TenantOwned> {
     );
   }
 
-  /** The underlying (unscoped) manager, e.g. to start a transaction */
-  get manager(): EntityManager {
-    return this.repository.manager;
+  /**
+   * Runs `work` in a transaction, with this wrapper bound to it (`scoped`)
+   * and the transaction's EntityManager (`em`, unscoped: for other entities,
+   * locks, ...).
+   */
+  transaction<R>(
+    work: (scoped: TenantScopedRepository<T>, em: EntityManager) => Promise<R>,
+  ): Promise<R> {
+    return this.repository.manager.transaction((em) =>
+      work(this.withManager(em), em),
+    );
   }
 
   async find(options: FindManyOptions<T> = {}): Promise<T[]> {
@@ -146,6 +162,7 @@ export class TenantScopedRepository<T extends TenantOwned> {
       : [entityOrEntities];
     for (const entity of entities) {
       assertSameTenant(entity.tenantId, tenantId, 'Entity');
+      this.assertTenantRelations(entity, tenantId, 'Entity');
     }
     await this.assertNoForeignRows(entities, tenantId);
     for (const entity of entities) {
@@ -160,6 +177,7 @@ export class TenantScopedRepository<T extends TenantOwned> {
   ): Promise<UpdateResult> {
     const tenantId = TenantContext.require();
     assertSameTenant((partial as ObjectLiteral)?.tenantId, tenantId, 'Update');
+    this.assertTenantRelations(partial as ObjectLiteral, tenantId, 'Update');
     const where = await this.writeWhere(criteria, tenantId);
     return where ? this.repository.update(where, partial) : EMPTY_WRITE;
   }
@@ -282,6 +300,43 @@ export class TenantScopedRepository<T extends TenantOwned> {
       ...this.primaryWhere(In(rows.map((row) => row[primary]))),
       tenantId,
     } as FindOptionsWhere<T>;
+  }
+
+  /**
+   * Relations stored in the tenant column (their join column is tenant_id):
+   * TypeORM writes the related object's id there, ahead of `tenantId`.
+   */
+  private tenantRelations() {
+    const metadata = this.repository.metadata;
+    const column = metadata.findColumnWithPropertyName('tenantId');
+    return (metadata.relations ?? []).filter((relation) =>
+      relation.joinColumns?.some(
+        (join) => join.databaseName === column?.databaseName,
+      ),
+    );
+  }
+
+  /** A tenant relation may be absent, null, or the context tenant only */
+  private assertTenantRelations(
+    values: ObjectLiteral | undefined,
+    tenantId: string,
+    what: string,
+  ): void {
+    if (!values) return;
+    for (const relation of this.tenantRelations()) {
+      const related = values[relation.propertyName];
+      if (related === undefined || related === null) continue;
+      const referenced = relation.joinColumns.find(
+        (join) => join.referencedColumn,
+      )?.referencedColumn;
+      const value =
+        typeof related === 'object' && referenced
+          ? related[referenced.propertyName]
+          : related;
+      if (value !== tenantId) {
+        throw new TenantMismatchError(what);
+      }
+    }
   }
 
   /** An existing row with the same id in another tenant must not be overwritten */

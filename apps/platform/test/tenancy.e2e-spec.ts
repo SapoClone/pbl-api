@@ -20,9 +20,20 @@ import {
   DataSource,
   DeleteDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryColumn,
   PrimaryGeneratedColumn,
+  Relation,
   Repository,
 } from 'typeorm';
+
+/** Stands in for the tenant table */
+@Entity({ name: 'tenancy_owner' })
+class TenancyOwner {
+  @PrimaryColumn('uuid')
+  id!: string;
+}
 
 @Entity({ name: 'tenancy_item' })
 class TenancyItem {
@@ -31,6 +42,11 @@ class TenancyItem {
 
   @Column({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
+
+  /** Shares tenant_id, like BranchEntity.tenant: TypeORM prefers its id */
+  @ManyToOne(() => TenancyOwner)
+  @JoinColumn({ name: 'tenant_id' })
+  tenant?: Relation<TenancyOwner> | null;
 
   @Column({ type: 'varchar' })
   name!: string;
@@ -71,17 +87,26 @@ describe('TenantScopedRepository on Postgres (e2e)', () => {
     dataSource = await new DataSource({
       ...connection,
       schema,
-      entities: [TenancyItem],
+      entities: [TenancyItem, TenancyOwner],
       synchronize: true,
     }).initialize();
     raw = dataSource.getRepository(TenancyItem);
     items = new TenantScopedRepository(raw);
+    await dataSource
+      .getRepository(TenancyOwner)
+      .save([{ id: tenantA }, { id: tenantB }]);
   });
 
   afterAll(async () => {
-    await dataSource?.destroy();
-    await admin?.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await admin?.destroy();
+    try {
+      await dataSource?.destroy();
+    } finally {
+      try {
+        await admin?.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      } finally {
+        await admin?.destroy();
+      }
+    }
   });
 
   beforeEach(async () => {
@@ -247,6 +272,55 @@ describe('TenantScopedRepository on Postgres (e2e)', () => {
       );
 
       await expect(reloadB1()).resolves.toMatchObject({ name: 'b1' });
+    });
+  });
+
+  describe('the tenant relation sharing tenant_id', () => {
+    it('save cannot move a new or existing row into B through the relation', async () => {
+      await inA(async () => {
+        await expect(
+          items.save({ name: 'via-relation', tenant: { id: tenantB } }),
+        ).rejects.toThrow(TenantMismatchError);
+        await expect(
+          items.save({ ...a1, tenant: { id: tenantB } }),
+        ).rejects.toThrow(TenantMismatchError);
+        // the context tenant through the relation is fine
+        const own = await items.save({ name: 'own', tenant: { id: tenantA } });
+        expect(own.tenantId).toBe(tenantA);
+      });
+
+      await expect(raw.countBy({ tenantId: tenantB })).resolves.toBe(1);
+      await expect(raw.findOneBy({ id: a1.id })).resolves.toMatchObject({
+        tenantId: tenantA,
+      });
+    });
+
+    it('update cannot move a row into B through the relation', async () => {
+      await inA(async () => {
+        await expect(
+          items.update({ id: a1.id }, { tenant: { id: tenantB } }),
+        ).rejects.toThrow(TenantMismatchError);
+      });
+
+      await expect(raw.countBy({ tenantId: tenantB })).resolves.toBe(1);
+      await expect(raw.findOneBy({ id: a1.id })).resolves.toMatchObject({
+        tenantId: tenantA,
+      });
+    });
+
+    it('a query builder with a join and skip/take stays tenant-filtered', async () => {
+      await inA(async () => {
+        const [rows, count] = await items
+          .createQueryBuilder('item')
+          .leftJoinAndSelect('item.tenant', 'owner')
+          .orderBy('item.name', 'ASC')
+          .skip(0)
+          .take(10)
+          .getManyAndCount();
+        expect(rows.map((item) => item.name)).toEqual(['a1', 'a2']);
+        expect(count).toBe(2);
+        expect(rows[0].tenant).toEqual({ id: tenantA });
+      });
     });
   });
 

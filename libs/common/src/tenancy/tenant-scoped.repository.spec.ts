@@ -10,6 +10,8 @@ class Item {
   id!: string;
   tenantId!: string;
   name!: string;
+  /** Mapped to tenant_id too, like BranchEntity.tenant */
+  tenant?: { id: string } | null;
 }
 
 type RepositoryMock = Record<
@@ -25,17 +27,41 @@ type RepositoryMock = Record<
   | 'delete'
   | 'createQueryBuilder',
   jest.Mock
-> & { target: typeof Item; metadata: object; manager: object };
+> & {
+  target: typeof Item;
+  metadata: object;
+  manager: { getRepository: jest.Mock; transaction: jest.Mock };
+};
 
 const repositoryMock = (): RepositoryMock => ({
   target: Item,
-  manager: { getRepository: jest.fn() },
+  manager: { getRepository: jest.fn(), transaction: jest.fn() },
   metadata: {
     primaryColumns: [{ propertyName: 'id' }],
     getEntityIdMap: (entity: Partial<Item>) =>
       entity.id === undefined ? undefined : { id: entity.id },
     findColumnWithPropertyName: (name: string) =>
       name === 'tenantId' ? { databaseName: 'tenant_id' } : undefined,
+    relations: [
+      {
+        propertyName: 'tenant',
+        joinColumns: [
+          {
+            databaseName: 'tenant_id',
+            referencedColumn: { propertyName: 'id' },
+          },
+        ],
+      },
+      {
+        propertyName: 'owner', // another relation: not checked
+        joinColumns: [
+          {
+            databaseName: 'owner_id',
+            referencedColumn: { propertyName: 'id' },
+          },
+        ],
+      },
+    ],
   },
   find: jest.fn().mockResolvedValue([]),
   findOne: jest.fn().mockResolvedValue(null),
@@ -382,6 +408,69 @@ describe('TenantScopedRepository', () => {
         { id: 'i1', name: 'x', tenantId: 'tA' },
         undefined,
       );
+    });
+  });
+
+  describe('relation mapped to the tenant column', () => {
+    it('save refuses a tenant relation that points to another tenant', async () => {
+      await asTenant(async () => {
+        await expect(
+          scoped.save({ name: 'x', tenant: { id: 'tB' } }),
+        ).rejects.toThrow(TenantMismatchError);
+        await expect(
+          scoped.save([{ name: 'ok' }, { name: 'x', tenant: { id: 'tB' } }]),
+        ).rejects.toThrow(TenantMismatchError);
+        await expect(
+          scoped.save({ name: 'x', tenant: {} as { id: string } }),
+        ).rejects.toThrow(TenantMismatchError);
+      });
+      expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it('save accepts the context tenant, null or no relation', async () => {
+      await asTenant(async () => {
+        await scoped.save({ name: 'a', tenant: { id: 'tA' } });
+        await scoped.save({ name: 'b', tenant: null });
+        await scoped.save({ name: 'c' });
+      });
+      expect(repository.save).toHaveBeenCalledTimes(3);
+    });
+
+    it('update refuses a tenant relation that points to another tenant', async () => {
+      await asTenant(async () => {
+        await expect(
+          scoped.update({ id: 'i1' }, { tenant: { id: 'tB' } }),
+        ).rejects.toThrow(TenantMismatchError);
+        await scoped.update({ id: 'i1' }, { tenant: { id: 'tA' } });
+      });
+      expect(repository.update).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('transaction', () => {
+    it('runs the work with the wrapper bound to the transaction manager', async () => {
+      const txRepository = repositoryMock();
+      const em = { getRepository: jest.fn(() => txRepository) };
+      repository.manager.transaction.mockImplementation((work) => work(em));
+
+      const result = await asTenant(() =>
+        scoped.transaction(async (tx, manager) => {
+          expect(manager).toBe(em);
+          await tx.count({ where: { name: 'x' } });
+          return 'done';
+        }),
+      );
+
+      expect(result).toBe('done');
+      expect(em.getRepository).toHaveBeenCalledWith(Item);
+      expect(txRepository.count).toHaveBeenCalledWith({
+        where: { name: 'x', tenantId: 'tA' },
+      });
+      expect(repository.count).not.toHaveBeenCalled();
+    });
+
+    it('exposes no unscoped manager', () => {
+      expect('manager' in scoped).toBe(false);
     });
   });
 

@@ -101,9 +101,9 @@ export class BranchService {
     if (deactivating) {
       // Serialise against other "last branch" changes of the same store.
       return (
-        await this.branches.manager.transaction(async (em) => {
-          await this.assertNotLastActive(em);
-          return this.save(branch, em);
+        await this.branches.transaction(async (branches, em) => {
+          await this.assertNotLastActive(branches, em);
+          return this.save(branch, branches);
         })
       ).toDto(BranchResDto);
     }
@@ -113,9 +113,9 @@ export class BranchService {
   async remove(id: string): Promise<void> {
     const branch = await this.find(id);
     if (branch.status === BranchStatus.ACTIVE) {
-      await this.branches.manager.transaction(async (em) => {
-        await this.assertNotLastActive(em);
-        await this.branches.withManager(em).softDelete({ id: branch.id });
+      await this.branches.transaction(async (branches, em) => {
+        await this.assertNotLastActive(branches, em);
+        await branches.softDelete({ id: branch.id });
       });
       return;
     }
@@ -139,14 +139,17 @@ export class BranchService {
   }
 
   /** Locks the store row first, so concurrent callers queue up before counting. */
-  private async assertNotLastActive(em: EntityManager): Promise<void> {
+  private async assertNotLastActive(
+    branches: TenantScopedRepository<BranchEntity>,
+    em: EntityManager,
+  ): Promise<void> {
     await em
       .createQueryBuilder(TenantEntity, 'tenant')
       .setLock('for_no_key_update')
       .where('tenant.id = :tenantId', { tenantId: TenantContext.require() })
       .getOne();
     if (
-      (await this.branches.withManager(em).count({
+      (await branches.count({
         where: { status: BranchStatus.ACTIVE },
       })) <= 1
     ) {
@@ -156,12 +159,10 @@ export class BranchService {
 
   private async save(
     branch: BranchEntity,
-    em?: EntityManager,
+    branches = this.branches,
   ): Promise<BranchEntity> {
     try {
-      return await (em ? this.branches.withManager(em) : this.branches).save(
-        branch,
-      );
+      return await branches.save(branch);
     } catch (error) {
       if (isUniqueViolation(error, 'UQ_branch_tenant_code')) {
         throw new ValidationException(ErrorCode.B001);
