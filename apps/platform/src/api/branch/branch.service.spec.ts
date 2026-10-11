@@ -2,6 +2,7 @@ import { Order } from '@/constants/app.constant';
 import { ErrorCode } from '@/constants/error-code.constant';
 import { NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
+import { TenantEntity } from '../tenant/entities/tenant.entity';
 import { BranchService } from './branch.service';
 import { ListBranchReqDto } from './dto/list-branch.req.dto';
 import { BranchEntity, BranchStatus } from './entities/branch.entity';
@@ -25,14 +26,34 @@ describe('BranchService', () => {
     save: jest.Mock;
     softDelete: jest.Mock;
     createQueryBuilder: jest.Mock;
+    manager: { transaction: jest.Mock };
   };
+  let em: {
+    createQueryBuilder: jest.Mock;
+    count: jest.Mock;
+    save: jest.Mock;
+    softDelete: jest.Mock;
+  };
+  let lockBuilder: Record<string, jest.Mock>;
   let builder: Record<string, jest.Mock>;
   let service: BranchService;
   const errorCodeOf = (promise: Promise<unknown>) =>
     promise.catch((e) => e.getResponse().errorCode);
 
   beforeEach(() => {
+    lockBuilder = {
+      setLock: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue({ id: 't1' }),
+    };
+    em = {
+      createQueryBuilder: jest.fn(() => lockBuilder),
+      count: jest.fn().mockResolvedValue(2),
+      save: jest.fn(async (e) => e),
+      softDelete: jest.fn(),
+    };
     repository = {
+      manager: { transaction: jest.fn((work) => work(em)) },
       findOne: jest.fn(),
       exists: jest.fn().mockResolvedValue(false),
       count: jest.fn().mockResolvedValue(2),
@@ -100,17 +121,17 @@ describe('BranchService', () => {
 
   it('refuses to delete the last active branch with B002', async () => {
     repository.findOne.mockResolvedValue(branch());
-    repository.count.mockResolvedValue(1);
+    em.count.mockResolvedValue(1);
 
     await expect(errorCodeOf(service.remove('t1', 'b1'))).resolves.toBe(
       ErrorCode.B002,
     );
-    expect(repository.softDelete).not.toHaveBeenCalled();
+    expect(em.softDelete).not.toHaveBeenCalled();
   });
 
   it('refuses to deactivate the last active branch with B002', async () => {
     repository.findOne.mockResolvedValue(branch());
-    repository.count.mockResolvedValue(1);
+    em.count.mockResolvedValue(1);
 
     await expect(
       errorCodeOf(
@@ -123,7 +144,7 @@ describe('BranchService', () => {
     repository.findOne.mockResolvedValue(
       branch({ status: BranchStatus.INACTIVE }),
     );
-    repository.count.mockResolvedValue(1);
+    em.count.mockResolvedValue(1);
 
     await service.remove('t1', 'b1');
 
@@ -131,6 +152,47 @@ describe('BranchService', () => {
       id: 'b1',
       tenantId: 't1',
     });
+    expect(repository.manager.transaction).not.toHaveBeenCalled();
+    expect(em.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('locks the store row before counting when removing an active branch', async () => {
+    repository.findOne.mockResolvedValue(branch());
+
+    await service.remove('t1', 'b1');
+
+    expect(em.createQueryBuilder).toHaveBeenCalledWith(TenantEntity, 'tenant');
+    expect(lockBuilder.setLock).toHaveBeenCalledWith('pessimistic_write');
+    expect(lockBuilder.where).toHaveBeenCalledWith('tenant.id = :tenantId', {
+      tenantId: 't1',
+    });
+    expect(lockBuilder.getOne.mock.invocationCallOrder[0]).toBeLessThan(
+      em.count.mock.invocationCallOrder[0],
+    );
+    expect(em.count).toHaveBeenCalledWith(BranchEntity, {
+      where: { tenantId: 't1', status: BranchStatus.ACTIVE },
+    });
+    expect(em.softDelete).toHaveBeenCalledWith(BranchEntity, {
+      id: 'b1',
+      tenantId: 't1',
+    });
+    expect(repository.softDelete).not.toHaveBeenCalled();
+  });
+
+  it('locks the store row before counting when deactivating an active branch', async () => {
+    repository.findOne.mockResolvedValue(branch());
+
+    await service.update('t1', 'a1', 'b1', { status: BranchStatus.INACTIVE });
+
+    expect(lockBuilder.setLock).toHaveBeenCalledWith('pessimistic_write');
+    expect(lockBuilder.getOne.mock.invocationCallOrder[0]).toBeLessThan(
+      em.count.mock.invocationCallOrder[0],
+    );
+    expect(em.save).toHaveBeenCalledTimes(1);
+    expect(em.save.mock.calls[0][0]).toMatchObject({
+      status: BranchStatus.INACTIVE,
+    });
+    expect(repository.save).not.toHaveBeenCalled();
   });
 
   it('rejects renaming the code to one already used in the tenant', async () => {
