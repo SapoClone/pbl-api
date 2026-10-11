@@ -113,6 +113,12 @@ done, production clients call platform directly.
   `ecs.tf` to the real web origin(s). It is `"false"` today, which blocks
   every browser call.
 - [ ] To deploy the gateway:
+  - **Build the image from `krakend/Dockerfile`** (KrakenD 2.6.3 + the
+    `pbl-error-body` plugin) and push it to a registry (ECR); do not use the
+    stock `devopsfaith/krakend` image: the config references the plugin and
+    KrakenD refuses to start without it. The plugin must match the KrakenD
+    version exactly, so rebuild both together when bumping. `deploy.yml` does
+    not build this image yet.
   - Add an ECS service for KrakenD with a **production** `krakend.json`.
   - `jwk_url` must be the https URL
     (`https://api.sapo.makeasy.id.vn/.well-known/jwks.json`), and
@@ -120,6 +126,9 @@ done, production clients call platform directly.
     http URL).
   - Set `security/cors.allow_origins` to the production web origin(s).
   - Point backend `host` values at each service's internal address.
+  - Keep `X-Request-Id` in each endpoint's `input_headers` and in the CORS
+    `allow_headers`/`expose_headers`; the services echo and log it, and a
+    request id is the thread that ties a gateway error to the service logs.
   - Introduce per-environment config (KrakenD flexible config or a
     separate file) so the local and production settings don't diverge.
 - [ ] To deploy catalog, commerce, finance, integration and insight: give
@@ -153,6 +162,12 @@ The base URL is `<gateway>/platform/api/v1`.
 
 ## 7. Later (no deploy blocker)
 
+- [ ] Publishing the shared libraries (`@sapoclone/pbl-auth`,
+  `@sapoclone/pbl-common`) needs no secret you create: `publish-libs.yml`
+  authenticates to GitHub Packages with the workflow's built-in `GITHUB_TOKEN`
+  (`packages: write`). Release by pushing a tag `pbl-auth-vX.Y.Z` or
+  `pbl-common-vX.Y.Z` ([ADR-0009](decisions/0009-shared-libraries-and-versioning.md)).
+  Consumers outside the org need a token with `read:packages`.
 - [ ] When both clients refresh correctly: lower
   `AUTH_JWT_TOKEN_EXPIRES_IN` from `1d` to 5–15 min. Keep the Redis logout
   deny-list: every service now checks it, which gives immediate logout and

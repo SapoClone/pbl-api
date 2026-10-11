@@ -110,7 +110,8 @@ The tenant always comes from the token, never from a query param (§8).
 
 ## 6. Errors
 
-Every service error uses one shape (`GlobalExceptionFilter`). Real examples:
+Every service error uses one shape (platform's `GlobalExceptionFilter`; the other
+services use `PblExceptionFilter` from `@pbl/common`, same fields). Real examples:
 
 **422 — request validation** (`details` per field):
 ```json
@@ -169,6 +170,7 @@ Rules:
 | `Authorization: Bearer <accessToken>` | request | every protected route |
 | `Content-Type: application/json` | request | bodies are JSON only |
 | `x-lang` / `Accept-Language` (or `?lang=`) | request | `en` (default), `vi`, `jp`: localises error messages |
+| `X-Request-Id: <id>` | request and response | optional on requests (any non-empty value; otherwise the service generates a uuid v4). Always echoed in the response, logged on every line as `req.id`, forwarded on internal HTTP calls and carried in events as `traceId`. Quote it when reporting a problem |
 | `Idempotency-Key: <uuid>` **(new, P5)** | request | **required** on order creation and payments; the same key returns the first result instead of creating twice (mobile retries on bad networks) |
 
 Every new request header must be added in three places: the gateway's

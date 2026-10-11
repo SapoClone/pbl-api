@@ -25,9 +25,9 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 
 | Area | Today | Target (build toward this) |
 |---|---|---|
-| Services | `platform` has business logic; `catalog`, `commerce`, `finance`, `integration`, `insight` only expose `GET /health` | 6 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md)) |
+| Services | `platform` has business logic; `catalog`, `commerce`, `finance`, `integration`, `insight` only expose `GET /health` (built from `templates/service/` on `@pbl/common`) | 6 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md)) |
 | Tenancy | Implemented (P0): stores, branches, `tid` + `roles` in tokens, `@CurrentTenant()`/`@RequireRoles()` ([ADR-0008](docs/decisions/0008-tenancy.md)) | Staff logins, RBAC `perms`, plans/subscriptions |
-| Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token` | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
+| Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every platform endpoint + each stub's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
 | Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles` | Step 5: `perms` claim + `@RequirePermission` (with Staff/RBAC); short access-token TTL (the deny-list stays: every service uses it) ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
 | Events | Only SQS `email-verification` → pbl-mail-service ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | Outbox → SNS → SQS with idempotent inboxes; services share data only through events and read models ([ADR-0007](docs/decisions/0007-event-bus.md)) — **not built** (roadmap P1) |
@@ -41,10 +41,13 @@ back away from the target direction.
 ```
 apps/
   platform/src/        auth · account · tenant · branch — the only app with logic
-  catalog|commerce|finance|integration|insight/src/   main.ts, app.module.ts, health.controller(.spec).ts
+  catalog|commerce|finance|integration|insight/src/   main.ts, app.module.ts, app.e2e.spec.ts (generated from templates/service/)
 libs/
-  auth/src/            @pbl/auth — token verification, global AuthGuard, Public/AuthOptional/CurrentUser
+  auth/src/            @pbl/auth — token verification, global AuthGuard, tenant context interceptor, Public/AuthOptional/CurrentUser
+  common/src/          @pbl/common — errors, logging/request id, health, bootstrap, request context, tenancy, propagation
+templates/service/     source of the generated service apps (scripts/new-service.mjs)
 krakend/krakend.json   gateway routes (every client-facing route must be declared here)
+krakend/Dockerfile     gateway image: KrakenD 2.6.3 + the pbl-error-body plugin (krakend/plugins/error-body)
 docker/                postgres-init-schemas.sql (creates the 6 schemas), elasticmq.conf (local SQS)
 docker-compose.yml     full local stack: 6 apps + postgres + redis + elasticmq + krakend
 scripts/verify-local-stack.sh   end-to-end check (health of all 6 + register/login via gateway)
@@ -104,12 +107,18 @@ Rules:
   `security/cors.allow_headers`, and to the service's `enableCors` list.
 - Validate after editing:
   `docker compose run --rm --no-deps krakend check -t -c /etc/krakend/krakend.json`
-  (use the built image: a plain `devopsfaith/krakend` image lacks the
-  `pbl-error-body` plugin). After editing `krakend/plugins/error-body`, run
-  `docker compose build krakend && docker compose up -d krakend`.
-- Gateway-generated errors (401, bodiless 500 -> 503) get a JSON body from the
-  `pbl-error-body` plugin; new forwarded headers also need `X-Request-Id`-style
-  entries in `input_headers` and CORS.
+  (use the built image `pbl-krakend:2.6.3`: a plain `devopsfaith/krakend` image lacks the
+  `pbl-error-body` plugin and cannot start with this config). The image is built from
+  `krakend/Dockerfile`; after editing `krakend/plugins/error-body`, run
+  `docker compose build krakend && docker compose up -d krakend`. The image and the
+  plugin are pinned to KrakenD 2.6.3; bump both together.
+- Gateway-generated errors (any empty-body response with status >= 400: bad token 401,
+  bodiless 500 -> 503 "Upstream service unavailable") get
+  `{timestamp, statusCode, error, message}` from the `pbl-error-body` plugin; 404/405 use
+  `router.error_body` (`{error, message}` only). A response that already has a body
+  (a service's own error) passes through untouched.
+- `X-Request-Id` is in `input_headers` of every endpoint and in CORS
+  `allow_headers`/`expose_headers`. Keep it there when you add a route or header.
 
 ## Auth rules — [ADR-0004](docs/decisions/0004-authentication-and-tokens.md)
 
@@ -126,11 +135,15 @@ Rules:
   (public) from `decorators/http.decorators.ts`; other apps use `@Public()` /
   `@AuthOptional()` from `@pbl/auth`. Read the caller with `@CurrentUser()`
   (an `AuthUser`: `id`, `sessionId`, `subjectType`, `exp`).
+- `PblAuthModule` also registers a `TenantContextInterceptor` (`APP_INTERCEPTOR`) that
+  enters the `@pbl/common` request context (`tenantId`, `requestId`, `authorization`,
+  `actor`) from the **verified** token, after the guards. That is the only place the
+  tenant is set.
 - `PblAuthModule` tenant mode: other services are `required` (a token without `tid` gets 403 unless `@TenantOptional()`); platform is `optional` and uses `@CurrentTenant()` on store routes.
 - In `tenant: 'required'` services an `@AuthOptional()` route still answers 403 when a token *without* `tid` is sent; add `@TenantOptional()` too if the route must accept such tokens.
 - Services verify the token themselves; never trust `X-User-Id` etc.
   forwarded by the gateway on their own.
-- Tenant/user identity comes **from the token**, never from body, query or path.
+- Tenant/user identity comes **from the token**, never from body, query, path or headers.
 - Refresh tokens are opaque and handled only by `RefreshTokenService`
   (hashed, rotated, reuse ⇒ family revoked). Never put them in a JWT or log them.
 
@@ -162,7 +175,8 @@ fields like `password`). Convert with `plainToInstance(Dto, x)` or
 `entity.toDto(Dto)`. Global `ValidationPipe` uses `whitelist: true` and
 returns **422** on validation errors.
 
-**Errors**: throw `ValidationException(ErrorCode.Xnnn)` for business
+**Errors** (platform; other services use `PblExceptionFilter` from `@pbl/common`,
+same JSON shape without i18n): throw `ValidationException(ErrorCode.Xnnn)` for business
 validation errors (→ 400) or Nest's `HttpException`s (`UnauthorizedException`, …).
 `ErrorCode` values are i18n keys: add the key to `i18n/en`, `i18n/vi` **and**
 `i18n/jp`. `GlobalExceptionFilter` formats every error — don't
@@ -207,6 +221,32 @@ add sensitive request fields to `loggingRedactPaths` in `constants/app.constant.
 
 ## Shared libraries
 
+`@pbl/common` holds what every service needs:
+
+- **errors:** `PblExceptionFilter` + `validationExceptionFactory` (422 with `details`);
+  platform keeps its own i18n `GlobalExceptionFilter`.
+- **logging:** `PblLoggingModule.forRoot(name)` (pino, `genReqId`): `X-Request-Id` is
+  accepted from the client or generated (uuid v4), echoed in the response and logged
+  as `req.id`.
+- **health:** `PblHealthModule.forRoot({ service, … })` → `GET /health` and `GET /health/ready`.
+- **bootstrap:** `bootstrapService(AppModule, { name })` for `main.ts`.
+- **context:** one AsyncLocalStorage request context (`RequestContext`: `tenantId`,
+  `requestId`, `authorization`, `actor`), filled by the `@pbl/auth` interceptor.
+- **tenancy:** `TenantContext` and `TenantScopedRepository` (see below).
+- **propagation:** `InternalHttpClient` (service-to-service REST; forwards the caller's
+  `Authorization` and `X-Request-Id`, never a tenant or user header, so the callee
+  verifies the token itself) and `EventEnvelope` (`createEvent` takes `tenantId` and
+  `traceId` from the context; `consumeEvent` restores them).
+
+**Tenant-scoped data access (ADR-0008).** A repository of a tenant-owned entity (one with
+a `tenantId` column) is a `TenantScopedRepository`, not a raw TypeORM `Repository`
+(register with `TenancyModule.forFeature([Entity])`, inject with
+`@InjectTenantScopedRepository(Entity)`; `BranchService` is the reference). It filters
+every read and write by the context's tenant, sets `tenantId` on `save` and refuses a
+mismatching one or a relation to another tenant, and throws `MissingTenantContextError`
+(a 500) outside a tenant context instead of returning all tenants' rows. Inside a
+transaction use `repo.transaction((scoped, em) => …)`. Joined relations are not filtered.
+
 `libs/auth` and `libs/common` are also published to GitHub Packages as
 `@sapoclone/pbl-auth` and `@sapoclone/pbl-common`
 ([ADR-0009](docs/decisions/0009-shared-libraries-and-versioning.md)). Apps in this
@@ -241,11 +281,13 @@ docker compose up --build -d                 # whole stack; gateway on :8080, pl
 bash scripts/verify-local-stack.sh           # must print "Stack verified." before you claim success
 docker compose up -d --build platform        # REQUIRED after editing platform code: the container
                                              # has no source mount, so watch mode never sees your edit
-# run tests/lint inside the image: mount the repo at /work and borrow the image's node_modules
+# run tests/lint inside the image (one container at a time; Docker has 8 GB): mount the repo at /work and borrow the image's node_modules
 # (Git Bash on Windows: MSYS_NO_PATHCONV=1 and $(pwd -W) instead of $PWD)
 docker compose run --rm --no-deps -v "$PWD:/work" -w /work platform sh -c \
-  "ln -s /app/node_modules node_modules; pnpm exec jest --config apps/platform/jest.config.json; rm node_modules"
-#   libs + stub apps: pnpm exec jest libs apps/catalog/src ...     lint: pnpm exec eslint <files>
+  "ln -s /app/node_modules node_modules; pnpm exec jest --config apps/platform/jest.config.json --maxWorkers=2; rm node_modules"
+#   libs + stub apps: pnpm exec jest libs apps/catalog/src --maxWorkers=2     lint: pnpm exec eslint <files>
+#   limit jest workers with `pnpm exec jest <pattern> --maxWorkers=2` (platform: add
+#   `--config apps/platform/jest.config.json`); `pnpm test -- --maxWorkers=2` does NOT limit them
 # after changing package.json / pnpm-lock.yaml: docker compose build (images bake node_modules)
 ```
 
@@ -257,13 +299,15 @@ Local SQS is ElasticMQ; queued messages:
 - Bug fix → first a failing test that reproduces it, then the fix.
 - Unit specs live next to the code (`*.spec.ts`); mock repositories with
   `getRepositoryToken(Entity)` as in `auth.service.spec.ts`.
-- New stub-service endpoints get a spec like `health.controller.spec.ts`.
+- New stub-service endpoints get a spec like `app.e2e.spec.ts` (generated from the template).
+- Tenant-owned resources need a cross-tenant test (tenant B cannot see tenant A's rows).
 - CI (`.github/workflows/ci.yml`) runs lint once and build+test **per
   service** in a matrix (plus `libs`: `build:libs`/`test:libs`); a new app
   must be added to that matrix, to `nest-cli.json` (with
   `entryFile: apps/<app>/src/main`), `package.json` scripts,
   `docker-compose.yml` (with `AUTH_JWKS_URL`), `docker/postgres-init-schemas.sql`
-  (its schema), `krakend.json`, and must import `PblAuthModule.forRemoteJwks()`.
+  (its schema), `krakend.json`, and must import `PblAuthModule.forRemoteJwks()` and the
+  `@pbl/common` modules. `node scripts/new-service.mjs` does all of this.
 
 ## Git
 

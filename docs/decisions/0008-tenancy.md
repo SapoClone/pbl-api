@@ -24,7 +24,12 @@ carries `tenant_id`. Platform had no Tenant/Branch, and tokens had no tenant
   from `@pbl/auth`, never from body, query, path or headers. `X-Tenant-Id`
   from the gateway is informational only.
 - **Every business table has `tenant_id`.** Every query filters by it, using
-  the tenant-scoped repository base introduced in P1. Unique constraints that
+  the tenant-scoped repository (`TenantScopedRepository` in `@pbl/common`: it filters
+  every read and write by the context's tenant, sets `tenantId` on `save`, and
+  throws outside a tenant context). The context is entered by `@pbl/auth` from the
+  verified token only. Internal REST calls forward the caller's `Authorization`, and
+  events carry `tenantId` from the context; no header or body field names a tenant.
+  Unique constraints that
   are per store include `tenant_id`, e.g. branch `code`, product `sku_code`.
 - **Isolation answers 404**, not 403, so other stores' ids are not revealed.
 - **Non-platform services require a tenant by default**
@@ -55,5 +60,5 @@ carries `tenant_id`. Platform had no Tenant/Branch, and tokens had no tenant
 - **Database or schema per tenant:** strong isolation, but heavy for many
   small stores on a free-tier Postgres; row-level `tenant_id` matches the ERD.
 - **Postgres row-level security:** a good later hardening layer, but it
-  needs per-request session settings through TypeORM. Revisit once
-  repositories are centralised.
+  needs per-request session settings through TypeORM. Revisit now that
+  repositories are centralised in `TenantScopedRepository`.

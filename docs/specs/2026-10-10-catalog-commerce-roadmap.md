@@ -37,7 +37,7 @@ Each row is its own spec → plan → implementation cycle.
 | # | Sub-project | Scope | Unblocks on mobile |
 |---|---|---|---|
 | P0 | Platform tenancy | Account, Tenant, Branch, AccountTenant(role); create store; select/switch tenant; `tid` + `roles` claims; `@pbl/auth` tenant support. Spec: [P0 design](2026-10-10-p0-platform-tenancy-design.md) | — (foundation) |
-| P1 | Event bus | `libs/events`: transactional outbox (publish retry with backoff) and idempotent inbox per service schema, relay to SNS, SQS consumers with per-message failure reporting; a DLQ + redrive policy (`maxReceiveCount` 3) on every queue and SNS subscription, plus a redrive script; versioned contracts in `libs/contracts`; LocalStack (SNS+SQS+Lambda) replaces ElasticMQ with the same definitions as production, running pbl-mail-service locally; tests for retry → DLQ, redrive, duplicates, SNS outage; tenant-scoped repository base | — (foundation) |
+| P1 | Event bus | `libs/events`: transactional outbox (publish retry with backoff) and idempotent inbox per service schema, relay to SNS, SQS consumers with per-message failure reporting; a DLQ + redrive policy (`maxReceiveCount` 3) on every queue and SNS subscription, plus a redrive script; versioned contracts in `libs/contracts`; LocalStack (SNS+SQS+Lambda) replaces ElasticMQ with the same definitions as production, running pbl-mail-service locally; tests for retry → DLQ, redrive, duplicates, SNS outage. (The tenant-scoped repository and `EventEnvelope` already exist in `@pbl/common`, built by the service-foundations work; P1 builds on them.) | — (foundation) |
 | P2 | Catalog core | Category, Brand, Attribute/Value, Product, ProductVariant, VariantAttributeValue; CRUD + search; publishes `catalog.variant.*` | Products |
 | P3 | Commerce · inventory | Variant read model (from P2 events), StockItem, StockThreshold, InventoryLedger, receipts/issues (stock in/out/correction), transfers, stock takes, low-stock query | Inventory, stock take, alerts |
 | P4 | Commerce · customers | CustomerGroup, Customer, CustomerAddress, MembershipTier, LoyaltyAccount/Transaction/Setting | Customers |
@@ -57,7 +57,7 @@ non-owners.
 1. **Tenancy ([ADR-0008](../decisions/0008-tenancy.md)).** Every business
    table has `tenant_id`. The tenant comes only from the token's `tid`
    (`@CurrentTenant()`), never from the request. Every query filters by it
-   through the tenant-scoped repository base. Other tenants' rows answer 404.
+   through `TenantScopedRepository` (`@pbl/common`). Other tenants' rows answer 404.
 2. **Data across services only through events ([ADR-0007](../decisions/0007-event-bus.md)).**
    No runtime REST calls between services for business data and no
    cross-schema reads (ADR-0002). A consumer keeps its own read model (e.g.

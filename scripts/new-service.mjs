@@ -188,7 +188,7 @@ for (const [rel, f] of edits) {
 console.log(`
 Service "${name}" created. Next steps:
   1. pnpm exec tsc -p apps/${name}/tsconfig.app.json --noEmit
-  2. pnpm test:${name} -- --maxWorkers=2
+  2. pnpm exec jest apps/${name}/src --maxWorkers=2
   3. docker compose up -d --build ${name} krakend
   4. curl http://localhost:8080/${name}/health    (expect {"status":"ok","service":"${name}"})
 Then add your modules to apps/${name}/src/app.module.ts. See docs/guides/new-service.md.

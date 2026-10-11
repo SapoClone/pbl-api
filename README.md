@@ -12,7 +12,7 @@
 ## Description
 
 Backend for **Sapo Clone** (PBL6): a Nest CLI monorepo with one app per
-microservice — `platform` (auth, accounts; the only one with business logic
+microservice — `platform` (auth, accounts, stores; the only one with business logic
 so far) and `catalog`, `commerce`, `finance`, `integration`, `insight` —
 behind a KrakenD API gateway. Architecture rules and decisions:
 [`CLAUDE.md`](CLAUDE.md) and [`docs/decisions/`](docs/decisions/).
@@ -95,6 +95,7 @@ docker compose down -v     # stop and delete all local data (fresh database)
 | Gateway returns 404 for a route | The route is not declared in `krakend/krakend.json` (every route must be). |
 | A new or changed route returns 404 through the gateway after pulling | KrakenD does not reload `krakend/krakend.json` while running: `docker compose restart krakend`. |
 | Your code change has no effect | Rebuild the service (see above). |
+| `krakend` exits with `plugin` / `pbl-error-body` errors, or a gateway error has an empty body | The gateway is a custom image (KrakenD 2.6.3 + the `pbl-error-body` plugin, `krakend/Dockerfile`), not the stock one. Build it: `docker compose build krakend && docker compose up -d krakend`. |
 
 ## How the local stack works
 
@@ -132,6 +133,16 @@ Notes on the local stack:
 To add a new service from the template (registers it in compose, the gateway,
 CI and the verify script), run `node scripts/new-service.mjs <name>`; see
 [`docs/guides/new-service.md`](docs/guides/new-service.md).
+
+Every request carries an `X-Request-Id` (send your own, or the service generates one);
+it is echoed in the response and appears as `req.id` in the logs, which makes a failed
+call easy to trace across the gateway and services. Errors the gateway itself
+generates (bad token, unreachable service) use the same JSON shape as service
+errors: `{ timestamp, statusCode, error, message }`.
+
+Shared code lives in `libs/` (`@pbl/auth`, `@pbl/common`), also published to GitHub
+Packages as `@sapoclone/pbl-auth` / `@sapoclone/pbl-common`; see
+[ADR-0009](docs/decisions/0009-shared-libraries-and-versioning.md).
 
 Individual services, outside Docker, for day-to-day development on `platform`:
 
