@@ -20,6 +20,7 @@ class Handlers {
   @AuthOptional() maybe() {}
   @TenantOptional() noTenant() {}
   @RequireRoles('owner') ownerOnly() {}
+  @RequireRoles('owner', 'admin') ownerOrAdmin() {}
 }
 
 const user = (overrides: Partial<AuthUser> = {}): AuthUser => ({
@@ -129,6 +130,25 @@ describe('AuthGuard', () => {
     await expect(
       guardFor('optional').canActivate(context('ownerOnly', 'Bearer abc').ctx),
     ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('@RequireRoles(owner, admin) accepts a caller with either role', async () => {
+    verifier.verify.mockResolvedValue(
+      user({ tenantId: 't1', roles: ['admin'] }),
+    );
+
+    await expect(
+      guardFor('optional').canActivate(
+        context('ownerOrAdmin', 'Bearer abc').ctx,
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('@Public() does not verify a token even when one is sent', async () => {
+    await expect(
+      guardFor('required').canActivate(context('open', 'Bearer abc').ctx),
+    ).resolves.toBe(true);
+    expect(verifier.verify).not.toHaveBeenCalled();
   });
 
   it('@RequireRoles() accepts a caller with the role', async () => {

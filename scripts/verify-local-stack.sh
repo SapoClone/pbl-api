@@ -46,9 +46,11 @@ done
 
 json_field() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }
 login_token() { curl -s -H "Content-Type: application/json" -d "$1" "$api/auth/email/login" | json_field accessToken; }
-expect_code() { # expected method url token
+expect_code() { # expected method url token [json-body]
   local code
-  code=$(curl -s -o /dev/null -w "%{http_code}" -X "$2" -H "Authorization: Bearer $4" "$3")
+  local args=(-s -o /dev/null -w "%{http_code}" -X "$2" -H "Authorization: Bearer $4")
+  [[ -z "${5:-}" ]] || args+=(-H "Content-Type: application/json" -d "$5")
+  code=$(curl "${args[@]}" "$3")
   [[ "$code" == "$1" ]] || fail "$2 $3 returned $code (expected $1)"
   echo "OK: $2 ${3#"$gateway"} -> $1"
 }
@@ -74,6 +76,17 @@ branch_id=$(echo "$branch" | sed -n 's/^{"id":"\([^"]*\)".*/\1/p')
 echo "OK: POST /platform/api/v1/branches -> $branch_id"
 expect_code 200 GET "$api/branches" "$store_token"
 expect_code 200 GET "$api/branches/$branch_id" "$store_token"
+expect_code 200 PATCH "$api/branches/$branch_id" "$store_token" '{"name":"Kho 2b"}'
+expect_code 422 PATCH "$api/branches/$branch_id" "$store_token" '{"name":null}'
+expect_code 200 GET "$api/tenants/current" "$store_token"
+expect_code 200 PATCH "$api/tenants/current" "$store_token" '{"phone":"0900000000"}'
+expect_code 204 DELETE "$api/branches/$branch_id" "$store_token"
+main_id=$(curl -s -H "Authorization: Bearer $store_token" "$api/branches" \
+  | grep -o '"id":"[^"]*","[^}]*"code":"CN01"' | head -n1 | sed -n 's/^"id":"\([^"]*\)".*/\1/p')
+[[ -n "$main_id" ]] || fail "could not find the CN01 branch id in GET /branches"
+last=$(curl -s -w " %{http_code}" -X DELETE -H "Authorization: Bearer $store_token" "$api/branches/$main_id")
+[[ "$last" == *'"errorCode":"B002"'* && "$last" == *" 400" ]] || fail "deleting the last active branch: $last"
+echo "OK: DELETE /platform/api/v1/branches/<last active> -> 400 B002"
 
 echo "Checking that another store cannot see it..."
 other="{\"email\":\"verify-other-$(date +%s)@example.com\",\"password\":\"Passw0rd!\"}"
@@ -82,5 +95,8 @@ other_token=$(curl -s -H "Authorization: Bearer $(login_token "$other")" -H "Con
   -d "{\"name\":\"Other\",\"subdomain\":\"$sub-b\"}" "$api/tenants" | json_field accessToken)
 [[ -n "$other_token" ]] || fail "second store was not created"
 expect_code 404 GET "$api/branches/$branch_id" "$other_token"
+tenant_id=$(curl -s -H "Authorization: Bearer $store_token" "$api/tenants/current" | json_field id)
+[[ -n "$tenant_id" ]] || fail "GET /tenants/current returned no id"
+expect_code 404 POST "$api/auth/switch-tenant" "$other_token" "{\"tenantId\":\"$tenant_id\"}"
 
 echo "Stack verified."

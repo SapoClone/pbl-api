@@ -1,7 +1,7 @@
 import { Order } from '@/constants/app.constant';
 import { ErrorCode } from '@/constants/error-code.constant';
 import { NotFoundException } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { TenantEntity } from '../tenant/entities/tenant.entity';
 import { BranchService } from './branch.service';
 import { ListBranchReqDto } from './dto/list-branch.req.dto';
@@ -195,6 +195,35 @@ describe('BranchService', () => {
     expect(repository.save).not.toHaveBeenCalled();
   });
 
+  describe('save errors', () => {
+    const dto = { name: 'Kho 2', code: 'KHO2' };
+    const dbError = (constraint: string) =>
+      new QueryFailedError(
+        'INSERT',
+        [],
+        Object.assign(new Error('dup'), { code: '23505', constraint }),
+      );
+
+    it('maps a UQ_branch_tenant_code violation to B001', async () => {
+      repository.save.mockRejectedValue(dbError('UQ_branch_tenant_code'));
+
+      await expect(errorCodeOf(service.create('t1', 'a1', dto))).resolves.toBe(
+        ErrorCode.B001,
+      );
+    });
+
+    it('rethrows other unique violations and errors', async () => {
+      const other = dbError('UQ_something_else');
+      repository.save.mockRejectedValueOnce(other);
+      await expect(service.create('t1', 'a1', dto)).rejects.toBe(other);
+
+      repository.save.mockRejectedValueOnce(new Error('connection lost'));
+      await expect(service.create('t1', 'a1', dto)).rejects.toThrow(
+        'connection lost',
+      );
+    });
+  });
+
   it('rejects renaming the code to one already used in the tenant', async () => {
     repository.findOne.mockResolvedValue(branch());
     repository.exists.mockResolvedValue(true);
@@ -235,6 +264,34 @@ describe('BranchService', () => {
         },
       );
       expect(builder.addOrderBy).toHaveBeenCalledWith('branch.id', Order.ASC);
+    });
+
+    it('adds no status or search condition when neither is given', async () => {
+      await service.list(
+        't1',
+        Object.assign(new ListBranchReqDto(), { order: Order.ASC }),
+      );
+
+      expect(builder.where).toHaveBeenCalledWith(
+        'branch.tenantId = :tenantId',
+        { tenantId: 't1' },
+      );
+      expect(builder.andWhere).not.toHaveBeenCalled();
+    });
+
+    it('adds the status condition when status is given', async () => {
+      await service.list(
+        't1',
+        Object.assign(new ListBranchReqDto(), {
+          order: Order.ASC,
+          status: BranchStatus.INACTIVE,
+        }),
+      );
+
+      expect(builder.andWhere).toHaveBeenCalledTimes(1);
+      expect(builder.andWhere).toHaveBeenCalledWith('branch.status = :status', {
+        status: BranchStatus.INACTIVE,
+      });
     });
 
     it('searches name and code case-insensitively with a bound parameter', async () => {

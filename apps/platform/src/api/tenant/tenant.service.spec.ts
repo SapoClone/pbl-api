@@ -121,3 +121,90 @@ describe('TenantService.create', () => {
     await expect(service.create('a1', dto)).rejects.toThrow('connection lost');
   });
 });
+
+describe('TenantService (read and update)', () => {
+  let tenantRepository: { findOneByOrFail: jest.Mock; save: jest.Mock };
+  let membershipService: { findActiveMemberships: jest.Mock };
+  let service: TenantService;
+  const existing = () =>
+    new TenantEntity({
+      id: 't1' as TenantEntity['id'],
+      name: 'Old',
+      subdomain: 'old',
+      phone: '0900000000',
+      email: 'a@b.co',
+      address: 'Street',
+    });
+
+  beforeEach(() => {
+    tenantRepository = {
+      findOneByOrFail: jest.fn(),
+      save: jest.fn(async (e) => e),
+    };
+    membershipService = { findActiveMemberships: jest.fn() };
+    service = new TenantService(
+      tenantRepository as unknown as Repository<TenantEntity>,
+      {} as DataSource,
+      membershipService as unknown as MembershipService,
+    );
+  });
+
+  it('listMine maps memberships to id, name, subdomain and role', async () => {
+    membershipService.findActiveMemberships.mockResolvedValue([
+      {
+        tenantId: 't1',
+        name: 'Shop',
+        subdomain: 'shop',
+        role: 'owner',
+        extra: 'dropped',
+      },
+    ]);
+
+    await expect(service.listMine('a1')).resolves.toEqual([
+      { id: 't1', name: 'Shop', subdomain: 'shop', role: 'owner' },
+    ]);
+    expect(membershipService.findActiveMemberships).toHaveBeenCalledWith('a1');
+  });
+
+  it('getCurrent loads the store by id', async () => {
+    tenantRepository.findOneByOrFail.mockResolvedValue(existing());
+
+    const result = await service.getCurrent('t1');
+
+    expect(tenantRepository.findOneByOrFail).toHaveBeenCalledWith({
+      id: 't1',
+    });
+    expect(result).toMatchObject({ name: 'Old' });
+  });
+
+  it('updateCurrent assigns only the fields sent and sets updatedBy', async () => {
+    tenantRepository.findOneByOrFail.mockResolvedValue(existing());
+
+    await service.updateCurrent('t1', 'a1', { name: 'New', phone: undefined });
+
+    expect(tenantRepository.save.mock.calls[0][0]).toMatchObject({
+      name: 'New',
+      phone: '0900000000',
+      email: 'a@b.co',
+      address: 'Street',
+      subdomain: 'old',
+      updatedBy: 'a1',
+    });
+  });
+
+  it('updateCurrent stores null for phone, email and address sent as null', async () => {
+    tenantRepository.findOneByOrFail.mockResolvedValue(existing());
+
+    await service.updateCurrent('t1', 'a1', {
+      phone: null,
+      email: null,
+      address: null,
+    });
+
+    const saved: TenantEntity = tenantRepository.save.mock.calls[0][0];
+    expect(saved.phone).toBeNull();
+    expect(saved.email).toBeNull();
+    expect(saved.address).toBeNull();
+    expect(saved.name).toBe('Old');
+  });
+});
