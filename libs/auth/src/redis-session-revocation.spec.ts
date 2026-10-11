@@ -64,6 +64,17 @@ describe('RedisSessionRevocation', () => {
       });
     });
 
+    it.each([[''], [undefined]])(
+      'should fall back to 6379 when the port is %p',
+      (port) => {
+        RedisSessionRevocation.fromEnv({ host: 'r', port });
+
+        expect(Redis).toHaveBeenCalledWith(
+          expect.objectContaining({ host: 'r', port: 6379 }),
+        );
+      },
+    );
+
     it('should listen for client errors so outages do not crash with an unhandled event', () => {
       RedisSessionRevocation.fromEnv({ host: 'r' });
 

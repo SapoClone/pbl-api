@@ -24,7 +24,7 @@ export class RedisSessionRevocation {
     if (!env.host) return null;
     const redis = new Redis({
       host: env.host,
-      port: Number(env.port ?? 6379),
+      port: Number(env.port) || 6379,
       password: env.password || undefined,
       tls: env.tls === 'true' ? {} : undefined,
       lazyConnect: false,
