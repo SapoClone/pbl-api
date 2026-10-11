@@ -56,9 +56,13 @@ class ProbeController {
 
 jest.mock('ioredis', () =>
   jest.fn().mockImplementation(() => ({
-    exists: jest.fn(async (key: string) =>
-      key === 'auth:session-blacklist:session-revoked' ? 1 : 0,
-    ),
+    exists: jest.fn(async (key: string) => {
+      if (key === 'auth:session-blacklist:session-broken') {
+        throw new Error('redis down');
+      }
+      return key === 'auth:session-blacklist:session-revoked' ? 1 : 0;
+    }),
+    on: jest.fn(),
     quit: jest.fn(async () => 'OK'),
   })),
 );
@@ -97,6 +101,9 @@ describe('PblAuthModule.forRemoteJwks', () => {
     });
     await new Promise<void>((resolve) => jwks.listen(0, resolve));
     process.env.AUTH_JWKS_URL = `http://127.0.0.1:${(jwks.address() as AddressInfo).port}/.well-known/jwks.json`;
+    // the in-image env file sets REDIS_HOST; this suite is the no-Redis path
+    delete process.env.REDIS_HOST;
+    (Redis as unknown as jest.Mock).mockClear();
 
     const moduleRef = await Test.createTestingModule({
       imports: [PblAuthModule.forRemoteJwks()],
@@ -110,6 +117,17 @@ describe('PblAuthModule.forRemoteJwks', () => {
     process.env = originalEnv;
     await app.close();
     await new Promise((resolve) => jwks.close(resolve));
+  });
+
+  it('should skip the deny-list entirely without REDIS_HOST', async () => {
+    await request(app.getHttpServer())
+      .get('/closed')
+      .set(
+        'Authorization',
+        `Bearer ${await sign({ tid: 'tenant-1', sid: 'session-revoked' })}`,
+      )
+      .expect(200);
+    expect(Redis).not.toHaveBeenCalled();
   });
 
   it('should leave @Public() routes open', async () => {
@@ -225,6 +243,7 @@ describe('PblAuthModule.forRemoteJwks with REDIS_HOST', () => {
     await new Promise<void>((resolve) => jwks.listen(0, resolve));
     process.env.AUTH_JWKS_URL = `http://127.0.0.1:${(jwks.address() as AddressInfo).port}/.well-known/jwks.json`;
     process.env.REDIS_HOST = 'redis.test';
+    (Redis as unknown as jest.Mock).mockClear();
 
     const moduleRef = await Test.createTestingModule({
       imports: [PblAuthModule.forRemoteJwks()],
@@ -234,9 +253,11 @@ describe('PblAuthModule.forRemoteJwks with REDIS_HOST', () => {
     await app.init();
   });
 
+  let closed = false;
+
   afterAll(async () => {
     process.env = originalEnv;
-    await app.close();
+    if (!closed) await app.close();
     await new Promise((resolve) => jwks.close(resolve));
   });
 
@@ -254,9 +275,19 @@ describe('PblAuthModule.forRemoteJwks with REDIS_HOST', () => {
       .expect(200);
   });
 
+  it('should fail loudly (500) when the deny-list store errors', async () => {
+    await request(app.getHttpServer())
+      .get('/closed')
+      .set('Authorization', `Bearer ${await sign('session-broken')}`)
+      .expect(500);
+  });
+
   it('should close the Redis connection when the app shuts down', async () => {
-    const { quit } = (Redis as unknown as jest.Mock).mock.results[0].value;
+    const results = (Redis as unknown as jest.Mock).mock.results;
+    expect(results).toHaveLength(1);
+    const { quit } = results[0].value;
     await app.close();
+    closed = true;
     expect(quit).toHaveBeenCalled();
   });
 });

@@ -42,7 +42,9 @@ carries `tenant_id`. Platform had no Tenant/Branch, and tokens had no tenant
 - Cross-tenant tests (tenant B cannot see tenant A's data) are mandatory
   for every new resource.
 - Every service checks the logout deny-list through `@pbl/auth` (ADR-0004 §7),
-  so revocation by logout or by switching store is immediate everywhere. Only
+  so revocation by logout or by switching store is immediate in every service
+  that has `REDIS_HOST` set (all deployed services); without it a service
+  skips the check. Only
   a token for a store suspended mid-session stays valid until it is refreshed
   or expires.
 

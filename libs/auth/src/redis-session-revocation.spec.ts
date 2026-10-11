@@ -64,6 +64,13 @@ describe('RedisSessionRevocation', () => {
       });
     });
 
+    it('should listen for client errors so outages do not crash with an unhandled event', () => {
+      RedisSessionRevocation.fromEnv({ host: 'r' });
+
+      const instance = (Redis as unknown as jest.Mock).mock.instances[0];
+      expect(instance.on).toHaveBeenCalledWith('error', expect.any(Function));
+    });
+
     it('should default the port and leave password and tls off', () => {
       RedisSessionRevocation.fromEnv({ host: 'r', password: '' });
 

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { sessionDenyListKey } from './auth.constants';
 import { AuthUser } from './auth.types';
@@ -21,16 +22,19 @@ export class RedisSessionRevocation {
     env: RedisSessionRevocationEnv,
   ): RedisSessionRevocation | null {
     if (!env.host) return null;
-    return new RedisSessionRevocation(
-      new Redis({
-        host: env.host,
-        port: Number(env.port ?? 6379),
-        password: env.password || undefined,
-        tls: env.tls === 'true' ? {} : undefined,
-        lazyConnect: false,
-        maxRetriesPerRequest: 1,
-      }),
-    );
+    const redis = new Redis({
+      host: env.host,
+      port: Number(env.port ?? 6379),
+      password: env.password || undefined,
+      tls: env.tls === 'true' ? {} : undefined,
+      lazyConnect: false,
+      maxRetriesPerRequest: 1,
+    });
+    // Without a listener ioredis prints "Unhandled error event"; commands
+    // still reject while the store is down.
+    const logger = new Logger('RedisSessionRevocation');
+    redis.on('error', (err) => logger.warn(`Redis error: ${err.message}`));
+    return new RedisSessionRevocation(redis);
   }
 
   async isSessionRevoked(user: AuthUser): Promise<boolean> {
