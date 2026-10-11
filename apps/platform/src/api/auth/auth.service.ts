@@ -39,6 +39,10 @@ import {
   RefreshTokenService,
 } from './refresh-token.service';
 
+// Argon2id hash of a random string, verified when no usable account exists
+const DUMMY_PASSWORD_HASH =
+  '$argon2id$v=19$m=65536,t=3,p=4$8d902FJaiwI8/5qJbpHQtw$zrd8rExr4nBCpW2or00BuccYs2iboSx8VQTt3CapOsM';
+
 type Token = Branded<
   {
     accessToken: string;
@@ -64,7 +68,7 @@ export class AuthService {
   ) {}
 
   /**
-   * Sign in user
+   * Sign in an account
    * @param dto LoginReqDto
    * @returns LoginResDto
    */
@@ -73,10 +77,17 @@ export class AuthService {
       where: { email: dto.email },
       select: ['id', 'email', 'password', 'status'],
     });
-    const isValid =
-      account?.status === AccountStatus.ACTIVE &&
-      (await verifyPassword(dto.password, account.password));
-    if (!isValid) {
+    // Always run one argon2 verification, so the response time does not
+    // reveal whether the email exists or the account is disabled
+    const isPasswordValid = await verifyPassword(
+      dto.password,
+      account?.password ?? DUMMY_PASSWORD_HASH,
+    );
+    if (
+      !account ||
+      account.status !== AccountStatus.ACTIVE ||
+      !isPasswordValid
+    ) {
       throw new UnauthorizedException();
     }
 
@@ -149,17 +160,17 @@ export class AuthService {
   }
 
   async register(dto: RegisterReqDto): Promise<RegisterResDto> {
-    // Check if the user already exists
-    const isExistUser = await AccountEntity.exists({
+    // Check if the account already exists
+    const isExistAccount = await AccountEntity.exists({
       where: { email: dto.email },
     });
 
-    if (isExistUser) {
+    if (isExistAccount) {
       throw new ValidationException(ErrorCode.E003);
     }
 
-    // Register user
-    const user = new AccountEntity({
+    // Register account
+    const account = new AccountEntity({
       email: dto.email,
       password: dto.password,
       name: dto.name ?? '',
@@ -167,10 +178,10 @@ export class AuthService {
       updatedBy: SYSTEM_USER_ID,
     });
 
-    await user.save();
+    await account.save();
 
     // Send email verification
-    const token = await this.createVerificationToken({ id: user.id });
+    const token = await this.createVerificationToken({ id: account.id });
     const tokenExpiresIn = this.configService.getOrThrow(
       'auth.confirmEmailExpires',
       {
@@ -178,14 +189,14 @@ export class AuthService {
       },
     );
     await this.cacheManager.set(
-      createCacheKey(CacheKey.EMAIL_VERIFICATION, user.id),
+      createCacheKey(CacheKey.EMAIL_VERIFICATION, account.id),
       token,
       ms(tokenExpiresIn),
     );
     await this.queueService.enqueueEmailVerification(dto.email, token);
 
     return plainToInstance(RegisterResDto, {
-      userId: user.id,
+      userId: account.id,
     });
   }
 

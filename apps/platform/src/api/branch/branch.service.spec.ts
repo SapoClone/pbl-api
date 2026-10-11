@@ -298,7 +298,7 @@ describe('BranchService', () => {
       await service.list('t1', Object.assign(query, { q: 'kho%' }));
 
       expect(builder.andWhere).toHaveBeenCalledWith(
-        '(branch.name ILIKE :q OR branch.code ILIKE :q)',
+        "(branch.name ILIKE :q ESCAPE '\\' OR branch.code ILIKE :q ESCAPE '\\')",
         { q: '%kho\\%%' },
       );
     });

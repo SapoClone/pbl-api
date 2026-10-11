@@ -64,7 +64,9 @@ type IClassFieldOptions = IFieldOptions;
 function optional(options: IFieldOptions): PropertyDecorator {
   return options.nullable
     ? IsOptional({ each: options.each })
-    : ValidateIf((_obj, value) => value !== undefined);
+    : ValidateIf((_obj, value) => value !== undefined, {
+        each: options.each,
+      });
 }
 
 export function NumberField(
@@ -111,7 +113,7 @@ export function NumberFieldOptional(
     INumberFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     NumberField({ required: false, ...options }),
   );
 }
@@ -214,7 +216,7 @@ export function PasswordFieldOptional(
     IStringFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     PasswordField({ required: false, ...options }),
   );
 }
@@ -316,7 +318,7 @@ export function UUIDFieldOptional(
     IFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     UUIDField({ required: false, ...options }),
   );
 }
@@ -339,7 +341,7 @@ export function URLFieldOptional(
   options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     URLField({ required: false, ...options }),
   );
 }
@@ -369,7 +371,7 @@ export function DateFieldOptional(
   options: Omit<ApiPropertyOptions, 'type' | 'required'> & IFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     DateField({ ...options, required: false }),
   );
 }
@@ -453,7 +455,7 @@ export function ClassFieldOptional<TClass extends Constructor>(
     IClassFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     ClassField(getClass, { required: false, ...options }),
   );
 }

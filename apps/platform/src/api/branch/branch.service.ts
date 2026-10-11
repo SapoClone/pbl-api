@@ -36,9 +36,10 @@ export class BranchService {
     }
     if (query.q) {
       const pattern = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
-      builder.andWhere('(branch.name ILIKE :q OR branch.code ILIKE :q)', {
-        q: pattern,
-      });
+      builder.andWhere(
+        "(branch.name ILIKE :q ESCAPE '\\' OR branch.code ILIKE :q ESCAPE '\\')",
+        { q: pattern },
+      );
     }
     const [branches, meta] = await paginate<BranchEntity>(builder, query, {
       skipCount: false,

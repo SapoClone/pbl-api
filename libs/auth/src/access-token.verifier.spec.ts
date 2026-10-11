@@ -75,6 +75,16 @@ describe('AccessTokenVerifier', () => {
     });
   });
 
+  it('should keep only string elements of the roles claim', async () => {
+    const token = await sign({
+      payload: { ...claims, roles: ['owner', 1, {}] },
+    });
+
+    await expect(verifier.verify(token)).resolves.toMatchObject({
+      roles: ['owner'],
+    });
+  });
+
   it('should treat a non-array roles claim as no roles', async () => {
     const token = await sign({ payload: { ...claims, roles: 'owner' } });
 

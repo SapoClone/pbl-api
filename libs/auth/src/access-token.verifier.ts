@@ -73,7 +73,9 @@ export class AccessTokenVerifier {
       sessionId: claims.sid,
       subjectType: claims.sub_type,
       tenantId: claims.tid || undefined,
-      roles: Array.isArray(claims.roles) ? claims.roles : [],
+      roles: Array.isArray(claims.roles)
+        ? claims.roles.filter((r): r is string => typeof r === 'string')
+        : [],
       exp: claims.exp,
     };
   }

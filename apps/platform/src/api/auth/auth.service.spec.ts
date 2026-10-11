@@ -26,7 +26,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let configServiceValue: Partial<Record<keyof ConfigService, jest.Mock>>;
   let jwtServiceValue: Partial<Record<keyof JwtService, jest.Mock>>;
-  let userRepositoryValue: Partial<
+  let accountRepositoryValue: Partial<
     Record<keyof Repository<AccountEntity>, jest.Mock>
   >;
   let queueServiceValue: Partial<Record<keyof QueueService, jest.Mock>>;
@@ -60,7 +60,7 @@ describe('AuthService', () => {
       signAsync: jest.fn(),
     };
 
-    userRepositoryValue = {
+    accountRepositoryValue = {
       findOne: jest.fn(),
     };
 
@@ -98,7 +98,7 @@ describe('AuthService', () => {
         },
         {
           provide: getRepositoryToken(AccountEntity),
-          useValue: userRepositoryValue,
+          useValue: accountRepositoryValue,
         },
         {
           provide: QueueService,
@@ -206,7 +206,7 @@ describe('AuthService', () => {
         subjectId: 'user-1',
         tenantId: null,
       });
-      userRepositoryValue.findOne.mockResolvedValue({
+      accountRepositoryValue.findOne.mockResolvedValue({
         id: 'user-1',
         status: AccountStatus.ACTIVE,
       });
@@ -248,14 +248,14 @@ describe('AuthService', () => {
       );
     });
 
-    it('should revoke the family and reject when the user no longer exists', async () => {
+    it('should revoke the family and reject when the account no longer exists', async () => {
       refreshTokenServiceValue.rotate.mockResolvedValue({
         token: 'next',
         familyId: 'family-1',
         subjectId: 'deleted-user',
         tenantId: null,
       });
-      userRepositoryValue.findOne.mockResolvedValue(null);
+      accountRepositoryValue.findOne.mockResolvedValue(null);
 
       await expect(
         service.refreshToken({ refreshToken: 'presented' }),
@@ -296,7 +296,7 @@ describe('AuthService', () => {
       });
 
     beforeEach(() => {
-      userRepositoryValue.findOne = jest.fn().mockResolvedValue({
+      accountRepositoryValue.findOne = jest.fn().mockResolvedValue({
         id: 'a1',
         password: 'hash',
         status: AccountStatus.ACTIVE,
@@ -377,7 +377,7 @@ describe('AuthService', () => {
     });
 
     it('rejects a disabled account like a wrong password', async () => {
-      userRepositoryValue.findOne = jest.fn().mockResolvedValue({
+      accountRepositoryValue.findOne = jest.fn().mockResolvedValue({
         id: 'a1',
         password: 'hash',
         status: AccountStatus.DISABLED,
@@ -386,11 +386,29 @@ describe('AuthService', () => {
       await expect(login()).rejects.toThrow(UnauthorizedException);
       expect(refreshTokenServiceValue.issue).not.toHaveBeenCalled();
     });
+
+    it.each([
+      ['an unknown email', null],
+      [
+        'a disabled account',
+        { id: 'a1', password: 'hash', status: AccountStatus.DISABLED },
+      ],
+    ])(
+      'still verifies a password once for %s so timing does not leak',
+      async (_label, account) => {
+        accountRepositoryValue.findOne = jest.fn().mockResolvedValue(account);
+        (verifyPassword as jest.Mock).mockClear();
+
+        await expect(login()).rejects.toThrow(UnauthorizedException);
+        expect(verifyPassword).toHaveBeenCalledTimes(1);
+        expect(refreshTokenServiceValue.issue).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('switchTenant', () => {
     beforeEach(() => {
-      userRepositoryValue.findOne = jest
+      accountRepositoryValue.findOne = jest
         .fn()
         .mockResolvedValue({ id: 'a1', status: AccountStatus.ACTIVE });
       refreshTokenServiceValue.issue.mockResolvedValue({
@@ -435,7 +453,7 @@ describe('AuthService', () => {
     ])(
       'answers 401 and ends the session for a %s account',
       async (_label, account) => {
-        userRepositoryValue.findOne = jest.fn().mockResolvedValue(account);
+        accountRepositoryValue.findOne = jest.fn().mockResolvedValue(account);
         membershipServiceValue.findActiveMemberships.mockResolvedValue([
           alpha,
           beta,
@@ -465,7 +483,7 @@ describe('AuthService', () => {
         subjectId: 'a1',
         tenantId: 't1',
       });
-      userRepositoryValue.findOne = jest
+      accountRepositoryValue.findOne = jest
         .fn()
         .mockResolvedValue({ id: 'a1', status: AccountStatus.ACTIVE });
       accessTokenServiceValue.sign.mockResolvedValue('at');
@@ -506,7 +524,7 @@ describe('AuthService', () => {
     });
 
     it('ends the session for a disabled account', async () => {
-      userRepositoryValue.findOne = jest
+      accountRepositoryValue.findOne = jest
         .fn()
         .mockResolvedValue({ id: 'a1', status: AccountStatus.DISABLED });
 
