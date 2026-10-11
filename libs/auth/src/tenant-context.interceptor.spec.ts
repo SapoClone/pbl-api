@@ -1,7 +1,7 @@
 import { Controller, Get, INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { TenantContext } from '@pbl/common';
+import { genReqId, RequestContext, TenantContext } from '@pbl/common';
 import { createPublicKey, generateKeyPairSync, KeyObject } from 'crypto';
 import { createServer, Server } from 'http';
 import { AddressInfo } from 'net';
@@ -10,6 +10,7 @@ import request from 'supertest';
 import { setTimeout as sleep } from 'timers/promises';
 import { AuthOptional, Public, TenantOptional } from './auth.decorators';
 import { PblAuthModule } from './pbl-auth.module';
+import { TenantContextInterceptor } from './tenant-context.interceptor';
 
 /** undefined (no context at all) is reported distinctly from null */
 const seen = () => {
@@ -44,6 +45,22 @@ class ContextProbeController {
   @Get('maybe')
   maybe() {
     return { tenantId: seen() };
+  }
+
+  @Get('propagation')
+  propagation() {
+    const state = RequestContext.get();
+    return {
+      requestId: state?.requestId ?? null,
+      authorization: state?.authorization ?? null,
+      actor: state?.actor ?? null,
+    };
+  }
+
+  @AuthOptional()
+  @Get('propagation-maybe')
+  propagationMaybe() {
+    return this.propagation();
   }
 
   @Get('stream')
@@ -99,6 +116,11 @@ describe('Tenant context interceptor — PblAuthModule.forRemoteJwks (tenant req
       controllers: [ContextProbeController],
     }).compile();
     app = moduleRef.createNestApplication({ logger: false });
+    // what nestjs-pino does in a service: set req.id and echo the header
+    app.use((req: any, res: any, next: () => void) => {
+      req.id = genReqId(req, res);
+      next();
+    });
     await app.init();
   });
 
@@ -165,6 +187,31 @@ describe('Tenant context interceptor — PblAuthModule.forRemoteJwks (tenant req
       .expect(200, { tenantId: null });
   });
 
+  it('captures request id, raw Authorization and actor from the verified request', async () => {
+    const token = await sign({ tid: 'tenant-1' });
+    await request(app.getHttpServer())
+      .get('/propagation')
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Request-Id', 'req-abc')
+      .expect(200, {
+        requestId: 'req-abc',
+        authorization: `Bearer ${token}`,
+        actor: { id: 'user-1', type: 'account' },
+      });
+  });
+
+  it('has a generated request id, no credentials and a null actor for an anonymous request', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/propagation-maybe')
+      .expect(200);
+    expect(res.body).toEqual({
+      requestId: res.headers['x-request-id'],
+      authorization: null,
+      actor: null,
+    });
+    expect(res.body.requestId).toBeTruthy();
+  });
+
   it('leaves no context behind after the request', async () => {
     await request(app.getHttpServer())
       .get('/tenant')
@@ -216,5 +263,42 @@ describe('Tenant context interceptor — PblAuthModule.forRootAsync (tenant opti
       .get('/tenant')
       .set('Authorization', `Bearer ${await sign()}`)
       .expect(200, { before: null, after: null });
+  });
+});
+
+describe('Tenant context interceptor � request id sources', () => {
+  const run = (req: object, headers: Record<string, string> = {}) => {
+    const http = {
+      getRequest: () => req,
+      getResponse: () => ({
+        getHeader: (name: string) => headers[name.toLowerCase()],
+      }),
+    };
+    const ctx = { getType: () => 'http', switchToHttp: () => http } as any;
+    let seen: unknown;
+    return new Promise((resolve) =>
+      new TenantContextInterceptor()
+        .intercept(ctx, {
+          handle: () =>
+            new Observable((s) => {
+              seen = RequestContext.get()?.requestId;
+              s.next(1);
+              s.complete();
+            }),
+        })
+        .subscribe({ complete: () => resolve(seen) }),
+    );
+  };
+
+  it('prefers req.id (set by nestjs-pino)', async () => {
+    expect(
+      await run({ id: 'from-req', headers: {} }, { 'x-request-id': 'h' }),
+    ).toBe('from-req');
+  });
+
+  it('falls back to the X-Request-Id response header', async () => {
+    expect(await run({ headers: {} }, { 'x-request-id': 'from-header' })).toBe(
+      'from-header',
+    );
   });
 });

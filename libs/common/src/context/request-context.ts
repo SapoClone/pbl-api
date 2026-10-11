@@ -1,15 +1,27 @@
 import { AsyncLocalStorage } from 'async_hooks';
 
+/** Verified token subject (or the producer of an event) */
+export interface RequestActor {
+  id: string;
+  type: string;
+}
+
 /**
  * Per-request state, carried across async continuations by one
  * AsyncLocalStorage. Entered by @pbl/auth's interceptor after the guard has
- * verified the access token; never filled from a header, body or query.
- * Tenant is the only field for now; request id, authorization and actor
- * join it later (one store, not one per concern).
+ * verified the access token; never filled from a header, body or query
+ * (requestId and authorization are only captured for forwarding).
+ * One store for every per-request concern, not one per concern.
  */
 export interface RequestContextState {
   /** Selected store from the verified token's `tid`; null without one */
   tenantId: string | null;
+  /** X-Request-Id of the request (client-supplied or generated) */
+  requestId?: string;
+  /** Raw Authorization header, forwarded on internal HTTP calls */
+  authorization?: string;
+  /** Verified token subject; null for anonymous requests */
+  actor?: RequestActor | null;
 }
 
 const storage = new AsyncLocalStorage<RequestContextState>();
