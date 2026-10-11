@@ -93,8 +93,11 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     // Authorization carries the Bearer access token; Accept-Language and
     // x-lang are read by the i18n resolvers in modules-set.ts.
+    // X-Request-Id is sent by browsers to correlate calls and read back from
+    // the response, so it is allowed and exposed.
     allowedHeaders:
-      'Content-Type, Accept, Authorization, Accept-Language, x-lang',
+      'Content-Type, Accept, Authorization, Accept-Language, x-lang, X-Request-Id',
+    exposedHeaders: ['X-Request-Id'],
     credentials: true,
   });
   console.info('CORS Origin:', corsOrigin);
