@@ -62,34 +62,44 @@ export function exportNames(libDir) {
 
 const major = (v) => Number(String(v).split('.')[0]);
 
-/** Problems for one lib given its base (main) folder, or null when the lib is new. */
+/**
+ * Problems for one lib given its base (main) folder; baseDir is null only when
+ * the lib's src/index.ts does not exist on base (new library). A base without a
+ * package.json counts as version 0.0.0, so the export comparison always runs.
+ */
 export function checkPrLib(name, headDir, baseDir) {
   if (!baseDir) return [];
   const head = JSON.parse(readFileSync(join(headDir, 'package.json'), 'utf8'));
-  const base = JSON.parse(readFileSync(join(baseDir, 'package.json'), 'utf8'));
+  const basePkg = join(baseDir, 'package.json');
+  const baseVersion = existsSync(basePkg) ? JSON.parse(readFileSync(basePkg, 'utf8')).version : '0.0.0';
   const headNames = new Set(exportNames(headDir));
   const removed = exportNames(baseDir).filter((n) => !headNames.has(n));
-  if (removed.length && major(head.version) <= major(base.version))
+  if (removed.length && major(head.version) <= major(baseVersion))
     return [
       `${name}: removed or renamed export(s) [${removed.join(', ')}] is a breaking change; ` +
-        `major must be greater than ${base.version} (package.json has ${head.version})`,
+        `major must be greater than ${baseVersion} (package.json has ${head.version})`,
     ];
   return [];
 }
 
-function materializeBase(ref, lib, into) {
+const git = (args) => execFileSync('git', args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
+
+/** Fails (throws) unless `ref` resolves to a commit: a typo'd --base must not pass silently. */
+export function verifyRef(ref) {
   try {
-    const tar = execFileSync('git', ['-c', 'core.autocrlf=false', 'archive', ref, `libs/${lib}`], {
-      cwd: root,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    execFileSync('tar', ['-x', '-C', into], { input: tar });
+    git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
   } catch {
-    return null; // lib does not exist on the base ref
+    throw new Error(`base ref "${ref}" does not resolve to a commit (shallow clone? run git fetch origin main)`);
   }
-  const dir = join(into, 'libs', lib);
-  return existsSync(join(dir, 'package.json')) && existsSync(join(dir, 'src', 'index.ts')) ? dir : null;
+}
+
+/** Extracts libs/<lib> of `ref` into `into`; null when libs/<lib>/src/index.ts is absent on ref. Other errors throw. */
+function materializeBase(ref, lib, into) {
+  const present = git(['ls-tree', '--name-only', ref, `libs/${lib}/src/index.ts`]).toString().trim();
+  if (!present) return null;
+  const tar = git(['-c', 'core.autocrlf=false', 'archive', ref, `libs/${lib}`]);
+  execFileSync('tar', ['-x', '-C', into], { input: tar });
+  return join(into, 'libs', lib);
 }
 
 function main(argv) {
@@ -97,11 +107,12 @@ function main(argv) {
   const problems = [];
   if (argv.includes('--pr')) {
     const base = opt('--base') ?? 'origin/main';
+    verifyRef(base);
     const tmp = mkdtempSync(join(tmpdir(), 'libver-'));
     try {
       for (const lib of Object.values(LIBS)) {
         const baseDir = materializeBase(base, lib, tmp);
-        if (!baseDir) console.log(`${lib}: not on ${base} (new library, no major check)`);
+        if (!baseDir) console.log(`${lib}: libs/${lib}/src/index.ts not on ${base} (new library, no major check)`);
         problems.push(...checkPrLib(lib, join(root, 'libs', lib), baseDir));
       }
     } finally {

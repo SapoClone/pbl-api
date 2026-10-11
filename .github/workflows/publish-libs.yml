@@ -21,6 +21,11 @@ jobs:
     steps:
       - name: Copy repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed to prove the tagged commit is on main
+
+      - name: Require the tagged commit to be on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
       - name: Install Node.js 24
         uses: actions/setup-node@v4
@@ -45,7 +50,7 @@ jobs:
 
       - name: Test libraries and release scripts
         run: |
-          pnpm test:libs -- --maxWorkers=2
+          pnpm exec jest libs --maxWorkers=2
           pnpm test:scripts
 
       - name: Publish
@@ -54,6 +59,11 @@ jobs:
           lib="${GITHUB_REF_NAME%%-v*}"
           lib="${lib#pbl-}"
           cd "libs/$lib"
-          pnpm publish --no-git-checks
+          version=$(node -p "require('./package.json').version")
+          case "$version" in
+            *-*) tag=next ;; # prerelease must not become `latest`
+            *) tag=latest ;;
+          esac
+          pnpm publish --no-git-checks --tag "$tag"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { rewriteAliases } from './build-libs.mjs';
-import { changelogHasVersion, checkPrLib, checkTag, exportNames, parseTag } from './check-lib-version.mjs';
+import { changelogHasVersion, checkPrLib, checkTag, exportNames, parseTag, verifyRef } from './check-lib-version.mjs';
 
 const tmp = mkdtempSync(join(tmpdir(), 'libver-test-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -92,6 +92,21 @@ describe('checkPrLib (major rule)', () => {
   });
   it('removal with a major bump passes', () =>
     assert.deepEqual(checkPrLib('x', head('2.0.0', 'export const A = 1;\n'), base()), []));
+  it('base without package.json (src only) is compared as 0.0.0: removal vs 1.0.0 passes', () => {
+    const b = base();
+    rmSync(join(b, 'package.json'));
+    assert.deepEqual(checkPrLib('x', head('1.0.0', 'export const A = 1;\n'), b), []);
+  });
+  it('base without package.json: removal with head still at 0.x fails', () => {
+    const b = base();
+    rmSync(join(b, 'package.json'));
+    assert.equal(checkPrLib('x', head('0.5.0', 'export const A = 1;\n'), b).length, 1);
+  });
+  it('base without package.json: exports are still compared (no removal passes)', () => {
+    const b = base();
+    rmSync(join(b, 'package.json'));
+    assert.deepEqual(checkPrLib('x', head('1.0.0', 'export const A = 1;\nexport const B = 2;\n'), b), []);
+  });
   it('a lower major also fails', () =>
     assert.equal(checkPrLib('x', head('0.9.0', 'export const A = 1;\n'), base()).length, 1));
 });
@@ -106,4 +121,9 @@ describe('rewriteAliases (build step)', () => {
     assert.match(out, /require\("@pbl\/common-extra"\)/);
     assert.match(out, /require\("@nestjs\/common"\)/);
   });
+});
+
+describe('verifyRef', () => {
+  it('accepts HEAD', () => assert.doesNotThrow(() => verifyRef('HEAD')));
+  it('throws for a missing ref (no fail-open)', () => assert.throws(() => verifyRef('origin/doesnotexist-xyz'), /does not resolve/));
 });

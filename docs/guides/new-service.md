@@ -47,7 +47,7 @@ tsconfig paths live in each app's `tsconfig.app.json`, so they need no change.
 
 ```bash
 pnpm exec tsc -p apps/<name>/tsconfig.app.json --noEmit
-pnpm test:<name> -- --maxWorkers=2
+pnpm exec jest apps/<name>/src --maxWorkers=2
 docker compose up -d --build <name> krakend
 curl http://localhost:8080/<name>/health      # {"status":"ok","service":"<name>"}
 bash scripts/verify-local-stack.sh            # whole stack, includes the new service

@@ -44,5 +44,6 @@
       "@/shared/*": ["apps/platform/src/shared/*"],
       "@/utils/*": ["apps/platform/src/utils/*"]
     }
-  }
+  },
+  "exclude": ["node_modules", "dist", "libs/*/dist"]
 }

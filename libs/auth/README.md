@@ -19,7 +19,8 @@ pnpm add @sapoclone/pbl-auth @sapoclone/pbl-common
 `@sapoclone/pbl-common` is a **peer** dependency on purpose: the tenant and
 request context live in module state, so the app and `pbl-auth` must share one
 copy. Also install the other peers (`@nestjs/common`, `@nestjs/core`,
-`@nestjs/config`, `@nestjs/jwt`, `rxjs`, `reflect-metadata`).
+`@nestjs/config`, `@nestjs/jwt`, `rxjs`, `reflect-metadata`). `@types/express` is an
+optional peer: install it if you compile TypeScript against the declarations.
 
 ## Use
 
