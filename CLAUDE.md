@@ -103,7 +103,13 @@ Rules:
 - Add a forwarded header to the gateway's `input_headers` **and** to
   `security/cors.allow_headers`, and to the service's `enableCors` list.
 - Validate after editing:
-  `docker run --rm -v "$PWD/krakend:/etc/krakend" devopsfaith/krakend:2.6 check -t -c /etc/krakend/krakend.json`
+  `docker compose run --rm --no-deps krakend check -t -c /etc/krakend/krakend.json`
+  (use the built image: a plain `devopsfaith/krakend` image lacks the
+  `pbl-error-body` plugin). After editing `krakend/plugins/error-body`, run
+  `docker compose build krakend && docker compose up -d krakend`.
+- Gateway-generated errors (401, bodiless 500 -> 503) get a JSON body from the
+  `pbl-error-body` plugin; new forwarded headers also need `X-Request-Id`-style
+  entries in `input_headers` and CORS.
 
 ## Auth rules — [ADR-0004](docs/decisions/0004-authentication-and-tokens.md)
 

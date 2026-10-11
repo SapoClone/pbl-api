@@ -149,9 +149,16 @@ Rules:
   `i18n/en`, `vi` **and** `jp`.
 - **Validation `details` messages are English only.** Clients should map
   `code` (class-validator rule) to their own text, not show the raw message.
-- **401 from the gateway has an empty body.** KrakenD rejects bad tokens
-  before the service sees them. Clients must decide on the **status code**,
-  never on the body.
+- **Gateway-generated errors have the same shape.** KrakenD CE answers
+  empty bodies for a bad token (401), an unreachable/timed-out backend or an
+  open circuit breaker (500). The `pbl-error-body` plugin rewrites these to
+  `{ timestamp, statusCode, error, message }` (no `errorCode`/`details`):
+  401 `Missing or invalid access token`, and a bodiless 500 becomes **503**
+  `Upstream service unavailable`. A 500 that carries a body comes from a
+  service and passes through unchanged. Unknown routes (404) and wrong
+  methods (405) return `{ error, message }` only: KrakenD's `router.error_body`
+  is static and lower-cases keys, so it cannot carry `timestamp`/`statusCode`.
+  Clients still decide on the **status code**.
 - **Stack traces** (`stack`, `trace`) appear only with `APP_DEBUG=true`
   (local). Never rely on them.
 
