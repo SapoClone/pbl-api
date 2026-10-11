@@ -1,10 +1,10 @@
 import { type AllConfigType } from '@/config/config.type';
 import { loggingRedactPaths, LogService } from '@/constants/app.constant';
 import { ConfigService } from '@nestjs/config';
+import { genReqId } from '@pbl/common';
 import { type IncomingMessage, type ServerResponse } from 'http';
 import { Params } from 'nestjs-pino';
-import { GenReqId, Options, type ReqId } from 'pino-http';
-import { v4 as uuidv4 } from 'uuid';
+import { Options } from 'pino-http';
 
 // https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry#logseverity
 const PinoLevelToGoogleLoggingSeverityLookup = Object.freeze({
@@ -15,15 +15,6 @@ const PinoLevelToGoogleLoggingSeverityLookup = Object.freeze({
   error: 'ERROR',
   fatal: 'CRITICAL',
 });
-
-const genReqId: GenReqId = (
-  req: IncomingMessage,
-  res: ServerResponse<IncomingMessage>,
-) => {
-  const id: ReqId = req.headers['x-request-id'] || uuidv4();
-  res.setHeader('X-Request-Id', id.toString());
-  return id;
-};
 
 const customSuccessMessage = (
   req: IncomingMessage,
@@ -99,7 +90,9 @@ async function loggerFactory(
 
   const pinoHttpOptions: Options = {
     level: logLevel,
-    genReqId: isDebug ? genReqId : undefined,
+    // Always: the id is echoed as X-Request-Id on every response, not just
+    // in debug mode.
+    genReqId,
     serializers: isDebug
       ? {
           req: (req) => {
@@ -119,6 +112,9 @@ async function loggerFactory(
   };
 
   return {
+    // See pinoLoggerOptions: the default route is skipped by Nest because
+    // main.ts excludes '/' from the global prefix.
+    forRoutes: ['*'],
     pinoHttp: pinoHttpOptions,
   };
 }

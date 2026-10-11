@@ -25,6 +25,8 @@
     "paths": {
       "@pbl/auth": ["libs/auth/src"],
       "@pbl/auth/*": ["libs/auth/src/*"],
+      "@pbl/common": ["libs/common/src"],
+      "@pbl/common/*": ["libs/common/src/*"],
       "@/api/*": ["apps/platform/src/api/*"],
       "@/queue/*": ["apps/platform/src/queue/*"],
       "@/common/*": ["apps/platform/src/common/*"],

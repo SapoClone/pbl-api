@@ -49,7 +49,7 @@
     "start:dev:insight": "nest start insight --watch",
     "build:insight": "nest build insight",
     "test:insight": "jest apps/insight/src",
-    "build:libs": "tsc -p libs/auth/tsconfig.lib.json --noEmit",
+    "build:libs": "tsc -p libs/auth/tsconfig.lib.json --noEmit && tsc -p libs/common/tsconfig.lib.json --noEmit",
     "test:libs": "jest libs"
   },
   "dependencies": {
@@ -145,7 +145,8 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "moduleNameMapper": {
-      "^@pbl/auth(|/.*)$": "<rootDir>/libs/auth/src$1"
+      "^@pbl/auth(|/.*)$": "<rootDir>/libs/auth/src$1",
+      "^@pbl/common(|/.*)$": "<rootDir>/libs/common/src$1"
     }
   }
 }

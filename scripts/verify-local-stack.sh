@@ -116,12 +116,16 @@ cors=$(curl -s -D - -o /dev/null -X OPTIONS -H "Origin: http://localhost:5173"  
 [[ "$cors" == *[Aa]ccess-[Cc]ontrol-[Aa]llow-[Hh]eaders:*[Xx]-[Rr]equest-[Ii]d* ]] || fail "CORS does not allow X-Request-Id: $cors"
 echo "OK: CORS allows X-Request-Id"
 rid="verify-$(date +%s)"
-echoed=$(curl -s -D - -o /dev/null -H "X-Request-Id: $rid" -H "Authorization: Bearer $store_token" "$api/accounts/me"   | tr -d '' | sed -n 's/^[Xx]-[Rr]equest-[Ii]d: //p' || true)
-if [[ -n "$echoed" ]]; then
-  [[ "$echoed" == "$rid" ]] || fail "X-Request-Id was changed on the way: $echoed (sent $rid)"
-  echo "OK: X-Request-Id echoed through the gateway"
-else
-  echo "NOTE: platform does not echo X-Request-Id yet (service foundations Task 2); skipped echo assertion"
-fi
+echoed=$(curl -s -D - -o /dev/null -H "X-Request-Id: $rid" -H "Authorization: Bearer $store_token" "$api/accounts/me"   | tr -d '\r' | sed -n 's/^[Xx]-[Rr]equest-[Ii]d: //p' || true)
+[[ -n "$echoed" ]] || fail "X-Request-Id was not echoed through the gateway (sent $rid)"
+[[ "$echoed" == "$rid" ]] || fail "X-Request-Id was changed on the way: $echoed (sent $rid)"
+echo "OK: X-Request-Id echoed through the gateway"
+generated=$(curl -s -D - -o /dev/null "$gateway/platform/health" | tr -d '\r' | sed -n 's/^[Xx]-[Rr]equest-[Ii]d: //p' || true)
+[[ -n "$generated" ]] || fail "platform did not generate an X-Request-Id when none was sent"
+echo "OK: X-Request-Id generated when absent"
+
+ready=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${PLATFORM_HOST_PORT:-3000}/health/ready")
+[[ "$ready" == "200" ]] || fail "platform GET /health/ready returned $ready"
+echo "OK: platform /health/ready -> 200 (direct)"
 
 echo "Stack verified."
