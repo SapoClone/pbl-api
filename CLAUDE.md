@@ -110,7 +110,9 @@ Rules:
   private key. Never add HS256, a shared secret, or an `alg` taken from the token.
 - Every app imports `PblAuthModule` from `@pbl/auth` exactly once: platform
   via `forRootAsync` in `auth.module.ts` (local key + Redis deny-list), every
-  other app via `PblAuthModule.forRemoteJwks()` (needs `AUTH_JWKS_URL`). It
+  other app via `PblAuthModule.forRemoteJwks()` (needs `AUTH_JWKS_URL`;
+  it also reads `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD`/`REDIS_TLS_ENABLED`
+  and honours the logout deny-list when `REDIS_HOST` is set). It
   registers a **global** guard: every route is protected unless `@Public()`.
 - Platform handlers use `@ApiAuth(...)` (protected) / `@ApiPublic(...)`
   (public) from `decorators/http.decorators.ts`; other apps use `@Public()` /

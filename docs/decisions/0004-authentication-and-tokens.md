@@ -45,7 +45,10 @@ blacklist couples every service to platform's Redis.
    `session` table and the Redis blacklist.
 7. **Revocation:** rely on short access-token TTL. Only if instant
    revocation is required, a small Redis deny-list keyed by `sid`, checked
-   inside `libs/auth` — never a per-request call to platform.
+   inside `libs/auth` — never a per-request call to platform. Platform
+   writes `auth:session-blacklist:<sid>`; every service checks it through
+   `@pbl/auth` (`forRemoteJwks()`) when `REDIS_HOST` is set. A Redis error
+   fails the request (5xx), never "not revoked".
 8. **Service-to-service:** forward the user's token for on-behalf-of
    calls; platform-issued service tokens (`sub_type: service`) for
    background/system calls. Events carry `tenant_id` + actor id in the
@@ -71,7 +74,7 @@ blacklist couples every service to platform's Redis.
 |---|---|---|
 | 1. RS256 + JWKS | Done | `apps/platform/src/api/auth/access-token.service.ts`, `jwks.controller.ts`; env `AUTH_JWT_PRIVATE_KEY` (base64 PEM, RSA ≥ 2048), `AUTH_JWT_KEY_ID`, `AUTH_JWT_ISSUER`, `AUTH_JWT_AUDIENCE` |
 | 2. Gateway validation | Done | `krakend/krakend.json` `auth/validator` on every protected route; claims → `X-User-Id`, `X-Session-Id`, `X-Subject-Type` |
-| 3. `libs/auth` in all apps | Done | `libs/auth` (`@pbl/auth`); platform: `PblAuthModule.forRootAsync` in `auth.module.ts`; others: `PblAuthModule.forRemoteJwks()` + `AUTH_JWKS_URL` |
+| 3. `libs/auth` in all apps | Done | `libs/auth` (`@pbl/auth`); platform: `PblAuthModule.forRootAsync` in `auth.module.ts`; others: `PblAuthModule.forRemoteJwks()` + `AUTH_JWKS_URL`; logout deny-list in every service via `RedisSessionRevocation` + `REDIS_HOST`/`REDIS_PORT` |
 | 4. Opaque refresh tokens | Done | `refresh-token.service.ts`, `entities/refresh-token.entity.ts`, migration `1791476400000-replace-session-with-refresh-token.ts` |
 | 5. `tid`/`roles`/`perms` + `@RequirePermission` | **Partly done**: `tid` and `roles` (P0); `perms` + `@RequirePermission` wait for Staff/RBAC | Needs Staff/RBAC entities for the rest |
 
