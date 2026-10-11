@@ -105,4 +105,23 @@ tenant_id=$(curl -s -H "Authorization: Bearer $store_token" "$api/tenants/curren
 [[ -n "$tenant_id" ]] || fail "GET /tenants/current returned no id"
 expect_code 404 POST "$api/auth/switch-tenant" "$other_token" "{\"tenantId\":\"$tenant_id\"}"
 
+echo "Checking gateway-generated errors and request ids..."
+body401=$(curl -s -w " %{http_code}" "$api/accounts/me")
+[[ "$body401" == *'"statusCode":401'* && "$body401" == *'"error":"Unauthorized"'* && "$body401" == *'"message":"Missing or invalid access token"'* && "$body401" == *'"timestamp"'* && "$body401" == *" 401" ]]   || fail "401 without a token should be a structured JSON error: $body401"
+echo "OK: GET /platform/api/v1/accounts/me (no token) -> 401 JSON"
+body404=$(curl -s -w " %{http_code}" "$gateway/this-route-does-not-exist")
+[[ "$body404" == *'"error":"Not Found"'* && "$body404" == *" 404" ]] || fail "unknown route should be a JSON 404: $body404"
+echo "OK: GET /this-route-does-not-exist -> 404 JSON"
+cors=$(curl -s -D - -o /dev/null -X OPTIONS -H "Origin: http://localhost:5173"   -H "Access-Control-Request-Method: GET" -H "Access-Control-Request-Headers: x-request-id" "$api/accounts/me")
+[[ "$cors" == *[Aa]ccess-[Cc]ontrol-[Aa]llow-[Hh]eaders:*[Xx]-[Rr]equest-[Ii]d* ]] || fail "CORS does not allow X-Request-Id: $cors"
+echo "OK: CORS allows X-Request-Id"
+rid="verify-$(date +%s)"
+echoed=$(curl -s -D - -o /dev/null -H "X-Request-Id: $rid" -H "Authorization: Bearer $store_token" "$api/accounts/me"   | tr -d '' | sed -n 's/^[Xx]-[Rr]equest-[Ii]d: //p' || true)
+if [[ -n "$echoed" ]]; then
+  [[ "$echoed" == "$rid" ]] || fail "X-Request-Id was changed on the way: $echoed (sent $rid)"
+  echo "OK: X-Request-Id echoed through the gateway"
+else
+  echo "NOTE: platform does not echo X-Request-Id yet (service foundations Task 2); skipped echo assertion"
+fi
+
 echo "Stack verified."

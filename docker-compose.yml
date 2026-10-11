@@ -136,7 +136,8 @@ services:
       - pbl-network
 
   krakend:
-    image: devopsfaith/krakend:2.6
+    build: ./krakend
+    image: pbl-krakend:2.6.3
     command: ["run", "-c", "/etc/krakend/krakend.json"]
     volumes:
       - ./krakend/krakend.json:/etc/krakend/krakend.json:ro
