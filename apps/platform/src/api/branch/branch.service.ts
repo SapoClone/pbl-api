@@ -4,9 +4,13 @@ import { ValidationException } from '@/exceptions/validation.exception';
 import { isUniqueViolation } from '@/utils/db-errors';
 import { paginate } from '@/utils/offset-pagination';
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import {
+  InjectTenantScopedRepository,
+  TenantContext,
+  TenantScopedRepository,
+} from '@pbl/common';
 import { plainToInstance } from 'class-transformer';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager } from 'typeorm';
 import { TenantEntity } from '../tenant/entities/tenant.entity';
 import { BranchResDto } from './dto/branch.res.dto';
 import { CreateBranchReqDto } from './dto/create-branch.req.dto';
@@ -14,21 +18,22 @@ import { ListBranchReqDto } from './dto/list-branch.req.dto';
 import { UpdateBranchReqDto } from './dto/update-branch.req.dto';
 import { BranchEntity, BranchStatus } from './entities/branch.entity';
 
-/** Every method takes the tenant from the token (ADR-0008); other tenants' rows are 404. */
+/**
+ * Scoped to the token's tenant (ADR-0008) by TenantScopedRepository, which
+ * reads it from TenantContext; other tenants' rows are 404.
+ */
 @Injectable()
 export class BranchService {
   constructor(
-    @InjectRepository(BranchEntity)
-    private readonly repository: Repository<BranchEntity>,
+    @InjectTenantScopedRepository(BranchEntity)
+    private readonly branches: TenantScopedRepository<BranchEntity>,
   ) {}
 
   async list(
-    tenantId: string,
     query: ListBranchReqDto,
   ): Promise<OffsetPaginatedDto<BranchResDto>> {
-    const builder = this.repository
+    const builder = this.branches
       .createQueryBuilder('branch')
-      .where('branch.tenantId = :tenantId', { tenantId })
       .orderBy('branch.createdAt', query.order)
       .addOrderBy('branch.id', query.order);
     if (query.status) {
@@ -51,18 +56,17 @@ export class BranchService {
     );
   }
 
-  async get(tenantId: string, id: string): Promise<BranchResDto> {
-    return (await this.find(tenantId, id)).toDto(BranchResDto);
+  async get(id: string): Promise<BranchResDto> {
+    return (await this.find(id)).toDto(BranchResDto);
   }
 
   async create(
-    tenantId: string,
     accountId: string,
     dto: CreateBranchReqDto,
   ): Promise<BranchResDto> {
-    await this.assertCodeFree(tenantId, dto.code);
+    await this.assertCodeFree(dto.code);
+    // tenantId is set by the scoped repository on save
     const branch = new BranchEntity({
-      tenantId,
       name: dto.name,
       code: dto.code,
       address: dto.address ?? null,
@@ -76,14 +80,13 @@ export class BranchService {
   }
 
   async update(
-    tenantId: string,
     accountId: string,
     id: string,
     dto: UpdateBranchReqDto,
   ): Promise<BranchResDto> {
-    const branch = await this.find(tenantId, id);
+    const branch = await this.find(id);
     if (dto.code !== undefined && dto.code !== branch.code) {
-      await this.assertCodeFree(tenantId, dto.code);
+      await this.assertCodeFree(dto.code);
     }
     const deactivating =
       dto.status === BranchStatus.INACTIVE &&
@@ -98,8 +101,8 @@ export class BranchService {
     if (deactivating) {
       // Serialise against other "last branch" changes of the same store.
       return (
-        await this.repository.manager.transaction(async (em) => {
-          await this.assertNotLastActive(tenantId, em);
+        await this.branches.manager.transaction(async (em) => {
+          await this.assertNotLastActive(em);
           return this.save(branch, em);
         })
       ).toDto(BranchResDto);
@@ -107,21 +110,21 @@ export class BranchService {
     return (await this.save(branch)).toDto(BranchResDto);
   }
 
-  async remove(tenantId: string, id: string): Promise<void> {
-    const branch = await this.find(tenantId, id);
+  async remove(id: string): Promise<void> {
+    const branch = await this.find(id);
     if (branch.status === BranchStatus.ACTIVE) {
-      await this.repository.manager.transaction(async (em) => {
-        await this.assertNotLastActive(tenantId, em);
-        await em.softDelete(BranchEntity, { id: branch.id, tenantId });
+      await this.branches.manager.transaction(async (em) => {
+        await this.assertNotLastActive(em);
+        await this.branches.withManager(em).softDelete({ id: branch.id });
       });
       return;
     }
-    await this.repository.softDelete({ id: branch.id, tenantId });
+    await this.branches.softDelete({ id: branch.id });
   }
 
-  private async find(tenantId: string, id: string): Promise<BranchEntity> {
-    const branch = await this.repository.findOne({
-      where: { id: id as BranchEntity['id'], tenantId },
+  private async find(id: string): Promise<BranchEntity> {
+    const branch = await this.branches.findOne({
+      where: { id: id as BranchEntity['id'] },
     });
     if (!branch) {
       throw new NotFoundException();
@@ -129,25 +132,22 @@ export class BranchService {
     return branch;
   }
 
-  private async assertCodeFree(tenantId: string, code: string): Promise<void> {
-    if (await this.repository.exists({ where: { tenantId, code } })) {
+  private async assertCodeFree(code: string): Promise<void> {
+    if (await this.branches.exists({ where: { code } })) {
       throw new ValidationException(ErrorCode.B001);
     }
   }
 
   /** Locks the store row first, so concurrent callers queue up before counting. */
-  private async assertNotLastActive(
-    tenantId: string,
-    em: EntityManager,
-  ): Promise<void> {
+  private async assertNotLastActive(em: EntityManager): Promise<void> {
     await em
       .createQueryBuilder(TenantEntity, 'tenant')
       .setLock('for_no_key_update')
-      .where('tenant.id = :tenantId', { tenantId })
+      .where('tenant.id = :tenantId', { tenantId: TenantContext.require() })
       .getOne();
     if (
-      (await em.count(BranchEntity, {
-        where: { tenantId, status: BranchStatus.ACTIVE },
+      (await this.branches.withManager(em).count({
+        where: { status: BranchStatus.ACTIVE },
       })) <= 1
     ) {
       throw new ValidationException(ErrorCode.B002);
@@ -159,7 +159,9 @@ export class BranchService {
     em?: EntityManager,
   ): Promise<BranchEntity> {
     try {
-      return await (em ? em.save(branch) : this.repository.save(branch));
+      return await (em ? this.branches.withManager(em) : this.branches).save(
+        branch,
+      );
     } catch (error) {
       if (isUniqueViolation(error, 'UQ_branch_tenant_code')) {
         throw new ValidationException(ErrorCode.B001);

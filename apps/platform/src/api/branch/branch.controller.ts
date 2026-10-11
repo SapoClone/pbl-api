@@ -33,10 +33,10 @@ export class BranchController {
   })
   @Get()
   list(
-    @CurrentTenant() tenantId: string,
+    @CurrentTenant() _tenantId: string, // 403 without a selected store
     @Query() query: ListBranchReqDto,
   ): Promise<OffsetPaginatedDto<BranchResDto>> {
-    return this.branchService.list(tenantId, query);
+    return this.branchService.list(query);
   }
 
   @ApiAuth({
@@ -47,21 +47,21 @@ export class BranchController {
   @RequireRoles(TenantRole.OWNER)
   @Post()
   create(
-    @CurrentTenant() tenantId: string,
+    @CurrentTenant() _tenantId: string, // 403 without a selected store
     @CurrentUser('id') accountId: string,
     @Body() dto: CreateBranchReqDto,
   ): Promise<BranchResDto> {
-    return this.branchService.create(tenantId, accountId, dto);
+    return this.branchService.create(accountId, dto);
   }
 
   @ApiAuth({ type: BranchResDto, summary: 'Get a branch' })
   @ApiParam({ name: 'id', type: 'String' })
   @Get(':id')
   get(
-    @CurrentTenant() tenantId: string,
+    @CurrentTenant() _tenantId: string, // 403 without a selected store
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<BranchResDto> {
-    return this.branchService.get(tenantId, id);
+    return this.branchService.get(id);
   }
 
   @ApiAuth({ type: BranchResDto, summary: 'Update a branch (owner)' })
@@ -69,12 +69,12 @@ export class BranchController {
   @RequireRoles(TenantRole.OWNER)
   @Patch(':id')
   update(
-    @CurrentTenant() tenantId: string,
+    @CurrentTenant() _tenantId: string, // 403 without a selected store
     @CurrentUser('id') accountId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBranchReqDto,
   ): Promise<BranchResDto> {
-    return this.branchService.update(tenantId, accountId, id, dto);
+    return this.branchService.update(accountId, id, dto);
   }
 
   @ApiAuth({
@@ -85,9 +85,9 @@ export class BranchController {
   @RequireRoles(TenantRole.OWNER)
   @Delete(':id')
   remove(
-    @CurrentTenant() tenantId: string,
+    @CurrentTenant() _tenantId: string, // 403 without a selected store
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
-    return this.branchService.remove(tenantId, id);
+    return this.branchService.remove(id);
   }
 }
