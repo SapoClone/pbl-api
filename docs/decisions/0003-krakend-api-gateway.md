@@ -47,8 +47,18 @@ and its Community Edition covers what we need. Initially only
   (and per-environment config introduced) before deploying the web app.
 - Protected routes carry `auth/validator` (RS256 against platform's JWKS,
   issuer/audience checked) and propagate `X-User-Id`, `X-Session-Id`,
-  `X-Subject-Type`; KrakenD overwrites client-sent values for those headers.
+  `X-Subject-Type`, `X-Tenant-Id` and `X-Roles` (comma-separated). KrakenD
+  overwrites client-sent values for those headers, and blanks them when the
+  claim is absent (a token without `tid` arrives with an empty `X-Tenant-Id`,
+  whatever the client sent; verified 2026-10-11). Services still trust only
+  the verified token (ADR-0004); the headers are informational.
   A route's public/protected status must match the service (ADR-0004).
+- Every backend carries a `qos/circuit-breaker` named `<service>-cb`
+  (`max_errors` 5 consecutive failures within `interval` 60 s, opens for
+  `timeout` 10 s). Only connection errors and timeouts count; 4xx/5xx passed
+  through with `no-op` encoding do not, so failed logins cannot open it.
+  With the breaker open the gateway answers 500 at once instead of waiting
+  on a dead service. The global `timeout` is 10 s.
 
 ## Alternatives considered
 

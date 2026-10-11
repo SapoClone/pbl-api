@@ -92,11 +92,13 @@ Rules:
   `krakend/krakend.json`** (one entry per method+path; `{id}` for params).
   KrakenD 404s anything undeclared. Copy an existing entry: keep
   `output_encoding`/backend `encoding` = `"no-op"`, the `input_headers`
-  whitelist, and `input_query_strings: ["*"]`.
+  whitelist, `input_query_strings: ["*"]`, and the backend's
+  `qos/circuit-breaker` block (name `<service>-cb`).
 - A route that is protected in the service **must also carry the
   `auth/validator` block** in its gateway entry (copy one from a `branches/*`
-  route, including the `X-User-Id`/`X-Session-Id`/`X-Subject-Type` headers in
-  `input_headers`). Public routes have no validator. Gateway and service must
+  route, including the `X-User-Id`/`X-Session-Id`/`X-Subject-Type`/
+  `X-Tenant-Id`/`X-Roles` headers in `input_headers` and `propagate_claims`).
+  Public routes have no validator. Gateway and service must
   agree on which routes are public.
 - Add a forwarded header to the gateway's `input_headers` **and** to
   `security/cors.allow_headers`, and to the service's `enableCors` list.
