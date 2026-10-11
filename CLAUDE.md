@@ -29,7 +29,7 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 | Tenancy | Implemented (P0): stores, branches, `tid` + `roles` in tokens, `@CurrentTenant()`/`@RequireRoles()` ([ADR-0008](docs/decisions/0008-tenancy.md)) | Staff logins, RBAC `perms`, plans/subscriptions |
 | Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token` | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every platform endpoint + each stub's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
-| Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles` | Step 5: `perms` claim + `@RequirePermission` (with Staff/RBAC); short access-token TTL, then drop the deny-list ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
+| Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles` | Step 5: `perms` claim + `@RequirePermission` (with Staff/RBAC); short access-token TTL (the deny-list stays: every service uses it) ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
 | Events | Only SQS `email-verification` → pbl-mail-service ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | Outbox → SNS → SQS with idempotent inboxes; services share data only through events and read models ([ADR-0007](docs/decisions/0007-event-bus.md)) — **not built** (roadmap P1) |
 | AWS | All AWS resources were deleted to save credits; pbl-infra keeps the Terraform | Re-apply pbl-infra when deploying |
 
@@ -265,9 +265,9 @@ Local SQS is ElasticMQ; queued messages:
 - Register saves the account before enqueueing; if SQS fails the account exists
   without a verification email and there is no working resend.
 - Access tokens still live `1d` (pbl-web has no refresh logic yet), so the
-  Redis logout deny-list stays (ADR-0004 §7).
+  Redis logout deny-list stays; every service shares it (ADR-0004 §7).
 - Production is not yet updated for the auth/gateway changes (pbl-infra
-  still provisions `AUTH_JWT_SECRET`/`AUTH_REFRESH_SECRET`, no gateway or
+  still provisions `AUTH_JWT_SECRET`/`AUTH_REFRESH_SECRET` until pbl-infra branch `fix/p0-deploy-config` is merged and applied; no gateway or
   stub services in AWS). The ordered checklist is
   [docs/deploy-actions.md](docs/deploy-actions.md); tick items off there.
 

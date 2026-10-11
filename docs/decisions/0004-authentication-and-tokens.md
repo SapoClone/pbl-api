@@ -93,6 +93,13 @@ Deliberate deviations from the plan above:
   take effect for up to a day. Remove it once the TTL is 5–15 min. On
   refresh-token reuse the family's `sid` is also denied, so an attacker's
   live access tokens die immediately.
+- **Every service shares platform's Redis for the deny-list.** The Context
+  section flags the coupling of services to platform's store, but a
+  per-service check against the same Redis is what makes logout and
+  switch-store revocation immediate everywhere, not only in platform. A
+  service without `REDIS_HOST` skips the check; a Redis outage fails the
+  request (5xx) rather than reading as "not revoked". This is why the
+  deny-list stays even after the access-token TTL is shortened.
 - **Concurrent refreshes count as reuse.** Rotation is a conditional update;
   of two simultaneous refreshes with the same token, the loser revokes the
   family (the user logs in again). Clients must serialize refreshes.

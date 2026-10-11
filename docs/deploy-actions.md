@@ -21,16 +21,23 @@ re-deploy.
   branches (`feat/fix-login-via-api-gateway`, `feat/rs256-jwks-auth`) are
   already merged, as #3 and #5.
 - [ ] Also merge pbl-infra `fix/p0-deploy-config` (section 2).
+- [ ] Order matters: merging to `main` triggers `deploy.yml` immediately
+  (it also has `workflow_dispatch`). Merge only after the section 2 apply
+  and the section 3 migration, or re-run `deploy.yml` from the Actions tab
+  (workflow_dispatch) afterwards.
 
 ## 2. Replace the token secrets (pbl-infra) — blocking
 
 Platform no longer reads `AUTH_JWT_SECRET` or `AUTH_REFRESH_SECRET`, and it
 refuses to start without `AUTH_JWT_PRIVATE_KEY` and `AUTH_JWT_KEY_ID`.
 
-The Terraform edits below are already prepared on the pbl-infra branch
-`fix/p0-deploy-config`; what is left is generating the key, filling
-`secrets.tfvars` and applying. The list describes what that branch changes,
-so you can review it.
+The Terraform edits below are **already done** on the pbl-infra branch
+`fix/p0-deploy-config` (review only, do not redo them). What is left is
+generating the key, filling `secrets.tfvars` and applying. Before you apply:
+`auth_jwt_private_key` must be set in `secrets.tfvars`, and the old
+`auth_jwt_secret` / `auth_refresh_secret` lines must be removed from any
+existing `secrets.tfvars`. The plan deletes the two old SSM parameters if
+they exist in state (AWS is currently torn down, so there may be none).
 
 - [ ] Generate the production signing key **once**, outside the repo:
   ```bash
@@ -147,8 +154,9 @@ The base URL is `<gateway>/platform/api/v1`.
 ## 7. Later (no deploy blocker)
 
 - [ ] When both clients refresh correctly: lower
-  `AUTH_JWT_TOKEN_EXPIRES_IN` from `1d` to 5–15 min, then remove the Redis
-  logout deny-list (ADR-0004 §7).
+  `AUTH_JWT_TOKEN_EXPIRES_IN` from `1d` to 5–15 min. Keep the Redis logout
+  deny-list: every service now checks it, which gives immediate logout and
+  switch-store revocation everywhere (ADR-0004 §7).
 - [ ] Key rotation: `AccessTokenService` serves one key. Add a second
   verification-key slot before the first rotation, so the old and new keys
   can be published side by side.
