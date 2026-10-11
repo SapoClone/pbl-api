@@ -4,6 +4,7 @@ import {
   BooleanFieldOptional,
   ClassFieldOptional,
   DateFieldOptional,
+  EmailFieldOptional,
   EnumFieldOptional,
   NumberFieldOptional,
   PasswordFieldOptional,
@@ -55,6 +56,17 @@ const cases: Array<[string, (nullable: boolean) => new () => object, unknown]> =
         return Dto;
       },
       '6f1c1f0e-8f0c-4b0e-9a57-0c6f1f6f3a11',
+    ],
+    [
+      'EmailFieldOptional',
+      (nullable) => {
+        class Dto {
+          @EmailFieldOptional({ nullable })
+          value?: string | null;
+        }
+        return Dto;
+      },
+      'a@example.com',
     ],
     [
       'URLFieldOptional',

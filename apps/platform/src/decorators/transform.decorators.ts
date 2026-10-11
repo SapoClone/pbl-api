@@ -51,7 +51,7 @@ export function ToLowerCase(): PropertyDecorator {
       const value = params.value;
 
       if (value === null || value === undefined) {
-        return;
+        return value;
       }
 
       if (!Array.isArray(value)) {
@@ -72,7 +72,7 @@ export function ToUpperCase(): PropertyDecorator {
       const value = params.value;
 
       if (value === null || value === undefined) {
-        return;
+        return value;
       }
 
       if (!Array.isArray(value)) {

@@ -81,6 +81,11 @@ expect_code 200 PATCH "$api/branches/$branch_id" "$store_token" '{"name":"Kho 2b
 expect_code 422 PATCH "$api/branches/$branch_id" "$store_token" '{"name":null}'
 expect_code 200 GET "$api/tenants/current" "$store_token"
 expect_code 200 PATCH "$api/tenants/current" "$store_token" '{"phone":"0900000000"}'
+expect_code 200 PATCH "$api/tenants/current" "$store_token" '{"email":"shop@example.com"}'
+expect_code 200 PATCH "$api/tenants/current" "$store_token" '{"email":null}'
+cleared=$(curl -s -H "Authorization: Bearer $store_token" "$api/tenants/current")
+[[ "$cleared" != *'shop@example.com'* ]] || fail "email was not cleared: $cleared"
+echo "OK: PATCH /tenants/current {email:null} cleared the email"
 expect_code 204 DELETE "$api/branches/$branch_id" "$store_token"
 main_id=$(curl -s -H "Authorization: Bearer $store_token" "$api/branches" \
   | grep -o '"id":"[^"]*","[^}]*"code":"CN01"' | head -n1 | sed -n 's/^"id":"\([^"]*\)".*/\1/p' || true)
@@ -95,7 +100,7 @@ curl -s -o /dev/null -H "Content-Type: application/json" -d "$other" "$api/auth/
 other_token=$(curl -s -H "Authorization: Bearer $(login_token "$other")" -H "Content-Type: application/json" \
   -d "{\"name\":\"Other\",\"subdomain\":\"$sub-b\"}" "$api/tenants" | json_field accessToken || true)
 [[ -n "$other_token" ]] || fail "second store was not created"
-expect_code 404 GET "$api/branches/$branch_id" "$other_token"
+expect_code 404 GET "$api/branches/$main_id" "$other_token"
 tenant_id=$(curl -s -H "Authorization: Bearer $store_token" "$api/tenants/current" | json_field id || true)
 [[ -n "$tenant_id" ]] || fail "GET /tenants/current returned no id"
 expect_code 404 POST "$api/auth/switch-tenant" "$other_token" "{\"tenantId\":\"$tenant_id\"}"

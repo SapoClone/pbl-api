@@ -12,6 +12,6 @@ export class LoginReqDto {
   password!: string;
 
   /** Store to select; omitted -> the only store, or none */
-  @UUIDFieldOptional()
-  tenantId?: string;
+  @UUIDFieldOptional({ nullable: true })
+  tenantId?: string | null;
 }
