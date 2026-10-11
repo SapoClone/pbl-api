@@ -38,7 +38,14 @@ export class PblExceptionFilter implements ExceptionFilter {
         message,
       };
       if (obj.errorCode) body.errorCode = obj.errorCode;
-      if (obj.details) body.details = obj.details;
+      // only a list (validation errors) is copied, never an arbitrary object
+      if (Array.isArray(obj.details)) body.details = obj.details;
+      if (statusCode >= 500) {
+        this.logger.error(
+          `${statusCode} ${String(body.message)}`,
+          exception.stack,
+        );
+      }
       return body;
     }
     this.logger.error(

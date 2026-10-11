@@ -4,8 +4,10 @@ import {
   Controller,
   Get,
   INestApplication,
+  Logger,
   NotFoundException,
   Post,
+  ServiceUnavailableException,
   ValidationPipe,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -35,6 +37,27 @@ class ProbeController {
       message: 'Bad thing',
       errorCode: 'X001',
     });
+  }
+
+  @Get('details-object')
+  detailsObject() {
+    throw new BadRequestException({
+      message: 'Bad thing',
+      details: { internal: 'secret' },
+    });
+  }
+
+  @Get('details-array')
+  detailsArray() {
+    throw new BadRequestException({
+      message: 'Bad thing',
+      details: [{ property: 'a' }],
+    });
+  }
+
+  @Get('unavailable')
+  unavailable() {
+    throw new ServiceUnavailableException('Down for now');
   }
 
   @Get('boom')
@@ -124,6 +147,36 @@ describe('PblExceptionFilter', () => {
         expect.objectContaining({ property: 'age', code: 'isInt' }),
       ]),
     );
+  });
+
+  it('copies details only when it is an array', async () => {
+    await boot();
+    const obj = await request(app.getHttpServer())
+      .get('/details-object')
+      .expect(400);
+    expect(obj.body.details).toBeUndefined();
+    const arr = await request(app.getHttpServer())
+      .get('/details-array')
+      .expect(400);
+    expect(arr.body.details).toEqual([{ property: 'a' }]);
+  });
+
+  it('logs HttpExceptions with status >= 500 at error level, not 4xx', async () => {
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      await boot();
+      await request(app.getHttpServer()).get('/not-found').expect(404);
+      expect(error).not.toHaveBeenCalled();
+      await request(app.getHttpServer()).get('/unavailable').expect(503);
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('503'),
+        expect.any(String),
+      );
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('turns unknown errors into a bare 500 without a stack', async () => {
