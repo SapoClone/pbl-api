@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { createPublicKey, generateKeyPairSync } from 'crypto';
 import { createServer, Server } from 'http';
+import Redis from 'ioredis';
 import { AddressInfo } from 'net';
 import request from 'supertest';
 import {
@@ -52,6 +53,15 @@ class ProbeController {
     return { ok: true };
   }
 }
+
+jest.mock('ioredis', () =>
+  jest.fn().mockImplementation(() => ({
+    exists: jest.fn(async (key: string) =>
+      key === 'auth:session-blacklist:session-revoked' ? 1 : 0,
+    ),
+    quit: jest.fn(async () => 'OK'),
+  })),
+);
 
 /** How a non-platform service uses the library: PblAuthModule.forRemoteJwks() */
 describe('PblAuthModule.forRemoteJwks', () => {
@@ -177,5 +187,76 @@ describe('PblAuthModule.forRemoteJwks', () => {
   it('should allow anonymous callers on @AuthOptional() routes', async () => {
     const res = await request(app.getHttpServer()).get('/maybe').expect(200);
     expect(res.body).toEqual({ id: null });
+  });
+});
+
+/** Logout deny-list: REDIS_HOST set -> revoked sessions are rejected */
+describe('PblAuthModule.forRemoteJwks with REDIS_HOST', () => {
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const jwtService = new JwtService();
+  let jwks: Server;
+  let app: INestApplication;
+  const originalEnv = { ...process.env };
+
+  const sign = (sid: string) =>
+    jwtService.signAsync(
+      { sub: 'user-1', sid, sub_type: 'account', tid: 'tenant-1' },
+      {
+        privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+        algorithm: 'RS256',
+        keyid: 'key-1',
+        issuer: 'platform',
+        audience: 'pbl6',
+        expiresIn: '5m',
+      },
+    );
+
+  beforeAll(async () => {
+    const jwk = {
+      ...createPublicKey(privateKey).export({ format: 'jwk' }),
+      kid: 'key-1',
+      alg: 'RS256',
+      use: 'sig',
+    };
+    jwks = createServer((_, res) => {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ keys: [jwk] }));
+    });
+    await new Promise<void>((resolve) => jwks.listen(0, resolve));
+    process.env.AUTH_JWKS_URL = `http://127.0.0.1:${(jwks.address() as AddressInfo).port}/.well-known/jwks.json`;
+    process.env.REDIS_HOST = 'redis.test';
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [PblAuthModule.forRemoteJwks()],
+      controllers: [ProbeController],
+    }).compile();
+    app = moduleRef.createNestApplication({ logger: false });
+    await app.init();
+  });
+
+  afterAll(async () => {
+    process.env = originalEnv;
+    await app.close();
+    await new Promise((resolve) => jwks.close(resolve));
+  });
+
+  it('should reject a token whose session is on the deny-list (401)', async () => {
+    await request(app.getHttpServer())
+      .get('/closed')
+      .set('Authorization', `Bearer ${await sign('session-revoked')}`)
+      .expect(401);
+  });
+
+  it('should accept a token whose session is not on the deny-list', async () => {
+    await request(app.getHttpServer())
+      .get('/closed')
+      .set('Authorization', `Bearer ${await sign('session-ok')}`)
+      .expect(200);
+  });
+
+  it('should close the Redis connection when the app shuts down', async () => {
+    const { quit } = (Redis as unknown as jest.Mock).mock.results[0].value;
+    await app.close();
+    expect(quit).toHaveBeenCalled();
   });
 });

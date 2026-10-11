@@ -71,6 +71,9 @@ importers:
       helmet:
         specifier: ^8.0.0
         version: 8.0.0
+      ioredis:
+        specifier: 5.4.1
+        version: 5.4.1
       jwks-rsa:
         specifier: ^3.2.2
         version: 3.2.2
