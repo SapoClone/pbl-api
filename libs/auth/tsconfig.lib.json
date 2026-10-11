@@ -4,6 +4,7 @@
     "declaration": true,
     "declarationMap": false,
     "sourceMap": false,
+    "removeComments": false,
     "incremental": false,
     "rootDir": "src",
     "outDir": "dist",
