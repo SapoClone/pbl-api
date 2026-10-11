@@ -114,3 +114,52 @@ func TestServiceError500WithBodyStays500(t *testing.T) {
 		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
 	}
 }
+
+func serveWithID(t *testing.T, id string, h http.HandlerFunc) *httptest.ResponseRecorder {
+	t.Helper()
+	wrapped, err := HandlerRegisterer.wrap(context.Background(), nil, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	if id != "" {
+		req.Header.Set("X-Request-Id", id)
+	}
+	wrapped.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestRewrittenResponseCarriesTheRequestID(t *testing.T) {
+	rec := serveWithID(t, "rid-1", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) })
+	if got := rec.Header().Get("X-Request-Id"); got != "rid-1" {
+		t.Fatalf("X-Request-Id = %q", got)
+	}
+}
+
+func TestRewrittenResponseKeepsAnExistingRequestID(t *testing.T) {
+	rec := serveWithID(t, "rid-1", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Request-Id", "from-service")
+		w.WriteHeader(404)
+	})
+	if got := rec.Header().Get("X-Request-Id"); got != "from-service" {
+		t.Fatalf("X-Request-Id = %q", got)
+	}
+}
+
+func TestRewrittenResponseIgnoresAMalformedRequestID(t *testing.T) {
+	rec := serveWithID(t, "bad id/with spaces", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) })
+	if got := rec.Header().Get("X-Request-Id"); got != "" {
+		t.Fatalf("X-Request-Id = %q", got)
+	}
+}
+
+func TestPassThroughResponseIsNotGivenARequestID(t *testing.T) {
+	rec := serveWithID(t, "rid-1", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+		_, _ = w.Write([]byte(`{"a":1}`))
+	})
+	if got := rec.Header().Get("X-Request-Id"); got != "" {
+		t.Fatalf("X-Request-Id = %q", got)
+	}
+}

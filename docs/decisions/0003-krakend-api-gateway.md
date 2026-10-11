@@ -68,6 +68,10 @@ and its Community Edition covers what we need. Initially only
   untouched and, for an error status with zero body bytes, writes
   `{timestamp, statusCode, error, message}` (500 -> 503
   `Upstream service unavailable`, 401 -> `Missing or invalid access token`).
+  This applies to any empty-body error response, including a service's own
+  bodiless error: a service answering 500 without a body also becomes 503.
+  A rewritten response gets the request's `X-Request-Id` when it has none
+  (a well-formed id only), so the client can still quote it.
   404/405 use `router.error_body` (`{error, message}`; static, keys are
   lower-cased by KrakenD, so no `timestamp`/`statusCode`).
 - **Plugin build and pinning.** Plugins require the exact KrakenD version and

@@ -8,10 +8,14 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"time"
 )
 
 const pluginName = "pbl-error-body"
+
+// Same rule as the services' genReqId.
+var validRequestID = regexp.MustCompile(`^[\w.:-]{1,128}$`)
 
 // HandlerRegisterer is the symbol KrakenD looks up.
 var HandlerRegisterer = registerer(pluginName)
@@ -30,7 +34,7 @@ func (r registerer) RegisterLogger(interface{}) {}
 
 func (r registerer) wrap(_ context.Context, _ map[string]interface{}, next http.Handler) (http.Handler, error) {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		rw := &recorder{ResponseWriter: w}
+		rw := &recorder{ResponseWriter: w, requestID: req.Header.Get("X-Request-Id")}
 		next.ServeHTTP(rw, req)
 		rw.finish()
 	}), nil
@@ -47,8 +51,9 @@ type body struct {
 // the handler) so an empty error response can still be rewritten.
 type recorder struct {
 	http.ResponseWriter
-	status  int
-	flushed bool
+	status    int
+	flushed   bool
+	requestID string // the request's X-Request-Id, copied onto a rewritten response
 }
 
 func (r *recorder) WriteHeader(s int) {
@@ -109,6 +114,11 @@ func (r *recorder) finish() {
 	h := r.Header()
 	h.Del("Content-Length")
 	h.Set("Content-Type", "application/json")
+	// A rewritten response never came from a service, so nothing echoed the
+	// id; give the client back the one it sent (only if well formed).
+	if h.Get("X-Request-Id") == "" && validRequestID.MatchString(r.requestID) {
+		h.Set("X-Request-Id", r.requestID)
+	}
 	r.ResponseWriter.WriteHeader(status)
 	_ = json.NewEncoder(r.ResponseWriter).Encode(body{
 		Timestamp:  time.Now().UTC().Format("2006-01-02T15:04:05.000Z07:00"),
