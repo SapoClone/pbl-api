@@ -129,6 +129,10 @@ Notes on the local stack:
   invalid tokens on protected routes, and every service re-verifies them
   through `@pbl/auth` (see `docs/decisions/0004-authentication-and-tokens.md`).
 
+To add a new service from the template (registers it in compose, the gateway,
+CI and the verify script), run `node scripts/new-service.mjs <name>`; see
+[`docs/guides/new-service.md`](docs/guides/new-service.md).
+
 Individual services, outside Docker, for day-to-day development on `platform`:
 
 ```bash

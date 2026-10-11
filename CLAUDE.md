@@ -205,6 +205,14 @@ add sensitive request fields to `loggingRedactPaths` in `constants/app.constant.
 (`QueueService`) and let `pbl-mail-service` render and send —
 [ADR-0005](docs/decisions/0005-async-work-via-sqs.md).
 
+## Adding a service
+
+Do not copy a stub by hand: run `node scripts/new-service.mjs <name> [--port N] [--dry-run]`.
+It creates `apps/<name>` from `templates/service/` and registers the service in
+`nest-cli.json`, `package.json`, `docker-compose.yml`, `krakend/krakend.json`, the CI
+matrix, `docker/postgres-init-schemas.sql` and `scripts/verify-local-stack.sh`. Keep
+`templates/service/` in step with the stubs. Guide: [docs/guides/new-service.md](docs/guides/new-service.md).
+
 ## Running and verifying
 
 There is no host `node_modules` by default; everything runs in Docker.

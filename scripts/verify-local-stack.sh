@@ -36,7 +36,7 @@ for svc in "${services[@]}"; do
   echo "OK: /$svc/health -> 200"
 done
 
-echo "All 6 services reachable through KrakenD. Checking platform login through the gateway..."
+echo "All ${#services[@]} services reachable through KrakenD. Checking platform login through the gateway..."
 api="$gateway/platform/api/v1"
 creds="{\"email\":\"verify-$(date +%s)@example.com\",\"password\":\"Passw0rd!\"}"
 for step in register login; do
