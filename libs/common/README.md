@@ -15,8 +15,15 @@ inside the monorepo it is imported as `@pbl/common` (path alias).
 pnpm add @sapoclone/pbl-common
 ```
 
-Install the peer dependencies the package declares (`@nestjs/*`, `typeorm`,
-`nestjs-pino`, `pino-http`, `axios`, `rxjs`, `reflect-metadata`).
+Install the peer dependencies the package declares (`@nestjs/*` including
+`@nestjs/platform-express`, `typeorm`, `nestjs-pino`, `pino-http`, `axios`,
+`class-validator`, `class-transformer`, `rxjs`, `reflect-metadata`). The barrel
+loads typeorm, axios, terminus and swagger when imported, so all of them must
+be installed even if you use only part of the package.
+
+`InternalHttpClient` forwards the caller's `Authorization` only to a destination
+you configure: `PblPropagationModule.forRoot({ baseURL, allowedHosts })`.
+Without either, a call that would forward the token throws.
 
 ## Use
 
