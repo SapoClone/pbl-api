@@ -1,222 +1,163 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Test, TestingModule } from '@nestjs/testing';
 import { AccessTokenVerifier } from './access-token.verifier';
+import {
+  AuthOptional,
+  Public,
+  RequireRoles,
+  TenantOptional,
+} from './auth.decorators';
 import { AuthGuard } from './auth.guard';
+import { AuthUser, PblAuthOptions } from './auth.types';
+
+class Handlers {
+  plain() {}
+  @Public() open() {}
+  @AuthOptional() maybe() {}
+  @TenantOptional() noTenant() {}
+  @RequireRoles('owner') ownerOnly() {}
+  @RequireRoles('owner', 'admin') ownerOrAdmin() {}
+}
+
+const user = (overrides: Partial<AuthUser> = {}): AuthUser => ({
+  id: 'u1',
+  sessionId: 's1',
+  subjectType: 'account',
+  roles: [],
+  exp: 0,
+  ...overrides,
+});
 
 describe('AuthGuard', () => {
-  let guard: AuthGuard;
-  let reflector: Partial<Record<keyof Reflector, jest.Mock>>;
-  let verifier: Partial<Record<keyof AccessTokenVerifier, jest.Mock>>;
-  let context: Partial<Record<keyof ExecutionContext, jest.Mock>>;
-  let module: TestingModule;
-
-  beforeAll(async () => {
-    verifier = {
-      verify: jest.fn(),
+  const verifier = { verify: jest.fn() } as unknown as AccessTokenVerifier & {
+    verify: jest.Mock;
+  };
+  const guardFor = (tenant: PblAuthOptions['tenant']) =>
+    new AuthGuard(new Reflector(), verifier, { tenant } as PblAuthOptions);
+  const context = (handler: keyof Handlers, authorization?: string) => {
+    const request: Record<string, unknown> = {
+      headers: authorization ? { authorization } : {},
     };
-
-    reflector = {
-      getAllAndOverride: jest.fn(),
+    return {
+      ctx: {
+        getHandler: () => Handlers.prototype[handler],
+        getClass: () => Handlers,
+        switchToHttp: () => ({ getRequest: () => request }),
+      } as unknown as ExecutionContext,
+      request,
     };
+  };
 
-    context = {
-      getHandler: jest.fn(),
-      getClass: jest.fn(),
-      switchToHttp: jest.fn().mockReturnValue({
-        getRequest: jest.fn(),
-      }),
-    };
+  beforeEach(() => jest.resetAllMocks());
 
-    module = await Test.createTestingModule({
-      providers: [
-        AuthGuard,
-        {
-          provide: AccessTokenVerifier,
-          useValue: verifier,
-        },
-        {
-          provide: Reflector,
-          useValue: reflector,
-        },
-      ],
-    }).compile();
-    guard = module.get<AuthGuard>(AuthGuard);
+  it('lets @Public() routes through without a token', async () => {
+    await expect(
+      guardFor('required').canActivate(context('open').ctx),
+    ).resolves.toBe(true);
+    expect(verifier.verify).not.toHaveBeenCalled();
   });
 
-  afterEach(async () => {
-    jest.clearAllMocks();
-    module.close();
+  it('lets @AuthOptional() routes through without a token', async () => {
+    await expect(
+      guardFor('required').canActivate(context('maybe').ctx),
+    ).resolves.toBe(true);
   });
 
-  it('should be defined', () => {
-    expect(guard).toBeDefined();
+  it('rejects a protected route without a token (401)', async () => {
+    await expect(
+      guardFor('optional').canActivate(context('plain').ctx),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
-  describe('canActivate', () => {
-    it('should return true if the route is public', async () => {
-      const isPublic = true;
-      reflector.getAllAndOverride.mockReturnValue(isPublic);
+  it('sets request.user from a valid token', async () => {
+    verifier.verify.mockResolvedValue(user({ tenantId: 't1' }));
+    const { ctx, request } = context('plain', 'Bearer abc');
 
-      const result = await guard.canActivate(context as ExecutionContext);
+    await expect(guardFor('required').canActivate(ctx)).resolves.toBe(true);
+    expect(verifier.verify).toHaveBeenCalledWith('abc');
+    expect(request.user).toMatchObject({ tenantId: 't1' });
+  });
 
-      expect(result).toBe(true);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith('isPublic', [
-        context.getHandler(),
-        context.getClass(),
-      ]);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledTimes(1);
-      expect(context.switchToHttp().getRequest).not.toHaveBeenCalled();
-      expect(verifier.verify).not.toHaveBeenCalled();
-    });
+  it('in required mode, rejects a token without tid (403)', async () => {
+    verifier.verify.mockResolvedValue(user());
 
-    it('should return true if the route is auth optional and no token is provided', async () => {
-      const isPublic = false;
-      reflector.getAllAndOverride.mockReturnValueOnce(isPublic);
+    await expect(
+      guardFor('required').canActivate(context('plain', 'Bearer abc').ctx),
+    ).rejects.toThrow(ForbiddenException);
+  });
 
-      const isAuthOptional = true;
-      reflector.getAllAndOverride.mockReturnValueOnce(isAuthOptional);
+  it('in required mode, @TenantOptional() accepts a token without tid', async () => {
+    verifier.verify.mockResolvedValue(user());
 
-      context.switchToHttp().getRequest.mockReturnValue({
-        headers: {},
-      });
+    await expect(
+      guardFor('required').canActivate(context('noTenant', 'Bearer abc').ctx),
+    ).resolves.toBe(true);
+  });
 
-      const result = await guard.canActivate(context as ExecutionContext);
+  it('defaults to required mode when the option is missing', async () => {
+    verifier.verify.mockResolvedValue(user());
 
-      expect(result).toBe(true);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith('isPublic', [
-        context.getHandler(),
-        context.getClass(),
-      ]);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith(
-        'isAuthOptional',
-        [context.getHandler(), context.getClass()],
-      );
-      expect(reflector.getAllAndOverride).toHaveBeenCalledTimes(2);
-      expect(context.switchToHttp().getRequest).toHaveBeenCalledTimes(1);
-      expect(verifier.verify).not.toHaveBeenCalled();
-    });
+    await expect(
+      guardFor(undefined).canActivate(context('plain', 'Bearer abc').ctx),
+    ).rejects.toThrow(ForbiddenException);
+  });
 
-    it('should verify the token and return true if the route is auth optional and the token is valid', async () => {
-      const isPublic = false;
-      reflector.getAllAndOverride.mockReturnValueOnce(isPublic);
+  it('in optional mode, accepts a token without tid', async () => {
+    verifier.verify.mockResolvedValue(user());
 
-      const isAuthOptional = true;
-      reflector.getAllAndOverride.mockReturnValueOnce(isAuthOptional);
+    await expect(
+      guardFor('optional').canActivate(context('plain', 'Bearer abc').ctx),
+    ).resolves.toBe(true);
+  });
 
-      context.switchToHttp().getRequest.mockReturnValue({
-        headers: {
-          authorization: 'Bearer accessToken',
-        },
-      });
+  it('@RequireRoles() rejects a caller without the role (403), even in optional mode', async () => {
+    verifier.verify.mockResolvedValue(
+      user({ tenantId: 't1', roles: ['staff'] }),
+    );
 
-      verifier.verify.mockReturnValueOnce({ id: 'x' });
+    await expect(
+      guardFor('optional').canActivate(context('ownerOnly', 'Bearer abc').ctx),
+    ).rejects.toThrow(ForbiddenException);
+  });
 
-      const result = await guard.canActivate(context as ExecutionContext);
+  it('@RequireRoles() rejects a caller without a tenant (403)', async () => {
+    verifier.verify.mockResolvedValue(user({ roles: ['owner'] }));
 
-      expect(result).toBe(true);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith('isPublic', [
-        context.getHandler(),
-        context.getClass(),
-      ]);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith(
-        'isAuthOptional',
-        [context.getHandler(), context.getClass()],
-      );
-      expect(reflector.getAllAndOverride).toHaveBeenCalledTimes(2);
-      expect(context.switchToHttp().getRequest).toHaveBeenCalledTimes(1);
-      expect(verifier.verify).toHaveBeenCalledTimes(1);
-    });
+    await expect(
+      guardFor('optional').canActivate(context('ownerOnly', 'Bearer abc').ctx),
+    ).rejects.toThrow(ForbiddenException);
+  });
 
-    it('should throw an UnauthorizedException if the route is not public and no token is provided', async () => {
-      const isPublic = false;
-      reflector.getAllAndOverride.mockReturnValueOnce(isPublic);
+  it('@RequireRoles(owner, admin) accepts a caller with either role', async () => {
+    verifier.verify.mockResolvedValue(
+      user({ tenantId: 't1', roles: ['admin'] }),
+    );
 
-      const isAuthOptional = false;
-      reflector.getAllAndOverride.mockReturnValueOnce(isAuthOptional);
+    await expect(
+      guardFor('optional').canActivate(
+        context('ownerOrAdmin', 'Bearer abc').ctx,
+      ),
+    ).resolves.toBe(true);
+  });
 
-      context.switchToHttp().getRequest.mockReturnValue({
-        headers: {},
-      });
+  it('@Public() does not verify a token even when one is sent', async () => {
+    await expect(
+      guardFor('required').canActivate(context('open', 'Bearer abc').ctx),
+    ).resolves.toBe(true);
+    expect(verifier.verify).not.toHaveBeenCalled();
+  });
 
-      await expect(
-        guard.canActivate(context as ExecutionContext),
-      ).rejects.toThrow(UnauthorizedException);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith('isPublic', [
-        context.getHandler(),
-        context.getClass(),
-      ]);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith(
-        'isAuthOptional',
-        [context.getHandler(), context.getClass()],
-      );
-      expect(reflector.getAllAndOverride).toHaveBeenCalledTimes(2);
-      expect(context.switchToHttp().getRequest).toHaveBeenCalledTimes(1);
-      expect(verifier.verify).not.toHaveBeenCalled();
-    });
+  it('@RequireRoles() accepts a caller with the role', async () => {
+    verifier.verify.mockResolvedValue(
+      user({ tenantId: 't1', roles: ['owner'] }),
+    );
 
-    it('should throw an UnauthorizedException if the token is invalid', async () => {
-      const isPublic = false;
-      reflector.getAllAndOverride.mockReturnValueOnce(isPublic);
-
-      const isAuthOptional = false;
-      reflector.getAllAndOverride.mockReturnValueOnce(isAuthOptional);
-
-      context.switchToHttp().getRequest.mockReturnValue({
-        headers: {
-          authorization: 'Bearer accessToken',
-        },
-      });
-
-      verifier.verify.mockImplementationOnce(() => {
-        throw new UnauthorizedException();
-      });
-
-      await expect(
-        guard.canActivate(context as ExecutionContext),
-      ).rejects.toThrow(UnauthorizedException);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith('isPublic', [
-        context.getHandler(),
-        context.getClass(),
-      ]);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith(
-        'isAuthOptional',
-        [context.getHandler(), context.getClass()],
-      );
-      expect(reflector.getAllAndOverride).toHaveBeenCalledTimes(2);
-      expect(context.switchToHttp().getRequest).toHaveBeenCalledTimes(1);
-      expect(verifier.verify).toHaveBeenCalledTimes(1);
-    });
-
-    it('should verify the token and return true if the route is not public and the token is valid', async () => {
-      const isPublic = false;
-      reflector.getAllAndOverride.mockReturnValueOnce(isPublic);
-
-      const isAuthOptional = false;
-      reflector.getAllAndOverride.mockReturnValueOnce(isAuthOptional);
-
-      context.switchToHttp().getRequest.mockReturnValue({
-        headers: {
-          authorization: 'Bearer accessToken',
-        },
-      });
-
-      verifier.verify.mockReturnValueOnce({ id: 'x' });
-
-      const result = await guard.canActivate(context as ExecutionContext);
-
-      expect(result).toBe(true);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith('isPublic', [
-        context.getHandler(),
-        context.getClass(),
-      ]);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith(
-        'isAuthOptional',
-        [context.getHandler(), context.getClass()],
-      );
-      expect(reflector.getAllAndOverride).toHaveBeenCalledTimes(2);
-      expect(context.switchToHttp().getRequest).toHaveBeenCalledTimes(1);
-      expect(verifier.verify).toHaveBeenCalledTimes(1);
-    });
+    await expect(
+      guardFor('optional').canActivate(context('ownerOnly', 'Bearer abc').ctx),
+    ).resolves.toBe(true);
   });
 });

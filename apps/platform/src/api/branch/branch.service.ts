@@ -1,0 +1,173 @@
+import { OffsetPaginatedDto } from '@/common/dto/offset-pagination/paginated.dto';
+import { ErrorCode } from '@/constants/error-code.constant';
+import { ValidationException } from '@/exceptions/validation.exception';
+import { isUniqueViolation } from '@/utils/db-errors';
+import { paginate } from '@/utils/offset-pagination';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  InjectTenantScopedRepository,
+  TenantContext,
+  TenantScopedRepository,
+} from '@pbl/common';
+import { plainToInstance } from 'class-transformer';
+import { EntityManager } from 'typeorm';
+import { TenantEntity } from '../tenant/entities/tenant.entity';
+import { BranchResDto } from './dto/branch.res.dto';
+import { CreateBranchReqDto } from './dto/create-branch.req.dto';
+import { ListBranchReqDto } from './dto/list-branch.req.dto';
+import { UpdateBranchReqDto } from './dto/update-branch.req.dto';
+import { BranchEntity, BranchStatus } from './entities/branch.entity';
+
+/**
+ * Scoped to the token's tenant (ADR-0008) by TenantScopedRepository, which
+ * reads it from TenantContext; other tenants' rows are 404.
+ */
+@Injectable()
+export class BranchService {
+  constructor(
+    @InjectTenantScopedRepository(BranchEntity)
+    private readonly branches: TenantScopedRepository<BranchEntity>,
+  ) {}
+
+  async list(
+    query: ListBranchReqDto,
+  ): Promise<OffsetPaginatedDto<BranchResDto>> {
+    const builder = this.branches
+      .createQueryBuilder('branch')
+      .orderBy('branch.createdAt', query.order)
+      .addOrderBy('branch.id', query.order);
+    if (query.status) {
+      builder.andWhere('branch.status = :status', { status: query.status });
+    }
+    if (query.q) {
+      const pattern = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
+      builder.andWhere(
+        "(branch.name ILIKE :q ESCAPE '\\' OR branch.code ILIKE :q ESCAPE '\\')",
+        { q: pattern },
+      );
+    }
+    const [branches, meta] = await paginate<BranchEntity>(builder, query, {
+      skipCount: false,
+      takeAll: false,
+    });
+    return new OffsetPaginatedDto(
+      plainToInstance(BranchResDto, branches),
+      meta,
+    );
+  }
+
+  async get(id: string): Promise<BranchResDto> {
+    return (await this.find(id)).toDto(BranchResDto);
+  }
+
+  async create(
+    accountId: string,
+    dto: CreateBranchReqDto,
+  ): Promise<BranchResDto> {
+    await this.assertCodeFree(dto.code);
+    // tenantId is set by the scoped repository on save
+    const branch = new BranchEntity({
+      name: dto.name,
+      code: dto.code,
+      address: dto.address ?? null,
+      phone: dto.phone ?? null,
+      isWarehouse: dto.isWarehouse ?? true,
+      status: BranchStatus.ACTIVE,
+      createdBy: accountId,
+      updatedBy: accountId,
+    });
+    return (await this.save(branch)).toDto(BranchResDto);
+  }
+
+  async update(
+    accountId: string,
+    id: string,
+    dto: UpdateBranchReqDto,
+  ): Promise<BranchResDto> {
+    const branch = await this.find(id);
+    if (dto.code !== undefined && dto.code !== branch.code) {
+      await this.assertCodeFree(dto.code);
+    }
+    const deactivating =
+      dto.status === BranchStatus.INACTIVE &&
+      branch.status === BranchStatus.ACTIVE;
+    Object.assign(
+      branch,
+      Object.fromEntries(
+        Object.entries(dto).filter(([, value]) => value !== undefined),
+      ),
+    );
+    branch.updatedBy = accountId;
+    if (deactivating) {
+      // Serialise against other "last branch" changes of the same store.
+      return (
+        await this.branches.transaction(async (branches, em) => {
+          await this.assertNotLastActive(branches, em);
+          return this.save(branch, branches);
+        })
+      ).toDto(BranchResDto);
+    }
+    return (await this.save(branch)).toDto(BranchResDto);
+  }
+
+  async remove(id: string): Promise<void> {
+    const branch = await this.find(id);
+    if (branch.status === BranchStatus.ACTIVE) {
+      await this.branches.transaction(async (branches, em) => {
+        await this.assertNotLastActive(branches, em);
+        await branches.softDelete({ id: branch.id });
+      });
+      return;
+    }
+    await this.branches.softDelete({ id: branch.id });
+  }
+
+  private async find(id: string): Promise<BranchEntity> {
+    const branch = await this.branches.findOne({
+      where: { id: id as BranchEntity['id'] },
+    });
+    if (!branch) {
+      throw new NotFoundException();
+    }
+    return branch;
+  }
+
+  private async assertCodeFree(code: string): Promise<void> {
+    if (await this.branches.exists({ where: { code } })) {
+      throw new ValidationException(ErrorCode.B001);
+    }
+  }
+
+  /** Locks the store row first, so concurrent callers queue up before counting. */
+  private async assertNotLastActive(
+    branches: TenantScopedRepository<BranchEntity>,
+    em: EntityManager,
+  ): Promise<void> {
+    await em
+      .createQueryBuilder(TenantEntity, 'tenant')
+      .setLock('for_no_key_update')
+      .where('tenant.id = :tenantId', { tenantId: TenantContext.require() })
+      .getOne();
+    if (
+      (await branches.count({
+        where: { status: BranchStatus.ACTIVE },
+      })) <= 1
+    ) {
+      throw new ValidationException(ErrorCode.B002);
+    }
+  }
+
+  private async save(
+    branch: BranchEntity,
+    branches = this.branches,
+  ): Promise<BranchEntity> {
+    try {
+      return await branches.save(branch);
+    } catch (error) {
+      if (isUniqueViolation(error, 'UQ_branch_tenant_code')) {
+        throw new ValidationException(ErrorCode.B001);
+      }
+      throw error;
+    }
+  }
+}

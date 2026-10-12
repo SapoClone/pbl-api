@@ -1,6 +1,6 @@
 # ADR-0008: Tenant comes from the token; every business row is tenant-scoped
 
-- **Status:** Accepted (2026-10-10). Implemented by P0 of the [catalog & commerce roadmap](../specs/2026-10-10-catalog-commerce-roadmap.md) ([P0 design](../specs/2026-10-10-p0-platform-tenancy-design.md)).
+- **Status:** Accepted (2026-10-10); implemented by P0 of the [catalog & commerce roadmap](../specs/2026-10-10-catalog-commerce-roadmap.md) ([P0 design](../specs/2026-10-10-p0-platform-tenancy-design.md)).
 - **Date:** 2026-10-10
 - **Scope:** all services, `@pbl/auth`, every business table
 
@@ -24,8 +24,12 @@ carries `tenant_id`. Platform had no Tenant/Branch, and tokens had no tenant
   from `@pbl/auth`, never from body, query, path or headers. `X-Tenant-Id`
   from the gateway is informational only.
 - **Every business table has `tenant_id`.** Every query filters by it, using
-  the tenant-scoped repository base introduced in P1. Unique constraints that
-  are per store include `tenant_id`, e.g. branch `code`, product `sku_code`.
+  the tenant-scoped repository (`TenantScopedRepository` in `@pbl/common`: it filters
+  every read and write by the context's tenant, sets `tenantId` on `save`, and
+  throws outside a tenant context). The context is entered by `@pbl/auth` from the
+  verified token only. Internal REST calls forward the caller's `Authorization`, and
+  events carry `tenantId` from the context; no header or body field names a tenant.
+  Unique constraints that are per store include `tenant_id`, e.g. branch `code`, product `sku_code`.
 - **Isolation answers 404**, not 403, so other stores' ids are not revealed.
 - **Non-platform services require a tenant by default**
   (`PblAuthModule.forRemoteJwks()` → `tenant: 'required'`).
@@ -41,6 +45,11 @@ carries `tenant_id`. Platform had no Tenant/Branch, and tokens had no tenant
   create-store screen.
 - Cross-tenant tests (tenant B cannot see tenant A's data) are mandatory
   for every new resource.
+- Every service checks the logout deny-list through `@pbl/auth` (ADR-0004 §7),
+  so revocation by logout or by switching store is immediate in every service
+  that has `REDIS_HOST` set (all deployed services); without it a service
+  skips the check. Only a token for a store suspended mid-session stays valid until it is refreshed
+  or expires.
 
 ## Alternatives considered
 
@@ -49,5 +58,5 @@ carries `tenant_id`. Platform had no Tenant/Branch, and tokens had no tenant
 - **Database or schema per tenant:** strong isolation, but heavy for many
   small stores on a free-tier Postgres; row-level `tenant_id` matches the ERD.
 - **Postgres row-level security:** a good later hardening layer, but it
-  needs per-request session settings through TypeORM. Revisit once
-  repositories are centralised.
+  needs per-request session settings through TypeORM. Revisit now that
+  repositories are centralised in `TenantScopedRepository`.

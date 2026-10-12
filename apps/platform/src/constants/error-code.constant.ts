@@ -10,4 +10,11 @@ export enum ErrorCode {
   E001 = 'user.error.username_or_email_exists',
   E002 = 'user.error.not_found',
   E003 = 'user.error.email_exists',
+
+  // Tenant
+  T001 = 'tenant.error.subdomain_exists',
+
+  // Branch
+  B001 = 'branch.error.code_exists',
+  B002 = 'branch.error.last_branch',
 }

@@ -1,7 +1,7 @@
 # P0 — Platform tenancy: design
 
 - **Date:** 2026-10-10
-- **Status:** Approved design, awaiting implementation plan
+- **Status:** Implemented
 - **Roadmap:** [catalog & commerce roadmap](2026-10-10-catalog-commerce-roadmap.md), sub-project P0
 - **Decisions:** [ADR-0008 tenancy](../decisions/0008-tenancy.md); builds on [ADR-0004](../decisions/0004-authentication-and-tokens.md) step 5 (tenant part only)
 

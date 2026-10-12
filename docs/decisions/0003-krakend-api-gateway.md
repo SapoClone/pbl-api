@@ -47,8 +47,40 @@ and its Community Edition covers what we need. Initially only
   (and per-environment config introduced) before deploying the web app.
 - Protected routes carry `auth/validator` (RS256 against platform's JWKS,
   issuer/audience checked) and propagate `X-User-Id`, `X-Session-Id`,
-  `X-Subject-Type`; KrakenD overwrites client-sent values for those headers.
+  `X-Subject-Type`, `X-Tenant-Id` and `X-Roles` (comma-separated). KrakenD
+  overwrites client-sent values for those headers, and blanks them when the
+  claim is absent (a token without `tid` arrives with an empty `X-Tenant-Id`,
+  whatever the client sent; verified 2026-10-11). Services still trust only
+  the verified token (ADR-0004); the headers are informational.
   A route's public/protected status must match the service (ADR-0004).
+- Every backend carries a `qos/circuit-breaker` named `<service>-cb`
+  (`max_errors` 5 consecutive failures within `interval` 60 s, opens for
+  `timeout` 10 s). Only connection errors and timeouts count; 4xx/5xx passed
+  through with `no-op` encoding do not, so failed logins cannot open it.
+  With the breaker open the gateway answers 500 at once instead of waiting
+  on a dead service. The global `timeout` is 10 s.
+- **Structured gateway errors (SCRUM-33).** KrakenD CE answers an empty body
+  with 500 when a backend is unreachable, times out or its circuit breaker is
+  open, 401 with an empty body for bad tokens, and Lua `post` modifiers do not
+  run on that error path; `router.error_body` only covers 404/405. So
+  `krakend/plugins/error-body` is an `http-server` plugin (`pbl-error-body`)
+  that wraps the router: it passes every response with a body through
+  untouched and, for an error status with zero body bytes, writes
+  `{timestamp, statusCode, error, message}` (500 -> 503
+  `Upstream service unavailable`, 401 -> `Missing or invalid access token`).
+  This applies to any empty-body error response, including a service's own
+  bodiless error: a service answering 500 without a body also becomes 503.
+  A rewritten response gets the request's `X-Request-Id` when it has none
+  (a well-formed id only), so the client can still quote it.
+  404/405 use `router.error_body` (`{error, message}`; static, keys are
+  lower-cased by KrakenD, so no `timestamp`/`statusCode`).
+- **Plugin build and pinning.** Plugins require the exact KrakenD version and
+  toolchain, so `krakend/Dockerfile` builds with `krakend/builder:2.6.3` and
+  runs on `devopsfaith/krakend:2.6.3` (compose image `pbl-krakend:2.6.3`).
+  Bump both together. Rebuild: `docker compose build krakend && docker compose up -d krakend`;
+  unit tests: `docker run --rm -v "$PWD/krakend/plugins/error-body:/src" -w /src krakend/builder:2.6.3 go test ./...`
+  (they also run during the image build). Validate config with
+  `docker compose run --rm --no-deps krakend check -t -c /etc/krakend/krakend.json`.
 
 ## Alternatives considered
 

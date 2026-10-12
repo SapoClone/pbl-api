@@ -8,8 +8,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthUser, PblAuthModule } from '@pbl/auth';
 import { Cache } from 'cache-manager';
-import { UserEntity } from '../user/entities/user.entity';
-import { UserModule } from '../user/user.module';
+import { AccountEntity } from '../account/entities/account.entity';
+import { MembershipModule } from '../tenant/membership.module';
 import { AccessTokenModule } from './access-token.module';
 import { AccessTokenService } from './access-token.service';
 import { AuthController } from './auth.controller';
@@ -20,10 +20,10 @@ import { RefreshTokenService } from './refresh-token.service';
 
 @Module({
   imports: [
-    UserModule,
-    TypeOrmModule.forFeature([UserEntity, RefreshTokenEntity]),
+    TypeOrmModule.forFeature([AccountEntity, RefreshTokenEntity]),
     JwtModule.register({}),
     AccessTokenModule,
+    MembershipModule,
     // Global guard + verifier shared by all services (ADR-0006). Platform
     // resolves keys locally instead of fetching its own JWKS, and keeps the
     // Redis logout deny-list for instant revocation (ADR-0004 §7).
@@ -38,6 +38,9 @@ import { RefreshTokenService } from './refresh-token.service';
         issuer: config.getOrThrow('auth.issuer', { infer: true }),
         audience: config.getOrThrow('auth.audience', { infer: true }),
         keyResolver: accessTokenService,
+        // Register, create store and switch run before a store is chosen;
+        // tenant routes use @CurrentTenant()/@RequireRoles() (ADR-0008).
+        tenant: 'optional',
         isSessionRevoked: async (user: AuthUser) =>
           Boolean(
             await cacheManager.store.get<boolean>(
@@ -49,5 +52,6 @@ import { RefreshTokenService } from './refresh-token.service';
   ],
   controllers: [AuthController, JwksController],
   providers: [AuthService, RefreshTokenService],
+  exports: [AuthService],
 })
 export class AuthModule {}

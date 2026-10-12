@@ -71,10 +71,21 @@ export class AccessTokenService implements KeyResolver {
     return { keys: [this.publicJwk] };
   }
 
-  async sign(data: { userId: string; sessionId: string }): Promise<string> {
+  async sign(data: {
+    userId: string;
+    sessionId: string;
+    tenantId?: string;
+    roles?: string[];
+  }): Promise<string> {
     const subjectType: AccessTokenSubjectType = 'account';
     return this.jwtService.signAsync(
-      { sub: data.userId, sid: data.sessionId, sub_type: subjectType },
+      {
+        sub: data.userId,
+        sid: data.sessionId,
+        sub_type: subjectType,
+        ...(data.tenantId ? { tid: data.tenantId } : {}),
+        roles: data.roles ?? [],
+      },
       {
         privateKey: this.privateKeyPem,
         algorithm: ALGORITHM,

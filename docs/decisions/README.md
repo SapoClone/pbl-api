@@ -15,5 +15,6 @@ large changes are built on them. Summary rules live in [`/CLAUDE.md`](../../CLAU
 | [0006](0006-shared-code-in-libs.md) | Code shared across services lives in Nest libraries under `libs/` | Accepted |
 | [0007](0007-event-bus.md) | Services share data through an event bus (outbox → SNS → SQS), no runtime REST for business data | Accepted (direction; built in P1) |
 | [0008](0008-tenancy.md) | Tenant comes from the token; every business row is tenant-scoped | Accepted (built in P0) |
+| [0009](0009-shared-libraries-and-versioning.md) | Shared libraries are published to GitHub Packages as `@sapoclone/pbl-*` and versioned with semver; breaking export changes bump the major | Accepted |
 
 New record: copy [0000-template.md](0000-template.md), take the next number.

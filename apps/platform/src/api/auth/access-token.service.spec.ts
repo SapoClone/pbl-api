@@ -88,6 +88,29 @@ describe('AccessTokenService', () => {
       });
       expect(payload.exp - payload.iat).toBe(15 * 60);
     });
+
+    it('should add tid and roles when a store is selected', async () => {
+      const token = await service.sign({
+        userId: 'user-1',
+        sessionId: 'session-1',
+        tenantId: 'tenant-1',
+        roles: ['owner'],
+      });
+
+      expect(jwtService.decode(token)).toMatchObject({
+        tid: 'tenant-1',
+        roles: ['owner'],
+      });
+    });
+
+    it('should omit tid and send empty roles without a store', async () => {
+      const claims = jwtService.decode(
+        await service.sign({ userId: 'user-1', sessionId: 'session-1' }),
+      );
+
+      expect(claims).not.toHaveProperty('tid');
+      expect(claims.roles).toEqual([]);
+    });
   });
 
   describe("getPublicKey (platform's KeyResolver)", () => {
@@ -120,6 +143,7 @@ describe('AccessTokenService', () => {
         id: 'user-1',
         sessionId: 'session-1',
         subjectType: 'account',
+        roles: [],
         exp: expect.any(Number),
       });
     });

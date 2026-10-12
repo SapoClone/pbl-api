@@ -1,4 +1,8 @@
-import { EmailField, PasswordField } from '@/decorators/field.decorators';
+import {
+  EmailField,
+  PasswordField,
+  StringFieldOptional,
+} from '@/decorators/field.decorators';
 
 export class RegisterReqDto {
   @EmailField()
@@ -6,4 +10,7 @@ export class RegisterReqDto {
 
   @PasswordField()
   password!: string;
+
+  @StringFieldOptional({ maxLength: 100 })
+  name?: string;
 }

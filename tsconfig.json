@@ -25,6 +25,8 @@
     "paths": {
       "@pbl/auth": ["libs/auth/src"],
       "@pbl/auth/*": ["libs/auth/src/*"],
+      "@pbl/common": ["libs/common/src"],
+      "@pbl/common/*": ["libs/common/src/*"],
       "@/api/*": ["apps/platform/src/api/*"],
       "@/queue/*": ["apps/platform/src/queue/*"],
       "@/common/*": ["apps/platform/src/common/*"],
@@ -42,5 +44,6 @@
       "@/shared/*": ["apps/platform/src/shared/*"],
       "@/utils/*": ["apps/platform/src/utils/*"]
     }
-  }
+  },
+  "exclude": ["node_modules", "dist", "libs/*/dist"]
 }

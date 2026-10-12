@@ -23,6 +23,7 @@
   "testEnvironment": "node",
   "moduleNameMapper": {
     "^@pbl/auth(|/.*)$": "<rootDir>/../../../libs/auth/src$1",
+    "^@pbl/common(|/.*)$": "<rootDir>/../../../libs/common/src$1",
     "^@/api(.*)$": "<rootDir>/api$1",
     "^@/queue(.*)$": "<rootDir>/queue$1",
     "^@/common(.*)$": "<rootDir>/common$1",

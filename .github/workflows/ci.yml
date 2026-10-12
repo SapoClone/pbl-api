@@ -9,6 +9,7 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/ci.yml'
+      - 'scripts/**'
       - '!**/README*.md'
       - '!docs/**'
   pull_request:
@@ -20,6 +21,7 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/ci.yml'
+      - 'scripts/**'
       - '!**/README*.md'
       - '!docs/**'
 
@@ -83,6 +85,9 @@ jobs:
     steps:
       - name: Copy repository
         uses: actions/checkout@v4
+        with:
+          # libs compares its public exports with origin/main (needs history)
+          fetch-depth: ${{ matrix.service == 'libs' && 0 || 1 }}
       - name: Install Node.js 24
         uses: actions/setup-node@v4
         with:
@@ -114,6 +119,17 @@ jobs:
 
       - name: Run UT tests for ${{ matrix.service }}
         run: pnpm test:${{ matrix.service }}
+
+      - name: Test the release scripts (libs)
+        if: matrix.service == 'libs'
+        run: pnpm test:scripts
+
+      - name: Check shared-library versions against main (libs, PRs)
+        # a removed or renamed export needs a major bump (ADR-0009)
+        if: matrix.service == 'libs' && github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          node scripts/check-lib-version.mjs --pr --base origin/main
 
   docs:
     name: Build docs

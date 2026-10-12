@@ -73,3 +73,6 @@ docs/.vuepress/dist
 
 # Local-only planning docs (specs/plans) — never committed
 docs/superpowers/
+
+# published-library build output
+/libs/*/dist

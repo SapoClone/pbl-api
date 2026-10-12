@@ -8,6 +8,12 @@
       ],
       "@pbl/auth/*": [
         "libs/auth/src/*"
+      ],
+      "@pbl/common": [
+        "libs/common/src"
+      ],
+      "@pbl/common/*": [
+        "libs/common/src/*"
       ]
     }
   },

@@ -34,6 +34,8 @@ services:
     environment:
       PORT: "3000"
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     networks:
       - pbl-network
 
@@ -46,6 +48,8 @@ services:
     environment:
       PORT: "3000"
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     networks:
       - pbl-network
 
@@ -58,6 +62,8 @@ services:
     environment:
       PORT: "3000"
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     networks:
       - pbl-network
 
@@ -70,6 +76,8 @@ services:
     environment:
       PORT: "3000"
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     networks:
       - pbl-network
 
@@ -82,6 +90,8 @@ services:
     environment:
       PORT: "3000"
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     networks:
       - pbl-network
 
@@ -126,7 +136,8 @@ services:
       - pbl-network
 
   krakend:
-    image: devopsfaith/krakend:2.6
+    build: ./krakend
+    image: pbl-krakend:2.6.3
     command: ["run", "-c", "/etc/krakend/krakend.json"]
     volumes:
       - ./krakend/krakend.json:/etc/krakend/krakend.json:ro

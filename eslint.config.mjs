@@ -16,6 +16,7 @@ export default tsEslint.config(
     },
     ignores: [
       'eslint.config.mjs',
+      'libs/*/dist/**',
       'docs/.vuepress/**/*',
       'src/generated/i18n.generated.ts',
     ],

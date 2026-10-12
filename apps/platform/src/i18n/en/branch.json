@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code_exists": "A branch with this code already exists",
+    "last_branch": "A store must keep at least one active branch"
+  }
+}

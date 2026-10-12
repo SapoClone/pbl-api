@@ -110,7 +110,8 @@ The tenant always comes from the token, never from a query param (§8).
 
 ## 6. Errors
 
-Every service error uses one shape (`GlobalExceptionFilter`). Real examples:
+Every service error uses one shape (platform's `GlobalExceptionFilter`; the other
+services use `PblExceptionFilter` from `@pbl/common`, same fields). Real examples:
 
 **422 — request validation** (`details` per field):
 ```json
@@ -149,9 +150,16 @@ Rules:
   `i18n/en`, `vi` **and** `jp`.
 - **Validation `details` messages are English only.** Clients should map
   `code` (class-validator rule) to their own text, not show the raw message.
-- **401 from the gateway has an empty body.** KrakenD rejects bad tokens
-  before the service sees them. Clients must decide on the **status code**,
-  never on the body.
+- **Gateway-generated errors have the same shape.** KrakenD CE answers
+  empty bodies for a bad token (401), an unreachable/timed-out backend or an
+  open circuit breaker (500). The `pbl-error-body` plugin rewrites these to
+  `{ timestamp, statusCode, error, message }` (no `errorCode`/`details`):
+  401 `Missing or invalid access token`, and a bodiless 500 becomes **503**
+  `Upstream service unavailable`. A 500 that carries a body comes from a
+  service and passes through unchanged. Unknown routes (404) and wrong
+  methods (405) return `{ error, message }` only: KrakenD's `router.error_body`
+  is static and lower-cases keys, so it cannot carry `timestamp`/`statusCode`.
+  Clients still decide on the **status code**.
 - **Stack traces** (`stack`, `trace`) appear only with `APP_DEBUG=true`
   (local). Never rely on them.
 
@@ -162,6 +170,7 @@ Rules:
 | `Authorization: Bearer <accessToken>` | request | every protected route |
 | `Content-Type: application/json` | request | bodies are JSON only |
 | `x-lang` / `Accept-Language` (or `?lang=`) | request | `en` (default), `vi`, `jp`: localises error messages |
+| `X-Request-Id: <id>` | request and response | optional on requests (accepted only if it is 1-128 characters of `[A-Za-z0-9_.:-]`; otherwise the service generates a uuid v4). Echoed in the response (also on errors the gateway rewrites, which copy the request's id), logged on every line as `req.id`, forwarded on internal HTTP calls and carried in events as `traceId`. Quote it when reporting a problem |
 | `Idempotency-Key: <uuid>` **(new, P5)** | request | **required** on order creation and payments; the same key returns the first result instead of creating twice (mobile retries on bad networks) |
 
 Every new request header must be added in three places: the gateway's

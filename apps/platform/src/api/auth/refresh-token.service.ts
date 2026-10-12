@@ -35,15 +35,24 @@ export class RefreshTokenService {
   /** Start a new family (one per login). */
   async issue(
     subjectId: Uuid | string,
+    tenantId: string | null = null,
   ): Promise<{ token: string; familyId: Uuid }> {
     const familyId = randomUUID() as Uuid;
-    const token = await this.store(this.repository, familyId, subjectId);
+    const token = await this.store(
+      this.repository,
+      familyId,
+      subjectId,
+      tenantId,
+    );
     return { token, familyId };
   }
 
-  async rotate(
-    presentedToken: string,
-  ): Promise<{ token: string; familyId: Uuid; subjectId: Uuid }> {
+  async rotate(presentedToken: string): Promise<{
+    token: string;
+    familyId: Uuid;
+    subjectId: Uuid;
+    tenantId: string | null;
+  }> {
     const current = await this.repository.findOneBy({
       tokenHash: hashToken(presentedToken),
     });
@@ -68,14 +77,24 @@ export class RefreshTokenService {
       if (affected !== 1) {
         return null;
       }
-      return this.store(em, current.familyId, current.subjectId);
+      return this.store(
+        em,
+        current.familyId,
+        current.subjectId,
+        current.tenantId,
+      );
     });
 
     if (!token) {
       await this.handleReuse(current);
     }
 
-    return { token, familyId: current.familyId, subjectId: current.subjectId };
+    return {
+      token,
+      familyId: current.familyId,
+      subjectId: current.subjectId,
+      tenantId: current.tenantId,
+    };
   }
 
   async revokeFamily(familyId: Uuid | string): Promise<void> {
@@ -97,6 +116,7 @@ export class RefreshTokenService {
     repository: Pick<Repository<RefreshTokenEntity>, 'save'>,
     familyId: Uuid,
     subjectId: Uuid | string,
+    tenantId: string | null,
   ): Promise<string> {
     const token = randomBytes(32).toString('base64url');
     const lifetime = this.configService.getOrThrow('auth.refreshExpires', {
@@ -108,7 +128,7 @@ export class RefreshTokenService {
         familyId,
         subjectType: 'account',
         subjectId: subjectId as Uuid,
-        tenantId: null,
+        tenantId: tenantId as Uuid | null,
         tokenHash: hashToken(token),
         expiresAt: new Date(Date.now() + ms(lifetime)),
         revokedAt: null,

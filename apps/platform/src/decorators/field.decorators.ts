@@ -21,6 +21,7 @@ import {
   Min,
   MinLength,
   NotEquals,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { ToBoolean, ToLowerCase, ToUpperCase } from './transform.decorators';
@@ -55,6 +56,18 @@ interface IEnumFieldOptions extends IFieldOptions {
 type IBooleanFieldOptions = IFieldOptions;
 type ITokenFieldOptions = IFieldOptions;
 type IClassFieldOptions = IFieldOptions;
+
+/**
+ * Marks a field as omittable. `null` is let through only for `nullable`
+ * fields; otherwise it is rejected like any other invalid value.
+ */
+function optional(options: IFieldOptions): PropertyDecorator {
+  return options.nullable
+    ? IsOptional({ each: options.each })
+    : ValidateIf((_obj, value) => value !== undefined, {
+        each: options.each,
+      });
+}
 
 export function NumberField(
   options: Omit<ApiPropertyOptions, 'type'> & INumberFieldOptions = {},
@@ -100,7 +113,7 @@ export function NumberFieldOptional(
     INumberFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     NumberField({ required: false, ...options }),
   );
 }
@@ -178,7 +191,7 @@ export function StringFieldOptional(
     IStringFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     StringField({ required: false, ...options }),
   );
 }
@@ -203,7 +216,7 @@ export function PasswordFieldOptional(
     IStringFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     PasswordField({ required: false, ...options }),
   );
 }
@@ -234,7 +247,7 @@ export function BooleanFieldOptional(
     IBooleanFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     BooleanField({ required: false, ...options }),
   );
 }
@@ -267,7 +280,7 @@ export function EmailFieldOptional(
   options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     EmailField({ required: false, ...options }),
   );
 }
@@ -305,7 +318,7 @@ export function UUIDFieldOptional(
     IFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     UUIDField({ required: false, ...options }),
   );
 }
@@ -328,7 +341,7 @@ export function URLFieldOptional(
   options: Omit<ApiPropertyOptions, 'type'> & IStringFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     URLField({ required: false, ...options }),
   );
 }
@@ -358,7 +371,7 @@ export function DateFieldOptional(
   options: Omit<ApiPropertyOptions, 'type' | 'required'> & IFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     DateField({ ...options, required: false }),
   );
 }
@@ -398,7 +411,7 @@ export function EnumFieldOptional<TEnum extends object>(
     IEnumFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     EnumField(getEnum, { required: false, ...options }),
   );
 }
@@ -442,7 +455,7 @@ export function ClassFieldOptional<TClass extends Constructor>(
     IClassFieldOptions = {},
 ): PropertyDecorator {
   return applyDecorators(
-    IsOptional({ each: options.each }),
+    optional(options),
     ClassField(getClass, { required: false, ...options }),
   );
 }
