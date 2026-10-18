@@ -34,8 +34,10 @@ describe('CreateTenantReqDto', () => {
     'static',
     'platform',
     'catalog',
-    'commerce',
+    'customer',
     'finance',
+    'inventory',
+    'sales',
     'insight',
     'integration',
   ])('rejects the reserved subdomain %p', async (subdomain) => {

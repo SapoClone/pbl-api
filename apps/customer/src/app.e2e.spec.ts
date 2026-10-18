@@ -4,7 +4,7 @@ import { AddressInfo } from 'net';
 import request from 'supertest';
 import { AppModule } from './app.module';
 
-describe('commerce service bootstrap', () => {
+describe('Customer service bootstrap', () => {
   let app: INestApplication;
   const saved = { ...process.env };
 
@@ -12,7 +12,7 @@ describe('commerce service bootstrap', () => {
     process.env.AUTH_JWKS_URL = 'http://127.0.0.1:1/jwks.json';
     process.env.APP_SWAGGER_ENABLED = 'false';
     delete process.env.REDIS_HOST; // no Redis under test
-    app = await bootstrapService(AppModule, { name: 'commerce', port: 0 });
+    app = await bootstrapService(AppModule, { name: 'customer', port: 0 });
   });
 
   afterAll(async () => {
@@ -25,7 +25,7 @@ describe('commerce service bootstrap', () => {
 
   it('GET /health reports the service', async () => {
     const res = await request(url()).get('/health').expect(200);
-    expect(res.body).toEqual({ status: 'ok', service: 'commerce' });
+    expect(res.body).toEqual({ status: 'ok', service: 'customer' });
     expect(res.headers['x-request-id']).toBeTruthy();
   });
 

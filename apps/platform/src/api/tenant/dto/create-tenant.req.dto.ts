@@ -15,8 +15,10 @@ export const RESERVED_SUBDOMAINS = [
   'static',
   'platform',
   'catalog',
-  'commerce',
+  'customer',
   'finance',
+  'inventory',
+  'sales',
   'insight',
   'integration',
 ];

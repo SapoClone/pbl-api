@@ -6,9 +6,9 @@ import { PblHealthModule, PblLoggingModule } from '@pbl/common';
   // Every route requires a platform-issued access token unless @Public()
   // (ADR-0004); keys come from platform's JWKS at AUTH_JWKS_URL.
   imports: [
-    PblLoggingModule.forRoot('commerce'),
+    PblLoggingModule.forRoot('customer'),
     PblAuthModule.forRemoteJwks(),
-    PblHealthModule.forRoot({ service: 'commerce', redisFromEnv: true }),
+    PblHealthModule.forRoot({ service: 'customer', redisFromEnv: true }),
   ],
 })
 export class AppModule {}

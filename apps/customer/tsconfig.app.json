@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../dist/apps/commerce",
+    "outDir": "../../dist/apps/customer",
     "paths": {
       "@pbl/auth": [
         "libs/auth/src"

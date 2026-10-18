@@ -1429,40 +1429,6 @@
       ]
     },
     {
-      "endpoint": "/commerce/health",
-      "method": "GET",
-      "output_encoding": "no-op",
-      "input_headers": [
-        "Authorization",
-        "Content-Type",
-        "Accept",
-        "Accept-Language",
-        "x-lang",
-        "X-Request-Id"
-      ],
-      "input_query_strings": [
-        "*"
-      ],
-      "backend": [
-        {
-          "url_pattern": "/health",
-          "encoding": "no-op",
-          "host": [
-            "http://commerce:3000"
-          ],
-          "extra_config": {
-            "qos/circuit-breaker": {
-              "name": "commerce-cb",
-              "interval": 60,
-              "timeout": 10,
-              "max_errors": 5,
-              "log_status_change": true
-            }
-          }
-        }
-      ]
-    },
-    {
       "endpoint": "/finance/health",
       "method": "GET",
       "output_encoding": "no-op",
@@ -1555,6 +1521,108 @@
           "extra_config": {
             "qos/circuit-breaker": {
               "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "endpoint": "/inventory/health",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/health",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "endpoint": "/sales/health",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/health",
+          "encoding": "no-op",
+          "host": [
+            "http://sales:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "sales-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "endpoint": "/customer/health",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/health",
+          "encoding": "no-op",
+          "host": [
+            "http://customer:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "customer-cb",
               "interval": 60,
               "timeout": 10,
               "max_errors": 5,

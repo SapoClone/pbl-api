@@ -81,7 +81,7 @@ jobs:
       fail-fast: false
       matrix:
         # libs = shared Nest libraries under libs/ (build:libs type-checks, test:libs runs their specs)
-        service: [platform, catalog, commerce, finance, integration, insight, libs]
+        service: [platform, catalog, finance, integration, insight, inventory, sales, customer, libs]
     steps:
       - name: Copy repository
         uses: actions/checkout@v4

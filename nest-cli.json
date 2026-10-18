@@ -42,15 +42,6 @@
         "tsConfigPath": "apps/catalog/tsconfig.app.json"
       }
     },
-    "commerce": {
-      "type": "application",
-      "root": "apps/commerce",
-      "entryFile": "apps/commerce/src/main",
-      "sourceRoot": "apps/commerce/src",
-      "compilerOptions": {
-        "tsConfigPath": "apps/commerce/tsconfig.app.json"
-      }
-    },
     "finance": {
       "type": "application",
       "root": "apps/finance",
@@ -76,6 +67,33 @@
       "sourceRoot": "apps/insight/src",
       "compilerOptions": {
         "tsConfigPath": "apps/insight/tsconfig.app.json"
+      }
+    },
+    "inventory": {
+      "type": "application",
+      "root": "apps/inventory",
+      "entryFile": "apps/inventory/src/main",
+      "sourceRoot": "apps/inventory/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/inventory/tsconfig.app.json"
+      }
+    },
+    "sales": {
+      "type": "application",
+      "root": "apps/sales",
+      "entryFile": "apps/sales/src/main",
+      "sourceRoot": "apps/sales/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/sales/tsconfig.app.json"
+      }
+    },
+    "customer": {
+      "type": "application",
+      "root": "apps/customer",
+      "entryFile": "apps/customer/src/main",
+      "sourceRoot": "apps/customer/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/customer/tsconfig.app.json"
       }
     },
     "auth": {
