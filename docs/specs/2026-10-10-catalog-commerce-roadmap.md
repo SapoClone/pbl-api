@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-10
 - **Status:** Approved (sequence and cross-cutting rules); each sub-project gets its own design spec before implementation
+- **P1 (event bus) built locally 2026-10-18** with a first slice (login, permissions, selling): [guide](../guides/events.md), [P1 design](2026-10-18-p1-event-bus-design.md).
 - **Update 2026-10-18:** `commerce` no longer exists; P3–P9 are built in `inventory`, `customer`, `sales` and `catalog` ([ADR-0010](../decisions/0010-eight-services.md), [eight-service design](2026-10-18-eight-service-decomposition-design.md)). The sequence is unchanged.
 - **Related:** [ADR-0007 event bus](../decisions/0007-event-bus.md), [ADR-0008 tenancy](../decisions/0008-tenancy.md), pbl-infra `docs/erd_viewer.html`
 

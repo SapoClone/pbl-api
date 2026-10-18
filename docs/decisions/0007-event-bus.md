@@ -1,6 +1,6 @@
 # ADR-0007: Services share data through an event bus (outbox → SNS → SQS)
 
-- **Status:** Accepted (direction, 2026-10-10). Amended by [ADR-0010](0010-eight-services.md) and by the P1 spec (local transport): the one synchronous command is the stock reservation from `sales` to `inventory`. Detailed design in the P1 spec of the [catalog & commerce roadmap](../specs/2026-10-10-catalog-commerce-roadmap.md); not built yet.
+- **Status:** Accepted (direction, 2026-10-10); built locally in P1 (2026-10-18): see the [events guide](../guides/events.md). Amended by [ADR-0010](0010-eight-services.md) and by the P1 spec (local transport): the one synchronous command is the stock reservation from `sales` to `inventory`. Detailed design in the P1 spec of the [catalog & commerce roadmap](../specs/2026-10-10-catalog-commerce-roadmap.md); not built yet.
 - **Date:** 2026-10-10
 - **Scope:** every service that needs another service's data; `libs/events`, `libs/contracts`, docker-compose, pbl-infra
 

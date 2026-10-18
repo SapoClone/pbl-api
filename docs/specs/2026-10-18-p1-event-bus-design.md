@@ -1,7 +1,7 @@
 # P1: Event bus (outbox, inbox, relay, consumers)
 
 - **Date:** 2026-10-18
-- **Status:** Design for review. Implementation starts only after this spec and its plan are approved.
+- **Status:** Built locally on 2026-10-18 (see "As built" at the end). The production transport is designed and unit-tested but has never run against AWS.
 - **Roadmap:** [sub-project P1](2026-10-10-catalog-commerce-roadmap.md); [ADR-0007](../decisions/0007-event-bus.md) (amended by this spec), [ADR-0010](../decisions/0010-eight-services.md), [ADR-0008](../decisions/0008-tenancy.md)
 
 ## Goal
@@ -220,6 +220,33 @@ End to end: `verify-local-stack.sh` as described.
   unknown work; they are done first in the plan.
 - **No per-service database roles yet** (ADR-0002 target), so schema isolation is
   by convention until that is done.
+
+## As built (2026-10-18)
+
+The design above was implemented. What differs, and what was added to reach a demo of login,
+permissions and selling:
+
+- **First consumer is `sales`, not `inventory`.** Selling needs to check a branch id against a
+  projection (ADR-0002), so `sales.branch_projection` came first; the same handler applies to
+  `inventory` in P3. Platform also emits the event for the **default branch** created with a store.
+- **More events than the one proof**, to demonstrate the three flows: `platform.account.logged_in`,
+  `platform.membership.granted`, `platform.membership.role_changed` and `sales.order.completed`.
+  `insight` consumes the last four into an audit log and a daily revenue table.
+- **Permissions:** roles `manager` and `cashier` next to `owner`; the owner adds members and changes
+  roles (`/tenants/current/members`); routes of `sales` and `insight` use `@RequireRoles`.
+- **`sales`** takes orders (`POST/GET /orders`), with a server-computed total and the order, its lines
+  and the event in one transaction. No stock reservation yet and lines are free text.
+- **Open items of the plan, decided:** `PblDatabaseModule` lives in `@pbl/events`; non-platform
+  services run their migrations at start; platform keeps synchronize locally and `pnpm migration:up`
+  elsewhere. The libraries are internal (not published).
+- **Local queue creation** happens in the publisher and the consumer (idempotent); it also created
+  a throwaway queue per integration test.
+- **Tests:** 25 unit tests in the libraries and the specs of platform, sales and insight; 7
+  integration tests (the four scenarios, a parked row, two relays at once) on Postgres and ElasticMQ,
+  run in CI with service containers; `scripts/demo-events.sh` drives the whole slice through the
+  gateway.
+- **Still open:** a real SNS run, Terraform, `inventory` consuming branches, replay beyond the DLQ
+  redrive, tenant isolation tests for the read models against a real database.
 
 ## Open items for the plan
 

@@ -18,6 +18,19 @@ so far) and `catalog`, `inventory`, `sales`, `customer`, `finance`,
 [ADR-0010](docs/decisions/0010-eight-services.md)) — behind a KrakenD API gateway. Architecture rules and decisions:
 [`CLAUDE.md`](CLAUDE.md) and [`docs/decisions/`](docs/decisions/).
 
+## Event demo
+
+With the stack running (`docker compose up -d --build`), one script shows login, permissions and
+selling travelling as events between services, and asserts every step:
+
+```bash
+bash scripts/demo-events.sh
+```
+
+An owner opens a store and a branch, gives a cashier a role, the cashier signs in and sells, is refused
+what a cashier may not do (403), and the owner reads the audit log and the daily revenue that
+`insight` built from the events. How it works: [docs/guides/events.md](docs/guides/events.md).
+
 ## Quick start
 
 ### Prerequisites
