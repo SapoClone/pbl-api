@@ -3,6 +3,8 @@ import { ValidationException } from '@/exceptions/validation.exception';
 import { isUniqueViolation } from '@/utils/db-errors';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { PLATFORM_BRANCH_CREATED } from '@pbl/contracts';
+import { EventOutbox } from '@pbl/events';
 import { DataSource, Repository } from 'typeorm';
 import {
   AccountEntity,
@@ -31,6 +33,7 @@ export class TenantService {
     private readonly tenantRepository: Repository<TenantEntity>,
     private readonly dataSource: DataSource,
     private readonly membershipService: MembershipService,
+    private readonly outbox: EventOutbox,
   ) {}
 
   async listMine(accountId: string): Promise<MembershipResDto[]> {
@@ -89,7 +92,7 @@ export class TenantService {
         // tenant was created just above, so no tenant exists in the request
         // context yet (the caller's token has none) and the scoped repository
         // would refuse to run. The tenantId is set explicitly from the new row.
-        await em.save(
+        const branch = await em.save(
           new BranchEntity({
             tenantId: tenant.id,
             code: DEFAULT_BRANCH.code,
@@ -99,6 +102,22 @@ export class TenantService {
             createdBy: accountId,
             updatedBy: accountId,
           }),
+        );
+        // The default branch is a branch like any other: other services learn of
+        // it through the event. The caller's token has no store yet, so the
+        // tenant is the one just created.
+        await this.outbox.add(
+          em,
+          PLATFORM_BRANCH_CREATED,
+          {
+            id: branch.id,
+            code: branch.code,
+            name: branch.name,
+            isWarehouse: branch.isWarehouse,
+            status: branch.status,
+            updatedAt: (branch.updatedAt ?? new Date()).toISOString(),
+          },
+          { tenantId: tenant.id },
         );
         return tenant;
       });
