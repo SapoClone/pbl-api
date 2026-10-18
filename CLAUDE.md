@@ -25,12 +25,12 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 
 | Area | Today | Target (build toward this) |
 |---|---|---|
-| Services | `platform` has business logic; `catalog`, `inventory`, `sales`, `customer`, `finance`, `integration`, `insight` only expose `GET /health` (built from `templates/service/` on `@pbl/common`) | 8 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md), [ADR-0010](docs/decisions/0010-eight-services.md)) |
+| Services | `platform` has business logic; `sales` has orders, `inventory` has stock, receipts and the stock reservation, `insight` has the audit log and daily revenue (the event demo); `catalog`, `customer`, `finance`, `integration` only expose `GET /health` (built from `templates/service/` on `@pbl/common`) | 8 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md), [ADR-0010](docs/decisions/0010-eight-services.md)) |
 | Tenancy | Implemented (P0): stores, branches, `tid` + `roles` in tokens, `@CurrentTenant()`/`@RequireRoles()` ([ADR-0008](docs/decisions/0008-tenancy.md)) | Staff logins, RBAC `perms`, plans/subscriptions |
 | Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every platform endpoint + each stub's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
 | Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles` | Step 5: `perms` claim + `@RequirePermission` (with Staff/RBAC); short access-token TTL (the deny-list stays: every service uses it) ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
-| Events | Only SQS `email-verification` → pbl-mail-service ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | Outbox → SNS → SQS with idempotent inboxes; services share data only through events and read models ([ADR-0007](docs/decisions/0007-event-bus.md)) — **not built** (roadmap P1) |
+| Events | Built locally (P1): outbox → relay → ElasticMQ queue → consumer with an inbox, retry, DLQ and redrive, in `@pbl/events`; first events: platform branch/login/role events and `sales.order.completed`, consumed by sales and insight ([guide](docs/guides/events.md)). The email queue stays separate ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | Production transport: outbox → SNS → SQS ([ADR-0007](docs/decisions/0007-event-bus.md)); the SNS adapter is written and unit-tested, never run against AWS |
 | AWS | All AWS resources were deleted to save credits; pbl-infra keeps the Terraform | Re-apply pbl-infra when deploying |
 
 Never describe a target item as implemented, and never "simplify" code
@@ -45,10 +45,12 @@ apps/
 libs/
   auth/src/            @pbl/auth — token verification, global AuthGuard, tenant context interceptor, Public/AuthOptional/CurrentUser
   common/src/          @pbl/common — errors, logging/request id, health, bootstrap, request context, tenancy, propagation
+  contracts/src/       @pbl/contracts — event names, payload types, the topology, role names (types only; internal, not published)
+  events/src/          @pbl/events — outbox, relay, publishers, consumer, inbox, PblDatabaseModule (internal, not published)
 templates/service/     source of the generated service apps (scripts/new-service.mjs)
 krakend/krakend.json   gateway routes (every client-facing route must be declared here)
 krakend/Dockerfile     gateway image: KrakenD 2.6.3 + the pbl-error-body plugin (krakend/plugins/error-body)
-docker/                postgres-init-schemas.sql (creates the 6 schemas), elasticmq.conf (local SQS)
+docker/                postgres-init-schemas.sql (creates the 8 schemas), elasticmq.conf (local SQS)
 docker-compose.yml     full local stack: 8 apps + postgres + redis + elasticmq + krakend
 scripts/verify-local-stack.sh   end-to-end check (health of all 6 + register/login via gateway)
 docs/decisions/        ADRs — add one for every new architectural decision
@@ -86,8 +88,8 @@ Rules:
   data → internal REST call or (later) an event.
 - Put each feature in the service that owns its ERD entity. If ownership is
   unclear, stop and ask; do not default to `platform`.
-- A sale does not share a transaction with stock. `sales` reserves stock in
-  `inventory` through one internal, idempotent command (the only synchronous
+- A sale does not share a transaction with stock. `sales` holds stock in
+  `inventory` (`POST /internal/reservations`, built; keyed by order id, 409 with the shortages) through one internal, idempotent command (the only synchronous
   cross-service call allowed; `InternalHttpClient`, not routed by the gateway);
   everything else crosses services as events. Only `sales` writes
   `payment_status`; `finance` and `integration` emit events about money
@@ -159,6 +161,11 @@ Rules:
 - Tenant/user identity comes **from the token**, never from body, query, path or headers.
 - Refresh tokens are opaque and handled only by `RefreshTokenService`
   (hashed, rotated, reuse ⇒ family revoked). Never put them in a JWT or log them.
+- Store roles are `owner`, `manager` and `cashier` (`ROLES` in `@pbl/contracts`, `TenantRole` in
+  platform). The owner gives them out (`POST /tenants/current/members`) and changes them
+  (`PATCH …/members/:accountId`); both write an event. Protect a route with
+  `@RequireRoles(ROLES.OWNER, …)`; a role not listed gets 403. The role is read from the token, so a
+  change applies at the next sign-in or refresh.
 
 ## API conventions
 
@@ -307,7 +314,10 @@ docker compose run --rm --no-deps -v "$PWD:/work" -w /work platform sh -c \
 # after changing package.json / pnpm-lock.yaml: docker compose build (images bake node_modules)
 ```
 
-Local SQS is ElasticMQ; queued messages:
+Event bus: `bash scripts/demo-events.sh` runs the login / permissions / selling demo through the
+gateway and asserts every step; `pnpm test:int` runs the bus, sales and insight against real Postgres and
+ElasticMQ (inside the image on Windows, see the guide). `node scripts/redrive-dlq.js <service>`
+moves dead letters back. Local SQS is ElasticMQ; queued messages:
 `http://localhost:9324/000000000000/email-verification?Action=ReceiveMessage`.
 
 ## Testing
@@ -345,7 +355,8 @@ Local SQS is ElasticMQ; queued messages:
 - KrakenD without `no-op` encoding turns backend 4xx into gateway 500s and
   drops bodies.
 - `.env.docker.platform` contains a **committed local-only RSA key**; tests
-  generate a throwaway key in `setup-jest.mjs`. Never reuse either elsewhere.
+  generate a throwaway key in `setup-jest.mjs`, and `createTestAuth()` (`@pbl/auth/testing`) makes
+  another per test file to sign tokens for route tests with the real guard. Never reuse any of them elsewhere.
 - `krakend.json` uses `disable_jwk_security: true` (http JWKS URL) — valid
   for the local stack only.
 - The README links `docs/specs/…monorepo-service-split-design.md`,
@@ -353,6 +364,14 @@ Local SQS is ElasticMQ; queued messages:
 
 ## Known open work (don't rediscover, don't depend on)
 
+- Events: the SNS adapter, the Terraform for topics/queues and the SNS-to-SQS subscription do not
+  exist or have never run against AWS (checklist in [docs/deploy-actions.md](docs/deploy-actions.md)).
+  No replay tool beyond the DLQ redrive. Only branch, login, membership and order events exist.
+- Stock is keyed by SKU text (order lines are free text, not catalog variants); payment is only a method
+  on the order. A stock receipt is not idempotent, orders cannot be cancelled, and a hold completed after it
+  expired is deducted on a best-effort basis ([design](docs/specs/2026-10-19-stock-reservation-design.md)).
+  Order creation needs an `Idempotency-Key` header (a retry returns the first order, 200 +
+  `Idempotency-Replayed`).
 - The production `Dockerfile` builds any service (`--build-arg APP_NAME=<service>`,
   default `platform`), but `deploy.yml` and pbl-infra still deploy only
   `platform`; per-service ECR repositories, ECS services and a deploy matrix do

@@ -14,6 +14,18 @@
       ],
       "@pbl/common/*": [
         "libs/common/src/*"
+      ],
+      "@pbl/contracts": [
+        "libs/contracts/src"
+      ],
+      "@pbl/contracts/*": [
+        "libs/contracts/src/*"
+      ],
+      "@pbl/events": [
+        "libs/events/src"
+      ],
+      "@pbl/events/*": [
+        "libs/events/src/*"
       ]
     }
   },

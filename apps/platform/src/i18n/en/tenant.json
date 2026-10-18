@@ -1,5 +1,7 @@
 {
   "error": {
-    "subdomain_exists": "This subdomain is already taken"
+    "subdomain_exists": "This subdomain is already taken",
+    "member_exists": "Member already belongs to this store",
+    "owner_role_locked": "The store owner role cannot be changed"
   }
 }

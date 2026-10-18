@@ -1,0 +1,20 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "../../..",
+  "roots": [
+    "<rootDir>/libs/events/test",
+    "<rootDir>/apps/sales/test",
+    "<rootDir>/apps/inventory/test",
+    "<rootDir>/apps/insight/test"
+  ],
+  "testRegex": ".*\\.int-spec\\.ts$",
+  "transform": { "^.+\\.(t|j)s$": "ts-jest" },
+  "testEnvironment": "node",
+  "testTimeout": 90000,
+  "moduleNameMapper": {
+    "^@pbl/auth(|/.*)$": "<rootDir>/libs/auth/src$1",
+    "^@pbl/common(|/.*)$": "<rootDir>/libs/common/src$1",
+    "^@pbl/contracts(|/.*)$": "<rootDir>/libs/contracts/src$1",
+    "^@pbl/events(|/.*)$": "<rootDir>/libs/events/src$1"
+  }
+}

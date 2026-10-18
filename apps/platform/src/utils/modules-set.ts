@@ -12,6 +12,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { ModuleMetadata } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { PblEventsModule } from '@pbl/events';
 import { redisStore } from 'cache-manager-ioredis-yet';
 import {
   AcceptLanguageResolver,
@@ -107,6 +108,7 @@ function generateModulesSet() {
     i18nModule,
     loggerModule,
     QueueModule,
+    PblEventsModule.forRoot({ service: 'platform' }),
   ]);
 }
 

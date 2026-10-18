@@ -2,6 +2,7 @@ import TypeOrmCustomLogger from '@/utils/typeorm-custom-logger';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModuleOptions, TypeOrmOptionsFactory } from '@nestjs/typeorm';
+import { PRODUCER_ENTITIES, PRODUCER_MIGRATIONS } from '@pbl/events';
 import { AllConfigType } from '../config/config.type';
 
 @Injectable()
@@ -28,8 +29,11 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
           ? ['error', 'warn', 'query', 'schema']
           : ['error', 'warn'],
       ),
-      entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-      migrations: [__dirname + '/migrations/**/*{.ts,.js}'],
+      entities: [__dirname + '/../**/*.entity{.ts,.js}', ...PRODUCER_ENTITIES],
+      migrations: [
+        __dirname + '/migrations/**/*{.ts,.js}',
+        ...PRODUCER_MIGRATIONS,
+      ],
       migrationsTableName: 'migrations',
       poolSize: this.configService.get('database.maxConnections', {
         infer: true,

@@ -79,6 +79,23 @@ services:
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: pbl
+      DATABASE_SCHEMA: insight
+      # events: ElasticMQ locally, the relay and consumer run inside the service
+      EVENTS_TRANSPORT: sqs-direct
+      AWS_REGION: ap-southeast-1
+      AWS_ENDPOINT_URL_SQS: http://elasticmq:9324
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started
     networks:
       - pbl-network
 
@@ -93,6 +110,25 @@ services:
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: pbl
+      DATABASE_SCHEMA: inventory
+      # events: ElasticMQ locally, the consumer runs inside the service
+      EVENTS_TRANSPORT: sqs-direct
+      AWS_REGION: ap-southeast-1
+      AWS_ENDPOINT_URL_SQS: http://elasticmq:9324
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      # how long stock stays held for an order that is never completed
+      INVENTORY_RESERVATION_TTL_MINUTES: "15"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started
     networks:
       - pbl-network
 
@@ -107,6 +143,25 @@ services:
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      # the one synchronous call: sales holds stock here before it sells (ADR-0010)
+      INVENTORY_URL: http://inventory:3000
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: pbl
+      DATABASE_SCHEMA: sales
+      # events: ElasticMQ locally, the relay and consumer run inside the service
+      EVENTS_TRANSPORT: sqs-direct
+      AWS_REGION: ap-southeast-1
+      AWS_ENDPOINT_URL_SQS: http://elasticmq:9324
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started
     networks:
       - pbl-network
 

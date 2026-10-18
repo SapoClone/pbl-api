@@ -1,5 +1,7 @@
 {
   "error": {
-    "subdomain_exists": "このサブドメインは既に使用されています"
+    "subdomain_exists": "このサブドメインは既に使用されています",
+    "member_exists": "このメンバーは既にこの店舗に所属しています",
+    "owner_role_locked": "店舗オーナーの役割は変更できません"
   }
 }

@@ -1,3 +1,4 @@
+import { PRODUCER_ENTITIES, PRODUCER_MIGRATIONS } from '@pbl/events';
 import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { SeederOptions } from 'typeorm-extension';
@@ -17,8 +18,8 @@ export const AppDataSource = new DataSource({
   dropSchema: false,
   keepConnectionAlive: true,
   logging: process.env.NODE_ENV !== 'production',
-  entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-  migrations: [__dirname + '/migrations/**/*{.ts,.js}'],
+  entities: [__dirname + '/../**/*.entity{.ts,.js}', ...PRODUCER_ENTITIES],
+  migrations: [__dirname + '/migrations/**/*{.ts,.js}', ...PRODUCER_MIGRATIONS],
   migrationsTableName: 'migrations',
   poolSize: process.env.DATABASE_MAX_CONNECTIONS
     ? parseInt(process.env.DATABASE_MAX_CONNECTIONS, 10)

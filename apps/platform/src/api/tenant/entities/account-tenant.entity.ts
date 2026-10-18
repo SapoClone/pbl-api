@@ -13,6 +13,8 @@ import { TenantEntity } from './tenant.entity';
 
 export enum TenantRole {
   OWNER = 'owner',
+  MANAGER = 'manager',
+  CASHIER = 'cashier',
 }
 
 /** Membership of an account in a store, with its role (ADR-0008). */

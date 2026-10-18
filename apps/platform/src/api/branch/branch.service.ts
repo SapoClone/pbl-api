@@ -9,6 +9,12 @@ import {
   TenantContext,
   TenantScopedRepository,
 } from '@pbl/common';
+import {
+  BranchEventPayload,
+  PLATFORM_BRANCH_CREATED,
+  PLATFORM_BRANCH_UPDATED,
+} from '@pbl/contracts';
+import { EventOutbox } from '@pbl/events';
 import { plainToInstance } from 'class-transformer';
 import { EntityManager } from 'typeorm';
 import { TenantEntity } from '../tenant/entities/tenant.entity';
@@ -27,6 +33,7 @@ export class BranchService {
   constructor(
     @InjectTenantScopedRepository(BranchEntity)
     private readonly branches: TenantScopedRepository<BranchEntity>,
+    private readonly outbox: EventOutbox,
   ) {}
 
   async list(
@@ -76,7 +83,17 @@ export class BranchService {
       createdBy: accountId,
       updatedBy: accountId,
     });
-    return (await this.save(branch)).toDto(BranchResDto);
+    // the event commits with the branch, or neither does
+    const saved = await this.branches.transaction(async (branches, em) => {
+      const row = await this.save(branch, branches);
+      await this.outbox.add(
+        em,
+        PLATFORM_BRANCH_CREATED,
+        this.eventPayload(row),
+      );
+      return row;
+    });
+    return saved.toDto(BranchResDto);
   }
 
   async update(
@@ -103,11 +120,26 @@ export class BranchService {
       return (
         await this.branches.transaction(async (branches, em) => {
           await this.assertNotLastActive(branches, em);
-          return this.save(branch, branches);
+          const row = await this.save(branch, branches);
+          await this.outbox.add(
+            em,
+            PLATFORM_BRANCH_UPDATED,
+            this.eventPayload(row),
+          );
+          return row;
         })
       ).toDto(BranchResDto);
     }
-    return (await this.save(branch)).toDto(BranchResDto);
+    const saved = await this.branches.transaction(async (branches, em) => {
+      const row = await this.save(branch, branches);
+      await this.outbox.add(
+        em,
+        PLATFORM_BRANCH_UPDATED,
+        this.eventPayload(row),
+      );
+      return row;
+    });
+    return saved.toDto(BranchResDto);
   }
 
   async remove(id: string): Promise<void> {
@@ -116,10 +148,41 @@ export class BranchService {
       await this.branches.transaction(async (branches, em) => {
         await this.assertNotLastActive(branches, em);
         await branches.softDelete({ id: branch.id });
+        await this.outbox.add(
+          em,
+          PLATFORM_BRANCH_UPDATED,
+          this.eventPayload(branch, 'deleted'),
+        );
       });
       return;
     }
-    await this.branches.softDelete({ id: branch.id });
+    await this.branches.transaction(async (branches, em) => {
+      await branches.softDelete({ id: branch.id });
+      await this.outbox.add(
+        em,
+        PLATFORM_BRANCH_UPDATED,
+        this.eventPayload(branch, 'deleted'),
+      );
+    });
+  }
+
+  /** What other services learn about a branch (the BranchProjection fields) */
+  private eventPayload(
+    branch: BranchEntity,
+    status: string = branch.status,
+  ): BranchEventPayload {
+    return {
+      id: branch.id,
+      code: branch.code,
+      name: branch.name,
+      isWarehouse: branch.isWarehouse,
+      status,
+      // a soft delete does not touch updatedAt, and consumers ignore an older event
+      updatedAt: (status === 'deleted'
+        ? new Date()
+        : (branch.updatedAt ?? new Date())
+      ).toISOString(),
+    };
   }
 
   private async find(id: string): Promise<BranchEntity> {

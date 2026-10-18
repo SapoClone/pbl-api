@@ -169,3 +169,65 @@ jobs:
 
       - name: Build docs
         run: pnpm docs:build
+
+  integration:
+    # the event bus, sales and insight against a real Postgres and a real SQS (ADR-0007); ElasticMQ is
+    # the same stand-in docker-compose uses, its default node address is localhost
+    name: Integration (event bus, sales, insight)
+    timeout-minutes: 15
+    if: |
+      !contains(github.event.pull_request.labels.*.name, 'skip-ci') &&
+      !contains(github.event.pull_request.labels.*.name, 'skip-actions')
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pbl
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pbl"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      elasticmq:
+        image: softwaremill/elasticmq-native:latest
+        ports:
+          - 9324:9324
+    env:
+      EVENTS_IT_DB_PORT: '5432'
+      AWS_ENDPOINT_URL_SQS: http://localhost:9324
+    steps:
+      - name: Copy repository
+        uses: actions/checkout@v4
+      - name: Install Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Integration tests
+        run: pnpm test:int

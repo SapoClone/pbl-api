@@ -131,6 +131,24 @@ done, production clients call platform directly.
     request id is the thread that ties a gateway error to the service logs.
   - Introduce per-environment config (KrakenD flexible config or a
     separate file) so the local and production settings don't diverge.
+- [ ] **Event bus** (ADR-0007, [guide](guides/events.md)). Locally it runs on ElasticMQ; the
+  production transport has never run, so check each item and then do the smoke test:
+  - Create one SNS topic per producer (`pbl-<producer>-events`) and, for each consumer in
+    `libs/contracts/src/topology.ts`, a queue `<service>-events` with a DLQ
+    `<service>-events-dlq` and a redrive policy (`maxReceiveCount` 3, DLQ retention 14 days).
+  - Subscribe each queue to the topics it consumes with **raw message delivery on**, otherwise the
+    body is wrapped in an SNS envelope and every consumer fails. Add a filter policy on the
+    `type` message attribute.
+  - Allow the SNS topic to send to the queue (queue policy) and give each task role
+    `sns:Publish` on its own topic (producers) and `sqs:ReceiveMessage`, `DeleteMessage`,
+    `GetQueueUrl`, `GetQueueAttributes` on its own queue (consumers).
+  - Set `EVENTS_TRANSPORT=sns` and `EVENTS_TOPIC_ARN` on every producing service; consumers only
+    need the region. Add an alarm on every DLQ (messages visible > 0).
+  - Neon: every service connects with its own `DATABASE_SCHEMA`; `PblDatabaseModule` runs its
+    migrations at start (platform: `pnpm migration:up`).
+  - **Smoke test, once, on the real AWS:** sign in, create a branch, and check that
+    `sales.branch_projection` has it within a few seconds and that no DLQ has a message. Then run
+    `node scripts/redrive-dlq.js sales` to prove the script works against SQS.
 - [ ] To deploy catalog, inventory, sales, customer, finance, integration and
   insight: give each an image (build with `--build-arg APP_NAME=<service>`;
   `deploy.yml` still builds and pushes only `platform`), an ECS service and the env var

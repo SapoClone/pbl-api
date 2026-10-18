@@ -1,6 +1,7 @@
 import { ErrorCode } from '@/constants/error-code.constant';
 import { ValidationException } from '@/exceptions/validation.exception';
 import { UnauthorizedException } from '@nestjs/common';
+import { PLATFORM_BRANCH_CREATED } from '@pbl/contracts';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { AccountStatus } from '../account/entities/account.entity';
 import { BranchEntity } from '../branch/entities/branch.entity';
@@ -16,9 +17,11 @@ describe('TenantService.create', () => {
   let dataSource: { transaction: jest.Mock; getRepository: jest.Mock };
   let accountRepository: { findOne: jest.Mock };
   let service: TenantService;
+  let outbox: { add: jest.Mock };
 
   beforeEach(() => {
     saved = [];
+    outbox = { add: jest.fn().mockResolvedValue(undefined) };
     tenantRepository = { exists: jest.fn().mockResolvedValue(false) };
     const em = {
       save: jest.fn(async (entity) => {
@@ -41,6 +44,7 @@ describe('TenantService.create', () => {
       tenantRepository as unknown as Repository<TenantEntity>,
       dataSource as unknown as DataSource,
       {} as MembershipService,
+      outbox as never,
     );
   });
 
@@ -70,6 +74,18 @@ describe('TenantService.create', () => {
       isWarehouse: true,
       status: 'active',
     });
+  });
+
+  it('writes the branch.created event of the default branch in the same transaction, for the new store', async () => {
+    await service.create('a1', dto);
+
+    expect(outbox.add).toHaveBeenCalledTimes(1);
+    expect(outbox.add).toHaveBeenCalledWith(
+      expect.anything(),
+      PLATFORM_BRANCH_CREATED,
+      expect.objectContaining({ code: 'CN01', status: 'active' }),
+      { tenantId: 't1' },
+    );
   });
 
   it.each([
@@ -146,6 +162,7 @@ describe('TenantService (read and update)', () => {
       tenantRepository as unknown as Repository<TenantEntity>,
       {} as DataSource,
       membershipService as unknown as MembershipService,
+      { add: jest.fn() } as never,
     );
   });
 

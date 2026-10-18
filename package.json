@@ -58,9 +58,12 @@
     "build:libs": "node scripts/build-libs.mjs",
     "pack:libs": "pnpm build:libs && pnpm --dir libs/common pack --pack-destination ../../dist/packs && pnpm --dir libs/auth pack --pack-destination ../../dist/packs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
-    "test:libs": "jest libs"
+    "test:libs": "jest libs",
+    "test:int": "jest --config libs/events/test/jest-int.json",
+    "redrive:dlq": "node scripts/redrive-dlq.js"
   },
   "dependencies": {
+    "@aws-sdk/client-sns": "^3.1129.0",
     "@aws-sdk/client-sqs": "^3.1129.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/cache-manager": "^2.3.0",
@@ -154,7 +157,9 @@
     },
     "moduleNameMapper": {
       "^@pbl/auth(|/.*)$": "<rootDir>/libs/auth/src$1",
-      "^@pbl/common(|/.*)$": "<rootDir>/libs/common/src$1"
+      "^@pbl/common(|/.*)$": "<rootDir>/libs/common/src$1",
+      "^@pbl/contracts(|/.*)$": "<rootDir>/libs/contracts/src$1",
+      "^@pbl/events(|/.*)$": "<rootDir>/libs/events/src$1"
     }
   }
 }

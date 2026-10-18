@@ -29,12 +29,14 @@
         "Accept",
         "Accept-Language",
         "x-lang",
-        "X-Request-Id"
+        "X-Request-Id",
+        "Idempotency-Key"
       ],
       "expose_headers": [
         "Content-Length",
         "Content-Type",
-        "X-Request-Id"
+        "X-Request-Id",
+        "Idempotency-Replayed"
       ],
       "allow_credentials": true,
       "max_age": "12h"
@@ -1395,6 +1397,228 @@
       ]
     },
     {
+      "endpoint": "/platform/api/v1/tenants/current/members",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/tenants/current/members",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/tenants/current/members",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/tenants/current/members",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/tenants/current/members/{accountId}",
+      "method": "PATCH",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/tenants/current/members/{accountId}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
       "endpoint": "/catalog/health",
       "method": "GET",
       "output_encoding": "no-op",
@@ -1531,6 +1755,154 @@
       ]
     },
     {
+      "endpoint": "/insight/api/v1/audit-logs",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/audit-logs",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/sales-summary/daily",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/sales-summary/daily",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
       "endpoint": "/inventory/health",
       "method": "GET",
       "output_encoding": "no-op",
@@ -1565,6 +1937,154 @@
       ]
     },
     {
+      "endpoint": "/inventory/api/v1/stock-receipts",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-receipts",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
       "endpoint": "/sales/health",
       "method": "GET",
       "output_encoding": "no-op",
@@ -1597,6 +2117,229 @@
           }
         }
       ]
+    },
+    {
+      "endpoint": "/sales/api/v1/orders",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/orders",
+          "encoding": "no-op",
+          "host": [
+            "http://sales:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "sales-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/sales/api/v1/orders",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/orders",
+          "encoding": "no-op",
+          "host": [
+            "http://sales:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "sales-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/sales/api/v1/orders/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/orders/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://sales:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "sales-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
     },
     {
       "endpoint": "/customer/health",
