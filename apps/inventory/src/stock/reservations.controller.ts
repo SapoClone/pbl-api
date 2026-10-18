@@ -16,6 +16,7 @@ import { ROLES, StockReservation } from '@pbl/contracts';
 import type { Response } from 'express';
 import { ReserveStockReqDto } from './dto/stock.dto';
 import {
+  ReservationMismatchError,
   ReservationsService,
   StockShortageError,
 } from './reservations.service';
@@ -49,6 +50,12 @@ export class ReservationsController {
           errorCode: InventoryErrorCode.OUT_OF_STOCK,
           message: 'Not enough stock for this order',
           details: error.shortages,
+        });
+      }
+      if (error instanceof ReservationMismatchError) {
+        throw new ConflictException({
+          errorCode: InventoryErrorCode.RESERVATION_MISMATCH,
+          message: error.message,
         });
       }
       throw error;

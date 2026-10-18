@@ -234,11 +234,12 @@ describe('sales (Postgres)', () => {
       expect(results.filter((r) => r.replayed)).toHaveLength(1);
       expect(await dataSource.getRepository(OrderEntity).count()).toBe(1);
       expect(await dataSource.getRepository(OutboxEventEntity).count()).toBe(1);
-      // every hold asked for beyond the one that became the order is given back
-      // (how many attempts reached inventory depends on timing)
-      expect(inventory.release).toHaveBeenCalledTimes(
-        inventory.reserve.mock.calls.length - 1,
+      // both attempts asked for the same hold (same order id), and none gave it back
+      const ids = new Set(
+        inventory.reserve.mock.calls.map((c: unknown[]) => c[0]),
       );
+      expect(ids.size).toBe(1);
+      expect(inventory.release).not.toHaveBeenCalled();
     });
   });
 

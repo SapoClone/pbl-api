@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { TenantContext } from '@pbl/common';
 import { SALES_ORDER_COMPLETED } from '@pbl/contracts';
 import { QueryFailedError } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
@@ -62,6 +63,10 @@ describe('OrdersService', () => {
       outbox as never,
       inventory as never,
     );
+    // every request runs inside a tenant (the hold is keyed by tenant and key)
+    const create = service.create.bind(service);
+    service.create = (...args) =>
+      TenantContext.run('t1', () => create(...args));
     // the line repository is built with TenantScopedRepository.forEntity(em, ...)
     jest
       .spyOn(
@@ -183,6 +188,34 @@ describe('OrdersService', () => {
       expect(inventory.release).toHaveBeenCalledWith(orderId);
     });
 
+    it('keeps the stock held when the order exists after the error (lost reply after COMMIT)', async () => {
+      orders.transaction.mockRejectedValue(new Error('connection lost'));
+      orders.findOne
+        .mockResolvedValueOnce(null) // the first lookup
+        .mockResolvedValue(new OrderEntity()); // the order is there after all
+
+      await expect(service.create('acc-1', KEY, dto())).rejects.toThrow(
+        'connection lost',
+      );
+
+      expect(inventory.release).not.toHaveBeenCalled();
+    });
+
+    it('asks for the same hold for the same key, and a different one for another key', async () => {
+      await service.create('acc-1', KEY, dto());
+      await service.create('acc-1', KEY, dto());
+      await service.create(
+        'acc-1',
+        'cccccccc-3333-4333-8333-333333333333',
+        dto(),
+      );
+
+      const [a, b, c] = inventory.reserve.mock.calls.map((call) => call[0]);
+      expect(a).toBe(b);
+      expect(c).not.toBe(a);
+      expect(a).toMatch(/^[0-9a-f-]{36}$/);
+    });
+
     it('does not touch inventory for a retried request', async () => {
       orders.findOne.mockResolvedValue(
         Object.assign(new OrderEntity(), {
@@ -283,8 +316,8 @@ describe('OrdersService', () => {
       const result = await service.create('acc-1', KEY, dto());
 
       expect(result).toMatchObject({ replayed: true, order: { id: 'o1' } });
-      // the loser's own hold is given back
-      expect(inventory.release).toHaveBeenCalled();
+      // the hold is shared with the winner (same order id): it is not given back
+      expect(inventory.release).not.toHaveBeenCalled();
     });
 
     it('rethrows other database errors', async () => {

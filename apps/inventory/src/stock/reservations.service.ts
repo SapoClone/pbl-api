@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { TenantContext } from '@pbl/common';
 import {
@@ -11,13 +11,22 @@ import {
 import { qualifiedTable } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
-import { mergeLines } from './stock-lines';
+import { RESERVATION_TTL_MINUTES } from '../config/inventory.config';
+import { mergeLines, sameLines } from './stock-lines';
 
 /** Thrown inside the reservation transaction so that it rolls back and nothing is held */
 export class StockShortageError extends Error {
   constructor(readonly shortages: StockShortage[]) {
     super('Not enough stock');
     this.name = 'StockShortageError';
+  }
+}
+
+/** The order id is already held for other lines or another branch */
+export class ReservationMismatchError extends Error {
+  constructor() {
+    super('The order is already held for different lines');
+    this.name = 'ReservationMismatchError';
   }
 }
 
@@ -45,10 +54,11 @@ type ReservationRow = {
 @Injectable()
 export class ReservationsService {
   private readonly logger = new Logger(ReservationsService.name);
-  private readonly ttlMinutes =
-    Number(process.env.INVENTORY_RESERVATION_TTL_MINUTES) || 15;
 
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    @Inject(RESERVATION_TTL_MINUTES) private readonly ttlMinutes: number,
+  ) {}
 
   /**
    * Holds every line, or nothing: one conditional UPDATE per line
@@ -65,6 +75,13 @@ export class ReservationsService {
       if (!id) {
         const existing = await this.findByOrder(em, tenantId, request.orderId);
         if (existing && ['held', 'committed'].includes(existing.status)) {
+          const held = await this.toReservation(em, existing);
+          if (
+            existing.branch_id !== request.branchId ||
+            !sameLines(held.lines, request.lines)
+          ) {
+            throw new ReservationMismatchError();
+          }
           return {
             created: false,
             reservation: await this.toReservation(em, existing),
@@ -166,6 +183,19 @@ export class ReservationsService {
             `Order ${order.code}: ${line.sku} short by ${line.quantity - take} when the hold had gone`,
           );
         }
+        if (take < line.quantity) {
+          // the gap is on record: a zero-change row, so on-hand stays a true count
+          await this.ledger(
+            em,
+            tenantId,
+            branchId,
+            line.sku,
+            0,
+            item?.free ?? 0,
+            'sale_shortfall',
+            order.orderId,
+          );
+        }
         if (take === 0) continue;
       }
       const [rows] = await em.query(
@@ -196,21 +226,39 @@ export class ReservationsService {
     }
   }
 
-  /** Expires the holds past their time and gives the stock back. Returns how many. */
+  /**
+   * Expires the holds past their time and gives the stock back. Returns how many.
+   * One transaction per hold, so a row that fails cannot block the ones after it.
+   */
   async expireDue(limit = 50): Promise<number> {
-    return this.dataSource.transaction(async (em) => {
-      const t = (name: string) => qualifiedTable(em.connection, name);
-      const due: (ReservationRow & { tenant_id: string })[] = await em.query(
-        `SELECT * FROM ${t('stock_reservation')}
-          WHERE "status" = 'held' AND "expires_at" < now()
-          ORDER BY "expires_at" LIMIT $1 FOR UPDATE SKIP LOCKED`,
-        [limit],
-      );
-      for (const row of due) {
-        await this.giveBack(em, row.tenant_id, row, 'expired');
+    const due: { id: string }[] = await this.dataSource.query(
+      `SELECT "id" FROM ${qualifiedTable(this.dataSource, 'stock_reservation')}
+        WHERE "status" = 'held' AND "expires_at" < now()
+        ORDER BY "expires_at" LIMIT $1`,
+      [limit],
+    );
+    let expired = 0;
+    for (const { id } of due) {
+      try {
+        const done = await this.dataSource.transaction(async (em) => {
+          const [row] = await em.query(
+            `SELECT * FROM ${qualifiedTable(em.connection, 'stock_reservation')}
+              WHERE "id" = $1 AND "status" = 'held' AND "expires_at" < now()
+              FOR UPDATE SKIP LOCKED`,
+            [id],
+          );
+          if (!row) return false;
+          await this.giveBack(em, row.tenant_id, row, 'expired');
+          return true;
+        });
+        if (done) expired++;
+      } catch (error) {
+        this.logger.error(
+          `Could not expire hold ${id}: ${(error as Error).message}`,
+        );
       }
-      return due.length;
-    });
+    }
+    return expired;
   }
 
   // ---- internals
@@ -257,7 +305,7 @@ export class ReservationsService {
   ): Promise<StockLine[]> {
     const rows = await em.query(
       `SELECT "sku", "quantity" FROM ${qualifiedTable(em.connection, 'stock_reservation_item')}
-        WHERE "reservation_id" = $1 ORDER BY "sku"`,
+        WHERE "reservation_id" = $1 ORDER BY "sku" COLLATE "C"`,
       [reservationId],
     );
     return rows.map((r: StockLine) => ({ sku: r.sku, quantity: r.quantity }));

@@ -9,6 +9,10 @@ import {
 } from '@pbl/events';
 import { BranchProjectionEntity } from './branches/branch-projection.entity';
 import { BranchProjectionHandler } from './branches/branch-projection.handler';
+import {
+  RESERVATION_TTL_MINUTES,
+  readReservationTtlMinutes,
+} from './config/inventory.config';
 import { CreateInventoryTables1791900000000 } from './migrations/1791900000000-create-inventory-tables';
 import {
   InventoryLedgerEntity,
@@ -48,6 +52,10 @@ import { StockService } from './stock/stock.service';
   providers: [
     StockService,
     ReservationsService,
+    {
+      provide: RESERVATION_TTL_MINUTES,
+      useFactory: () => readReservationTtlMinutes(),
+    },
     ReservationExpiryJob,
     OrderCompletedHandler,
     BranchProjectionHandler,

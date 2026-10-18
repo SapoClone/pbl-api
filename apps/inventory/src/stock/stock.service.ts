@@ -17,6 +17,7 @@ import { mergeLines } from './stock-lines';
 export const InventoryErrorCode = {
   UNKNOWN_BRANCH: 'I001',
   OUT_OF_STOCK: 'I002',
+  RESERVATION_MISMATCH: 'I003',
 } as const;
 
 export interface StockRes {

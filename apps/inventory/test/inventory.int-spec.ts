@@ -24,6 +24,7 @@ import {
   StockReservationItemEntity,
 } from '../src/stock/entities/stock.entities';
 import {
+  ReservationMismatchError,
   ReservationsService,
   StockShortageError,
 } from '../src/stock/reservations.service';
@@ -128,7 +129,7 @@ describe('inventory (Postgres)', () => {
         ],
       }),
     );
-    reservations = new ReservationsService(dataSource);
+    reservations = new ReservationsService(dataSource, 15);
     stock = new StockService(
       dataSource,
       TenantScopedRepository.forEntity(dataSource, StockItemEntity),
@@ -263,6 +264,15 @@ describe('inventory (Postgres)', () => {
 
       expect(retry.created).toBe(false);
       expect(retry.reservation.status).toBe('held');
+      expect(await item(TENANT_A, 'AO-01')).toEqual({ onHand: 5, reserved: 3 });
+    });
+
+    it('refuses to reuse an order id for other lines', async () => {
+      const first = await reserve(TENANT_A, [{ sku: 'AO-01', quantity: 3 }]);
+
+      await expect(
+        reserve(TENANT_A, [{ sku: 'AO-01', quantity: 1 }], first.orderId),
+      ).rejects.toBeInstanceOf(ReservationMismatchError);
       expect(await item(TENANT_A, 'AO-01')).toEqual({ onHand: 5, reserved: 3 });
     });
 
@@ -494,6 +504,28 @@ describe('inventory (Postgres)', () => {
       // only 1 was free: it is deducted, the other hold keeps its 4
       expect(await item(TENANT_A, 'AO-01')).toEqual({ onHand: 4, reserved: 4 });
     });
+
+    it('records the gap in the ledger when the hold had gone and stock was short', async () => {
+      const late = await reserve(TENANT_A, [{ sku: 'AO-01', quantity: 3 }]);
+      await dataSource.query(
+        `UPDATE ${table('stock_reservation')} SET "expires_at" = now() - interval '1 minute'`,
+      );
+      await reservations.expireDue();
+      await reserve(TENANT_A, [{ sku: 'AO-01', quantity: 5 }]);
+
+      await commit(
+        TENANT_A,
+        completed(late.orderId, [{ sku: 'AO-01', quantity: 3 }]),
+      );
+
+      const rows = await dataSource.query(
+        `SELECT "change_qty" FROM ${table('inventory_ledger')}
+          WHERE "ref_type" = 'sale_shortfall' AND "ref_id" = $1`,
+        [late.orderId],
+      );
+      expect(rows).toHaveLength(1);
+      expect(await item(TENANT_A, 'AO-01')).toEqual({ onHand: 5, reserved: 5 });
+    });
   });
 
   describe('expiry', () => {
@@ -516,6 +548,31 @@ describe('inventory (Postgres)', () => {
         [stale.orderId],
       );
       expect(row.status).toBe('expired');
+    });
+
+    it('expires the other holds when one of them cannot be given back', async () => {
+      const broken = await reserve(TENANT_A, [{ sku: 'AO-01', quantity: 2 }]);
+      await receive(TENANT_A, [{ sku: 'QUAN-02', quantity: 4 }]);
+      const fine = await reserve(TENANT_A, [{ sku: 'QUAN-02', quantity: 1 }]);
+      // corrupt the first one: giving it back would push reserved below zero
+      await dataSource.query(
+        `UPDATE ${table('stock_item')} SET "quantity_reserved" = 0 WHERE "sku" = 'AO-01'`,
+      );
+      await dataSource.query(
+        `UPDATE ${table('stock_reservation')} SET "expires_at" = now() - interval '1 minute'`,
+      );
+
+      expect(await reservations.expireDue()).toBe(1);
+
+      const status = async (orderId: string) =>
+        (
+          await dataSource.query(
+            `SELECT "status" FROM ${table('stock_reservation')} WHERE "order_id" = $1`,
+            [orderId],
+          )
+        )[0].status;
+      expect(await status(fine.orderId)).toBe('expired');
+      expect(await status(broken.orderId)).toBe('held');
     });
 
     it('works across stores and leaves completed holds alone', async () => {

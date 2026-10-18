@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   InjectTenantScopedRepository,
+  TenantContext,
   TenantScopedRepository,
 } from '@pbl/common';
 import { OrderCompletedPayload, SALES_ORDER_COMPLETED } from '@pbl/contracts';
@@ -28,6 +29,8 @@ export const SalesErrorCode = {
   OUT_OF_STOCK: 'S004',
 } as const;
 
+/** The order id derives from the key, so a racing retry can hit the primary key first */
+const ORDER_PRIMARY_KEY = 'PK_orders_id';
 const IDEMPOTENCY_INDEX = 'UQ_orders_tenant_idempotency_key';
 
 export interface Page<T> {
@@ -61,6 +64,14 @@ export function hashRequest(dto: CreateOrderReqDto): string {
     .digest('hex');
 }
 
+/** A stable UUID for the order of this tenant and key (the hold is keyed by it) */
+function orderIdFor(tenantId: string, idempotencyKey: string): string {
+  const h = createHash('sha256')
+    .update(`${tenantId}:${idempotencyKey}`)
+    .digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
 /**
  * Sells at the counter: the order, its lines and the `sales.order.completed`
  * event commit in one transaction. Every read and write is scoped to the
@@ -90,8 +101,10 @@ export class OrdersService {
 
     await this.assertActiveBranch(dto.branchId);
 
-    // The order id is the reservation key, so it exists before the order does
-    const orderId = randomUUID();
+    // The order id is the reservation key, so it exists before the order does. It
+    // derives from the Idempotency-Key: a concurrent retry asks for the same hold
+    // (inventory is idempotent per order) instead of taking a second one.
+    const orderId = orderIdFor(TenantContext.require(), idempotencyKey);
     const shortages = await this.inventory.reserve(
       orderId,
       dto.branchId,
@@ -157,13 +170,13 @@ export class OrdersService {
       });
       return { order: toOrderRes(saved), replayed: false };
     } catch (error) {
-      // The order was not created: give the stock back now (the hold expires anyway)
-      await this.inventory.release(orderId);
-      // Two requests with the same key raced past the lookup; the index decided
+      // Two requests with the same key raced past the lookup; the index decided.
+      // They share one hold, which belongs to the winner: nothing to give back.
       if (this.isKeyViolation(error)) {
         const winner = await this.findByKey(idempotencyKey);
         if (winner) return this.replay(winner, requestHash);
       }
+      await this.releaseUnlessCreated(orderId, idempotencyKey);
       throw error;
     }
   }
@@ -200,6 +213,23 @@ export class OrdersService {
     return toOrderRes(order);
   }
 
+  /**
+   * Gives the stock back after a failure, but only when the order is known not to
+   * exist: an error after COMMIT (a dropped connection) must not free stock that a
+   * stored order has sold. When that cannot be told, the hold expires by itself.
+   */
+  private async releaseUnlessCreated(
+    orderId: string,
+    idempotencyKey: string,
+  ): Promise<void> {
+    try {
+      if (await this.findByKey(idempotencyKey)) return;
+      await this.inventory.release(orderId);
+    } catch {
+      // the hold expires after its time to live
+    }
+  }
+
   private findByKey(idempotencyKey: string): Promise<OrderEntity | null> {
     return this.orders.findOne({
       where: { idempotencyKey },
@@ -225,7 +255,8 @@ export class OrdersService {
     return (
       error instanceof QueryFailedError &&
       driver?.code === '23505' &&
-      driver?.constraint === IDEMPOTENCY_INDEX
+      (driver?.constraint === IDEMPOTENCY_INDEX ||
+        driver?.constraint === ORDER_PRIMARY_KEY)
     );
   }
 
