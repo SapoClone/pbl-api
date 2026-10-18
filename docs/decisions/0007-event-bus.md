@@ -1,6 +1,6 @@
 # ADR-0007: Services share data through an event bus (outbox → SNS → SQS)
 
-- **Status:** Accepted (direction, 2026-10-10). Amended by [ADR-0010](0010-eight-services.md): the one synchronous command is the stock reservation from `sales` to `inventory`. Detailed design in the P1 spec of the [catalog & commerce roadmap](../specs/2026-10-10-catalog-commerce-roadmap.md); not built yet.
+- **Status:** Accepted (direction, 2026-10-10). Amended by [ADR-0010](0010-eight-services.md) and by the P1 spec (local transport): the one synchronous command is the stock reservation from `sales` to `inventory`. Detailed design in the P1 spec of the [catalog & commerce roadmap](../specs/2026-10-10-catalog-commerce-roadmap.md); not built yet.
 - **Date:** 2026-10-10
 - **Scope:** every service that needs another service's data; `libs/events`, `libs/contracts`, docker-compose, pbl-infra
 
@@ -52,17 +52,18 @@ architecture is an SNS/SQS bus with outbox/inbox (~20 domain events).
   - **Publish retry** is the relay's job: an outbox row stays pending, and is
     retried with backoff, until SNS accepts it. A row that keeps failing is
     flagged, not dropped.
-- **Local parity (required):** LocalStack (SNS + SQS) replaces ElasticMQ in
-  docker-compose. It is created from the same queue/topic/DLQ/redrive
-  definitions as production, so retries and dead-lettering behave the same
-  locally. The existing `email-verification` queue moves there too, with its
-  DLQ, and pbl-mail-service runs locally as a LocalStack Lambda behind the
-  queue. Automated tests must cover:
-  - a failing consumer → the message is retried, then lands in the DLQ after
+- **Local transport (amended 2026-10-18, [P1 spec](../specs/2026-10-18-p1-event-bus-design.md)):**
+  production is SNS to SQS. Locally the same `EventPublisher` interface has a
+  direct-to-queue adapter on ElasticMQ, which is already in docker-compose, so
+  no LocalStack is needed. Queues, DLQs and redrive policies are created from
+  one topology file. Automated tests must cover:
+  - a failing consumer: the message is retried, then lands in the DLQ after
     3 receives;
-  - redrive from the DLQ → it is processed;
-  - a duplicate delivery → the inbox ignores it;
-  - SNS unavailable → outbox rows are published once it is back.
+  - redrive from the DLQ: it is processed;
+  - a duplicate delivery: the inbox ignores it;
+  - the publisher failing and recovering: outbox rows are published once.
+  (The earlier requirement of LocalStack with pbl-mail-service as a local
+  Lambda is dropped; the email path is not an event.)
 
 ## Consequences
 
