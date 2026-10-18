@@ -33,6 +33,10 @@ USER node
 FROM base AS builder
 WORKDIR /app
 
+# The service to build and run: platform, catalog, inventory, sales, ...
+# One image per service: docker build --build-arg APP_NAME=<service> --target production .
+ARG APP_NAME=platform
+
 COPY --chown=node:node package*.json pnpm-lock.yaml ./
 COPY --chown=node:node --from=development /app/node_modules ./node_modules
 COPY --chown=node:node --from=development /app/apps ./apps
@@ -41,7 +45,7 @@ COPY --chown=node:node --from=development /app/tsconfig.json ./tsconfig.json
 COPY --chown=node:node --from=development /app/tsconfig.build.json ./tsconfig.build.json
 COPY --chown=node:node --from=development /app/nest-cli.json ./nest-cli.json
 
-RUN pnpm build
+RUN pnpm build:${APP_NAME}
 
 # Removes unnecessary packages adn re-install only production dependencies
 ENV NODE_ENV production
@@ -57,6 +61,9 @@ USER node
 FROM node:24-alpine AS production
 WORKDIR /app
 
+ARG APP_NAME=platform
+ENV APP_NAME=${APP_NAME}
+
 RUN mkdir -p apps/platform/src/generated && chown -R node:node apps
 
 # Copy the bundled code from the build stage to the production image
@@ -69,4 +76,4 @@ USER node
 
 # Start the server using the production build
 # Apps import shared code from libs/, so tsc keeps the repo-relative path
-CMD [ "node", "dist/apps/platform/apps/platform/src/main.js" ]
+CMD [ "sh", "-c", "exec node dist/apps/${APP_NAME}/apps/${APP_NAME}/src/main.js" ]
