@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-10
 - **Status:** Approved (sequence and cross-cutting rules); each sub-project gets its own design spec before implementation
+- **Update 2026-10-18:** `commerce` no longer exists; P3–P9 are built in `inventory`, `customer`, `sales` and `catalog` ([ADR-0010](../decisions/0010-eight-services.md), [eight-service design](2026-10-18-eight-service-decomposition-design.md)). The sequence is unchanged.
 - **Related:** [ADR-0007 event bus](../decisions/0007-event-bus.md), [ADR-0008 tenancy](../decisions/0008-tenancy.md), pbl-infra `docs/erd_viewer.html`
 
 ## Goal
@@ -39,13 +40,13 @@ Each row is its own spec → plan → implementation cycle.
 | P0 | Platform tenancy | Account, Tenant, Branch, AccountTenant(role); create store; select/switch tenant; `tid` + `roles` claims; `@pbl/auth` tenant support. Spec: [P0 design](2026-10-10-p0-platform-tenancy-design.md) | — (foundation) |
 | P1 | Event bus | `libs/events`: transactional outbox (publish retry with backoff) and idempotent inbox per service schema, relay to SNS, SQS consumers with per-message failure reporting; a DLQ + redrive policy (`maxReceiveCount` 3) on every queue and SNS subscription, plus a redrive script; versioned contracts in `libs/contracts`; LocalStack (SNS+SQS+Lambda) replaces ElasticMQ with the same definitions as production, running pbl-mail-service locally; tests for retry → DLQ, redrive, duplicates, SNS outage. (The tenant-scoped repository and `EventEnvelope` already exist in `@pbl/common`, built by the service-foundations work; P1 builds on them.) | — (foundation) |
 | P2 | Catalog core | Category, Brand, Attribute/Value, Product, ProductVariant, VariantAttributeValue; CRUD + search; publishes `catalog.variant.*` | Products |
-| P3 | Commerce · inventory | Variant read model (from P2 events), StockItem, StockThreshold, InventoryLedger, receipts/issues (stock in/out/correction), transfers, stock takes, low-stock query | Inventory, stock take, alerts |
-| P4 | Commerce · customers | CustomerGroup, Customer, CustomerAddress, MembershipTier, LoyaltyAccount/Transaction/Setting | Customers |
-| P5 | Commerce · sales (POS) | SalesChannel, Shift, Order/OrderItem/Payment/OrderStatusHistory; stock deduction in the same transaction; loyalty points; returns; optimistic locking (`version`) | Orders |
+| P3 | `inventory` | Variant read model (from P2 events), StockItem, StockThreshold, StockReservation (hold, commit, release, expiry), InventoryLedger, receipts/issues (stock in/out/correction), transfers, stock takes, low-stock query | Inventory, stock take, alerts |
+| P4 | `customer` | CustomerGroup, Customer, CustomerAddress, MembershipTier, LoyaltyAccount/Transaction/Setting | Customers |
+| P5 | `sales` (POS) | SalesChannel, Shift, Order/OrderItem/Payment/OrderStatusHistory; stock reserved in `inventory` through the internal reservation command, deducted on `order.completed`; loyalty points through `customer` events; returns; optimistic locking (`version`) | Orders |
 | P6 | Insight · dashboard | Read models fed by order and stock events: daily revenue, best sellers, low-stock count | Home |
-| P7 | Promotions & coupons | Promotion, conditions, benefits, Coupon, usage; applied to order pricing in P5 | Full POS |
-| P8 | Catalog advanced | ComboItem, UnitConversion, PriceList (+channel, customer group) | Full POS |
-| P9 | Purchasing | Supplier, PurchaseOrder → stock receipts | — |
+| P7 | `sales` · promotions & coupons | Promotion, conditions, benefits, Coupon, usage; applied to order pricing in P5 | Full POS |
+| P8 | `catalog` · advanced | ComboItem, UnitConversion, PriceList (+channel, customer group) | Full POS |
+| P9 | `inventory` · purchasing | Supplier, PurchaseOrder → stock receipts | — |
 
 Deferred beyond P9: Staff login and RBAC (permissions in tokens,
 `@RequirePermission`), plans/subscriptions, finance, integration
@@ -61,13 +62,14 @@ non-owners.
 2. **Data across services only through events ([ADR-0007](../decisions/0007-event-bus.md)).**
    No runtime REST calls between services for business data and no
    cross-schema reads (ADR-0002). A consumer keeps its own read model (e.g.
-   commerce's copy of variants). Orders store a snapshot of name, SKU and
+   inventory's and sales' copy of variants). The one exception is the stock
+   reservation from `sales` to `inventory` (ADR-0010). Orders store a snapshot of name, SKU and
    price at sale time (the ERD's `OrderItem` columns).
 3. **Events are published through a transactional outbox:** the state change
    and its event commit together. Consumers are idempotent through an inbox
    table, and events carry `tenantId`, `eventId`, `occurredAt`, `version`.
 4. **Ownership follows the service boundaries** in CLAUDE.md. The dashboard
-   belongs to insight, built from events, not by reading commerce tables.
+   belongs to insight, built from events, not by reading sales or inventory tables.
 5. **API conventions:** [docs/conventions/api-conventions.md](../conventions/api-conventions.md):
    gateway path `/<service>/api/v1/<resource>`, every route in `krakend.json`
    with `auth/validator` when protected, `@pbl/auth` in every service,

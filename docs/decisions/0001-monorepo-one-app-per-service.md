@@ -1,14 +1,16 @@
 # ADR-0001: Nest monorepo with one app per microservice
 
-- **Status:** Accepted
+- **Status:** Accepted. Amended by [ADR-0010](0010-eight-services.md): eight services, `commerce` split.
 - **Date:** 2026-09-28 (recorded 2026-10-08)
 - **Scope:** whole repo
 
 ## Context
 
-Sapo Clone is split into 6 bounded contexts (pbl-infra
+Sapo Clone was first split into 6 bounded contexts (pbl-infra
 `docs/architecture.html`): platform, catalog, commerce, finance,
-integration, insight. The team is small, works on a course schedule, and
+integration, insight. ADR-0010 (2026-10-18) split `commerce`, so there are
+now 8: platform, catalog, inventory, sales, customer, finance, integration,
+insight. The team is small, works on a course schedule, and
 shares one toolchain (NestJS 11, TypeORM, pnpm, Node 24). The original
 single NestJS app (from the vndevteam boilerplate) was moved into
 `apps/platform` in PR #2; the other five were scaffolded as stubs that only
@@ -24,10 +26,11 @@ expose `GET /health`.
   task per service) and listens on port 3000 inside its container.
 - Apps never import from each other. Shared code goes through `libs/`
   (ADR-0006).
-- Service boundaries follow the ERD in pbl-infra `docs/erd_viewer.html`;
-  `commerce` deliberately keeps POS, inventory, purchasing, promotions and
-  CRM together so that a sale and its stock movement commit in one
-  database transaction.
+- Service boundaries follow the ERD in pbl-infra `docs/erd_viewer.html` and
+  [ADR-0010](0010-eight-services.md). (The original decision kept POS,
+  inventory, purchasing, promotions and CRM together in `commerce` so a
+  sale and its stock movement committed in one transaction; ADR-0010
+  replaced that with an atomic stock reservation inside `inventory`.)
 
 ## Consequences
 

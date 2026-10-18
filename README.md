@@ -13,8 +13,9 @@
 
 Backend for **Sapo Clone** (PBL6): a Nest CLI monorepo with one app per
 microservice — `platform` (auth, accounts, stores; the only one with business logic
-so far) and `catalog`, `commerce`, `finance`, `integration`, `insight` —
-behind a KrakenD API gateway. Architecture rules and decisions:
+so far) and `catalog`, `inventory`, `sales`, `customer`, `finance`,
+`integration`, `insight` (eight services in all, see
+[ADR-0010](docs/decisions/0010-eight-services.md)) — behind a KrakenD API gateway. Architecture rules and decisions:
 [`CLAUDE.md`](CLAUDE.md) and [`docs/decisions/`](docs/decisions/).
 
 ## Quick start
@@ -72,7 +73,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
 There is no hot reload yet. Rebuild the service you changed:
 
 ```bash
-docker compose up -d --build platform     # or catalog, commerce, ...
+docker compose up -d --build platform     # or catalog, inventory, sales, ...
 ```
 
 Tests and lint run inside the image (see the "Running and verifying"

@@ -6,7 +6,7 @@
 
 ## Context
 
-With 6 services, clients must not know service hostnames/ports, and
+With several services (6 when this was decided, 8 since ADR-0010), clients must not know service hostnames/ports, and
 cross-cutting concerns (CORS, later JWT validation, rate limiting) belong
 in one place. KrakenD is stateless, config-driven (one JSON file), fast,
 and its Community Edition covers what we need. Initially only

@@ -235,7 +235,7 @@ docker compose up -d db redis pgadmin
 
 ### Quick run
 
-The whole stack (6 services, Postgres, Redis, ElasticMQ and the KrakenD
+The whole stack (8 services, Postgres, Redis, ElasticMQ and the KrakenD
 gateway) runs with one command; see **Quick start** in the
 [README](../README.md#quick-start) for prerequisites, URLs and troubleshooting.
 
