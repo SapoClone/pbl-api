@@ -1,6 +1,19 @@
 import { Module } from '@nestjs/common';
 import { PblAuthModule } from '@pbl/auth';
-import { PblHealthModule, PblLoggingModule } from '@pbl/common';
+import { PblHealthModule, PblLoggingModule, TenancyModule } from '@pbl/common';
+import {
+  CONSUMER_ENTITIES,
+  CONSUMER_MIGRATIONS,
+  PblDatabaseModule,
+  PblEventsModule,
+} from '@pbl/events';
+import { AuditLogEntity } from './audit/audit-log.entity';
+import { AuditHandler } from './audit/audit.handler';
+import { InsightQueryService } from './insight-query.service';
+import { InsightController } from './insight.controller';
+import { CreateInsightTables1791800000100 } from './migrations/1791800000100-create-insight-tables';
+import { DailySalesEntity } from './sales-summary/daily-sales.entity';
+import { SalesSummaryHandler } from './sales-summary/sales-summary.handler';
 
 @Module({
   // Every route requires a platform-issued access token unless @Public()
@@ -9,6 +22,14 @@ import { PblHealthModule, PblLoggingModule } from '@pbl/common';
     PblLoggingModule.forRoot('insight'),
     PblAuthModule.forRemoteJwks(),
     PblHealthModule.forRoot({ service: 'insight', redisFromEnv: true }),
+    PblDatabaseModule.forRoot({
+      entities: [AuditLogEntity, DailySalesEntity, ...CONSUMER_ENTITIES],
+      migrations: [...CONSUMER_MIGRATIONS, CreateInsightTables1791800000100],
+    }),
+    PblEventsModule.forRoot({ service: 'insight' }),
+    TenancyModule.forFeature([AuditLogEntity, DailySalesEntity]),
   ],
+  controllers: [InsightController],
+  providers: [InsightQueryService, AuditHandler, SalesSummaryHandler],
 })
 export class AppModule {}

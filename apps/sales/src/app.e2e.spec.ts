@@ -1,8 +1,30 @@
-import { INestApplication } from '@nestjs/common';
-import { bootstrapService } from '@pbl/common';
+import { INestApplication, Module } from '@nestjs/common';
+import { PblAuthModule } from '@pbl/auth';
+import {
+  PblHealthModule,
+  PblLoggingModule,
+  bootstrapService,
+} from '@pbl/common';
 import { AddressInfo } from 'net';
 import request from 'supertest';
-import { AppModule } from './app.module';
+import { OrdersController } from './orders/orders.controller';
+import { OrdersService } from './orders/orders.service';
+
+/**
+ * The service's HTTP shell without a database: logging, auth guard, health and
+ * the orders controller over a stub service. AppModule needs Postgres and the
+ * queue, which the integration tests and the local stack cover.
+ */
+@Module({
+  imports: [
+    PblLoggingModule.forRoot('sales'),
+    PblAuthModule.forRemoteJwks(),
+    PblHealthModule.forRoot({ service: 'sales', redisFromEnv: true }),
+  ],
+  controllers: [OrdersController],
+  providers: [{ provide: OrdersService, useValue: {} }],
+})
+class TestAppModule {}
 
 describe('Sales service bootstrap', () => {
   let app: INestApplication;
@@ -12,7 +34,7 @@ describe('Sales service bootstrap', () => {
     process.env.AUTH_JWKS_URL = 'http://127.0.0.1:1/jwks.json';
     process.env.APP_SWAGGER_ENABLED = 'false';
     delete process.env.REDIS_HOST; // no Redis under test
-    app = await bootstrapService(AppModule, { name: 'sales', port: 0 });
+    app = await bootstrapService(TestAppModule, { name: 'sales', port: 0 });
   });
 
   afterAll(async () => {
@@ -48,5 +70,13 @@ describe('Sales service bootstrap', () => {
       error: 'Not Found',
       timestamp: expect.any(String),
     });
+  });
+
+  it('refuses the orders routes without a token', async () => {
+    await request(url()).get('/api/v1/orders').expect(401);
+    await request(url())
+      .post('/api/v1/orders')
+      .send({ branchId: 'x', items: [] })
+      .expect(401);
   });
 });
