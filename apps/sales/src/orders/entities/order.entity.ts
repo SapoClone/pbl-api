@@ -18,6 +18,10 @@ export const bigintNumber = {
 @Entity('orders')
 @Index('UQ_orders_tenant_code', ['tenantId', 'code'], { unique: true })
 @Index('IDX_orders_tenant_created', ['tenantId', 'createdAt'])
+@Index('UQ_orders_tenant_idempotency_key', ['tenantId', 'idempotencyKey'], {
+  unique: true,
+  where: '"idempotency_key" IS NOT NULL',
+})
 export class OrderEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'PK_orders_id' })
   id!: string;
@@ -54,6 +58,14 @@ export class OrderEntity {
 
   @Column({ name: 'created_by', type: 'uuid' })
   createdBy!: string;
+
+  /** The client's Idempotency-Key: one sale attempt is one order */
+  @Column({ name: 'idempotency_key', type: 'uuid', nullable: true })
+  idempotencyKey!: string | null;
+
+  /** Hash of the request that created the order, to tell a retry from a reused key */
+  @Column({ name: 'request_hash', type: 'varchar', length: 64, nullable: true })
+  requestHash!: string | null;
 
   @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
   createdAt!: Date;

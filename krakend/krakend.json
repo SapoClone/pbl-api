@@ -29,12 +29,14 @@
         "Accept",
         "Accept-Language",
         "x-lang",
-        "X-Request-Id"
+        "X-Request-Id",
+        "Idempotency-Key"
       ],
       "expose_headers": [
         "Content-Length",
         "Content-Type",
-        "X-Request-Id"
+        "X-Request-Id",
+        "Idempotency-Replayed"
       ],
       "allow_credentials": true,
       "max_age": "12h"
@@ -1983,7 +1985,8 @@
         "X-Subject-Type",
         "X-Tenant-Id",
         "X-Roles",
-        "X-Request-Id"
+        "X-Request-Id",
+        "Idempotency-Key"
       ],
       "input_query_strings": [
         "*"

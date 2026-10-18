@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,7 +10,8 @@ import {
 } from '@pbl/common';
 import { OrderCompletedPayload, SALES_ORDER_COMPLETED } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
+import { QueryFailedError } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
 import { CreateOrderReqDto } from './dto/create-order.req.dto';
 import { ListOrdersReqDto } from './dto/list-orders.req.dto';
@@ -20,7 +22,11 @@ import { OrderEntity } from './entities/order.entity';
 /** Error codes of this service (a domain letter plus 3 digits, api-conventions §6) */
 export const SalesErrorCode = {
   UNKNOWN_BRANCH: 'S001',
+  IDEMPOTENCY_KEY_REQUIRED: 'S002',
+  IDEMPOTENCY_KEY_REUSED: 'S003',
 } as const;
+
+const IDEMPOTENCY_INDEX = 'UQ_orders_tenant_idempotency_key';
 
 export interface Page<T> {
   data: T[];
@@ -33,10 +39,32 @@ export interface Page<T> {
   };
 }
 
+export interface CreateOrderResult {
+  order: OrderRes;
+  /** True when the same Idempotency-Key had already created this order */
+  replayed: boolean;
+}
+
+/** What identifies a request: the same key with another body is a client bug */
+export function hashRequest(dto: CreateOrderReqDto): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        branchId: dto.branchId,
+        paymentMethod: dto.paymentMethod,
+        customerName: dto.customerName ?? null,
+        items: dto.items.map((i) => [i.sku, i.name, i.quantity, i.unitPrice]),
+      }),
+    )
+    .digest('hex');
+}
+
 /**
  * Sells at the counter: the order, its lines and the `sales.order.completed`
  * event commit in one transaction. Every read and write is scoped to the
- * token's store by TenantScopedRepository (ADR-0008).
+ * token's store by TenantScopedRepository (ADR-0008). Creating is idempotent
+ * per `Idempotency-Key`, so a client that retries on a bad network never sells
+ * twice.
  */
 @Injectable()
 export class OrdersService {
@@ -48,7 +76,15 @@ export class OrdersService {
     private readonly outbox: EventOutbox,
   ) {}
 
-  async create(accountId: string, dto: CreateOrderReqDto): Promise<OrderRes> {
+  async create(
+    accountId: string,
+    idempotencyKey: string,
+    dto: CreateOrderReqDto,
+  ): Promise<CreateOrderResult> {
+    const requestHash = hashRequest(dto);
+    const earlier = await this.findByKey(idempotencyKey);
+    if (earlier) return this.replay(earlier, requestHash);
+
     await this.assertActiveBranch(dto.branchId);
 
     const orderId = randomUUID();
@@ -74,33 +110,44 @@ export class OrdersService {
     order.itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
     order.createdBy = accountId;
     order.createdAt = new Date();
+    order.idempotencyKey = idempotencyKey;
+    order.requestHash = requestHash;
 
-    const saved = await this.orders.transaction(async (orders, em) => {
-      const row = await orders.save(order);
-      const lines = await TenantScopedRepository.forEntity(
-        em,
-        OrderItemEntity,
-      ).save(items);
-      await this.outbox.add(em, SALES_ORDER_COMPLETED, {
-        orderId: row.id,
-        code: row.code,
-        branchId: row.branchId,
-        totalAmount: row.totalAmount,
-        itemCount: row.itemCount,
-        paymentMethod: row.paymentMethod,
-        createdBy: accountId,
-        completedAt: new Date().toISOString(),
-        items: lines.map((l) => ({
-          sku: l.sku,
-          name: l.name,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-        })),
-      } satisfies OrderCompletedPayload);
-      row.items = lines;
-      return row;
-    });
-    return toOrderRes(saved);
+    try {
+      const saved = await this.orders.transaction(async (orders, em) => {
+        const row = await orders.save(order);
+        const lines = await TenantScopedRepository.forEntity(
+          em,
+          OrderItemEntity,
+        ).save(items);
+        await this.outbox.add(em, SALES_ORDER_COMPLETED, {
+          orderId: row.id,
+          code: row.code,
+          branchId: row.branchId,
+          totalAmount: row.totalAmount,
+          itemCount: row.itemCount,
+          paymentMethod: row.paymentMethod,
+          createdBy: accountId,
+          completedAt: new Date().toISOString(),
+          items: lines.map((l) => ({
+            sku: l.sku,
+            name: l.name,
+            quantity: l.quantity,
+            unitPrice: l.unitPrice,
+          })),
+        } satisfies OrderCompletedPayload);
+        row.items = lines;
+        return row;
+      });
+      return { order: toOrderRes(saved), replayed: false };
+    } catch (error) {
+      // Two requests with the same key raced past the lookup; the index decided
+      if (this.isKeyViolation(error)) {
+        const winner = await this.findByKey(idempotencyKey);
+        if (winner) return this.replay(winner, requestHash);
+      }
+      throw error;
+    }
   }
 
   async list(query: ListOrdersReqDto): Promise<Page<OrderRes>> {
@@ -133,6 +180,35 @@ export class OrdersService {
       throw new NotFoundException();
     }
     return toOrderRes(order);
+  }
+
+  private findByKey(idempotencyKey: string): Promise<OrderEntity | null> {
+    return this.orders.findOne({
+      where: { idempotencyKey },
+      relations: { items: true },
+    });
+  }
+
+  /** The first result for this key, or a conflict when the request is not the same */
+  private replay(order: OrderEntity, requestHash: string): CreateOrderResult {
+    if (order.requestHash !== requestHash) {
+      throw new ConflictException({
+        errorCode: SalesErrorCode.IDEMPOTENCY_KEY_REUSED,
+        message: 'The Idempotency-Key was already used for a different request',
+      });
+    }
+    return { order: toOrderRes(order), replayed: true };
+  }
+
+  private isKeyViolation(error: unknown): boolean {
+    const driver = (error as QueryFailedError)?.driverError as
+      | { code?: string; constraint?: string }
+      | undefined;
+    return (
+      error instanceof QueryFailedError &&
+      driver?.code === '23505' &&
+      driver?.constraint === IDEMPOTENCY_INDEX
+    );
   }
 
   /** A bare branch id from the request is checked against the projection, with the tenant */

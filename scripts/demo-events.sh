@@ -21,11 +21,18 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 step() { echo; echo "== $*"; }
 ok() { echo "   ok: $*"; }
 
+new_uuid() { # portable: Linux, macOS and Git Bash on Windows
+  if [[ -r /proc/sys/kernel/random/uuid ]]; then cat /proc/sys/kernel/random/uuid
+  elif command -v uuidgen >/dev/null 2>&1; then uuidgen | tr 'A-Z' 'a-z'
+  else od -An -N16 -tx1 /dev/urandom | tr -d ' \n' | sed -E 's/(.{8})(.{4}).(.{3}).(.{3})(.{12})/\1-\2-4\3-8\4-\5/'
+  fi
+}
 json_field() { grep -o "\"$1\":\"[^\"]*\"" | sed -n '1s/^[^:]*:"\(.*\)"$/\1/p'; }
-# curl helper: http <method> <url> <token> [json] -> prints "<body>\n<status>"
+# curl helper: http <method> <url> <token> [json] [extra header] -> prints "<body>\n<status>"
 http() {
   local args=(-s -w "\n%{http_code}" -X "$1" -H "Authorization: Bearer $3")
   [[ -z "${4:-}" ]] || args+=(-H "Content-Type: application/json" -d "$4")
+  [[ -z "${5:-}" ]] || args+=(-H "$5")
   curl "${args[@]}" "$2"
 }
 status_of() { tail -n1; }
@@ -89,14 +96,22 @@ cashier_token=$(login "$cashier" "$tenant_id" | json_field accessToken)
 ok "cashier is signed in with the cashier role"
 
 step "5. Selling: the cashier sells at the counter (event sales.order.completed)"
-order=$(http POST "$sales/orders" "$cashier_token" "{\"branchId\":\"$branch_id\",\"paymentMethod\":\"cash\",\"items\":[{\"sku\":\"AO-01\",\"name\":\"Ao thun\",\"quantity\":2,\"unitPrice\":120000},{\"sku\":\"QUAN-02\",\"name\":\"Quan jean\",\"quantity\":1,\"unitPrice\":350000}]}")
+sale_key=$(new_uuid)
+sale_body="{\"branchId\":\"$branch_id\",\"paymentMethod\":\"cash\",\"items\":[{\"sku\":\"AO-01\",\"name\":\"Ao thun\",\"quantity\":2,\"unitPrice\":120000},{\"sku\":\"QUAN-02\",\"name\":\"Quan jean\",\"quantity\":1,\"unitPrice\":350000}]}"
+expect_status 400 "an order without an Idempotency-Key" "$(http POST "$sales/orders" "$cashier_token" "$sale_body")"
+order=$(http POST "$sales/orders" "$cashier_token" "$sale_body" "Idempotency-Key: $sale_key")
 expect_status 201 "create an order (cashier)" "$order"
 printf '%s' "$order" | body_of | grep -q '"totalAmount":590000' || fail "the server did not compute the total (590000): $(printf '%s' "$order" | body_of)"
 ok "the total is computed by the server: 590000 VND"
 order_id=$(printf '%s' "$order" | body_of | json_field id)
 expect_status 200 "read the order back" "$(http GET "$sales/orders/$order_id" "$cashier_token")"
-expect_status 400 "an order for an unknown branch" "$(http POST "$sales/orders" "$cashier_token" '{"branchId":"00000000-0000-4000-8000-000000000000","paymentMethod":"cash","items":[{"sku":"X","name":"X","quantity":1,"unitPrice":1}]}')"
-expect_status 422 "an order without items" "$(http POST "$sales/orders" "$cashier_token" "{\"branchId\":\"$branch_id\",\"paymentMethod\":\"cash\",\"items\":[]}")"
+retry=$(http POST "$sales/orders" "$cashier_token" "$sale_body" "Idempotency-Key: $sale_key")
+expect_status 200 "the same request again (a retry on a bad network) returns the first order" "$retry"
+[[ "$(printf '%s' "$retry" | body_of | json_field id)" == "$order_id" ]] || fail "the retry created another order"
+ok "same order id: nothing was sold twice"
+expect_status 409 "the same key with a different request" "$(http POST "$sales/orders" "$cashier_token" "${sale_body/cash/card}" "Idempotency-Key: $sale_key")"
+expect_status 400 "an order for an unknown branch" "$(http POST "$sales/orders" "$cashier_token" '{"branchId":"00000000-0000-4000-8000-000000000000","paymentMethod":"cash","items":[{"sku":"X","name":"X","quantity":1,"unitPrice":1}]}' "Idempotency-Key: $(new_uuid)")"
+expect_status 422 "an order without items" "$(http POST "$sales/orders" "$cashier_token" "{\"branchId\":\"$branch_id\",\"paymentMethod\":\"cash\",\"items\":[]}" "Idempotency-Key: $(new_uuid)")"
 expect_status 401 "an order without a token" "$(curl -s -w '\n%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$sales/orders")"
 
 step "6. Permissions: what a cashier may not do"
