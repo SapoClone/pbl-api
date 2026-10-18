@@ -108,6 +108,14 @@ the database start-up (schema created when missing, four replicas migrating one 
 `sales` and `insight`, tenant isolation of every read model, idempotent order creation (also two
 requests at once) and the audit log and daily revenue.
 
+## Stock reservation (the one call that is not an event)
+
+`sales` asks `inventory` to hold stock before it creates an order ([design](../specs/2026-10-19-stock-reservation-design.md)).
+`POST /internal/reservations` is internal (not in `krakend.json`), idempotent by order id, all or nothing, and
+answers 409 with the shortages when stock is short. When the order is completed, `inventory` consumes
+`sales.order.completed` and turns the hold into a deduction; a hold nobody completes expires after 15 minutes.
+If `inventory` is down, `sales` refuses the sale with 503 `S005`.
+
 ## Limits to know
 
 - An access token carries the role it was issued with, for up to its lifetime (1 day). A role

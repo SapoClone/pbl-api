@@ -25,7 +25,7 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 
 | Area | Today | Target (build toward this) |
 |---|---|---|
-| Services | `platform` has business logic; `sales` has orders and `insight` has the audit log and daily revenue (the event demo); `catalog`, `inventory`, `customer`, `finance`, `integration` only expose `GET /health` (built from `templates/service/` on `@pbl/common`) | 8 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md), [ADR-0010](docs/decisions/0010-eight-services.md)) |
+| Services | `platform` has business logic; `sales` has orders, `inventory` has stock, receipts and the stock reservation, `insight` has the audit log and daily revenue (the event demo); `catalog`, `customer`, `finance`, `integration` only expose `GET /health` (built from `templates/service/` on `@pbl/common`) | 8 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md), [ADR-0010](docs/decisions/0010-eight-services.md)) |
 | Tenancy | Implemented (P0): stores, branches, `tid` + `roles` in tokens, `@CurrentTenant()`/`@RequireRoles()` ([ADR-0008](docs/decisions/0008-tenancy.md)) | Staff logins, RBAC `perms`, plans/subscriptions |
 | Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every platform endpoint + each stub's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
@@ -88,8 +88,8 @@ Rules:
   data → internal REST call or (later) an event.
 - Put each feature in the service that owns its ERD entity. If ownership is
   unclear, stop and ask; do not default to `platform`.
-- A sale does not share a transaction with stock. `sales` reserves stock in
-  `inventory` through one internal, idempotent command (the only synchronous
+- A sale does not share a transaction with stock. `sales` holds stock in
+  `inventory` (`POST /internal/reservations`, built; keyed by order id, 409 with the shortages) through one internal, idempotent command (the only synchronous
   cross-service call allowed; `InternalHttpClient`, not routed by the gateway);
   everything else crosses services as events. Only `sales` writes
   `payment_status`; `finance` and `integration` emit events about money
@@ -367,9 +367,11 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
 - Events: the SNS adapter, the Terraform for topics/queues and the SNS-to-SQS subscription do not
   exist or have never run against AWS (checklist in [docs/deploy-actions.md](docs/deploy-actions.md)).
   No replay tool beyond the DLQ redrive. Only branch, login, membership and order events exist.
-- `sales` takes orders but does not reserve stock yet (`inventory` is a stub), and lines are free text
-  (`sku`, `name`, price), not catalog variants; payment is only a method on the order. Order creation
-  needs an `Idempotency-Key` header (a retry returns the first order, 200 + `Idempotency-Replayed`).
+- Stock is keyed by SKU text (order lines are free text, not catalog variants); payment is only a method
+  on the order. A stock receipt is not idempotent, orders cannot be cancelled, and a hold completed after it
+  expired is deducted on a best-effort basis ([design](docs/specs/2026-10-19-stock-reservation-design.md)).
+  Order creation needs an `Idempotency-Key` header (a retry returns the first order, 200 +
+  `Idempotency-Replayed`).
 - The production `Dockerfile` builds any service (`--build-arg APP_NAME=<service>`,
   default `platform`), but `deploy.yml` and pbl-infra still deploy only
   `platform`; per-service ECR repositories, ECS services and a deploy matrix do

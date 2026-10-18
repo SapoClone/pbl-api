@@ -61,6 +61,8 @@ with the tenant condition (`WHERE id = :id AND tenant_id = :tid`).
 
 ## Selling without overselling
 
+> Built on 2026-10-19: [stock reservation design](2026-10-19-stock-reservation-design.md).
+
 The sale and the stock movement no longer share a transaction, so the
 protection lives in `inventory`.
 
