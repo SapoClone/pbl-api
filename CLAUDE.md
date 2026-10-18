@@ -315,7 +315,7 @@ docker compose run --rm --no-deps -v "$PWD:/work" -w /work platform sh -c \
 ```
 
 Event bus: `bash scripts/demo-events.sh` runs the login / permissions / selling demo through the
-gateway and asserts every step; `pnpm test:events:int` runs the bus against real Postgres and
+gateway and asserts every step; `pnpm test:int` runs the bus, sales and insight against real Postgres and
 ElasticMQ (inside the image on Windows, see the guide). `node scripts/redrive-dlq.js <service>`
 moves dead letters back. Local SQS is ElasticMQ; queued messages:
 `http://localhost:9324/000000000000/email-verification?Action=ReceiveMessage`.
@@ -367,7 +367,8 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
   exist or have never run against AWS (checklist in [docs/deploy-actions.md](docs/deploy-actions.md)).
   No replay tool beyond the DLQ redrive. Only branch, login, membership and order events exist.
 - `sales` takes orders but does not reserve stock yet (`inventory` is a stub), and lines are free text
-  (`sku`, `name`, price), not catalog variants; payment is only a method on the order.
+  (`sku`, `name`, price), not catalog variants; payment is only a method on the order. Order creation
+  needs an `Idempotency-Key` header (a retry returns the first order, 200 + `Idempotency-Replayed`).
 - The production `Dockerfile` builds any service (`--build-arg APP_NAME=<service>`,
   default `platform`), but `deploy.yml` and pbl-infra still deploy only
   `platform`; per-service ECR repositories, ECS services and a deploy matrix do

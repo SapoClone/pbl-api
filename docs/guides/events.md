@@ -99,11 +99,14 @@ Tests of the bus itself (real Postgres and ElasticMQ):
 
 ```bash
 docker compose up -d postgres elasticmq
-pnpm test:events:int       # on Windows run it inside the image, see CLAUDE.md "Running and verifying"
+pnpm test:int       # on Windows run it inside the image, see CLAUDE.md "Running and verifying"
 ```
 
-It covers retry then DLQ after 3 receives, redrive, a duplicate delivery, a publisher that
-fails and recovers, a row that keeps failing, and two relays at once.
+It covers, for the bus: retry then DLQ after 3 receives, redrive, a duplicate delivery, a publisher that
+fails and recovers, a row that keeps failing, old-row cleanup and two relays at once. It also covers
+the database start-up (schema created when missing, four replicas migrating one at a time) and, for
+`sales` and `insight`, tenant isolation of every read model, idempotent order creation (also two
+requests at once) and the audit log and daily revenue.
 
 ## Limits to know
 

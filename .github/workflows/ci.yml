@@ -171,9 +171,9 @@ jobs:
         run: pnpm docs:build
 
   events-integration:
-    # the event bus against a real Postgres and a real SQS (ADR-0007); ElasticMQ is
+    # the event bus, sales and insight against a real Postgres and a real SQS (ADR-0007); ElasticMQ is
     # the same stand-in docker-compose uses, its default node address is localhost
-    name: Event bus (integration)
+    name: Integration (event bus, sales, insight)
     timeout-minutes: 15
     if: |
       !contains(github.event.pull_request.labels.*.name, 'skip-ci') &&
@@ -229,5 +229,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Event bus integration tests
-        run: pnpm test:events:int
+      - name: Integration tests
+        run: pnpm test:int

@@ -59,7 +59,7 @@
     "pack:libs": "pnpm build:libs && pnpm --dir libs/common pack --pack-destination ../../dist/packs && pnpm --dir libs/auth pack --pack-destination ../../dist/packs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "test:libs": "jest libs",
-    "test:events:int": "jest --config libs/events/test/jest-int.json",
+    "test:int": "jest --config libs/events/test/jest-int.json",
     "redrive:dlq": "node scripts/redrive-dlq.js"
   },
   "dependencies": {

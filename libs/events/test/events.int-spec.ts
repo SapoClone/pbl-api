@@ -292,6 +292,31 @@ describe('event bus (Postgres + SQS)', () => {
     expect(await tight.relayOnce()).toBe(0);
   });
 
+  it('cleanup deletes old published rows and keeps everything else', async () => {
+    const { relay } = await setup();
+    const old = await emit();
+    const recent = await emit();
+    const unpublished = await emit();
+    const table = `"${schema}"."outbox_event"`;
+    await dataSource.query(
+      `UPDATE ${table} SET "published_at" = now() - interval '8 days' WHERE "id" = $1`,
+      [old.id],
+    );
+    await dataSource.query(
+      `UPDATE ${table} SET "published_at" = now() - interval '1 day' WHERE "id" = $1`,
+      [recent.id],
+    );
+    await dataSource.query(
+      `UPDATE ${table} SET "created_at" = now() - interval '30 days' WHERE "id" = $1`,
+      [unpublished.id],
+    );
+
+    expect(await relay.cleanup()).toBe(1);
+
+    const left = (await outboxRows()).map((r) => r.id).sort();
+    expect(left).toEqual([recent.id, unpublished.id].sort());
+  });
+
   it('two relays at once never publish the same row twice (SKIP LOCKED)', async () => {
     const sent: string[] = [];
     const publisher: EventPublisher = {
