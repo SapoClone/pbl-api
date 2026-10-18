@@ -11,17 +11,23 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { AuthUser } from '@pbl/auth';
+import {
+  AccountLoggedInPayload,
+  PLATFORM_ACCOUNT_LOGGED_IN,
+} from '@pbl/contracts';
+import { EventOutbox } from '@pbl/events';
 import { Cache } from 'cache-manager';
 import { plainToInstance } from 'class-transformer';
 import ms from 'ms';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   AccountEntity,
   AccountStatus,
@@ -54,6 +60,8 @@ type Token = Branded<
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly configService: ConfigService<AllConfigType>,
     private readonly jwtService: JwtService,
@@ -65,6 +73,8 @@ export class AuthService {
     private readonly membershipService: MembershipService,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly outbox: EventOutbox,
   ) {}
 
   /**
@@ -101,7 +111,7 @@ export class AuthService {
     } else if (memberships.length === 1) {
       selected = memberships[0];
     }
-    return this.startSession(account.id, selected, memberships);
+    return this.startSession(account.id, selected, memberships, 'password');
   }
 
   /**
@@ -126,13 +136,14 @@ export class AuthService {
       throw new NotFoundException();
     }
     await this.revokeSession(user.sessionId, user.exp * 1000 - Date.now());
-    return this.startSession(user.id, selected, memberships);
+    return this.startSession(user.id, selected, memberships, 'switch_tenant');
   }
 
   private async startSession(
     accountId: string,
     selected: Membership | null,
     memberships: Membership[],
+    method: AccountLoggedInPayload['method'],
   ): Promise<LoginResDto> {
     // One refresh-token family per login; its id is the access token's sid
     const { token: refreshToken, familyId } =
@@ -146,6 +157,9 @@ export class AuthService {
       refreshToken,
       membership: selected,
     });
+    if (selected) {
+      await this.recordLogin(accountId, familyId, selected, method);
+    }
     return plainToInstance(LoginResDto, {
       userId: accountId,
       ...token,
@@ -157,6 +171,38 @@ export class AuthService {
         role: m.role,
       })),
     });
+  }
+
+  /**
+   * Writes the login event (it feeds the audit log in insight). It never fails
+   * the login: the event is a side effect, not part of the sign-in.
+   */
+  private async recordLogin(
+    accountId: string,
+    sessionId: string,
+    membership: Membership,
+    method: AccountLoggedInPayload['method'],
+  ): Promise<void> {
+    try {
+      await this.dataSource.transaction((em) =>
+        this.outbox.add(
+          em,
+          PLATFORM_ACCOUNT_LOGGED_IN,
+          {
+            accountId,
+            sessionId,
+            role: membership.role,
+            method,
+          } satisfies AccountLoggedInPayload,
+          // the tenant comes from the verified membership, not from the request
+          { tenantId: membership.tenantId },
+        ),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not record the login event: ${error instanceof Error ? error.message : error}`,
+      );
+    }
   }
 
   async register(dto: RegisterReqDto): Promise<RegisterResDto> {

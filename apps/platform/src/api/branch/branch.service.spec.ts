@@ -6,6 +6,10 @@ import {
   TenantContext,
   TenantScopedRepository,
 } from '@pbl/common';
+import {
+  PLATFORM_BRANCH_CREATED,
+  PLATFORM_BRANCH_UPDATED,
+} from '@pbl/contracts';
 import { QueryFailedError, Repository } from 'typeorm';
 import { TenantEntity } from '../tenant/entities/tenant.entity';
 import { BranchService } from './branch.service';
@@ -48,6 +52,7 @@ describe('BranchService', () => {
   let builder: Record<string, jest.Mock>;
   let expressionMap: { extraAppendedAndWhereCondition: string };
   let service: BranchService;
+  let outbox: { add: jest.Mock };
   const errorCodeOf = (promise: Promise<unknown>) =>
     promise.catch((e) => e.getResponse().errorCode);
   /** The service in a request of `tenantId` (TenantContext, set by @pbl/auth) */
@@ -121,10 +126,12 @@ describe('BranchService', () => {
       getMany: jest.fn().mockResolvedValue([]),
       getCount: jest.fn().mockResolvedValue(0),
     } as unknown as Record<string, jest.Mock>;
+    outbox = { add: jest.fn().mockResolvedValue(undefined) };
     service = new BranchService(
       new TenantScopedRepository(
         repository as unknown as Repository<BranchEntity>,
       ),
+      outbox as never,
     );
   });
 
@@ -153,7 +160,7 @@ describe('BranchService', () => {
     expect(repository.exists).toHaveBeenCalledWith({
       where: { tenantId: 't1', code: 'KHO2' },
     });
-    expect(repository.save.mock.calls[0][0]).toMatchObject({
+    expect(em.save.mock.calls[0][0]).toMatchObject({
       tenantId: 't1',
       code: 'KHO2',
       isWarehouse: true,
@@ -161,6 +168,48 @@ describe('BranchService', () => {
       createdBy: 'a1',
     });
     expect(created).toMatchObject({ code: 'KHO2', name: 'Kho 2' });
+  });
+
+  it('writes the branch.created event in the same transaction as the branch', async () => {
+    await as('t1').create('a1', { name: 'Kho 2', code: 'KHO2' });
+
+    expect(repository.manager.transaction).toHaveBeenCalledTimes(1);
+    expect(outbox.add).toHaveBeenCalledWith(
+      em,
+      PLATFORM_BRANCH_CREATED,
+      expect.objectContaining({
+        code: 'KHO2',
+        name: 'Kho 2',
+        status: 'active',
+      }),
+    );
+  });
+
+  it('writes no event when the branch cannot be saved', async () => {
+    repository.exists.mockResolvedValue(true);
+
+    await as('t1')
+      .create('a1', { name: 'X', code: 'CN01' })
+      .catch(() => null);
+
+    expect(outbox.add).not.toHaveBeenCalled();
+  });
+
+  it('writes a branch.updated event on update and a deleted one on remove', async () => {
+    repository.findOne.mockResolvedValue(branch());
+    await as('t1').update('a1', 'b1', { name: 'Renamed' });
+    expect(outbox.add).toHaveBeenLastCalledWith(
+      em,
+      PLATFORM_BRANCH_UPDATED,
+      expect.objectContaining({ id: 'b1', name: 'Renamed', status: 'active' }),
+    );
+
+    await as('t1').remove('b1');
+    expect(outbox.add).toHaveBeenLastCalledWith(
+      em,
+      PLATFORM_BRANCH_UPDATED,
+      expect.objectContaining({ id: 'b1', status: 'deleted' }),
+    );
   });
 
   it('rejects a duplicate code in the tenant with B001', async () => {
@@ -200,11 +249,11 @@ describe('BranchService', () => {
 
     await as('t1').remove('b1');
 
-    expect(repository.softDelete).toHaveBeenCalledWith({
+    expect(em.softDelete).toHaveBeenCalledWith(BranchEntity, {
       id: 'b1',
       tenantId: 't1',
     });
-    expect(repository.manager.transaction).not.toHaveBeenCalled();
+    // no store lock: an inactive branch is not counted against the last active one
     expect(em.createQueryBuilder).not.toHaveBeenCalled();
   });
 
@@ -257,7 +306,7 @@ describe('BranchService', () => {
       );
 
     it('maps a UQ_branch_tenant_code violation to B001', async () => {
-      repository.save.mockRejectedValue(dbError('UQ_branch_tenant_code'));
+      em.save.mockRejectedValue(dbError('UQ_branch_tenant_code'));
 
       await expect(errorCodeOf(as('t1').create('a1', dto))).resolves.toBe(
         ErrorCode.B001,
@@ -266,10 +315,10 @@ describe('BranchService', () => {
 
     it('rethrows other unique violations and errors', async () => {
       const other = dbError('UQ_something_else');
-      repository.save.mockRejectedValueOnce(other);
+      em.save.mockRejectedValueOnce(other);
       await expect(as('t1').create('a1', dto)).rejects.toBe(other);
 
-      repository.save.mockRejectedValueOnce(new Error('connection lost'));
+      em.save.mockRejectedValueOnce(new Error('connection lost'));
       await expect(as('t1').create('a1', dto)).rejects.toThrow(
         'connection lost',
       );
@@ -290,7 +339,7 @@ describe('BranchService', () => {
 
     await as('t1').update('a1', 'b1', { address: null, phone: null });
 
-    const saved: BranchEntity = repository.save.mock.calls[0][0];
+    const saved: BranchEntity = em.save.mock.calls[0][0];
     expect(saved.address).toBeNull();
     expect(saved.phone).toBeNull();
   });

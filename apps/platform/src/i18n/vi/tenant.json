@@ -1,5 +1,7 @@
 {
   "error": {
-    "subdomain_exists": "Tên miền phụ này đã được sử dụng"
+    "subdomain_exists": "Tên miền phụ này đã được sử dụng",
+    "member_exists": "Thành viên này đã thuộc cửa hàng",
+    "owner_role_locked": "Không thể đổi vai trò của chủ cửa hàng"
   }
 }

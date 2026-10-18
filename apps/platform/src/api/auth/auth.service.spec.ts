@@ -5,7 +5,9 @@ import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
+import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
+import { PLATFORM_ACCOUNT_LOGGED_IN } from '@pbl/contracts';
+import { EventOutbox } from '@pbl/events';
 import { Repository } from 'typeorm';
 import {
   AccountEntity,
@@ -36,6 +38,8 @@ describe('AuthService', () => {
     jest.Mock
   >;
   let accessTokenServiceValue: { sign: jest.Mock };
+  let outboxValue: { add: jest.Mock };
+  let dataSourceValue: { transaction: jest.Mock };
   let membershipServiceValue: {
     findActiveMemberships: jest.Mock;
     findActiveMembership: jest.Mock;
@@ -80,6 +84,10 @@ describe('AuthService', () => {
     };
 
     accessTokenServiceValue = { sign: jest.fn() };
+    outboxValue = { add: jest.fn().mockResolvedValue(undefined) };
+    dataSourceValue = {
+      transaction: jest.fn(async (work: (em: object) => unknown) => work({})),
+    };
     membershipServiceValue = {
       findActiveMemberships: jest.fn(),
       findActiveMembership: jest.fn(),
@@ -117,6 +125,8 @@ describe('AuthService', () => {
           provide: CACHE_MANAGER,
           useValue: cacheManagerValue,
         },
+        { provide: getDataSourceToken(), useValue: dataSourceValue },
+        { provide: EventOutbox, useValue: outboxValue },
       ],
     }).compile();
 
@@ -330,6 +340,42 @@ describe('AuthService', () => {
       expect(res.tenants).toEqual([
         { id: 't1', name: 'Alpha', subdomain: 'alpha', role: 'owner' },
       ]);
+    });
+
+    it('writes a login event for the selected store, with the store as its tenant', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([alpha]);
+
+      await login();
+
+      expect(outboxValue.add).toHaveBeenCalledWith(
+        expect.anything(),
+        PLATFORM_ACCOUNT_LOGGED_IN,
+        {
+          accountId: 'a1',
+          sessionId: 'family-1',
+          role: 'owner',
+          method: 'password',
+        },
+        { tenantId: 't1' },
+      );
+    });
+
+    it('writes no login event when no store is selected', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([
+        alpha,
+        beta,
+      ]);
+
+      await login();
+
+      expect(outboxValue.add).not.toHaveBeenCalled();
+    });
+
+    it('still signs in when the login event cannot be written', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([alpha]);
+      outboxValue.add.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(login()).resolves.toMatchObject({ accessToken: 'at' });
     });
 
     it('selects none with several stores and returns the list', async () => {
