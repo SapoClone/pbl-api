@@ -56,7 +56,7 @@ describe('Insight service bootstrap', () => {
   const url = () =>
     `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   const as = (roles: string[], tid: string | null = TENANT) =>
-    `Bearer ${auth.token({ roles, tid: tid ?? undefined })}`;
+    auth.bearer(roles, tid ?? undefined);
 
   it('GET /health reports the service', async () => {
     const res = await request(url()).get('/health').expect(200);

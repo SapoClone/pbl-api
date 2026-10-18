@@ -12,7 +12,9 @@ export interface TestTokenClaims {
 /**
  * For tests of an app's routes with the real AuthGuard: a throwaway RSA key, the
  * options that make PblAuthModule trust it, and a function that signs tokens the
- * way platform does. Not part of the library's public API (`@pbl/auth/testing`).
+ * way platform does. Not part of the library's public API (`@pbl/auth/testing`) and
+ * excluded from its build. Issuer and audience are the defaults of
+ * `PblAuthModule.forRemoteJwks()` (`platform`, `pbl6`).
  *
  *   const auth = createTestAuth();
  *   PblAuthModule.forRootAsync({ useFactory: () => auth.options })
@@ -39,6 +41,10 @@ export function createTestAuth() {
 
   return {
     options,
+    /** `Bearer <token>`, ready for an Authorization header */
+    bearer(roles: string[], tid?: string): string {
+      return `Bearer ${this.token({ roles, tid })}`;
+    },
     token(claims: TestTokenClaims = {}): string {
       return jwt.sign(
         {

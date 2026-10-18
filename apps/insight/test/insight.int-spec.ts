@@ -23,6 +23,7 @@ const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const BRANCH_1 = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
 const BRANCH_2 = '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b';
+const ACCOUNT = '99999999-9999-4999-8999-999999999999';
 
 const envelope = (
   tenantId: string,
@@ -60,8 +61,6 @@ const sale = (
     },
     at,
   );
-
-const ACCOUNT = '99999999-9999-4999-8999-999999999999';
 
 describe('insight (Postgres)', () => {
   const schema = uniqueSchema('insight_it');

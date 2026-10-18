@@ -2,7 +2,7 @@
  * Integration tests of the event bus against a real Postgres and a real SQS
  * (ElasticMQ), the four scenarios ADR-0007 requires plus competing relays.
  * They need `docker compose up -d postgres elasticmq`; run with
- * `pnpm test:events:int`. Everything is created under a throwaway schema and
+ * `pnpm test:int`. Everything is created under a throwaway schema and
  * throwaway queue names.
  */
 import {
@@ -28,6 +28,7 @@ import {
   readEventsConfig,
   type EventPublisher,
 } from '../src';
+import { uniqueSchema, useDatabase } from './it-env';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { redrive } = require('../../../scripts/redrive-dlq.js');
 
@@ -46,16 +47,17 @@ const config = readEventsConfig({
 });
 
 describe('event bus (Postgres + SQS)', () => {
-  const schema = `events_it_${Date.now().toString(36)}`;
+  const schema = uniqueSchema('events_it');
   let dataSource: DataSource;
   let sqs: SQSClient;
 
   beforeAll(async () => {
+    useDatabase(schema);
     sqs = new SQSClient({ region: 'ap-southeast-1' });
     dataSource = new DataSource({
       type: 'postgres',
-      host: process.env.EVENTS_IT_DB_HOST ?? 'localhost',
-      port: Number(process.env.EVENTS_IT_DB_PORT ?? 25432),
+      host: process.env.DATABASE_HOST,
+      port: Number(process.env.DATABASE_PORT),
       username: 'postgres',
       password: 'postgres',
       database: 'pbl',
@@ -299,12 +301,12 @@ describe('event bus (Postgres + SQS)', () => {
     const unpublished = await emit();
     const table = `"${schema}"."outbox_event"`;
     await dataSource.query(
-      `UPDATE ${table} SET "published_at" = now() - interval '8 days' WHERE "id" = $1`,
-      [old.id],
+      `UPDATE ${table} SET "published_at" = now() - make_interval(days => $2) WHERE "id" = $1`,
+      [old.id, config.outboxRetentionDays + 1], // just past the retention
     );
     await dataSource.query(
-      `UPDATE ${table} SET "published_at" = now() - interval '1 day' WHERE "id" = $1`,
-      [recent.id],
+      `UPDATE ${table} SET "published_at" = now() - make_interval(days => $2) WHERE "id" = $1`,
+      [recent.id, config.outboxRetentionDays - 1], // still inside it
     );
     await dataSource.query(
       `UPDATE ${table} SET "created_at" = now() - interval '30 days' WHERE "id" = $1`,

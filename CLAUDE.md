@@ -355,7 +355,8 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
 - KrakenD without `no-op` encoding turns backend 4xx into gateway 500s and
   drops bodies.
 - `.env.docker.platform` contains a **committed local-only RSA key**; tests
-  generate a throwaway key in `setup-jest.mjs`. Never reuse either elsewhere.
+  generate a throwaway key in `setup-jest.mjs`, and `createTestAuth()` (`@pbl/auth/testing`) makes
+  another per test file to sign tokens for route tests with the real guard. Never reuse any of them elsewhere.
 - `krakend.json` uses `disable_jwk_security: true` (http JWKS URL) — valid
   for the local stack only.
 - The README links `docs/specs/…monorepo-service-split-design.md`,

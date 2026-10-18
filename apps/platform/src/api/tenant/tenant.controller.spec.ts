@@ -59,7 +59,7 @@ describe('TenantController members', () => {
   beforeEach(() => jest.clearAllMocks());
 
   const as = (roles: string[], tid: string | null = TENANT) =>
-    `Bearer ${auth.token({ roles, tid: tid ?? undefined })}`;
+    auth.bearer(roles, tid ?? undefined);
   const base = '/api/v1/tenants/current/members';
 
   it('refuses everything without a token (401)', async () => {
