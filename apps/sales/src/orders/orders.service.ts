@@ -13,6 +13,7 @@ import { EventOutbox } from '@pbl/events';
 import { createHash, randomUUID } from 'crypto';
 import { QueryFailedError } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
+import { InventoryClient } from '../inventory/inventory.client';
 import { CreateOrderReqDto } from './dto/create-order.req.dto';
 import { ListOrdersReqDto } from './dto/list-orders.req.dto';
 import { OrderRes, toOrderRes } from './dto/order.res';
@@ -24,6 +25,7 @@ export const SalesErrorCode = {
   UNKNOWN_BRANCH: 'S001',
   IDEMPOTENCY_KEY_REQUIRED: 'S002',
   IDEMPOTENCY_KEY_REUSED: 'S003',
+  OUT_OF_STOCK: 'S004',
 } as const;
 
 const IDEMPOTENCY_INDEX = 'UQ_orders_tenant_idempotency_key';
@@ -74,6 +76,7 @@ export class OrdersService {
     @InjectTenantScopedRepository(BranchProjectionEntity)
     private readonly branches: TenantScopedRepository<BranchProjectionEntity>,
     private readonly outbox: EventOutbox,
+    private readonly inventory: InventoryClient,
   ) {}
 
   async create(
@@ -87,7 +90,20 @@ export class OrdersService {
 
     await this.assertActiveBranch(dto.branchId);
 
+    // The order id is the reservation key, so it exists before the order does
     const orderId = randomUUID();
+    const shortages = await this.inventory.reserve(
+      orderId,
+      dto.branchId,
+      dto.items.map(({ sku, quantity }) => ({ sku, quantity })),
+    );
+    if (shortages) {
+      throw new ConflictException({
+        errorCode: SalesErrorCode.OUT_OF_STOCK,
+        message: 'Not enough stock for this order',
+        details: shortages,
+      });
+    }
     const items = dto.items.map((line) => {
       const item = new OrderItemEntity();
       item.id = randomUUID();
@@ -141,6 +157,8 @@ export class OrdersService {
       });
       return { order: toOrderRes(saved), replayed: false };
     } catch (error) {
+      // The order was not created: give the stock back now (the hold expires anyway)
+      await this.inventory.release(orderId);
       // Two requests with the same key raced past the lookup; the index decided
       if (this.isKeyViolation(error)) {
         const winner = await this.findByKey(idempotencyKey);

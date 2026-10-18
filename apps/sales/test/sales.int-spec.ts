@@ -45,6 +45,11 @@ describe('sales (Postgres)', () => {
   const schema = uniqueSchema('sales_it');
   let dataSource: DataSource;
   let service: OrdersService;
+  /** What inventory answers: null means the stock was held */
+  const inventory = {
+    reserve: jest.fn(async (): Promise<unknown> => null),
+    release: jest.fn(async () => undefined),
+  };
   const handler = new BranchProjectionHandler();
 
   /** Runs `work` as a request of `tenantId`, as @pbl/auth's interceptor does */
@@ -103,6 +108,8 @@ describe('sales (Postgres)', () => {
       TenantScopedRepository.forEntity(dataSource, OrderEntity),
       TenantScopedRepository.forEntity(dataSource, BranchProjectionEntity),
       new EventOutbox(),
+      // the real client talks HTTP to inventory; its contract is tested in the unit specs
+      inventory as never,
     );
   });
 
@@ -112,6 +119,8 @@ describe('sales (Postgres)', () => {
   });
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    inventory.reserve.mockResolvedValue(null);
     for (const table of [
       'order_items',
       'orders',
@@ -225,6 +234,48 @@ describe('sales (Postgres)', () => {
       expect(results.filter((r) => r.replayed)).toHaveLength(1);
       expect(await dataSource.getRepository(OrderEntity).count()).toBe(1);
       expect(await dataSource.getRepository(OutboxEventEntity).count()).toBe(1);
+      // every hold asked for beyond the one that became the order is given back
+      // (how many attempts reached inventory depends on timing)
+      expect(inventory.release).toHaveBeenCalledTimes(
+        inventory.reserve.mock.calls.length - 1,
+      );
+    });
+  });
+
+  describe('stock', () => {
+    it('stores nothing when inventory says the stock is short (S004)', async () => {
+      inventory.reserve.mockResolvedValue([
+        { sku: 'AO-01', requested: 2, available: 1 },
+      ]);
+
+      const error = await as(TENANT_A, () =>
+        service.create(ACCOUNT, randomUUID(), dto()),
+      ).catch((e) => e);
+
+      expect(error.getResponse()).toMatchObject({
+        errorCode: SalesErrorCode.OUT_OF_STOCK,
+        details: [{ sku: 'AO-01', requested: 2, available: 1 }],
+      });
+      expect(await dataSource.getRepository(OrderEntity).count()).toBe(0);
+      expect(await dataSource.getRepository(OutboxEventEntity).count()).toBe(0);
+    });
+
+    it('holds stock under the id of the order it then creates', async () => {
+      const { order } = await as(TENANT_A, () =>
+        service.create(ACCOUNT, randomUUID(), dto()),
+      );
+
+      expect(inventory.reserve).toHaveBeenCalledWith(order.id, BRANCH_A, [
+        { sku: 'AO-01', quantity: 2 },
+      ]);
+    });
+
+    it('does not ask for stock again on a retry', async () => {
+      const key = randomUUID();
+      await as(TENANT_A, () => service.create(ACCOUNT, key, dto()));
+      await as(TENANT_A, () => service.create(ACCOUNT, key, dto()));
+
+      expect(inventory.reserve).toHaveBeenCalledTimes(1);
     });
   });
 

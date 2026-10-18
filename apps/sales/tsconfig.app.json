@@ -3,36 +3,16 @@
   "compilerOptions": {
     "outDir": "../../dist/apps/sales",
     "paths": {
-      "@pbl/auth": [
-        "libs/auth/src"
-      ],
-      "@pbl/auth/*": [
-        "libs/auth/src/*"
-      ],
-      "@pbl/common": [
-        "libs/common/src"
-      ],
-      "@pbl/common/*": [
-        "libs/common/src/*"
-      ],
-      "@pbl/contracts": [
-        "libs/contracts/src"
-      ],
-      "@pbl/contracts/*": [
-        "libs/contracts/src/*"
-      ],
-      "@pbl/events": [
-        "libs/events/src"
-      ],
-      "@pbl/events/*": [
-        "libs/events/src/*"
-      ]
+      "@pbl/auth": ["libs/auth/src"],
+      "@pbl/auth/*": ["libs/auth/src/*"],
+      "@pbl/common": ["libs/common/src"],
+      "@pbl/common/*": ["libs/common/src/*"],
+      "@pbl/contracts": ["libs/contracts/src"],
+      "@pbl/contracts/*": ["libs/contracts/src/*"],
+      "@pbl/events": ["libs/events/src"],
+      "@pbl/events/*": ["libs/events/src/*"]
     }
   },
-  "include": [
-    "src/**/*.ts"
-  ],
-  "exclude": [
-    "src/**/*.spec.ts"
-  ]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"]
 }

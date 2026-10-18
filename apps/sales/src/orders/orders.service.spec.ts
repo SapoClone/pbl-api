@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { SALES_ORDER_COMPLETED } from '@pbl/contracts';
 import { QueryFailedError } from 'typeorm';
@@ -30,6 +31,7 @@ describe('OrdersService', () => {
   let orders: Record<string, jest.Mock>;
   let branches: { findOne: jest.Mock };
   let outbox: { add: jest.Mock };
+  let inventory: { reserve: jest.Mock; release: jest.Mock };
   let em: unknown;
   let service: OrdersService;
 
@@ -50,10 +52,15 @@ describe('OrdersService', () => {
         ),
     };
     outbox = { add: jest.fn().mockResolvedValue(undefined) };
+    inventory = {
+      reserve: jest.fn().mockResolvedValue(null), // stock held
+      release: jest.fn().mockResolvedValue(undefined),
+    };
     service = new OrdersService(
       orders as never,
       branches as never,
       outbox as never,
+      inventory as never,
     );
     // the line repository is built with TenantScopedRepository.forEntity(em, ...)
     jest
@@ -126,6 +133,79 @@ describe('OrdersService', () => {
     });
     expect(orders.transaction).not.toHaveBeenCalled();
     expect(outbox.add).not.toHaveBeenCalled();
+  });
+
+  describe('stock', () => {
+    it('holds the stock of every line before the order exists, under the order id', async () => {
+      const { order: res } = await service.create('acc-1', KEY, dto());
+
+      expect(inventory.reserve).toHaveBeenCalledWith(res.id, 'b1', [
+        { sku: 'AO-01', quantity: 2 },
+        { sku: 'QUAN-02', quantity: 1 },
+      ]);
+      expect(inventory.reserve.mock.invocationCallOrder[0]).toBeLessThan(
+        orders.transaction.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('refuses the sale with 409 S004 and the shortages, and creates nothing', async () => {
+      const shortages = [{ sku: 'AO-01', requested: 2, available: 1 }];
+      inventory.reserve.mockResolvedValue(shortages);
+
+      const error = await service.create('acc-1', KEY, dto()).catch((e) => e);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect(error.getResponse()).toMatchObject({
+        errorCode: SalesErrorCode.OUT_OF_STOCK,
+        details: shortages,
+      });
+      expect(orders.transaction).not.toHaveBeenCalled();
+      expect(outbox.add).not.toHaveBeenCalled();
+    });
+
+    it('refuses the sale when inventory cannot be reached, and creates nothing', async () => {
+      inventory.reserve.mockRejectedValue(new ServiceUnavailableException());
+
+      await expect(service.create('acc-1', KEY, dto())).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(orders.transaction).not.toHaveBeenCalled();
+    });
+
+    it('gives the stock back at once when the order cannot be saved', async () => {
+      orders.transaction.mockRejectedValue(new Error('connection lost'));
+
+      await expect(service.create('acc-1', KEY, dto())).rejects.toThrow(
+        'connection lost',
+      );
+
+      const [orderId] = inventory.reserve.mock.calls[0];
+      expect(inventory.release).toHaveBeenCalledWith(orderId);
+    });
+
+    it('does not touch inventory for a retried request', async () => {
+      orders.findOne.mockResolvedValue(
+        Object.assign(new OrderEntity(), {
+          id: 'o1',
+          code: 'DH-1',
+          branchId: 'b1',
+          status: 'completed',
+          paymentMethod: 'cash',
+          customerName: null,
+          totalAmount: 590000,
+          itemCount: 3,
+          createdBy: 'acc-1',
+          createdAt: new Date(),
+          requestHash: hashRequest(dto()),
+          items: [],
+        }),
+      );
+
+      const result = await service.create('acc-1', KEY, dto());
+
+      expect(result.replayed).toBe(true);
+      expect(inventory.reserve).not.toHaveBeenCalled();
+    });
   });
 
   describe('Idempotency-Key', () => {
@@ -203,6 +283,8 @@ describe('OrdersService', () => {
       const result = await service.create('acc-1', KEY, dto());
 
       expect(result).toMatchObject({ replayed: true, order: { id: 'o1' } });
+      // the loser's own hold is given back
+      expect(inventory.release).toHaveBeenCalled();
     });
 
     it('rethrows other database errors', async () => {
