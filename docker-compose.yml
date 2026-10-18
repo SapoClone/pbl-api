@@ -39,19 +39,6 @@ services:
     networks:
       - pbl-network
 
-  commerce:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-      args:
-        APP_NAME: commerce
-    environment:
-      PORT: "3000"
-      AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-    networks:
-      - pbl-network
 
   finance:
     build:
@@ -87,6 +74,48 @@ services:
       dockerfile: Dockerfile.dev
       args:
         APP_NAME: insight
+    environment:
+      PORT: "3000"
+      AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    networks:
+      - pbl-network
+
+  inventory:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        APP_NAME: inventory
+    environment:
+      PORT: "3000"
+      AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    networks:
+      - pbl-network
+
+  sales:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        APP_NAME: sales
+    environment:
+      PORT: "3000"
+      AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    networks:
+      - pbl-network
+
+  customer:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        APP_NAME: customer
     environment:
       PORT: "3000"
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
@@ -146,10 +175,12 @@ services:
     depends_on:
       - platform
       - catalog
-      - commerce
       - finance
       - integration
       - insight
+      - inventory
+      - sales
+      - customer
     networks:
       - pbl-network
 

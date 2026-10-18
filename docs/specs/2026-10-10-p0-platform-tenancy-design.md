@@ -106,7 +106,8 @@ having no ownership check.
 
 Validation: `subdomain` is lowercase `^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$`
 (3–30 chars) and not reserved (`www`, `api`, `admin`, `app`, `static`,
-`platform`, `catalog`, `commerce`, `finance`, `insight`, `integration`);
+`platform`, `catalog`, `finance`, `insight`, `integration`, plus `inventory`,
+`sales`, `customer` after ADR-0010);
 branch `code` is `^[A-Z0-9_-]{1,20}$`. Invalid input → 422 (global
 ValidationPipe).
 

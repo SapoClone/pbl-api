@@ -1,6 +1,6 @@
 # ADR-0002: One Postgres database, one schema per service
 
-- **Status:** Accepted
+- **Status:** Accepted. Amended by [ADR-0010](0010-eight-services.md): the schema list below has eight entries.
 - **Date:** 2026-09-28 (recorded 2026-10-08)
 - **Scope:** all services, `docker/postgres-init-schemas.sql`, TypeORM config
 
@@ -14,9 +14,9 @@ see pbl-infra README); locally, one `postgres:16` container.
 ## Decision
 
 - One database (`pbl`, one Neon project in production) with **one schema
-  per service**: `platform`, `catalog`, `commerce`, `finance`,
-  `integration`, `insight`. `commerce` may use sub-schemas per area
-  (sales, inventory, purchasing, promotion, customer) as in the ERD.
+  per service**: `platform`, `catalog`, `inventory`, `sales`, `customer`,
+  `finance`, `integration`, `insight`. (Originally `commerce` was one schema
+  with sub-schemas; ADR-0010 made its areas separate services.)
 - Each service connects with `DATABASE_SCHEMA=<service>` (read by
   `database.config.ts` / `data-source.ts`) and touches only that schema.
 - **Forbidden:** cross-schema joins, cross-schema foreign keys, sharing

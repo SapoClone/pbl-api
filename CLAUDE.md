@@ -11,7 +11,7 @@ read the matching record before changing anything it covers.
 1. This file + [docs/decisions/](docs/decisions/) (architecture decision records, "ADRs").
 2. `pbl-infra/docs/architecture.html` (target architecture) and
    `pbl-infra/docs/erd_viewer.html` (ERD per service: Platform, Catalog,
-   Commerce ×5, Finance, Integration, Insight) in the sibling `pbl-infra` repo.
+   Inventory, Sales, Customer, Finance, Integration, Insight) in the sibling `pbl-infra` repo.
 3. The code and its enforced tooling (eslint/prettier, commitlint, husky, CI).
 4. `docs/*.md` (VuePress site) — **partly stale**: written for the
    pre-monorepo layout (`src/...` paths, old CORS snippet). When it
@@ -25,7 +25,7 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 
 | Area | Today | Target (build toward this) |
 |---|---|---|
-| Services | `platform` has business logic; `catalog`, `commerce`, `finance`, `integration`, `insight` only expose `GET /health` (built from `templates/service/` on `@pbl/common`) | 6 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md)) |
+| Services | `platform` has business logic; `catalog`, `inventory`, `sales`, `customer`, `finance`, `integration`, `insight` only expose `GET /health` (built from `templates/service/` on `@pbl/common`) | 8 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md), [ADR-0010](docs/decisions/0010-eight-services.md)) |
 | Tenancy | Implemented (P0): stores, branches, `tid` + `roles` in tokens, `@CurrentTenant()`/`@RequireRoles()` ([ADR-0008](docs/decisions/0008-tenancy.md)) | Staff logins, RBAC `perms`, plans/subscriptions |
 | Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every platform endpoint + each stub's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
@@ -41,7 +41,7 @@ back away from the target direction.
 ```
 apps/
   platform/src/        auth · account · tenant · branch — the only app with logic
-  catalog|commerce|finance|integration|insight/src/   main.ts, app.module.ts, app.e2e.spec.ts (generated from templates/service/)
+  catalog|inventory|sales|customer|finance|integration|insight/src/   main.ts, app.module.ts, app.e2e.spec.ts (generated from templates/service/)
 libs/
   auth/src/            @pbl/auth — token verification, global AuthGuard, tenant context interceptor, Public/AuthOptional/CurrentUser
   common/src/          @pbl/common — errors, logging/request id, health, bootstrap, request context, tenancy, propagation
@@ -49,7 +49,7 @@ templates/service/     source of the generated service apps (scripts/new-service
 krakend/krakend.json   gateway routes (every client-facing route must be declared here)
 krakend/Dockerfile     gateway image: KrakenD 2.6.3 + the pbl-error-body plugin (krakend/plugins/error-body)
 docker/                postgres-init-schemas.sql (creates the 6 schemas), elasticmq.conf (local SQS)
-docker-compose.yml     full local stack: 6 apps + postgres + redis + elasticmq + krakend
+docker-compose.yml     full local stack: 8 apps + postgres + redis + elasticmq + krakend
 scripts/verify-local-stack.sh   end-to-end check (health of all 6 + register/login via gateway)
 docs/decisions/        ADRs — add one for every new architectural decision
 ```
@@ -73,7 +73,9 @@ are copied there via an explicit asset `outDir`.
 
 - **platform**: auth, tenant, branch, staff, RBAC, subscription — **issues JWTs**
 - **catalog**: products, SKU, combos, price lists
-- **commerce**: POS, inventory, purchasing, promotions, CRM — kept together so one sale is one DB transaction
+- **inventory** (core): stock per branch, reservations, ledger, receipts/issues, transfers, stock takes, suppliers, purchase orders
+- **sales** (core): channels, shifts, orders, payments (record and status), returns, promotions, coupons
+- **customer**: customers, groups, addresses, membership tiers, loyalty
 - **finance**: cash book, receivables/payables, shipping, COD reconciliation
 - **integration**: e-commerce marketplaces (Shopee/Lazada/TikTok), SKU mapping, webhooks
 - **insight**: reports, notifications, audit log (read-only)
@@ -84,6 +86,15 @@ Rules:
   data → internal REST call or (later) an event.
 - Put each feature in the service that owns its ERD entity. If ownership is
   unclear, stop and ask; do not default to `platform`.
+- A sale does not share a transaction with stock. `sales` reserves stock in
+  `inventory` through one internal, idempotent command (the only synchronous
+  cross-service call allowed; `InternalHttpClient`, not routed by the gateway);
+  everything else crosses services as events. Only `sales` writes
+  `payment_status`; `finance` and `integration` emit events about money
+  ([ADR-0010](docs/decisions/0010-eight-services.md)).
+- Do not split a service further, or add one, without a reason from
+  [the design](docs/specs/2026-10-18-eight-service-decomposition-design.md)
+  (scaling, failure, team, consistency) and a new ADR.
 
 ## Gateway rules (KrakenD) — [ADR-0003](docs/decisions/0003-krakend-api-gateway.md)
 
@@ -342,6 +353,14 @@ Local SQS is ElasticMQ; queued messages:
 
 ## Known open work (don't rediscover, don't depend on)
 
+- The production `Dockerfile` builds any service (`--build-arg APP_NAME=<service>`,
+  default `platform`), but `deploy.yml` and pbl-infra still deploy only
+  `platform`; per-service ECR repositories, ECS services and a deploy matrix do
+  not exist.
+- Each service should connect with its own Postgres role limited to its schema
+  (ADR-0002 target); today they would share the superuser.
+- Calls made outside a user request (jobs, consumers) have no service token yet
+  (ADR-0004 §8).
 - Auth endpoints `forgot-password`, `verify/forgot-password`,
   `reset-password`, `verify/email`, `verify/email/resend`
   are placeholders returning a string.
@@ -358,7 +377,7 @@ Local SQS is ElasticMQ; queued messages:
 ## Roadmap
 
 Catalog/commerce work follows [docs/specs/2026-10-10-catalog-commerce-roadmap.md](docs/specs/2026-10-10-catalog-commerce-roadmap.md)
-(P0 tenancy → P1 event bus → P2 catalog → P3–P5 commerce → P6 insight → P7–P9).
+(P0 tenancy → P1 event bus → P2 catalog → P3 inventory → P4 customer → P5 sales → P6 insight → P7–P9). Boundaries: [eight-service design](docs/specs/2026-10-18-eight-service-decomposition-design.md).
 Each sub-project needs its own approved design spec in `docs/specs/`
 (committed; `docs/superpowers/` is gitignored for personal drafts only)
 before implementation; do not start a later sub-project's code early, and

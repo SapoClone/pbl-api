@@ -131,8 +131,9 @@ done, production clients call platform directly.
     request id is the thread that ties a gateway error to the service logs.
   - Introduce per-environment config (KrakenD flexible config or a
     separate file) so the local and production settings don't diverge.
-- [ ] To deploy catalog, commerce, finance, integration and insight: give
-  each an image, an ECS service and the env var
+- [ ] To deploy catalog, inventory, sales, customer, finance, integration and
+  insight: give each an image (build with `--build-arg APP_NAME=<service>`;
+  `deploy.yml` still builds and pushes only `platform`), an ECS service and the env var
   `AUTH_JWKS_URL=https://api.sapo.makeasy.id.vn/.well-known/jwks.json`
   (they refuse to start without it). They also read the logout deny-list
   from Redis, so set `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` and

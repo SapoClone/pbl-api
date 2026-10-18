@@ -1,6 +1,6 @@
 # API conventions
 
-Rules for every HTTP API in this repo (all six services). Follow them for
+Rules for every HTTP API in this repo (all eight services). Follow them for
 new endpoints; change existing endpoints toward them when you touch them.
 
 Items marked **(new)** were decided on 2026-10-10 for the

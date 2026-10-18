@@ -16,5 +16,6 @@ large changes are built on them. Summary rules live in [`/CLAUDE.md`](../../CLAU
 | [0007](0007-event-bus.md) | Services share data through an event bus (outbox → SNS → SQS), no runtime REST for business data | Accepted (direction; built in P1) |
 | [0008](0008-tenancy.md) | Tenant comes from the token; every business row is tenant-scoped | Accepted (built in P0) |
 | [0009](0009-shared-libraries-and-versioning.md) | Shared libraries are published to GitHub Packages as `@sapoclone/pbl-*` and versioned with semver; breaking export changes bump the major | Accepted |
+| [0010](0010-eight-services.md) | Eight services: `commerce` is split into `inventory`, `sales` and `customer`; stock reservation instead of a shared transaction; payment split by concern | Accepted (direction) |
 
 New record: copy [0000-template.md](0000-template.md), take the next number.

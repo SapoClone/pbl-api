@@ -13,7 +13,7 @@ docker compose version >/dev/null 2>&1 || fail "'docker compose' (Compose v2) is
 docker info >/dev/null 2>&1 || fail "the Docker engine is not running — start Docker Desktop and retry."
 
 gateway="http://localhost:${GATEWAY_HOST_PORT:-8080}"
-services=(platform catalog commerce finance integration insight)
+services=(platform catalog finance integration insight inventory sales customer)
 
 echo "Starting stack..."
 docker compose up --build -d
