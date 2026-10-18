@@ -14,6 +14,7 @@ gateway="http://localhost:${GATEWAY_HOST_PORT:-8080}"
 platform="$gateway/platform/api/v1"
 sales="$gateway/sales/api/v1"
 insight="$gateway/insight/api/v1"
+inventory="$gateway/inventory/api/v1"
 run="$(date +%s)"
 password="Passw0rd!"
 
@@ -84,6 +85,8 @@ wait_for "sales learned the new branch through the event (branch_projection)" \
   count_is "select count(*) from sales.branch_projection where branch_id='$branch_id' and tenant_id='$tenant_id' and status='active'" 1
 wait_for "sales learned the default branch too (2 branches in the store)" \
   count_is "select count(*) from sales.branch_projection where tenant_id='$tenant_id'" 2
+wait_for "inventory learned both branches as well (every subscriber gets the event)" \
+  count_is "select count(*) from inventory.branch_projection where tenant_id='$tenant_id'" 2
 
 step "3. Permissions: the owner gives the cashier a role (event platform.membership.granted)"
 granted=$(http POST "$platform/tenants/current/members" "$store_token" "{\"email\":\"$cashier\",\"role\":\"cashier\"}")
@@ -95,7 +98,22 @@ cashier_token=$(login "$cashier" "$tenant_id" | json_field accessToken)
 [[ -n "$cashier_token" ]] || fail "cashier could not sign in to the store"
 ok "cashier is signed in with the cashier role"
 
+step "4b. Stock: the owner receives goods; selling will hold and then deduct them"
+receipt="{\"branchId\":\"$branch_id\",\"items\":[{\"sku\":\"AO-01\",\"quantity\":5},{\"sku\":\"QUAN-02\",\"quantity\":2}]}"
+expect_status 403 "a cashier cannot receive stock" "$(http POST "$inventory/stock-receipts" "$cashier_token" "$receipt")"
+expect_status 201 "the owner receives 5 AO-01 and 2 QUAN-02" "$(http POST "$inventory/stock-receipts" "$store_token" "$receipt")"
+expect_status 404 "the hold command is internal: the gateway does not route it" "$(http POST "$gateway/inventory/internal/reservations" "$cashier_token" '{}')"
+stock_is() { count_is "select count(*) from inventory.stock_item where tenant_id='$tenant_id' and sku='$1' and quantity_on_hand=$2 and quantity_reserved=$3" 1; }
+
 step "5. Selling: the cashier sells at the counter (event sales.order.completed)"
+order_of() { echo "{\"branchId\":\"$branch_id\",\"paymentMethod\":\"cash\",\"items\":[{\"sku\":\"$1\",\"quantity\":$2,\"name\":\"$1\",\"unitPrice\":120000}]}"; }
+too_much="$(order_of AO-01 9)"
+oversell=$(http POST "$sales/orders" "$cashier_token" "$too_much" "Idempotency-Key: $(new_uuid)")
+expect_status 409 "selling 9 when 5 are in stock is refused" "$oversell"
+printf '%s' "$oversell" | body_of | grep -q '"errorCode":"S004"' || fail "expected S004: $(printf '%s' "$oversell" | body_of)"
+printf '%s' "$oversell" | body_of | grep -q '"available":5' || fail "the refusal should say 5 are available"
+ok "the refusal names the shortage (requested 9, available 5) and nothing was held"
+stock_is AO-01 5 0 || fail "stock changed after a refused sale"
 sale_key=$(new_uuid)
 sale_body="{\"branchId\":\"$branch_id\",\"paymentMethod\":\"cash\",\"items\":[{\"sku\":\"AO-01\",\"name\":\"Ao thun\",\"quantity\":2,\"unitPrice\":120000},{\"sku\":\"QUAN-02\",\"name\":\"Quan jean\",\"quantity\":1,\"unitPrice\":350000}]}"
 expect_status 400 "an order without an Idempotency-Key" "$(http POST "$sales/orders" "$cashier_token" "$sale_body")"
@@ -112,6 +130,13 @@ ok "same order id: nothing was sold twice"
 expect_status 409 "the same key with a different request" "$(http POST "$sales/orders" "$cashier_token" "${sale_body/cash/card}" "Idempotency-Key: $sale_key")"
 expect_status 400 "an order for an unknown branch" "$(http POST "$sales/orders" "$cashier_token" '{"branchId":"00000000-0000-4000-8000-000000000000","paymentMethod":"cash","items":[{"sku":"X","name":"X","quantity":1,"unitPrice":1}]}' "Idempotency-Key: $(new_uuid)")"
 expect_status 422 "an order without items" "$(http POST "$sales/orders" "$cashier_token" "{\"branchId\":\"$branch_id\",\"paymentMethod\":\"cash\",\"items\":[]}" "Idempotency-Key: $(new_uuid)")"
+wait_for "AO-01: 3 on hand, nothing held any more" stock_is AO-01 3 0
+wait_for "QUAN-02: 1 on hand, nothing held any more" stock_is QUAN-02 1 0
+sleep 1
+stock_is AO-01 3 0 || fail "the retry took stock twice"
+ok "the retry and the 409 did not touch the stock"
+expect_status 409 "selling 4 AO-01 when only 3 are left" "$(http POST "$sales/orders" "$cashier_token" "$(order_of AO-01 4)" "Idempotency-Key: $(new_uuid)")"
+expect_status 200 "the cashier can see what is left" "$(http GET "$inventory/stock?branchId=$branch_id" "$cashier_token")"
 expect_status 401 "an order without a token" "$(curl -s -w '\n%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$sales/orders")"
 
 step "6. Permissions: what a cashier may not do"
