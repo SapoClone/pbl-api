@@ -57,9 +57,14 @@ describe('SqsDirectPublisher', () => {
     );
     await publisher.publish(event('platform.branch.updated'));
 
-    expect(send).toHaveBeenCalledTimes(1);
-    const command = send.mock.calls[0][0] as SendMessageCommand;
-    expect(command.input.QueueUrl).toBe('http://q/sales-events');
+    expect(send).toHaveBeenCalledTimes(2);
+    const urls = send.mock.calls.map(
+      ([command]) => (command as SendMessageCommand).input.QueueUrl,
+    );
+    expect(urls).toEqual([
+      'http://q/sales-events',
+      'http://q/inventory-events',
+    ]);
   });
 
   it('sends nothing when nobody subscribes', async () => {

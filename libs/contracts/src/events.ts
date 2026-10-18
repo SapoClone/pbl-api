@@ -88,3 +88,32 @@ export interface OrderCompletedPayload {
   completedAt: string;
   items: { sku: string; name: string; quantity: number; unitPrice: number }[];
 }
+
+// ---- inventory (internal command, not an event: sales holds stock before it sells)
+
+export interface StockLine {
+  sku: string;
+  quantity: number;
+}
+
+/** `POST /internal/reservations` of inventory; `orderId` is the idempotency key */
+export interface ReserveStockRequest {
+  orderId: string;
+  branchId: string;
+  lines: StockLine[];
+}
+
+export interface StockShortage {
+  sku: string;
+  requested: number;
+  /** on hand minus what other holds keep */
+  available: number;
+}
+
+export interface StockReservation {
+  orderId: string;
+  branchId: string;
+  status: 'held' | 'committed' | 'released' | 'expired';
+  expiresAt: string;
+  lines: StockLine[];
+}
