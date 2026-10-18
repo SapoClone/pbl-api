@@ -12,10 +12,12 @@ export class SqsDirectPublisher implements EventPublisher {
   constructor(
     private readonly sqs: SQSClient,
     private readonly queues: QueueProvisioner,
+    /** Which services' queues get an event type; the topology unless a test says otherwise */
+    private readonly subscribers: (type: string) => string[] = subscribersOf,
   ) {}
 
   async publish(envelope: EventEnvelope): Promise<void> {
-    for (const service of subscribersOf(envelope.type)) {
+    for (const service of this.subscribers(envelope.type)) {
       const queueUrl = await this.queues.ensureQueue(service);
       await this.sqs.send(
         new SendMessageCommand({

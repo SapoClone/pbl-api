@@ -91,22 +91,30 @@ export class EventConsumer
     });
   }
 
+  /**
+   * One receive and its processing. Returns the number of messages received.
+   * Public so tests and tools can drive the consumer without the loop.
+   */
+  async pollOnce(waitSeconds = this.config.pollWaitSeconds): Promise<number> {
+    const queueUrl = await this.queues.resolveQueueUrl(this.options.service);
+    const { Messages = [] } = await this.sqs.send(
+      new ReceiveMessageCommand({
+        QueueUrl: queueUrl,
+        MaxNumberOfMessages: 10,
+        WaitTimeSeconds: waitSeconds,
+      }),
+    );
+    for (const message of Messages) {
+      if (this.stopped) break;
+      await this.process(queueUrl, message);
+    }
+    return Messages.length;
+  }
+
   private async run(): Promise<void> {
-    let queueUrl: string | undefined;
     while (!this.stopped) {
       try {
-        queueUrl ??= await this.queues.resolveQueueUrl(this.options.service);
-        const { Messages = [] } = await this.sqs.send(
-          new ReceiveMessageCommand({
-            QueueUrl: queueUrl,
-            MaxNumberOfMessages: 10,
-            WaitTimeSeconds: this.config.pollWaitSeconds,
-          }),
-        );
-        for (const message of Messages) {
-          if (this.stopped) break;
-          await this.process(queueUrl, message);
-        }
+        await this.pollOnce();
       } catch (error) {
         this.logger.error(
           `Event consumer error: ${error instanceof Error ? error.message : error}`,

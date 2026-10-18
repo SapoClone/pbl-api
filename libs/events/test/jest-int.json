@@ -1,0 +1,14 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "../../..",
+  "roots": ["<rootDir>/libs/events/test"],
+  "testRegex": ".*\\.int-spec\\.ts$",
+  "transform": { "^.+\\.(t|j)s$": "ts-jest" },
+  "testEnvironment": "node",
+  "testTimeout": 90000,
+  "moduleNameMapper": {
+    "^@pbl/common(|/.*)$": "<rootDir>/libs/common/src$1",
+    "^@pbl/contracts(|/.*)$": "<rootDir>/libs/contracts/src$1",
+    "^@pbl/events(|/.*)$": "<rootDir>/libs/events/src$1"
+  }
+}
