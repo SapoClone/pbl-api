@@ -1,6 +1,6 @@
 {
   "name": "@sapoclone/pbl-common",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Shared Nest building blocks for PBL services: bootstrap, request/tenant context, errors, health, logging, propagation, tenant-scoped repository",
   "license": "MIT",
   "main": "dist/index.js",

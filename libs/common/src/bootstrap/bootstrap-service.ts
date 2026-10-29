@@ -54,14 +54,23 @@ export async function bootstrapService(
 
   if (process.env.APP_SWAGGER_ENABLED !== 'false') {
     const config = new DocumentBuilder()
-      .setTitle(options.name)
+      .setTitle(`SapoClone — ${options.name} service`)
+      .setDescription(
+        `OpenAPI specification for the ${options.name} microservice`,
+      )
+      .setVersion('1.0')
       .addBearerAuth()
       .build();
-    SwaggerModule.setup(
-      'api-docs',
-      app,
-      SwaggerModule.createDocument(app, config),
-    );
+    const document = SwaggerModule.createDocument(app, config);
+    const swaggerSetupOptions = {
+      customSiteTitle: `SapoClone API — ${options.name}`,
+      swaggerOptions: {
+        persistAuthorization: true,
+        docExpansion: 'list',
+      },
+    };
+    SwaggerModule.setup('api-docs', app, document, swaggerSetupOptions);
+    SwaggerModule.setup('api/docs', app, document, swaggerSetupOptions);
   }
 
   await app.listen(options.port ?? process.env.PORT ?? 3000);

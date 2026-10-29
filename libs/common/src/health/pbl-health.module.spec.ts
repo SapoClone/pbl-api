@@ -24,10 +24,14 @@ describe('PblHealthModule', () => {
     else process.env.REDIS_HOST = savedRedis;
   });
 
-  it('GET /health is a liveness check naming the service', async () => {
+  it('GET /health and GET /health/live are liveness checks naming the service', async () => {
     await boot({ service: 'catalog' });
     const res = await request(app.getHttpServer()).get('/health').expect(200);
     expect(res.body).toEqual({ status: 'ok', service: 'catalog' });
+    const live = await request(app.getHttpServer())
+      .get('/health/live')
+      .expect(200);
+    expect(live.body).toEqual({ status: 'ok', service: 'catalog' });
   });
 
   it('GET /health/ready is 200 when every check is up', async () => {

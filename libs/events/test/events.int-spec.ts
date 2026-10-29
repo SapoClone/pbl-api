@@ -53,7 +53,10 @@ describe('event bus (Postgres + SQS)', () => {
 
   beforeAll(async () => {
     useDatabase(schema);
-    sqs = new SQSClient({ region: 'ap-southeast-1' });
+    sqs = new SQSClient({
+      region: 'ap-southeast-1',
+      useQueueUrlAsEndpoint: false,
+    });
     dataSource = new DataSource({
       type: 'postgres',
       host: process.env.DATABASE_HOST,

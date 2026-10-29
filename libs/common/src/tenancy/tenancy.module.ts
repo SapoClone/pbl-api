@@ -16,6 +16,9 @@ export const getTenantScopedRepositoryToken = (entity: EntityClassOrSchema) =>
 export const InjectTenantScopedRepository = (entity: EntityClassOrSchema) =>
   Inject(getTenantScopedRepositoryToken(entity));
 
+/** Convenience alias for InjectTenantScopedRepository */
+export const InjectTenantRepository = InjectTenantScopedRepository;
+
 /**
  * `TenancyModule.forFeature([Entity])` next to (or instead of)
  * `TypeOrmModule.forFeature([Entity])`: provides a TenantScopedRepository per

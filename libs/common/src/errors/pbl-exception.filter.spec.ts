@@ -197,4 +197,17 @@ describe('PblExceptionFilter', () => {
     expect(res.body.stack).toContain('secret internals');
     expect(res.body.message).toBe('Internal Server Error');
   });
+
+  it('includes traceId when X-Trace-Id header is present', async () => {
+    await boot();
+    const res = await request(app.getHttpServer())
+      .get('/coded')
+      .set('X-Trace-Id', 'trace-abc-123')
+      .expect(400);
+    expect(res.body).toMatchObject({
+      statusCode: 400,
+      errorCode: 'X001',
+      traceId: 'trace-abc-123',
+    });
+  });
 });
