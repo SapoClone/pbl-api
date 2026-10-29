@@ -12,8 +12,12 @@ import {
 import { BranchProjectionEntity } from './branches/branch-projection.entity';
 import { CreateSalesTables1791800000000 } from './migrations/1791800000000-create-sales-tables';
 import { AddOrderIdempotency1791800000200 } from './migrations/1791800000200-add-order-idempotency';
+import { CreateCheckoutWorkflow1791800000300 } from './migrations/1791800000300-create-checkout-workflow';
 import { OrderItemEntity } from './orders/entities/order-item.entity';
-import { OrderEntity } from './orders/entities/order.entity';
+import {
+  CheckoutWorkflowEntity,
+  OrderEntity,
+} from './orders/entities/order.entity';
 import { OrdersModule } from './orders/orders.module';
 
 @Module({
@@ -22,11 +26,16 @@ import { OrdersModule } from './orders/orders.module';
   imports: [
     PblLoggingModule.forRoot('sales'),
     PblAuthModule.forRemoteJwks(),
-    PblHealthModule.forRoot({ service: 'sales', redisFromEnv: true }),
+    PblHealthModule.forRoot({
+      service: 'sales',
+      redisFromEnv: true,
+      database: true,
+    }),
     PblDatabaseModule.forRoot({
       entities: [
         OrderEntity,
         OrderItemEntity,
+        CheckoutWorkflowEntity,
         BranchProjectionEntity,
         ...PRODUCER_ENTITIES,
         ...CONSUMER_ENTITIES,
@@ -36,6 +45,7 @@ import { OrdersModule } from './orders/orders.module';
         ...CONSUMER_MIGRATIONS,
         CreateSalesTables1791800000000,
         AddOrderIdempotency1791800000200,
+        CreateCheckoutWorkflow1791800000300,
       ],
     }),
     PblEventsModule.forRoot({ service: 'sales' }),

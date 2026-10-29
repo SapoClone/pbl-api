@@ -8,6 +8,9 @@ import { OrderCompletedPayload } from '@pbl/contracts';
 import {
   CONSUMER_ENTITIES,
   CONSUMER_MIGRATIONS,
+  EventOutbox,
+  PRODUCER_ENTITIES,
+  PRODUCER_MIGRATIONS,
   databaseOptions,
   initializeDatabase,
 } from '@pbl/events';
@@ -17,11 +20,13 @@ import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
 import { BranchProjectionEntity } from '../src/branches/branch-projection.entity';
 import { BranchProjectionHandler } from '../src/branches/branch-projection.handler';
 import { CreateInventoryTables1791900000000 } from '../src/migrations/1791900000000-create-inventory-tables';
+import { AddWarehouseStockBalances1791900000100 } from '../src/migrations/1791900000100-add-warehouse-stock-balances';
 import {
   InventoryLedgerEntity,
   StockItemEntity,
   StockReservationEntity,
   StockReservationItemEntity,
+  WAREHOUSE_STOCK_ENTITIES,
 } from '../src/stock/entities/stock.entities';
 import {
   ReservationMismatchError,
@@ -120,20 +125,26 @@ describe('inventory (Postgres)', () => {
           StockReservationEntity,
           StockReservationItemEntity,
           InventoryLedgerEntity,
+          ...WAREHOUSE_STOCK_ENTITIES,
           BranchProjectionEntity,
+          ...PRODUCER_ENTITIES,
           ...CONSUMER_ENTITIES,
         ],
         migrations: [
+          ...PRODUCER_MIGRATIONS,
           ...CONSUMER_MIGRATIONS,
           CreateInventoryTables1791900000000,
+          AddWarehouseStockBalances1791900000100,
         ],
       }),
     );
-    reservations = new ReservationsService(dataSource, 15);
+    const outbox = new EventOutbox();
+    reservations = new ReservationsService(dataSource, 15, outbox);
     stock = new StockService(
       dataSource,
       TenantScopedRepository.forEntity(dataSource, StockItemEntity),
       TenantScopedRepository.forEntity(dataSource, BranchProjectionEntity),
+      outbox,
     );
   });
 
@@ -144,6 +155,12 @@ describe('inventory (Postgres)', () => {
 
   beforeEach(async () => {
     for (const name of [
+      'warehouse_reservation_line',
+      'warehouse_reservation',
+      'stock_balance_ledger',
+      'stock_balance',
+      'warehouse',
+      'outbox_event',
       'stock_reservation_item',
       'stock_reservation',
       'inventory_ledger',
@@ -587,6 +604,249 @@ describe('inventory (Postgres)', () => {
 
       expect(await reservations.expireDue()).toBe(0);
       expect(await item(TENANT_A, 'AO-01')).toEqual({ onHand: 3, reserved: 0 });
+    });
+  });
+
+  describe('warehouse stock balances and /internal/v1/reservations (ADR-0012)', () => {
+    const SKU_ID_1 = '11111111-1111-4111-8111-111111111111';
+    const SKU_ID_2 = '22222222-2222-4222-8222-222222222222';
+    let warehouseId: string;
+
+    beforeEach(async () => {
+      const warehouse = await as(TENANT_A, () =>
+        stock.createWarehouse({
+          code: 'WH-HCM-01',
+          name: 'Kho Trung Tam HCM',
+          branchId: BRANCH,
+        }),
+      );
+      warehouseId = warehouse.id;
+      await as(TENANT_A, () =>
+        stock.receiveStockBalance({
+          warehouseId,
+          skuId: SKU_ID_1,
+          qty: '5.000',
+        }),
+      );
+      await as(TENANT_A, () =>
+        stock.receiveStockBalance({
+          warehouseId,
+          skuId: SKU_ID_2,
+          qty: '2.000',
+        }),
+      );
+    });
+
+    it('creates a HELD reservation, replays idempotently on same key, and rejects mismatched payload with 409 IDEMPOTENCY_CONFLICT', async () => {
+      const idempotencyKey = randomUUID();
+      const checkoutId = randomUUID();
+
+      const first = await as(TENANT_A, () =>
+        reservations.reserveWarehouseStock(idempotencyKey, {
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: checkoutId,
+          ttlSeconds: 900,
+          lines: [
+            { warehouseId, skuId: SKU_ID_2, qty: '1.000' },
+            { warehouseId, skuId: SKU_ID_1, qty: '1.500' },
+            { warehouseId, skuId: SKU_ID_1, qty: '0.500' },
+          ],
+        }),
+      );
+
+      expect(first.replayed).toBe(false);
+      expect(first.reservation.state).toBe('HELD');
+      expect(first.reservation.lines).toEqual([
+        expect.objectContaining({
+          warehouseId,
+          skuId: SKU_ID_1,
+          qty: '2.000',
+          availableAfter: '3.000',
+        }),
+        expect.objectContaining({
+          warehouseId,
+          skuId: SKU_ID_2,
+          qty: '1.000',
+          availableAfter: '1.000',
+        }),
+      ]);
+
+      // Replay with equivalent normalized lines
+      const replay = await as(TENANT_A, () =>
+        reservations.reserveWarehouseStock(idempotencyKey, {
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: checkoutId,
+          ttlSeconds: 900,
+          lines: [
+            { warehouseId, skuId: SKU_ID_1, qty: '2.000' },
+            { warehouseId, skuId: SKU_ID_2, qty: '1.000' },
+          ],
+        }),
+      );
+      expect(replay.replayed).toBe(true);
+      expect(replay.reservation.reservationId).toBe(
+        first.reservation.reservationId,
+      );
+
+      // Replay with different payload -> 409 IDEMPOTENCY_CONFLICT
+      const conflictErr = await as(TENANT_A, () =>
+        reservations.reserveWarehouseStock(idempotencyKey, {
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: checkoutId,
+          ttlSeconds: 900,
+          lines: [{ warehouseId, skuId: SKU_ID_1, qty: '3.000' }],
+        }),
+      ).catch((e) => e);
+      expect(conflictErr.getResponse()).toMatchObject({
+        errorCode: 'IDEMPOTENCY_CONFLICT',
+      });
+    });
+
+    it('rolls back all lines atomically when any line has insufficient stock (409 INSUFFICIENT_STOCK)', async () => {
+      const err = await as(TENANT_A, () =>
+        reservations.reserveWarehouseStock(randomUUID(), {
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: randomUUID(),
+          ttlSeconds: 900,
+          lines: [
+            { warehouseId, skuId: SKU_ID_1, qty: '2.000' }, // fits
+            { warehouseId, skuId: SKU_ID_2, qty: '9.000' }, // exceeds 2.000
+          ],
+        }),
+      ).catch((e) => e);
+
+      expect(err.getResponse()).toMatchObject({
+        errorCode: 'INSUFFICIENT_STOCK',
+        details: [
+          {
+            warehouseId,
+            skuId: SKU_ID_2,
+            requestedQty: '9.000',
+            availableQty: '2.000',
+          },
+        ],
+      });
+
+      const balances = await as(TENANT_A, () =>
+        stock.listStockBalances(warehouseId),
+      );
+      const b1 = balances.find((b: { skuId: string }) => b.skuId === SKU_ID_1);
+      expect(b1).toMatchObject({
+        onHandQty: '5.000',
+        reservedQty: '0.000',
+        availableQty: '5.000',
+      });
+    });
+
+    it('serializes concurrent last-unit contention: 10 callers for 5.000 in stock -> exactly 5 succeed and 5 get 409 INSUFFICIENT_STOCK', async () => {
+      const outcomes = await Promise.allSettled(
+        Array.from({ length: 10 }, () =>
+          as(TENANT_A, () =>
+            reservations.reserveWarehouseStock(randomUUID(), {
+              callerService: 'sales',
+              sourceRefType: 'ORDER',
+              sourceRefId: randomUUID(),
+              ttlSeconds: 900,
+              lines: [{ warehouseId, skuId: SKU_ID_1, qty: '1.000' }],
+            }),
+          ),
+        ),
+      );
+
+      expect(outcomes.filter((o) => o.status === 'fulfilled')).toHaveLength(5);
+      expect(outcomes.filter((o) => o.status === 'rejected')).toHaveLength(5);
+
+      const balances = await as(TENANT_A, () =>
+        stock.listStockBalances(warehouseId),
+      );
+      const b1 = balances.find((b: { skuId: string }) => b.skuId === SKU_ID_1);
+      expect(b1).toMatchObject({
+        onHandQty: '5.000',
+        reservedQty: '5.000',
+        availableQty: '0.000',
+      });
+    });
+
+    it('commits a HELD reservation once, writes stock_balance_ledger and outbox events, and releases HELD reservations idempotently', async () => {
+      const held = await as(TENANT_A, () =>
+        reservations.reserveWarehouseStock(randomUUID(), {
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: randomUUID(),
+          ttlSeconds: 900,
+          lines: [{ warehouseId, skuId: SKU_ID_1, qty: '2.000' }],
+        }),
+      );
+
+      const committed = await as(TENANT_A, () =>
+        reservations.commitWarehouseReservation(held.reservation.reservationId),
+      );
+      const committedReplay = await as(TENANT_A, () =>
+        reservations.commitWarehouseReservation(held.reservation.reservationId),
+      );
+
+      expect(committed.state).toBe('COMMITTED');
+      expect(committedReplay.state).toBe('COMMITTED');
+
+      const balances = await as(TENANT_A, () =>
+        stock.listStockBalances(warehouseId),
+      );
+      const b1 = balances.find((b: { skuId: string }) => b.skuId === SKU_ID_1);
+      expect(b1).toMatchObject({
+        onHandQty: '3.000',
+        reservedQty: '0.000',
+        availableQty: '3.000',
+      });
+
+      const outboxEvents = await dataSource.query(
+        `SELECT "type" FROM ${table('outbox_event')} ORDER BY "created_at"`,
+      );
+      expect(outboxEvents.map((e: { type: string }) => e.type)).toEqual(
+        expect.arrayContaining([
+          'inventory.reservation.confirmed',
+          'inventory.stock.changed',
+        ]),
+      );
+
+      // Reserve another 1.000 and release it idempotently
+      const held2 = await as(TENANT_A, () =>
+        reservations.reserveWarehouseStock(randomUUID(), {
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: randomUUID(),
+          ttlSeconds: 900,
+          lines: [{ warehouseId, skuId: SKU_ID_1, qty: '1.000' }],
+        }),
+      );
+      const released = await as(TENANT_A, () =>
+        reservations.releaseWarehouseReservation(
+          held2.reservation.reservationId,
+        ),
+      );
+      const releasedReplay = await as(TENANT_A, () =>
+        reservations.releaseWarehouseReservation(
+          held2.reservation.reservationId,
+        ),
+      );
+      expect(released.state).toBe('RELEASED');
+      expect(releasedReplay.state).toBe('RELEASED');
+
+      const balancesAfterRelease = await as(TENANT_A, () =>
+        stock.listStockBalances(warehouseId),
+      );
+      expect(
+        balancesAfterRelease.find(
+          (b: { skuId: string }) => b.skuId === SKU_ID_1,
+        ),
+      ).toMatchObject({
+        onHandQty: '3.000',
+        reservedQty: '0.000',
+        availableQty: '3.000',
+      });
     });
   });
 });
