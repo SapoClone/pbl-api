@@ -15,8 +15,25 @@ import {
   readReservationTtlMinutes,
   RESERVATION_TTL_MINUTES,
 } from './config/inventory.config';
+import { CatalogSkuProjectionHandler } from './infrastructure/catalog-reference/catalog-sku-projection.handler';
+import { M2_INVENTORY_ENTITIES } from './infrastructure/persistence/inventory.entities';
 import { CreateInventoryTables1791900000000 } from './migrations/1791900000000-create-inventory-tables';
 import { AddWarehouseStockBalances1791900000100 } from './migrations/1791900000100-add-warehouse-stock-balances';
+import { CreateM2InventoryCore1791900000200 } from './migrations/1791900000200-create-m2-inventory-core';
+import { IssuingController } from './modules/issuing/issuing.controller';
+import { IssuingService } from './modules/issuing/issuing.service';
+import { ProcurementController } from './modules/procurement/procurement.controller';
+import { ProcurementService } from './modules/procurement/procurement.service';
+import { ReceivingController } from './modules/receiving/receiving.controller';
+import { ReceivingService } from './modules/receiving/receiving.service';
+import { StockQueryController } from './modules/stock/stock-query.controller';
+import { StockQueryService } from './modules/stock/stock-query.service';
+import { StocktakeController } from './modules/stocktake/stocktake.controller';
+import { StocktakeService } from './modules/stocktake/stocktake.service';
+import { TransfersController } from './modules/transfers/transfers.controller';
+import { TransfersService } from './modules/transfers/transfers.service';
+import { WarehousesController } from './modules/warehouses/warehouses.controller';
+import { WarehousesService } from './modules/warehouses/warehouses.service';
 import {
   InventoryLedgerEntity,
   StockItemEntity,
@@ -53,6 +70,7 @@ import { StockService } from './stock/stock.service';
         InventoryLedgerEntity,
         BranchProjectionEntity,
         ...WAREHOUSE_STOCK_ENTITIES,
+        ...M2_INVENTORY_ENTITIES,
         ...PRODUCER_ENTITIES,
         ...CONSUMER_ENTITIES,
       ],
@@ -61,6 +79,7 @@ import { StockService } from './stock/stock.service';
         ...CONSUMER_MIGRATIONS,
         CreateInventoryTables1791900000000,
         AddWarehouseStockBalances1791900000100,
+        CreateM2InventoryCore1791900000200,
       ],
     }),
     PblEventsModule.forRoot({ service: 'inventory' }),
@@ -68,15 +87,30 @@ import { StockService } from './stock/stock.service';
       StockItemEntity,
       BranchProjectionEntity,
       ...WAREHOUSE_STOCK_ENTITIES,
+      ...M2_INVENTORY_ENTITIES,
     ]),
   ],
   controllers: [
     StockController,
+    WarehousesController,
+    StockQueryController,
+    ReceivingController,
+    IssuingController,
+    TransfersController,
+    StocktakeController,
+    ProcurementController,
     ReservationsController,
     WarehouseReservationsController,
   ],
   providers: [
     StockService,
+    WarehousesService,
+    StockQueryService,
+    ReceivingService,
+    IssuingService,
+    TransfersService,
+    StocktakeService,
+    ProcurementService,
     ReservationsService,
     {
       provide: RESERVATION_TTL_MINUTES,
@@ -85,6 +119,7 @@ import { StockService } from './stock/stock.service';
     ReservationExpiryJob,
     OrderCompletedHandler,
     BranchProjectionHandler,
+    CatalogSkuProjectionHandler,
   ],
 })
 export class AppModule {}

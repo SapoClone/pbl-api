@@ -4,8 +4,10 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Optional,
   Post,
   Query,
+  ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -15,35 +17,69 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { RequireRoles } from '@pbl/auth';
+import { validationExceptionFactory } from '@pbl/common';
 import { ROLES } from '@pbl/contracts';
+import { CreateStockReceiptDto } from '../modules/receiving/receiving.dto';
+import { ReceivingService } from '../modules/receiving/receiving.service';
+import { rethrowInventoryHttpError } from '../presentation/inventory-http-error';
 import {
-  CreateWarehouseDto,
   ListStockReqDto,
   ReceiveStockBalanceDto,
   StockReceiptReqDto,
 } from './dto/stock.dto';
 import { Page, StockRes, StockService } from './stock.service';
 
+const polymorphicPipe = new ValidationPipe({
+  whitelist: true,
+  transform: true,
+  exceptionFactory: validationExceptionFactory,
+});
+
 /** Goods in, and what there is: receiving is for the people who run the store */
 @ApiTags('stock')
 @ApiBearerAuth()
 @Controller('api/v1')
 export class StockController {
-  constructor(private readonly stock: StockService) {}
+  constructor(
+    private readonly stock: StockService,
+    @Optional() private readonly receiving?: ReceivingService,
+  ) {}
 
   @Post('stock-receipts')
   @HttpCode(HttpStatus.CREATED)
   @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
   @ApiOperation({
-    summary: 'Receive branch stock (purchase receipt)',
+    summary:
+      'Create a warehouse stock receipt document (M2) or receive branch stock (P1)',
     description:
-      'Increments branch on-hand stock for each line item and writes a PURCHASE_RECEIPT stock movement.',
+      'Creates a DRAFT M2 warehouse stock receipt document when warehouseId is provided, or increments legacy P1 branch on-hand stock when branchId is provided.',
   })
   @ApiResponse({
     status: HttpStatus.CREATED,
-    description: 'Updated branch stock rows',
+    description: 'Created stock receipt document or updated branch stock rows',
   })
-  receive(@Body() dto: StockReceiptReqDto): Promise<StockRes[]> {
+  async receive(@Body() body: Record<string, unknown>): Promise<unknown> {
+    if (
+      body &&
+      typeof body === 'object' &&
+      'warehouseId' in body &&
+      this.receiving
+    ) {
+      const dto = (await polymorphicPipe.transform(body, {
+        type: 'body',
+        metatype: CreateStockReceiptDto,
+      })) as CreateStockReceiptDto;
+      try {
+        return await this.receiving.createReceipt(dto);
+      } catch (error) {
+        rethrowInventoryHttpError(error);
+      }
+    }
+
+    const dto = (await polymorphicPipe.transform(body, {
+      type: 'body',
+      metatype: StockReceiptReqDto,
+    })) as StockReceiptReqDto;
     return this.stock.receive(dto);
   }
 
@@ -60,36 +96,6 @@ export class StockController {
   })
   list(@Query() query: ListStockReqDto): Promise<Page<StockRes>> {
     return this.stock.list(query);
-  }
-
-  @Post('warehouses')
-  @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
-  @ApiOperation({
-    summary: 'Create a warehouse',
-    description:
-      'Creates a tenant-scoped warehouse for decimal(12,3) stock balances and reservations.',
-  })
-  @ApiResponse({
-    status: HttpStatus.CREATED,
-    description: 'Created warehouse record',
-  })
-  createWarehouse(@Body() dto: CreateWarehouseDto) {
-    return this.stock.createWarehouse(dto);
-  }
-
-  @Get('warehouses')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
-  @ApiOperation({
-    summary: 'List tenant warehouses',
-    description: 'Lists all active and inactive warehouses for the tenant.',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'List of warehouses',
-  })
-  listWarehouses() {
-    return this.stock.listWarehouses();
   }
 
   @Post('stock-balances/receipts')

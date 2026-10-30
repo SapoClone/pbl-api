@@ -875,10 +875,490 @@ export const MICROSERVICE_SWAGGER_PATHS: PathsObject = {
     },
   },
 
+  '/inventory/api/v1/warehouses/{id}': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Get warehouse details by ID',
+      operationId: 'WarehousesController_getById',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Warehouse details' } },
+    },
+    patch: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Update warehouse or deactivate with precondition check',
+      operationId: 'WarehousesController_update',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: {
+        '200': { description: 'Updated warehouse' },
+        '409': { description: 'WAREHOUSE_HAS_PENDING_OPERATIONS' },
+      },
+    },
+  },
+  '/inventory/api/v1/stocks': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary:
+        'List M2 warehouse stock balances with available_qty and valuation',
+      operationId: 'StockQueryController_listStocks',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Paginated warehouse stock balances' },
+      },
+    },
+  },
+  '/inventory/api/v1/stocks/{skuId}': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Get aggregated and per-warehouse stock summary for a SKU',
+      operationId: 'StockQueryController_getSkuStockSummary',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'skuId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: {
+        '200': { description: 'SKU stock summary across warehouses' },
+      },
+    },
+  },
+  '/inventory/api/v1/stocks/reconcile': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary:
+        'Reconcile stock_balance rows against immutable stock_balance_ledger and HELD reservations',
+      operationId: 'StockQueryController_reconcile',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Reconciliation report' } },
+    },
+  },
+  '/inventory/api/v1/stock-movements': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Query immutable stock movement ledger entries',
+      operationId: 'StockQueryController_listMovements',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Paginated stock movements' } },
+    },
+  },
+  '/inventory/api/v1/stock-thresholds': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary:
+        'List configured stock thresholds and active LOW_STOCK / OUT_OF_STOCK / OVER_MAX_STOCK alerts',
+      operationId: 'StockQueryController_listThresholds',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Stock thresholds and alerts' } },
+    },
+    put: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Upsert stock threshold for a (warehouseId, skuId) pair',
+      operationId: 'StockQueryController_upsertThreshold',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Upserted stock threshold' } },
+    },
+  },
+  '/inventory/api/v1/stock-receipts/{id}': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Get stock receipt document details by ID',
+      operationId: 'ReceivingController_getById',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Stock receipt document details' } },
+    },
+  },
+  '/inventory/api/v1/stock-receipts/{id}/post': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary:
+        'Approve and post a DRAFT stock receipt (updates weighted-average cost & ledger)',
+      operationId: 'ReceivingController_post',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: {
+        '200': { description: 'Posted stock receipt' },
+        '409': { description: 'STOCK_RECEIPT_ALREADY_POSTED' },
+      },
+    },
+  },
+  '/inventory/api/v1/stock-issues': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Create a stock issue document (DRAFT or immediate POST)',
+      operationId: 'IssuingController_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Created stock issue' } },
+    },
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'List stock issue documents',
+      operationId: 'IssuingController_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of stock issues' } },
+    },
+  },
+  '/inventory/api/v1/stock-issues/{id}': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Get stock issue details by ID',
+      operationId: 'IssuingController_getById',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Stock issue details' } },
+    },
+  },
+  '/inventory/api/v1/stock-issues/{id}/post': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary:
+        'Approve and post a DRAFT stock issue (verifies available unreserved stock)',
+      operationId: 'IssuingController_post',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: {
+        '200': { description: 'Posted stock issue' },
+        '409': {
+          description: 'INSUFFICIENT_STOCK or STOCK_ISSUE_ALREADY_POSTED',
+        },
+      },
+    },
+  },
+  '/inventory/api/v1/stock-transfers': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Create a multi-warehouse stock transfer document (DRAFT)',
+      operationId: 'TransfersController_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Created stock transfer' } },
+    },
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'List multi-warehouse stock transfers',
+      operationId: 'TransfersController_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of stock transfers' } },
+    },
+  },
+  '/inventory/api/v1/stock-transfers/{id}': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Get stock transfer details by ID',
+      operationId: 'TransfersController_getById',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Stock transfer details' } },
+    },
+  },
+  '/inventory/api/v1/stock-transfers/{id}/dispatch': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary:
+        'Dispatch a DRAFT stock transfer (deducts source on_hand_qty and increments destination in_transit_qty)',
+      operationId: 'TransfersController_dispatch',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Dispatched stock transfer' } },
+    },
+  },
+  '/inventory/api/v1/stock-transfers/{id}/receive': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary:
+        'Receive a dispatched stock transfer at destination warehouse (partial or full with discrepancy tracking)',
+      operationId: 'TransfersController_receive',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Received stock transfer' } },
+    },
+  },
+  '/inventory/api/v1/stocktakes': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Create a physical stocktake session with snapshot capture',
+      operationId: 'StocktakeController_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Created stocktake session' } },
+    },
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'List stocktake sessions',
+      operationId: 'StocktakeController_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of stocktake sessions' } },
+    },
+  },
+  '/inventory/api/v1/stocktakes/{id}': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Get stocktake session details by ID',
+      operationId: 'StocktakeController_getById',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Stocktake session details' } },
+    },
+  },
+  '/inventory/api/v1/stocktakes/{id}/counts': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Record physical counted quantities for a stocktake session',
+      operationId: 'StocktakeController_recordCounts',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Updated stocktake counts' } },
+    },
+  },
+  '/inventory/api/v1/stocktakes/{id}/approve': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Approve a stocktake session and post variance adjustments',
+      operationId: 'StocktakeController_approve',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: {
+        '200': { description: 'Approved stocktake' },
+        '409': {
+          description: 'STOCKTAKE_STALE_SNAPSHOT or STOCKTAKE_BELOW_RESERVED',
+        },
+      },
+    },
+  },
+  '/inventory/api/v1/suppliers': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Create a supplier',
+      operationId: 'ProcurementController_createSupplier',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Created supplier' } },
+    },
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'List suppliers',
+      operationId: 'ProcurementController_listSuppliers',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of suppliers' } },
+    },
+  },
+  '/inventory/api/v1/suppliers/{id}': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Get supplier details by ID',
+      operationId: 'ProcurementController_getSupplierById',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Supplier details' } },
+    },
+    patch: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Update supplier details',
+      operationId: 'ProcurementController_updateSupplier',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Updated supplier' } },
+    },
+  },
+  '/inventory/api/v1/purchase-orders': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Create a purchase order (DRAFT)',
+      operationId: 'ProcurementController_createPurchaseOrder',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Created purchase order' } },
+    },
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'List purchase orders',
+      operationId: 'ProcurementController_listPurchaseOrders',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of purchase orders' } },
+    },
+  },
+  '/inventory/api/v1/purchase-orders/{id}': {
+    get: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Get purchase order details by ID',
+      operationId: 'ProcurementController_getPurchaseOrderById',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Purchase order details' } },
+    },
+  },
+  '/inventory/api/v1/purchase-orders/{id}/approve': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary: 'Approve a DRAFT purchase order',
+      operationId: 'ProcurementController_approvePurchaseOrder',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'Approved purchase order' } },
+    },
+  },
+  '/inventory/api/v1/purchase-orders/{id}/receive': {
+    post: {
+      tags: ['Inventory — Stock & Warehouses'],
+      summary:
+        'Receive goods against an approved purchase order (partial or full)',
+      operationId: 'ProcurementController_receivePurchaseOrder',
+      security: [{ bearer: [] }],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: {
+        '200': {
+          description: 'Updated purchase order and posted stock receipt',
+        },
+        '409': { description: 'OVER_RECEIPT_NOT_ALLOWED' },
+      },
+    },
+  },
+
   // =========================================================================
   // INVENTORY SERVICE — INTERNAL RESERVATIONS (EAST-WEST)
   // =========================================================================
   '/internal/v1/reservations': {
+    get: {
+      tags: ['Inventory — Internal Reservations'],
+      summary:
+        '[Internal East-West] List warehouse reservations by orderId for timeout recovery',
+      operationId: 'WarehouseReservationsController_listByOrder',
+      parameters: [
+        {
+          name: 'X-Tenant-Id',
+          in: 'header',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+        {
+          name: 'orderId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: { '200': { description: 'List of reservations for order' } },
+    },
     post: {
       tags: ['Inventory — Internal Reservations'],
       summary:
@@ -939,6 +1419,40 @@ export const MICROSERVICE_SWAGGER_PATHS: PathsObject = {
           content: {
             'application/json': {
               schema: { $ref: '#/components/schemas/ErrorEnvelopeRes' },
+            },
+          },
+        },
+      },
+    },
+  },
+  '/internal/v1/reservations/by-key/{idempotencyKey}': {
+    get: {
+      tags: ['Inventory — Internal Reservations'],
+      summary:
+        '[Internal East-West] Inspect warehouse reservation by Idempotency-Key',
+      description:
+        'Used by Sales timeout recovery when original response timed out before reservationId was received.',
+      operationId: 'WarehouseReservationsController_getByKey',
+      parameters: [
+        {
+          name: 'idempotencyKey',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'X-Tenant-Id',
+          in: 'header',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+      ],
+      responses: {
+        '200': {
+          description: 'Warehouse reservation details',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/WarehouseReservationRes' },
             },
           },
         },

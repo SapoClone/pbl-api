@@ -5631,6 +5631,2556 @@
           ]
         }
       }
+    },
+    {
+      "endpoint": "/inventory/api/v1/warehouses/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/warehouses/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/warehouses/{id}",
+      "method": "PATCH",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/warehouses/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stocks",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stocks",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stocks/{skuId}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stocks/{skuId}",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stocks/reconcile",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stocks/reconcile",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-movements",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-movements",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-thresholds",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-thresholds",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-thresholds",
+      "method": "PUT",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-thresholds",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-receipts",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-receipts",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-receipts/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-receipts/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-receipts/{id}/post",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-receipts/{id}/post",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-issues",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-issues",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-issues",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-issues",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-issues/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-issues/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-issues/{id}/post",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-issues/{id}/post",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-transfers",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-transfers",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-transfers",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-transfers",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-transfers/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-transfers/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-transfers/{id}/dispatch",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-transfers/{id}/dispatch",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stock-transfers/{id}/receive",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stock-transfers/{id}/receive",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stocktakes",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stocktakes",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stocktakes",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stocktakes",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stocktakes/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stocktakes/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stocktakes/{id}/counts",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stocktakes/{id}/counts",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/stocktakes/{id}/approve",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/stocktakes/{id}/approve",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/suppliers",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/suppliers",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/suppliers",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/suppliers",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/suppliers/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/suppliers/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/suppliers/{id}",
+      "method": "PATCH",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/suppliers/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/purchase-orders",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/purchase-orders",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/purchase-orders",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/purchase-orders",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/purchase-orders/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/purchase-orders/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/purchase-orders/{id}/approve",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/purchase-orders/{id}/approve",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/inventory/api/v1/purchase-orders/{id}/receive",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/purchase-orders/{id}/receive",
+          "encoding": "no-op",
+          "host": [
+            "http://inventory:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "inventory-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
     }
   ]
 }

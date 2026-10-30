@@ -11,6 +11,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Res,
 } from '@nestjs/common';
 import {
@@ -25,6 +26,7 @@ import { Public, RequireRoles } from '@pbl/auth';
 import { TenantContext } from '@pbl/common';
 import { ROLES, StockReservation } from '@pbl/contracts';
 import type { Response } from 'express';
+import { rethrowInventoryHttpError } from '../presentation/inventory-http-error';
 import {
   CreateWarehouseReservationDto,
   ReleaseWarehouseReservationDto,
@@ -126,6 +128,92 @@ export class ReservationsController {
   }
 }
 
+function normalizeCreateWarehouseReservationPayload(
+  raw: Record<string, any>,
+): CreateWarehouseReservationDto {
+  if (!raw || typeof raw !== 'object') {
+    throw new BadRequestException({
+      errorCode: 'INVALID_RESERVATION_PAYLOAD',
+      message: 'Reservation request body is required',
+    });
+  }
+  const callerService = (raw.callerService ?? raw.caller_service ?? 'sales') as
+    | 'sales'
+    | 'inventory'
+    | 'integration';
+  const sourceRefType = (raw.sourceRefType ??
+    raw.source_ref_type ??
+    'ORDER') as 'ORDER' | 'TRANSFER' | 'RETURN';
+  const sourceRefId =
+    raw.sourceRefId ?? raw.source_ref_id ?? raw.orderId ?? raw.order_id;
+  const rawLines = Array.isArray(raw.lines) ? raw.lines : [];
+  if (
+    !sourceRefId ||
+    typeof sourceRefId !== 'string' ||
+    !UUID_REGEX.test(sourceRefId)
+  ) {
+    throw new BadRequestException({
+      errorCode: 'INVALID_ORDER_ID',
+      message: 'sourceRefId (or orderId / order_id) must be a valid UUID',
+    });
+  }
+  if (rawLines.length === 0) {
+    throw new BadRequestException({
+      errorCode: 'EMPTY_RESERVATION_LINES',
+      message: 'lines must contain at least one reservation line',
+    });
+  }
+
+  let ttlSeconds: number | undefined =
+    typeof raw.ttlSeconds === 'number'
+      ? raw.ttlSeconds
+      : typeof raw.ttl_seconds === 'number'
+        ? raw.ttl_seconds
+        : undefined;
+  const expiresAt = raw.expiresAt ?? raw.expires_at;
+  if (!ttlSeconds && typeof expiresAt === 'string') {
+    const diffSec = Math.round(
+      (new Date(expiresAt).getTime() - Date.now()) / 1000,
+    );
+    if (Number.isFinite(diffSec) && diffSec > 0) {
+      ttlSeconds = Math.max(30, Math.min(86400, diffSec));
+    }
+  }
+
+  const lines = rawLines.map((line: Record<string, any>) => {
+    const skuId = line?.skuId ?? line?.sku_id;
+    const warehouseId = line?.warehouseId ?? line?.warehouse_id;
+    const qty = String(line?.qty ?? line?.quantity ?? '');
+    if (!skuId || !UUID_REGEX.test(String(skuId))) {
+      throw new BadRequestException({
+        errorCode: 'INVALID_SKU_ID',
+        message:
+          'Each reservation line requires a valid UUID skuId (or sku_id)',
+      });
+    }
+    if (!warehouseId || !UUID_REGEX.test(String(warehouseId))) {
+      throw new BadRequestException({
+        errorCode: 'INVALID_WAREHOUSE_ID',
+        message:
+          'Each reservation line requires a valid UUID warehouseId (or warehouse_id)',
+      });
+    }
+    return {
+      skuId: String(skuId),
+      warehouseId: String(warehouseId),
+      qty,
+    };
+  });
+
+  return {
+    callerService,
+    sourceRefType,
+    sourceRefId,
+    ttlSeconds,
+    lines,
+  };
+}
+
 /**
  * Internal East-West warehouse stock reservation API (`inventory-reservation.openapi.yaml`).
  * Never exposed on the public KrakenD gateway.
@@ -167,20 +255,85 @@ export class WarehouseReservationsController {
   async create(
     @Headers(TENANT_ID_HEADER) tenantHeader: string | undefined,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
-    @Body() dto: CreateWarehouseReservationDto,
+    @Body() rawBody: Record<string, any>,
     @Res({ passthrough: true }) res: Response,
   ) {
     const tenantId = resolveInternalTenantId(tenantHeader);
-    const { reservation, replayed } = await TenantContext.run(tenantId, () =>
-      this.reservations.reserveWarehouseStock(idempotencyKey, dto),
-    );
-    if (replayed) {
-      res.status(HttpStatus.OK);
-      res.setHeader('Idempotency-Replayed', 'true');
-    } else {
-      res.status(HttpStatus.CREATED);
+    const dto = normalizeCreateWarehouseReservationPayload(rawBody);
+    try {
+      const { reservation, replayed } = await TenantContext.run(tenantId, () =>
+        this.reservations.reserveWarehouseStock(idempotencyKey, dto),
+      );
+      if (replayed) {
+        res.status(HttpStatus.OK);
+        res.setHeader('Idempotency-Replayed', 'true');
+      } else {
+        res.status(HttpStatus.CREATED);
+      }
+      return reservation;
+    } catch (error) {
+      rethrowInventoryHttpError(error);
     }
-    return reservation;
+  }
+
+  @Get()
+  @ApiOperation({
+    summary:
+      '[Internal] List warehouse reservations by orderId for timeout recovery',
+  })
+  @ApiHeader({
+    name: 'X-Tenant-Id',
+    required: true,
+    description: 'Tenant UUID',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'List of reservations for the order',
+  })
+  async listByOrder(
+    @Headers(TENANT_ID_HEADER) tenantHeader: string | undefined,
+    @Headers('x-order-id') headerOrderId?: string,
+    @Query('orderId') queryOrderId?: string,
+  ) {
+    const tenantId = resolveInternalTenantId(tenantHeader);
+    const resolvedOrderId = queryOrderId ?? headerOrderId;
+    if (!resolvedOrderId || !UUID_REGEX.test(resolvedOrderId)) {
+      throw new BadRequestException({
+        errorCode: 'MISSING_ORDER_ID',
+        message:
+          'Valid orderId query param or X-Order-Id header (UUID) is required',
+      });
+    }
+    return TenantContext.run(tenantId, () =>
+      this.reservations.listWarehouseReservationsByOrder(resolvedOrderId),
+    );
+  }
+
+  @Get('by-key/:idempotencyKey')
+  @ApiOperation({
+    summary:
+      '[Internal] Inspect a warehouse stock reservation by Idempotency-Key',
+    description:
+      'Used by Sales timeout recovery when the original reservation response timed out before reservationId was received.',
+  })
+  @ApiHeader({
+    name: 'X-Tenant-Id',
+    required: true,
+    description: 'Tenant UUID',
+  })
+  @ApiParam({ name: 'idempotencyKey', description: 'Idempotency key' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Warehouse reservation details',
+  })
+  async getByKey(
+    @Headers(TENANT_ID_HEADER) tenantHeader: string | undefined,
+    @Param('idempotencyKey') idempotencyKey: string,
+  ) {
+    const tenantId = resolveInternalTenantId(tenantHeader);
+    return TenantContext.run(tenantId, () =>
+      this.reservations.getWarehouseReservationByKey(idempotencyKey),
+    );
   }
 
   @Get(':reservationId')
@@ -214,7 +367,7 @@ export class WarehouseReservationsController {
   @ApiOperation({
     summary: '[Internal] Commit a reserved warehouse stock hold',
     description:
-      'Transitions a RESERVED hold to COMMITTED and deducts both qty_on_hand and qty_reserved.',
+      'Transitions a HELD reservation to COMMITTED and deducts both qty_on_hand and qty_reserved.',
   })
   @ApiHeader({
     name: 'X-Tenant-Id',
@@ -229,10 +382,15 @@ export class WarehouseReservationsController {
   async commit(
     @Headers(TENANT_ID_HEADER) tenantHeader: string | undefined,
     @Param('reservationId', new ParseUUIDPipe()) reservationId: string,
+    @Body()
+    body?: { fulfillmentId?: string; fulfillment_id?: string; note?: string },
   ) {
     const tenantId = resolveInternalTenantId(tenantHeader);
     return TenantContext.run(tenantId, () =>
-      this.reservations.commitWarehouseReservation(reservationId),
+      this.reservations.commitWarehouseReservation(reservationId, {
+        fulfillmentId: body?.fulfillmentId ?? body?.fulfillment_id,
+        note: body?.note,
+      }),
     );
   }
 
@@ -241,7 +399,7 @@ export class WarehouseReservationsController {
   @ApiOperation({
     summary: '[Internal] Release a warehouse stock reservation',
     description:
-      'Idempotently transitions a RESERVED hold to RELEASED and restores qty_reserved.',
+      'Idempotently transitions a HELD reservation to RELEASED and restores qty_reserved.',
   })
   @ApiHeader({
     name: 'X-Tenant-Id',
@@ -256,11 +414,14 @@ export class WarehouseReservationsController {
   async release(
     @Headers(TENANT_ID_HEADER) tenantHeader: string | undefined,
     @Param('reservationId', new ParseUUIDPipe()) reservationId: string,
-    @Body() _dto?: ReleaseWarehouseReservationDto,
+    @Body() dto?: ReleaseWarehouseReservationDto & { note?: string },
   ) {
     const tenantId = resolveInternalTenantId(tenantHeader);
     return TenantContext.run(tenantId, () =>
-      this.reservations.releaseWarehouseReservation(reservationId),
+      this.reservations.releaseWarehouseReservation(reservationId, {
+        reason: dto?.reason,
+        note: dto?.note,
+      }),
     );
   }
 }
