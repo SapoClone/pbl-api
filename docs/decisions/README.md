@@ -20,5 +20,6 @@ large changes are built on them. Summary rules live in [`/CLAUDE.md`](../../CLAU
 | [0011](0011-rls-and-db-role-isolation.md) | Enforce PostgreSQL RLS (`ENABLE`/`FORCE`), transaction-local `app.tenant_id`, and per-service DB runtime roles (`<service>_app`) | Accepted |
 | [0012](0012-warehouse-reservation-and-checkout-workflow.md) | Warehouse decimal stock reservation contract (`/internal/v1/reservations`) and Sales checkout timeout recovery workflow | Accepted |
 | [0013](0013-catalog-m1-domain-and-pricing-boundaries.md) | Catalog M1 domain boundaries, composite tenant FKs, category depth/CTE locking, variant combination signatures, and pricing resolution | Accepted |
+| [0014](0014-inventory-m2-domain-concurrency-and-valuation.md) | Inventory M2 domain, concurrency control, weighted-average cost valuation, and document workflows | Accepted |
 
 New record: copy [0000-template.md](0000-template.md), take the next number.
