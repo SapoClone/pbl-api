@@ -32,6 +32,7 @@ export async function bootstrapService(
   const app = await NestFactory.create(appModule, {
     bufferLogs: true,
     abortOnError: false,
+    rawBody: true,
   });
 
   // The module tree normally imports PblLoggingModule. Without it, keep

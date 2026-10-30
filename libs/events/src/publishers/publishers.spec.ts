@@ -1,5 +1,6 @@
 import { PublishCommand, SNSClient } from '@aws-sdk/client-sns';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
+import { subscribersOf } from '@pbl/contracts';
 import { QueueProvisioner } from '../sqs-queues';
 import { SnsEventPublisher } from './sns-event.publisher';
 import { SqsDirectPublisher } from './sqs-direct.publisher';
@@ -57,14 +58,14 @@ describe('SqsDirectPublisher', () => {
     );
     await publisher.publish(event('platform.branch.updated'));
 
-    expect(send).toHaveBeenCalledTimes(2);
+    const expectedSubscribers = subscribersOf('platform.branch.updated');
+    expect(send).toHaveBeenCalledTimes(expectedSubscribers.length);
     const urls = send.mock.calls.map(
       ([command]) => (command as SendMessageCommand).input.QueueUrl,
     );
-    expect(urls).toEqual([
-      'http://q/sales-events',
-      'http://q/inventory-events',
-    ]);
+    expect(urls).toEqual(
+      expectedSubscribers.map((service) => `http://q/${service}-events`),
+    );
   });
 
   it('sends nothing when nobody subscribes', async () => {
