@@ -1,0 +1,13 @@
+# M4 Customer & Loyalty Core — Concurrency, Locking & Idempotency Engineering Report
+
+## 1. Concurrency Control Mechanisms
+
+| Contention Hotspot | Race Condition Risk | Implemented Locking & Constraint Strategy | Verified Outcome |
+|---|---|---|---|
+| **Concurrent Customer Creation (Same Phone)** | Two cashiers submit `+84 912 345 678` and `0912-345-678` simultaneously | Deterministic `normalizePhoneNumber` -> `0912345678` + partial unique index `UQ_customers_tenant_phone (tenant_id, phone_normalized) WHERE phone_normalized IS NOT NULL AND deleted_at IS NULL` + PostgreSQL `23505` translation | 1 winner (`201`), 1 rejected (`409 CUSTOMER_ALREADY_EXISTS`) |
+| **Concurrent Customer Profile Updates** | Lost update when two staff members edit the same customer profile | Pessimistic row lock (`SELECT ... FOR UPDATE`) + optimistic `version` check (`customer.version !== dto.version` -> `409 RESOURCE_VERSION_CONFLICT`) | 1 winner (`version + 1`), 1 rejected (`409`) |
+| **Concurrent Default Address Switching** | Customer ends up with 0 or 2 default addresses | Customer row locked `FOR UPDATE` + existing defaults cleared before setting new default + partial unique index `UQ_customer_addresses_single_default` | Exactly 1 active default address at all times |
+| **Concurrent Loyalty Point Holds (Overspending)** | 100 concurrent checkout holds attempt to redeem points from the same wallet | `SELECT * FROM loyalty_accounts WHERE tenant_id = $1 AND customer_id = $2 FOR UPDATE` serializes wallet balance checks (`availablePoints = GREATEST(0, posted_points_balance - held_points)`) | 100 concurrent 50-pt holds against 2,500-pt wallet: 50 succeed, 50 fail with `409 INSUFFICIENT_LOYALTY_POINTS`, `0` deadlocks |
+| **Concurrent Hold Commit vs. Release** | Checkout timeout release races with payment confirmation commit | Both `commitHold` and `releaseHold` lock `loyalty_holds` `FOR UPDATE` then `loyalty_accounts` `FOR UPDATE` in fixed table order | Deterministic single winner; loser receives `409` conflict |
+| **Concurrent Customer Merge** | Deadlock if two merges lock customer A and B in opposite orders | Locks `customers` and `loyalty_accounts` in ascending UUID order (`[sourceCustomerId, targetCustomerId].sort()`) + `UQ_customer_merge_source (tenant_id, source_customer_id)` | Zero deadlocks; idempotent replay on duplicate merge request |
+| **Duplicate / Out-of-Order Sales Events** | At-least-once SQS delivery or `sales.return.completed` arriving before `sales.order.completed` | `UQ_loyalty_tx_idempotency (tenant_id, idempotency_key)` + `PENDING_ORDER_EVENT` deferred return reversal on `customer_purchase_projections` | Zero duplicate points awarded; out-of-order returns reconciled automatically |
