@@ -54,6 +54,21 @@ export const MICROSERVICE_SWAGGER_TAGS: TagsObject = [
       'Catalog Service (M1 Core) — Categories, Brands, Attributes, Products, Variants, Barcodes, Units & Price Lists (ADR-0013)',
   },
   {
+    name: 'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+    description:
+      'Customer Service (M4 Core) — Customer Profiles, Addresses, Groups, Membership Tiers, Loyalty Wallet/Ledger & Point Holds (ADR-0016)',
+  },
+  {
+    name: 'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+    description:
+      'Finance Service (M5 Core) — Double-Entry Financial Journal, Cash Accounts, Cashbook Vouchers, Customer Receivables & Credit Holds, Supplier Payables, Payment Settlements, Refunds, COD Reconciliation & Shift/System Reconciliation (ADR-0017)',
+  },
+  {
+    name: 'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+    description:
+      'Integration Service (M6 Core) — Shopee/Lazada Channel Connections, Encrypted Credentials, Signed Webhook Ingress, SKU Mappings, Omnichannel Order Sync, Inventory Availability Publication, Sync Jobs, Conflicts & Reconciliation (ADR-0018)',
+  },
+  {
     name: 'Microservices — Health & Readiness',
     description:
       'Health & Readiness Endpoints across Inventory, Sales, Insight, Catalog, Customer, Finance & Integration',
@@ -2498,6 +2513,1587 @@ export const MICROSERVICE_SWAGGER_PATHS: PathsObject = {
             },
           },
         },
+      },
+    },
+  },
+  '/api/v1/pos/shifts/open': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Open a POS cashier shift',
+      operationId: 'SalesPosShifts_open',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'POS shift opened' } },
+    },
+  },
+  '/api/v1/pos/shifts/active': {
+    get: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Get active POS shift for current cashier',
+      operationId: 'SalesPosShifts_active',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Active POS shift' } },
+    },
+  },
+  '/api/v1/pos/shifts/{id}/close': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Close a POS cashier shift and reconcile cash variance',
+      operationId: 'SalesPosShifts_close',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'POS shift closed and reconciled' } },
+    },
+  },
+  '/api/v1/pos/products/lookup': {
+    get: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Lookup POS product variant by SKU or barcode',
+      operationId: 'SalesPos_lookupProduct',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Authoritative Catalog variant' } },
+    },
+  },
+  '/api/v1/pos/quote': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Calculate authoritative POS order quote & discount waterfall',
+      operationId: 'SalesPos_quote',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Calculated POS quote' } },
+    },
+  },
+  '/api/v1/pos/drafts': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Create a POS draft invoice (max 5 active per staff per branch)',
+      operationId: 'SalesPos_createDraft',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'POS draft created' } },
+    },
+    get: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'List active POS draft invoices for current staff',
+      operationId: 'SalesPos_listDrafts',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Active POS drafts' } },
+    },
+  },
+  '/api/v1/pos/checkout': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary:
+        'Execute POS checkout saga (price waterfall + stock reserve/commit + tender settlement)',
+      operationId: 'SalesPos_checkout',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'POS checkout completed' } },
+    },
+  },
+  '/api/v1/pos/checkouts/{id}/retry': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Retry / recover a pending or timed-out POS checkout workflow',
+      operationId: 'SalesPos_retryCheckout',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Recovered POS checkout' } },
+    },
+  },
+  '/api/v1/pos/checkouts/{id}/confirm-payment': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary:
+        'Confirm pending electronic payment on an AWAITING_PAYMENT POS checkout',
+      operationId: 'SalesPos_confirmPayment',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Payment confirmed and order finalized' },
+      },
+    },
+  },
+  '/api/v1/orders/omnichannel': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary:
+        'Create an omnichannel / manual / marketplace sales order with external idempotency',
+      operationId: 'SalesOrders_createOmnichannel',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Omnichannel order created' } },
+    },
+  },
+  '/api/v1/orders/{id}/confirm': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Confirm a DRAFT/PENDING order and reserve warehouse stock',
+      operationId: 'SalesOrders_confirm',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Order confirmed and stock reserved' },
+      },
+    },
+  },
+  '/api/v1/orders/{id}/cancel': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Cancel an unfulfilled order and release stock reservation',
+      operationId: 'SalesOrders_cancel',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Order cancelled' } },
+    },
+  },
+  '/api/v1/returns': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary:
+        'Create a partial or full return against a completed/fulfilled order',
+      operationId: 'SalesReturns_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Sales return created' } },
+    },
+    get: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'List sales returns',
+      operationId: 'SalesReturns_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Sales returns list' } },
+    },
+  },
+  '/api/v1/returns/{id}/receive': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary:
+        'Receive returned goods into warehouse inventory and complete return',
+      operationId: 'SalesReturns_receive',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Returned goods received' } },
+    },
+  },
+  '/api/v1/returns/{id}/refund-request': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Create an idempotent refund request for a sales return',
+      operationId: 'SalesReturns_createRefundRequest',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Refund request created' } },
+    },
+  },
+  '/api/v1/orders/{id}/fulfillments': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Create a fulfillment record for an order',
+      operationId: 'SalesFulfillments_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Fulfillment created' } },
+    },
+    get: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'List fulfillments for an order',
+      operationId: 'SalesFulfillments_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Order fulfillments' } },
+    },
+  },
+  '/api/v1/fulfillments/{id}/confirm': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary:
+        'Confirm fulfillment completion and commit warehouse stock reservation',
+      operationId: 'SalesFulfillments_confirm',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Fulfillment confirmed' } },
+    },
+  },
+  '/api/v1/promotions': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Create a promotion rule',
+      operationId: 'SalesPromotions_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Promotion created' } },
+    },
+    get: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'List promotions for current tenant',
+      operationId: 'SalesPromotions_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Promotions list' } },
+    },
+  },
+  '/api/v1/coupons': {
+    post: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'Create a coupon code linked to a promotion',
+      operationId: 'SalesCoupons_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Coupon created' } },
+    },
+    get: {
+      tags: ['Sales — Orders & Checkouts'],
+      summary: 'List coupons for current tenant',
+      operationId: 'SalesCoupons_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Coupons list' } },
+    },
+  },
+  '/api/v1/customers': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Create a customer profile and initialize their loyalty wallet atomically',
+      operationId: 'CustomerProfiles_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Customer profile created' } },
+    },
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'List and search customers with cursor/offset pagination and optional PII masking',
+      operationId: 'CustomerProfiles_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer profiles page' } },
+    },
+  },
+  '/api/v1/customers/lookup': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Fast exact customer lookup by normalized phone, code, or email for POS',
+      operationId: 'CustomerProfiles_lookup',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer lookup result' } },
+    },
+  },
+  '/api/v1/customers/{id}': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Get customer profile by ID',
+      operationId: 'CustomerProfiles_getById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer profile' } },
+    },
+    patch: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Update customer profile with optional optimistic concurrency version check',
+      operationId: 'CustomerProfiles_update',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Updated customer profile' } },
+    },
+    delete: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Deactivate or privacy-anonymize a customer profile',
+      operationId: 'CustomerProfiles_deactivate',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Deactivated or anonymized customer' },
+      },
+    },
+  },
+  '/api/v1/customers/{id}/summary': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Get 360-degree customer summary (profile, loyalty, purchase projection, financial summary)',
+      operationId: 'CustomerProfiles_getSummary',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: '360-degree customer summary' } },
+    },
+  },
+  '/api/v1/customers/{id}/orders': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'List historical orders for a customer from event-driven purchase projection',
+      operationId: 'CustomerProfiles_listOrders',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer purchase history' } },
+    },
+  },
+  '/api/v1/customers/{id}/purchase-summary': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Get aggregated purchase metrics from event-driven purchase projection',
+      operationId: 'CustomerProfiles_getPurchaseSummary',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer purchase summary' } },
+    },
+  },
+  '/api/v1/customers/{id}/addresses': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Add an address to a customer profile',
+      operationId: 'CustomerAddresses_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Address created' } },
+    },
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'List active addresses for a customer',
+      operationId: 'CustomerAddresses_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer addresses' } },
+    },
+  },
+  '/api/v1/customers/{id}/addresses/{addressId}': {
+    patch: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Update a customer address',
+      operationId: 'CustomerAddresses_update',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Address updated' } },
+    },
+    delete: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Soft-deactivate a customer address',
+      operationId: 'CustomerAddresses_delete',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Address deactivated' } },
+    },
+  },
+  '/api/v1/customers/{id}/addresses/{addressId}/set-default': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Set an address as the single active default address',
+      operationId: 'CustomerAddresses_setDefault',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Default address updated' } },
+    },
+  },
+  '/api/v1/customer-groups': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Create a customer group (VIP, Wholesale, Member)',
+      operationId: 'CustomerGroups_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Customer group created' } },
+    },
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'List customer groups for current tenant',
+      operationId: 'CustomerGroups_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer groups' } },
+    },
+  },
+  '/api/v1/customer-groups/{id}': {
+    patch: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Update or deactivate a customer group',
+      operationId: 'CustomerGroups_update',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer group updated' } },
+    },
+  },
+  '/api/v1/customers/{id}/assign-group': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Assign or unassign a customer to a customer group',
+      operationId: 'CustomerGroups_assign',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer group assigned' } },
+    },
+  },
+  '/api/v1/membership-tiers': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Create a membership tier (Member, Silver, Gold, Platinum)',
+      operationId: 'CustomerMembershipTiers_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Membership tier created' } },
+    },
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'List membership tiers for current tenant',
+      operationId: 'CustomerMembershipTiers_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Membership tiers' } },
+    },
+  },
+  '/api/v1/membership-tiers/{id}': {
+    patch: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Update a membership tier configuration',
+      operationId: 'CustomerMembershipTiers_update',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Membership tier updated' } },
+    },
+  },
+  '/api/v1/customers/{id}/membership': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Get customer membership tier and qualification progress',
+      operationId: 'CustomerMembershipTiers_getCustomerMembership',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer membership tier' } },
+    },
+  },
+  '/api/v1/loyalty/settings': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Get tenant loyalty program configuration',
+      operationId: 'CustomerLoyalty_getSettings',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Loyalty settings' } },
+    },
+    put: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Update tenant loyalty program configuration',
+      operationId: 'CustomerLoyalty_updateSettings',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Updated loyalty settings' } },
+    },
+  },
+  '/api/v1/customers/{id}/loyalty': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Get customer loyalty account balance (posted, held, available, qualifying)',
+      operationId: 'CustomerLoyalty_getAccount',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Loyalty account balance' } },
+    },
+  },
+  '/api/v1/customers/{id}/loyalty/transactions': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'List immutable loyalty ledger transactions for a customer',
+      operationId: 'CustomerLoyalty_listTransactions',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Loyalty ledger transactions' } },
+    },
+  },
+  '/api/v1/customers/{id}/loyalty/adjustments': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Privileged manual loyalty point adjustment with mandatory reason and idempotency',
+      operationId: 'CustomerLoyalty_adjustPoints',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Loyalty points adjusted' } },
+    },
+  },
+  '/api/v1/loyalty/reconcile': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Run loyalty wallet vs. ledger & hold reconciliation and expire overdue holds',
+      operationId: 'CustomerLoyalty_reconcile',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Loyalty reconciliation report' } },
+    },
+  },
+  '/api/v1/customers/duplicates': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Detect duplicate customer profiles within the tenant',
+      operationId: 'CustomerDataManagement_findDuplicates',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Duplicate customer groups' } },
+    },
+  },
+  '/api/v1/customers/merge': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Merge source customer into target customer with atomic loyalty ledger transfer',
+      operationId: 'CustomerDataManagement_merge',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Customers merged' } },
+    },
+  },
+  '/api/v1/customers/import-jobs': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Create a customer CSV/batch import job with row-level validation',
+      operationId: 'CustomerDataManagement_createImportJob',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Import job completed' } },
+    },
+  },
+  '/api/v1/customers/import-jobs/{id}': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Get customer import job status and row errors',
+      operationId: 'CustomerDataManagement_getImportJob',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Import job status' } },
+    },
+  },
+  '/api/v1/customers/export-jobs': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Create a formula-injection-safe customer CSV export job with optional PII masking',
+      operationId: 'CustomerDataManagement_createExportJob',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Export job completed' } },
+    },
+  },
+  '/api/v1/customers/export-jobs/{id}': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Get customer export job status and CSV output',
+      operationId: 'CustomerDataManagement_getExportJob',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Export job status' } },
+    },
+  },
+  '/internal/v1/customers/{id}/eligibility': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Internal S2S: Fetch customer eligibility, discounts, and loyalty balance for POS',
+      operationId: 'CustomerInternal_getEligibility',
+      responses: { '200': { description: 'Customer eligibility' } },
+    },
+  },
+  '/internal/v1/loyalty/accounts/{customerId}': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Internal S2S: Get customer loyalty account balance for checkout',
+      operationId: 'CustomerInternal_getLoyaltyAccount',
+      responses: { '200': { description: 'Customer loyalty account' } },
+    },
+  },
+  '/internal/v1/loyalty/holds': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Internal S2S: Atomically hold loyalty points for POS checkout',
+      operationId: 'CustomerInternal_createHold',
+      responses: { '201': { description: 'Loyalty hold created' } },
+    },
+  },
+  '/internal/v1/loyalty/holds/{id}': {
+    get: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary: 'Internal S2S: Inspect a loyalty point hold',
+      operationId: 'CustomerInternal_getHold',
+      responses: { '200': { description: 'Loyalty hold details' } },
+    },
+  },
+  '/internal/v1/loyalty/holds/{id}/commit': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Internal S2S: Commit HELD loyalty points into an immutable REDEEM ledger entry',
+      operationId: 'CustomerInternal_commitHold',
+      responses: { '200': { description: 'Loyalty hold committed' } },
+    },
+  },
+  '/internal/v1/loyalty/holds/{id}/release': {
+    post: {
+      tags: [
+        'Customer — Profiles, Segmentation, Membership Tiers & Loyalty Ledger',
+      ],
+      summary:
+        'Internal S2S: Release HELD loyalty points on checkout cancellation',
+      operationId: 'CustomerInternal_releaseHold',
+      responses: { '200': { description: 'Loyalty hold released' } },
+    },
+  },
+
+  // =========================================================================
+  // FINANCE SERVICE (M5 CORE) — JOURNALS, CASHBOOK, AR, AP, CREDIT, SETTLEMENTS, REFUNDS, COD & RECONCILIATION
+  // =========================================================================
+  '/api/v1/finance/accounts': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List tenant chart of financial accounts',
+      operationId: 'FinanceJournal_listAccounts',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Financial accounts list' } },
+    },
+  },
+  '/api/v1/finance/journals': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List posted double-entry financial journals with pagination',
+      operationId: 'FinanceJournal_listJournals',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Financial journals page' } },
+    },
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Post a manual balanced double-entry financial journal',
+      operationId: 'FinanceJournal_postManualJournal',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Financial journal posted' } },
+    },
+  },
+  '/api/v1/finance/journals/{id}': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Get financial journal header and balanced debit/credit lines',
+      operationId: 'FinanceJournal_getJournalById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Financial journal details' } },
+    },
+  },
+  '/api/v1/finance/journals/{id}/reverse': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Reverse a posted financial journal by posting an offsetting reversal journal',
+      operationId: 'FinanceJournal_reverseJournal',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Reversal journal posted' } },
+    },
+  },
+  '/api/v1/finance/cash-accounts': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Create a branch cash drawer, bank account, or e-wallet cash account',
+      operationId: 'FinanceCashAccounts_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Cash account created' } },
+    },
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List cash accounts and current balances',
+      operationId: 'FinanceCashAccounts_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Cash accounts list' } },
+    },
+  },
+  '/api/v1/finance/cash-accounts/{id}': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Get cash account details and balance',
+      operationId: 'FinanceCashAccounts_getById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Cash account details' } },
+    },
+    patch: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Update cash account metadata or status (ACTIVE, INACTIVE, CLOSED)',
+      operationId: 'FinanceCashAccounts_update',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Updated cash account' } },
+    },
+  },
+  '/api/v1/finance/cashbook/categories': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List cashbook receipt and expense categories',
+      operationId: 'FinanceCashbook_listCategories',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Cashbook categories' } },
+    },
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Create a custom cashbook category',
+      operationId: 'FinanceCashbook_createCategory',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Cashbook category created' } },
+    },
+  },
+  '/api/v1/finance/cashbook/receipts': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Create and optionally post a cashbook receipt voucher (PT)',
+      operationId: 'FinanceCashbook_createReceipt',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Cashbook receipt voucher created' } },
+    },
+  },
+  '/api/v1/finance/cashbook/expenses': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Create and optionally post a cashbook expense voucher (PC)',
+      operationId: 'FinanceCashbook_createExpense',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Cashbook expense voucher created' } },
+    },
+  },
+  '/api/v1/finance/cashbook/entries': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List cashbook entries with filtering and pagination',
+      operationId: 'FinanceCashbook_listEntries',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Cashbook entries page' } },
+    },
+  },
+  '/api/v1/finance/cashbook/export': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Export cashbook entries as CSV',
+      operationId: 'FinanceCashbook_exportCsv',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'CSV export payload' } },
+    },
+  },
+  '/api/v1/finance/cashbook/entries/{id}': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Get cashbook voucher details',
+      operationId: 'FinanceCashbook_getEntryById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Cashbook voucher details' } },
+    },
+  },
+  '/api/v1/finance/cashbook/entries/{id}/approve': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Approve a DRAFT cashbook voucher',
+      operationId: 'FinanceCashbook_approveEntry',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Cashbook voucher approved' } },
+    },
+  },
+  '/api/v1/finance/cashbook/entries/{id}/post': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Post a cashbook voucher and update cash account balance atomically',
+      operationId: 'FinanceCashbook_postEntry',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Cashbook voucher posted' } },
+    },
+  },
+  '/api/v1/finance/cashbook/entries/{id}/reverse': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Reverse a posted cashbook voucher via offsetting reversal entry',
+      operationId: 'FinanceCashbook_reverseEntry',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Cashbook voucher reversed' } },
+    },
+  },
+  '/api/v1/finance/customers/{customerId}/credit-profile': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Get customer credit profile, posted debt, held credit, and available credit',
+      operationId: 'FinanceCredit_getProfile',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer credit profile' } },
+    },
+    put: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Update customer credit limit and credit status',
+      operationId: 'FinanceCredit_updateLimit',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Updated customer credit profile' } },
+    },
+  },
+  '/api/v1/finance/receivables': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Recognize a customer receivable (AR) and post debt ledger & journal',
+      operationId: 'FinanceReceivables_recognize',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Customer receivable recognized' } },
+    },
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List customer receivables with filtering and pagination',
+      operationId: 'FinanceReceivables_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer receivables page' } },
+    },
+  },
+  '/api/v1/finance/receivables/{id}': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Get customer receivable details',
+      operationId: 'FinanceReceivables_getById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer receivable details' } },
+    },
+  },
+  '/api/v1/finance/receivables/{id}/payments': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Record a customer debt payment allocated to a receivable (never inflates sales revenue)',
+      operationId: 'FinanceReceivables_recordPayment',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer debt payment applied' } },
+    },
+  },
+  '/api/v1/finance/customers/{customerId}/debt': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Get customer debt summary, open receivables, and immutable debt statement ledger',
+      operationId: 'FinanceReceivables_getCustomerDebtSummary',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Customer debt summary and statement' },
+      },
+    },
+  },
+  '/api/v1/finance/customers/{customerId}/debt-payments': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Record a multi-invoice FIFO or explicit customer debt payment',
+      operationId: 'FinanceReceivables_recordCustomerDebtPayment',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Multi-invoice customer debt payment applied' },
+      },
+    },
+  },
+  '/api/v1/finance/payables': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Recognize a supplier payable (AP) and post supplier debt ledger & journal',
+      operationId: 'FinancePayables_recognize',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Supplier payable recognized' } },
+    },
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List supplier payables with filtering and pagination',
+      operationId: 'FinancePayables_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Supplier payables page' } },
+    },
+  },
+  '/api/v1/finance/payables/{id}': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Get supplier payable details',
+      operationId: 'FinancePayables_getById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Supplier payable details' } },
+    },
+  },
+  '/api/v1/finance/payables/{id}/payments': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Record a supplier payment and post cashbook expense voucher & journal',
+      operationId: 'FinancePayables_recordPayment',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Supplier payment recorded' } },
+    },
+  },
+  '/api/v1/finance/payables/{id}/return-credits': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Apply a supplier return credit note to reduce supplier payable',
+      operationId: 'FinancePayables_applyReturnCredit',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Supplier return credit applied' } },
+    },
+  },
+  '/api/v1/finance/suppliers/{supplierId}/debt': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Get supplier debt summary, open payables, and supplier debt statement ledger',
+      operationId: 'FinancePayables_getSupplierDebtSummary',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Supplier debt summary and statement' },
+      },
+    },
+  },
+  '/api/v1/finance/settlements': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Confirm or record a payment tender settlement',
+      operationId: 'FinanceSettlements_confirm',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Payment settlement recorded' } },
+    },
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List payment settlements with filtering and pagination',
+      operationId: 'FinanceSettlements_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Payment settlements page' } },
+    },
+  },
+  '/api/v1/finance/settlements/callbacks': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Process idempotent payment provider callback / settlement notification',
+      operationId: 'FinanceSettlements_processCallback',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Provider callback processed' } },
+    },
+  },
+  '/api/v1/finance/settlements/{id}': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Get payment settlement details',
+      operationId: 'FinanceSettlements_getById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Payment settlement details' } },
+    },
+  },
+  '/api/v1/finance/refunds': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Create a refund operation enforcing remaining refundable cap per order',
+      operationId: 'FinanceRefunds_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Refund operation created' } },
+    },
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List refund operations with filtering and pagination',
+      operationId: 'FinanceRefunds_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Refund operations page' } },
+    },
+  },
+  '/api/v1/finance/refunds/{id}/approve': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Approve a REQUESTED refund operation',
+      operationId: 'FinanceRefunds_approve',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Refund operation approved' } },
+    },
+  },
+  '/api/v1/finance/refunds/{id}/execute': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Execute an approved refund (enters PENDING_CONFIRMATION on external provider timeout, never fabricating completion)',
+      operationId: 'FinanceRefunds_execute',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Refund execution outcome' } },
+    },
+  },
+  '/api/v1/finance/refunds/{id}/confirm': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Confirm or reconcile a PENDING_CONFIRMATION external refund outcome',
+      operationId: 'FinanceRefunds_confirmOutcome',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Refund outcome confirmed' } },
+    },
+  },
+  '/api/v1/finance/cod/receivables': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Register a carrier COD receivable for a shipment',
+      operationId: 'FinanceCod_createReceivable',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'COD receivable registered' } },
+    },
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List carrier COD receivables with filtering and pagination',
+      operationId: 'FinanceCod_listReceivables',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'COD receivables page' } },
+    },
+  },
+  '/api/v1/finance/cod/settlement-batches': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Import and reconcile a carrier COD settlement statement batch',
+      operationId: 'FinanceCod_importBatch',
+      security: [{ bearer: [] }],
+      responses: {
+        '201': { description: 'COD settlement batch imported and reconciled' },
+      },
+    },
+  },
+  '/api/v1/finance/reconciliation/shifts': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Reconcile POS shift closing cash and post shortage/overage variance journal',
+      operationId: 'FinanceReconciliation_reconcileShift',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'POS shift cash reconciled' } },
+    },
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List POS shift cash reconciliations',
+      operationId: 'FinanceReconciliation_listShifts',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Shift reconciliations list' } },
+    },
+  },
+  '/api/v1/finance/adjustments': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Create a financial adjustment request (requires Maker-Checker approval)',
+      operationId: 'FinanceReconciliation_createAdjustment',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Financial adjustment created' } },
+    },
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List financial adjustments',
+      operationId: 'FinanceReconciliation_listAdjustments',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Financial adjustments list' } },
+    },
+  },
+  '/api/v1/finance/adjustments/{id}/approve': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Approve and post a financial adjustment (enforces Maker-Checker separation)',
+      operationId: 'FinanceReconciliation_approveAdjustment',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Financial adjustment approved and posted' },
+      },
+    },
+  },
+  '/api/v1/finance/reconciliation/runs': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'Trigger a cross-ledger financial reconciliation run',
+      operationId: 'FinanceReconciliation_triggerRun',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Reconciliation run completed' } },
+    },
+  },
+  '/api/v1/finance/reconciliation/issues': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary: 'List financial reconciliation issues',
+      operationId: 'FinanceReconciliation_listIssues',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Reconciliation issues page' } },
+    },
+  },
+  '/api/v1/finance/reconciliation/issues/{id}/resolve': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Resolve or ignore a financial reconciliation issue with audit note',
+      operationId: 'FinanceReconciliation_resolveIssue',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Reconciliation issue resolved' } },
+    },
+  },
+  '/api/v1/finance/summary': {
+    get: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        'Get tenant-wide operational finance summary (cash, AR, AP, COD, open issues)',
+      operationId: 'FinanceReconciliation_getSummary',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Tenant finance summary' } },
+    },
+  },
+  '/internal/v1/finance/credit-authorizations': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        '[Internal East-West] Authorize and place a concurrency-safe customer credit hold for POS/Order checkout',
+      operationId: 'FinanceInternalCredit_authorize',
+      responses: { '201': { description: 'Credit authorization hold placed' } },
+    },
+  },
+  '/internal/v1/finance/credit-authorizations/{id}/commit': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        '[Internal East-West] Commit a HELD credit authorization into a posted customer receivable and journal',
+      operationId: 'FinanceInternalCredit_commit',
+      responses: { '200': { description: 'Credit authorization committed' } },
+    },
+  },
+  '/internal/v1/finance/credit-authorizations/{id}/release': {
+    post: {
+      tags: [
+        'Finance — Journals, Cashbook, Receivables, Payables, Credit, Settlements, Refunds, COD & Reconciliation',
+      ],
+      summary:
+        '[Internal East-West] Release a HELD credit authorization on checkout failure/cancellation',
+      operationId: 'FinanceInternalCredit_release',
+      responses: { '200': { description: 'Credit authorization released' } },
+    },
+  },
+  '/api/v1/integrations/providers': {
+    get: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'List supported marketplace providers and capability matrix (Shopee v2, Lazada)',
+      operationId: 'IntegrationConnections_listProviders',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Provider capability matrix' } },
+    },
+  },
+  '/api/v1/integrations/connections': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Create a marketplace channel connection with AES-256-GCM encrypted credentials',
+      operationId: 'IntegrationConnections_create',
+      security: [{ bearer: [] }],
+      responses: {
+        '201': { description: 'Sanitized channel connection created' },
+      },
+    },
+    get: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'List tenant marketplace channel connections (sanitized credential metadata)',
+      operationId: 'IntegrationConnections_list',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'List of sanitized channel connections' },
+      },
+    },
+  },
+  '/api/v1/integrations/connections/{id}': {
+    get: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary: 'Get sanitized channel connection details by ID',
+      operationId: 'IntegrationConnections_getById',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Sanitized channel connection details' },
+      },
+    },
+    delete: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Disconnect a marketplace channel connection and revoke stored tokens',
+      operationId: 'IntegrationConnections_disconnect',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Channel connection disconnected' } },
+    },
+  },
+  '/api/v1/integrations/connections/{id}/authorize': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Initiate OAuth/partner authorization or complete callback state exchange',
+      operationId: 'IntegrationConnections_authorize',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Authorization URL or connected view' },
+      },
+    },
+  },
+  '/api/v1/integrations/connections/{id}/refresh-token': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Concurrency-safe credential token refresh with lease & CAS version guard',
+      operationId: 'IntegrationConnections_refreshToken',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Token refresh outcome' } },
+    },
+  },
+  '/api/v1/integrations/connections/{id}/health': {
+    get: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Inspect channel connection health, token expiry, circuit breaker & sync lag',
+      operationId: 'IntegrationConnections_health',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Channel connection health diagnostics' },
+      },
+    },
+  },
+  '/api/v1/integrations/sku-mappings': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Create an explicit SKU mapping between marketplace variation and internal Catalog variant',
+      operationId: 'IntegrationSkuMapping_create',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'SKU mapping created' } },
+    },
+    get: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'List SKU mappings with optional connection, variant, or status filters',
+      operationId: 'IntegrationSkuMapping_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'SKU mappings list' } },
+    },
+  },
+  '/api/v1/integrations/sku-mappings/{id}': {
+    patch: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary: 'Update a SKU mapping and increment mappingVersion',
+      operationId: 'IntegrationSkuMapping_update',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'SKU mapping updated' } },
+    },
+    delete: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary: 'Delete a SKU mapping with audit log entry',
+      operationId: 'IntegrationSkuMapping_delete',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'SKU mapping deleted' } },
+    },
+  },
+  '/api/v1/integrations/connections/{id}/sync/orders': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Trigger manual or incremental external order synchronization for a connection',
+      operationId: 'IntegrationSyncJobs_syncOrders',
+      security: [{ bearer: [] }],
+      responses: { '202': { description: 'Order sync job enqueued/executed' } },
+    },
+  },
+  '/api/v1/integrations/connections/{id}/sync/inventory': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Trigger sellable inventory availability publication for a connection',
+      operationId: 'IntegrationSyncJobs_syncInventory',
+      security: [{ bearer: [] }],
+      responses: {
+        '202': { description: 'Inventory sync job enqueued/executed' },
+      },
+    },
+  },
+  '/api/v1/integrations/connections/{id}/sync/products': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Trigger external product listing discovery and exact-SKU auto-mapping',
+      operationId: 'IntegrationSyncJobs_syncProducts',
+      security: [{ bearer: [] }],
+      responses: {
+        '202': { description: 'Product sync job enqueued/executed' },
+      },
+    },
+  },
+  '/api/v1/integrations/sync-jobs': {
+    get: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary: 'List durable synchronization jobs across connections',
+      operationId: 'IntegrationSyncJobs_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of sync jobs' } },
+    },
+  },
+  '/api/v1/integrations/sync-jobs/{id}': {
+    get: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary: 'Get sync job details and execution summary by ID',
+      operationId: 'IntegrationSyncJobs_getById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Sync job details' } },
+    },
+  },
+  '/api/v1/integrations/sync-jobs/{id}/retry': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Authorized operator replay of a failed or dead-lettered sync job',
+      operationId: 'IntegrationSyncJobs_retry',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Sync job replayed' } },
+    },
+  },
+  '/api/v1/integrations/conflicts': {
+    get: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'List synchronization conflicts (SKU_UNMAPPED, STOCK_INSUFFICIENT, ORDER_STATE_CONFLICT)',
+      operationId: 'IntegrationConflicts_list',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of sync conflicts' } },
+    },
+  },
+  '/api/v1/integrations/conflicts/{id}/resolve': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Resolve a synchronization conflict and optionally re-trigger order import',
+      operationId: 'IntegrationConflicts_resolve',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Conflict resolved' } },
+    },
+  },
+  '/api/v1/integrations/reconciliation-runs': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        'Execute an omnichannel reconciliation run across orders, stock publications & DLQ',
+      operationId: 'IntegrationReconciliation_run',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Reconciliation run completed' } },
+    },
+    get: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary: 'List omnichannel reconciliation runs',
+      operationId: 'IntegrationReconciliation_listRuns',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of reconciliation runs' } },
+    },
+  },
+  '/api/v1/integrations/reconciliation-runs/{id}': {
+    get: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary: 'Get reconciliation run details and detected discrepancy issues',
+      operationId: 'IntegrationReconciliation_getRunById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Reconciliation run details' } },
+    },
+  },
+  '/webhooks/v1/{provider}/{connectionKey}': {
+    post: {
+      tags: [
+        'Integration — Marketplace Connections, Webhooks, SKU Mapping, Order/Inventory Sync & Reconciliation',
+      ],
+      summary:
+        '[Public External Webhook Ingress] Verify HMAC-SHA256 signature on raw body, enforce replay window, persist to durable webhook inbox & enqueue sync job',
+      operationId: 'IntegrationWebhooks_ingest',
+      responses: {
+        '200': { description: 'Webhook verified and durably persisted' },
+        '401': {
+          description: 'INVALID_WEBHOOK_SIGNATURE or WEBHOOK_REPLAY_REJECTED',
+        },
+        '503': { description: 'WEBHOOK_PERSISTENCE_FAILED' },
       },
     },
   },
