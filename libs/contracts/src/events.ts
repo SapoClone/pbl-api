@@ -143,16 +143,101 @@ export const INVENTORY_STOCK_CHANGED = {
   version: 1,
 } as const satisfies EventDefinition;
 
+export const INVENTORY_STOCK_RECEIVED = {
+  type: 'inventory.stock.received',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INVENTORY_STOCK_ISSUED = {
+  type: 'inventory.stock.issued',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INVENTORY_RESERVATION_COMMITTED = {
+  type: 'inventory.reservation.committed',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INVENTORY_RESERVATION_RELEASED = {
+  type: 'inventory.reservation.released',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INVENTORY_RESERVATION_EXPIRED = {
+  type: 'inventory.reservation.expired',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INVENTORY_TRANSFER_DISPATCHED = {
+  type: 'inventory.transfer.dispatched',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INVENTORY_TRANSFER_RECEIVED = {
+  type: 'inventory.transfer.received',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INVENTORY_STOCKTAKE_ADJUSTED = {
+  type: 'inventory.stocktake.adjusted',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INVENTORY_PURCHASE_ORDER_APPROVED = {
+  type: 'inventory.purchase_order.approved',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export type InventoryMovementType =
+  | 'SALE_COMMIT'
+  | 'SALE_ISSUE'
+  | 'RECEIPT'
+  | 'PURCHASE_RECEIPT'
+  | 'MANUAL_RECEIPT'
+  | 'MANUAL_ISSUE'
+  | 'TRANSFER_DISPATCH'
+  | 'TRANSFER_RECEIPT'
+  | 'STOCKTAKE_ADJUSTMENT'
+  | 'RETURN_IN'
+  | 'RETURN_RECEIPT'
+  | 'ADJUSTMENT'
+  | 'REVERSAL';
+
 export interface StockChangedPayload {
   warehouseId: string;
   skuId: string;
-  movementType: 'SALE_COMMIT' | 'RECEIPT' | 'ADJUSTMENT' | 'RETURN_IN';
+  movementType: InventoryMovementType;
   qtyDelta: string;
   onHandAfter: string;
   reservedAfter: string;
+  unitCost?: string;
+  avgCostAfter?: string;
   referenceType: string;
   referenceId: string;
   occurredAt: string;
+}
+
+export interface ReservationLifecycleEventPayload {
+  reservationId: string;
+  sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
+  sourceRefId: string;
+  state: 'COMMITTED' | 'RELEASED' | 'EXPIRED';
+  reason?: string;
+  occurredAt: string;
+  lines: {
+    warehouseId: string;
+    skuId: string;
+    qty: string;
+  }[];
+}
+
+export interface PurchaseOrderApprovedPayload {
+  purchaseOrderId: string;
+  code: string;
+  supplierId: string;
+  warehouseId: string;
+  totalAmount: string;
+  approvedAt: string;
 }
 
 export type WarehouseReservationState =
