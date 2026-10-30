@@ -1,12 +1,34 @@
 import {
+  ConflictException,
   Injectable,
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InternalHttpClient } from '@pbl/common';
-import { StockLine, StockShortage } from '@pbl/contracts';
+import {
+  CreateWarehouseReservationRequest,
+  StockLine,
+  StockShortage,
+  WarehouseReservationResponse,
+  WarehouseStockShortage,
+} from '@pbl/contracts';
 
-export const InventoryClientErrorCode = { UNAVAILABLE: 'S005' } as const;
+export const InventoryClientErrorCode = {
+  UNAVAILABLE: 'S005',
+  TIMEOUT_RECOVERY_PENDING: 'S006',
+  IDEMPOTENCY_CONFLICT: 'IDEMPOTENCY_CONFLICT',
+} as const;
+
+export type WarehouseReservationClientResult =
+  | {
+      status: 'HELD';
+      reservation: WarehouseReservationResponse;
+      replayed: boolean;
+    }
+  | {
+      status: 'INSUFFICIENT_STOCK';
+      shortages: WarehouseStockShortage[];
+    };
 
 /** The call is short: a sale waiting on stock is a customer waiting at the counter */
 const TIMEOUT_MS = 3000;
@@ -14,11 +36,12 @@ const BREAKER_THRESHOLD = 5;
 const BREAKER_OPEN_MS = 10_000;
 
 /**
- * Asks `inventory` to hold stock before an order is created (ADR-0010): the one
- * synchronous call between services. It forwards the caller's token, so inventory
- * verifies the user and takes the tenant from it. When inventory cannot be
- * reached the sale is refused (fail closed), and after a run of failures the
- * breaker stops calling for a few seconds so requests fail fast instead of queueing.
+ * Asks `inventory` to hold stock before an order is created (ADR-0010, ADR-0012):
+ * the one synchronous call between services. It forwards the caller's token and
+ * tenant header (`X-Tenant-Id`), so inventory verifies the tenant and enforces
+ * idempotency. When inventory cannot be reached the sale is refused or placed in
+ * `RECOVERY_PENDING` (fail closed), and after a run of failures the breaker stops
+ * calling for a few seconds so requests fail fast instead of queueing.
  */
 @Injectable()
 export class InventoryClient {
@@ -75,6 +98,128 @@ export class InventoryClient {
       this.logger.warn(
         `Could not release the hold of order ${orderId}; it will expire: ${error instanceof Error ? error.message : error}`,
       );
+    }
+  }
+
+  /**
+   * Internal warehouse reservation call (`POST /internal/v1/reservations`).
+   * Uses a deterministic `Idempotency-Key` so timeout recovery can safely replay
+   * the exact same request without double-reserving stock (ADR-0012).
+   */
+  async reserveWarehouseStock(
+    idempotencyKey: string,
+    req: CreateWarehouseReservationRequest,
+  ): Promise<WarehouseReservationClientResult> {
+    this.assertClosed();
+    let response;
+    try {
+      response = await this.http.post<
+        WarehouseReservationResponse & {
+          errorCode?: string;
+          details?: WarehouseStockShortage[];
+        }
+      >('/internal/v1/reservations', req, {
+        timeout: TIMEOUT_MS,
+        headers: { 'Idempotency-Key': idempotencyKey },
+        validateStatus: (status) => status < 500,
+      });
+    } catch (error) {
+      throw this.failed(error);
+    }
+
+    if (response.status === 200 || response.status === 201) {
+      this.failures = 0;
+      return {
+        status: 'HELD',
+        reservation: response.data,
+        replayed: response.status === 200,
+      };
+    }
+
+    if (response.status === 409) {
+      this.failures = 0;
+      const errorCode = response.data?.errorCode;
+      if (errorCode === InventoryClientErrorCode.IDEMPOTENCY_CONFLICT) {
+        throw new ConflictException({
+          errorCode: InventoryClientErrorCode.IDEMPOTENCY_CONFLICT,
+          message:
+            'Idempotency-Key already used with a different reservation payload',
+        });
+      }
+      const details = response.data?.details;
+      return {
+        status: 'INSUFFICIENT_STOCK',
+        shortages: Array.isArray(details) ? details : [],
+      };
+    }
+
+    throw this.failed(
+      new Error(`inventory reservation answered ${response.status}`),
+      false,
+    );
+  }
+
+  async getWarehouseReservation(
+    reservationId: string,
+  ): Promise<WarehouseReservationResponse | null> {
+    const response = await this.http.get<WarehouseReservationResponse>(
+      `/internal/v1/reservations/${reservationId}`,
+      {
+        timeout: TIMEOUT_MS,
+        validateStatus: (status) => status < 500,
+      },
+    );
+    if (response.status === 200) {
+      return response.data;
+    }
+    if (response.status === 404) {
+      return null;
+    }
+    throw this.failed(
+      new Error(`inventory reservation lookup answered ${response.status}`),
+      false,
+    );
+  }
+
+  async commitWarehouseReservation(
+    reservationId: string,
+  ): Promise<WarehouseReservationResponse> {
+    const response = await this.http.post<WarehouseReservationResponse>(
+      `/internal/v1/reservations/${reservationId}/commit`,
+      {},
+      {
+        timeout: TIMEOUT_MS,
+        validateStatus: (status) => status < 500,
+      },
+    );
+    if (response.status === 200) {
+      return response.data;
+    }
+    throw this.failed(
+      new Error(`inventory reservation commit answered ${response.status}`),
+      false,
+    );
+  }
+
+  async releaseWarehouseReservation(
+    reservationId: string,
+    reason?: string,
+  ): Promise<WarehouseReservationResponse | null> {
+    try {
+      const response = await this.http.post<WarehouseReservationResponse>(
+        `/internal/v1/reservations/${reservationId}/release`,
+        reason ? { reason } : {},
+        {
+          timeout: TIMEOUT_MS,
+          validateStatus: (status) => status < 500,
+        },
+      );
+      return response.status === 200 ? response.data : null;
+    } catch (error) {
+      this.logger.warn(
+        `Could not release reservation ${reservationId}: ${error instanceof Error ? error.message : error}`,
+      );
+      return null;
     }
   }
 

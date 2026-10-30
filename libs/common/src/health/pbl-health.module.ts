@@ -5,8 +5,10 @@ import {
   Inject,
   Module,
   OnApplicationShutdown,
+  Optional,
   SetMetadata,
 } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   HealthCheck,
   HealthCheckError,
@@ -16,6 +18,7 @@ import {
   TerminusModule,
 } from '@nestjs/terminus';
 import Redis from 'ioredis';
+import { DataSource } from 'typeorm';
 
 /**
  * Same metadata as @pbl/auth's @Public() (IS_PUBLIC = 'isPublic'), set
@@ -31,34 +34,56 @@ const HEALTH_REDIS = Symbol('PBL_HEALTH_REDIS');
 export type ReadinessCheck = () => Promise<HealthIndicatorResult>;
 
 export interface PblHealthOptions {
-  /** Reported by GET /health */
+  /** Reported by GET /health and GET /health/live */
   service: string;
   /** Extra readiness checks (database, ...) */
   readiness?: ReadinessCheck[];
+  /** Add a PostgreSQL DataSource ping (SELECT 1) when true and DataSource is present */
+  database?: boolean;
   /** Add a Redis ping when REDIS_HOST is set */
   redisFromEnv?: boolean;
   /** Readiness gives up on the Redis ping after this long (default 2000 ms) */
   redisTimeoutMs?: number;
 }
 
+@ApiTags('health')
 @Public()
 @Controller('health')
 class PblHealthController {
   constructor(
     @Inject(HEALTH_OPTIONS)
-    private readonly options: { service: string; checks: ReadinessCheck[] },
+    private readonly options: {
+      service: string;
+      database?: boolean;
+      checks: ReadinessCheck[];
+    },
     private readonly health: HealthCheckService,
+    @Optional() private readonly dataSource?: DataSource,
   ) {}
 
   @Get()
+  @ApiOperation({ summary: 'Service health check' })
   live() {
     return { status: 'ok', service: this.options.service };
   }
 
+  @Get('live')
+  @ApiOperation({ summary: 'Liveness probe' })
+  liveExplicit() {
+    return { status: 'ok', service: this.options.service };
+  }
+
   @Get('ready')
+  @ApiOperation({ summary: 'Readiness probe (Database and Redis)' })
   @HealthCheck()
   ready(): Promise<HealthCheckResult> {
-    return this.health.check(this.options.checks);
+    const checks: ReadinessCheck[] = [
+      ...(this.options.database && this.dataSource
+        ? [() => pingDatabase(this.dataSource!)]
+        : []),
+      ...this.options.checks,
+    ];
+    return this.health.check(checks);
   }
 }
 
@@ -71,6 +96,22 @@ class HealthRedisShutdown implements OnApplicationShutdown {
 }
 
 const DEFAULT_REDIS_TIMEOUT_MS = 2000;
+
+async function pingDatabase(
+  dataSource: DataSource,
+): Promise<HealthIndicatorResult> {
+  try {
+    await dataSource.query('SELECT 1');
+    return { database: { status: 'up' } };
+  } catch (err) {
+    throw new HealthCheckError('Database check failed', {
+      database: {
+        status: 'down',
+        message: err instanceof Error ? err.message : String(err),
+      },
+    });
+  }
+}
 
 async function pingRedis(
   redis: Redis,
@@ -130,6 +171,7 @@ export class PblHealthModule {
           inject: [HEALTH_REDIS],
           useFactory: (redis: Redis | null) => ({
             service: options.service,
+            database: options.database,
             checks: [
               ...(options.readiness ?? []),
               ...(redis

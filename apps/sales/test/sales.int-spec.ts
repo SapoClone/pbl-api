@@ -3,7 +3,11 @@
  * projection, idempotent order creation (including two requests at once) and the
  * outbox row written with each order. Run with `pnpm test:int`.
  */
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { RequestContext, TenantScopedRepository } from '@pbl/common';
 import {
   CONSUMER_ENTITIES,
@@ -22,9 +26,13 @@ import { BranchProjectionEntity } from '../src/branches/branch-projection.entity
 import { BranchProjectionHandler } from '../src/branches/branch-projection.handler';
 import { CreateSalesTables1791800000000 } from '../src/migrations/1791800000000-create-sales-tables';
 import { AddOrderIdempotency1791800000200 } from '../src/migrations/1791800000200-add-order-idempotency';
+import { CreateCheckoutWorkflow1791800000300 } from '../src/migrations/1791800000300-create-checkout-workflow';
 import { CreateOrderReqDto } from '../src/orders/dto/create-order.req.dto';
 import { OrderItemEntity } from '../src/orders/entities/order-item.entity';
-import { OrderEntity } from '../src/orders/entities/order.entity';
+import {
+  CheckoutWorkflowEntity,
+  OrderEntity,
+} from '../src/orders/entities/order.entity';
 import { OrdersService, SalesErrorCode } from '../src/orders/orders.service';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -49,6 +57,9 @@ describe('sales (Postgres)', () => {
   const inventory = {
     reserve: jest.fn(async (): Promise<unknown> => null),
     release: jest.fn(async () => undefined),
+    reserveWarehouseStock: jest.fn(),
+    commitWarehouseReservation: jest.fn(),
+    releaseWarehouseReservation: jest.fn(),
   };
   const handler = new BranchProjectionHandler();
 
@@ -92,6 +103,7 @@ describe('sales (Postgres)', () => {
         entities: [
           OrderEntity,
           OrderItemEntity,
+          CheckoutWorkflowEntity,
           BranchProjectionEntity,
           ...PRODUCER_ENTITIES,
           ...CONSUMER_ENTITIES,
@@ -101,6 +113,7 @@ describe('sales (Postgres)', () => {
           ...CONSUMER_MIGRATIONS,
           CreateSalesTables1791800000000,
           AddOrderIdempotency1791800000200,
+          CreateCheckoutWorkflow1791800000300,
         ],
       }),
     });
@@ -110,6 +123,7 @@ describe('sales (Postgres)', () => {
       new EventOutbox(),
       // the real client talks HTTP to inventory; its contract is tested in the unit specs
       inventory as never,
+      TenantScopedRepository.forEntity(dataSource, CheckoutWorkflowEntity),
     );
   });
 
@@ -122,6 +136,7 @@ describe('sales (Postgres)', () => {
     jest.clearAllMocks();
     inventory.reserve.mockResolvedValue(null);
     for (const table of [
+      'checkout_workflow',
       'order_items',
       'orders',
       'branch_projection',
@@ -338,6 +353,129 @@ describe('sales (Postgres)', () => {
 
     expect(error.getResponse()).toMatchObject({
       errorCode: SalesErrorCode.UNKNOWN_BRANCH,
+    });
+  });
+
+  describe('warehouse checkout workflow & timeout recovery (ADR-0012)', () => {
+    const WAREHOUSE_A = '77777777-7777-4777-8777-777777777777';
+    const VARIANT_1 = '11111111-1111-4111-8111-111111111111';
+
+    const checkoutDto = () => ({
+      branchId: BRANCH_A,
+      warehouseId: WAREHOUSE_A,
+      paymentMethod: 'cash' as const,
+      items: [
+        {
+          variantId: VARIANT_1,
+          sku: 'AO-01',
+          name: 'Ao thun',
+          qty: '2.000',
+          unitPrice: 120000,
+        },
+      ],
+    });
+
+    it('persists checkout_workflow, order, order_items, and outbox_event atomically on happy path', async () => {
+      const reservationId = randomUUID();
+      inventory.reserveWarehouseStock.mockResolvedValue({
+        status: 'HELD',
+        replayed: false,
+        reservation: {
+          reservationId,
+          tenantId: TENANT_A,
+          warehouseId: WAREHOUSE_A,
+          checkoutId: 'chk-1',
+          state: 'HELD',
+          expiresAt: new Date(Date.now() + 900_000).toISOString(),
+          lines: [
+            {
+              variantId: VARIANT_1,
+              qty: '2.000',
+              availableAfter: '8.000',
+            },
+          ],
+        },
+      });
+      inventory.commitWarehouseReservation.mockResolvedValue({
+        reservationId,
+        state: 'COMMITTED',
+      });
+
+      const key = randomUUID();
+      const outcome = await as(TENANT_A, () =>
+        service.checkout(ACCOUNT, key, checkoutDto()),
+      );
+
+      expect(outcome.state).toBe('CONFIRMED');
+      expect(outcome.reservationId).toBe(reservationId);
+      expect(outcome.order?.totalAmount).toBe(240000);
+      expect(outcome.replayed).toBe(false);
+
+      // Replay with same Idempotency-Key returns CONFIRMED without calling inventory again
+      const replay = await as(TENANT_A, () =>
+        service.checkout(ACCOUNT, key, checkoutDto()),
+      );
+      expect(replay.replayed).toBe(true);
+      expect(replay.orderId).toBe(outcome.orderId);
+      expect(inventory.reserveWarehouseStock).toHaveBeenCalledTimes(1);
+    });
+
+    it('records RECOVERY_PENDING on Inventory timeout and reconciles deterministically without double-reserving stock', async () => {
+      const reservationId = randomUUID();
+      inventory.reserveWarehouseStock
+        .mockRejectedValueOnce(new ServiceUnavailableException('timeout'))
+        .mockResolvedValueOnce({
+          status: 'HELD',
+          replayed: true,
+          reservation: {
+            reservationId,
+            tenantId: TENANT_A,
+            warehouseId: WAREHOUSE_A,
+            checkoutId: 'chk-timeout',
+            state: 'HELD',
+            expiresAt: new Date(Date.now() + 900_000).toISOString(),
+            lines: [
+              {
+                variantId: VARIANT_1,
+                qty: '2.000',
+                availableAfter: '8.000',
+              },
+            ],
+          },
+        });
+      inventory.commitWarehouseReservation.mockResolvedValue({
+        reservationId,
+        state: 'COMMITTED',
+      });
+
+      const key = randomUUID();
+      const err = await as(TENANT_A, () =>
+        service.checkout(ACCOUNT, key, checkoutDto()),
+      ).catch((e) => e);
+
+      expect(err).toBeInstanceOf(ServiceUnavailableException);
+      expect(err.getResponse()).toMatchObject({
+        errorCode: SalesErrorCode.CHECKOUT_RECOVERY_PENDING,
+      });
+
+      const [workflow] = await dataSource
+        .getRepository(CheckoutWorkflowEntity)
+        .find();
+      expect(workflow.state).toBe('RECOVERY_PENDING');
+
+      // Recover via recoverCheckout -> replays exact same reservationIdempotencyKey
+      const recovered = await as(TENANT_A, () =>
+        service.recoverCheckout(workflow.id),
+      );
+      expect(recovered.state).toBe('CONFIRMED');
+      expect(recovered.reservationId).toBe(reservationId);
+      expect(recovered.order?.totalAmount).toBe(240000);
+
+      expect(inventory.reserveWarehouseStock).toHaveBeenCalledTimes(2);
+      expect(inventory.reserveWarehouseStock.mock.calls[0][0]).toBe(
+        inventory.reserveWarehouseStock.mock.calls[1][0],
+      );
+      expect(await dataSource.getRepository(OrderEntity).count()).toBe(1);
     });
   });
 });

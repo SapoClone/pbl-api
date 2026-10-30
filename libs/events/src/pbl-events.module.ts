@@ -48,7 +48,14 @@ export class PblEventsModule {
         { provide: EVENTS_CONFIG, useFactory: () => readEventsConfig() },
         {
           provide: SQS_CLIENT,
-          useFactory: () => new SQSClient({ region: region() }),
+          useFactory: () =>
+            new SQSClient({
+              region: region(),
+              ...(process.env.AWS_ENDPOINT_URL_SQS ||
+              process.env.AWS_ENDPOINT_URL
+                ? { useQueueUrlAsEndpoint: false }
+                : {}),
+            }),
         },
         {
           provide: QueueProvisioner,

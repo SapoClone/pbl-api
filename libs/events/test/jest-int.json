@@ -5,7 +5,8 @@
     "<rootDir>/libs/events/test",
     "<rootDir>/apps/sales/test",
     "<rootDir>/apps/inventory/test",
-    "<rootDir>/apps/insight/test"
+    "<rootDir>/apps/insight/test",
+    "<rootDir>/apps/catalog/test"
   ],
   "testRegex": ".*\\.int-spec\\.ts$",
   "transform": { "^.+\\.(t|j)s$": "ts-jest" },

@@ -5,7 +5,7 @@ import { BranchProjectionHandler } from '../branches/branch-projection.handler';
 import { readInventoryUrl } from '../config/sales.config';
 import { InventoryClient } from '../inventory/inventory.client';
 import { OrderItemEntity } from './entities/order-item.entity';
-import { OrderEntity } from './entities/order.entity';
+import { CheckoutWorkflowEntity, OrderEntity } from './entities/order.entity';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 
@@ -18,6 +18,7 @@ import { OrdersService } from './orders.service';
     TenancyModule.forFeature([
       OrderEntity,
       OrderItemEntity,
+      CheckoutWorkflowEntity,
       BranchProjectionEntity,
     ]),
   ],

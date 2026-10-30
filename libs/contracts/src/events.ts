@@ -117,3 +117,166 @@ export interface StockReservation {
   expiresAt: string;
   lines: StockLine[];
 }
+
+// ---- inventory events & warehouse reservation contract (ADR-0012)
+
+export const INVENTORY_RESERVATION_CONFIRMED = {
+  type: 'inventory.reservation.confirmed',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export interface ReservationConfirmedPayload {
+  reservationId: string;
+  sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
+  sourceRefId: string;
+  state: 'HELD';
+  expiresAt: string;
+  lines: {
+    warehouseId: string;
+    skuId: string;
+    qty: string;
+  }[];
+}
+
+export const INVENTORY_STOCK_CHANGED = {
+  type: 'inventory.stock.changed',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export interface StockChangedPayload {
+  warehouseId: string;
+  skuId: string;
+  movementType: 'SALE_COMMIT' | 'RECEIPT' | 'ADJUSTMENT' | 'RETURN_IN';
+  qtyDelta: string;
+  onHandAfter: string;
+  reservedAfter: string;
+  referenceType: string;
+  referenceId: string;
+  occurredAt: string;
+}
+
+export type WarehouseReservationState =
+  | 'HELD'
+  | 'COMMITTED'
+  | 'RELEASED'
+  | 'EXPIRED';
+
+export interface WarehouseReservationLineInput {
+  warehouseId: string;
+  skuId: string;
+  qty: string;
+}
+
+export interface CreateWarehouseReservationRequest {
+  callerService: 'sales' | 'inventory' | 'integration';
+  sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
+  sourceRefId: string;
+  ttlSeconds?: number;
+  lines: WarehouseReservationLineInput[];
+}
+
+export interface WarehouseReservationLineResult {
+  lineNo: number;
+  warehouseId: string;
+  skuId: string;
+  qty: string;
+  onHandAfter: string;
+  reservedAfter: string;
+  availableAfter: string;
+}
+
+export interface WarehouseReservationResponse {
+  reservationId: string;
+  tenantId: string;
+  callerService: string;
+  sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
+  sourceRefId: string;
+  state: WarehouseReservationState;
+  expiresAt: string;
+  createdAt: string;
+  lines: WarehouseReservationLineResult[];
+}
+
+export interface WarehouseStockShortage {
+  warehouseId: string;
+  skuId: string;
+  requestedQty: string;
+  availableQty: string;
+}
+
+// ---- catalog (M1 Catalog Core — ADR-0013)
+
+export const CATALOG_PRODUCT_CREATED = {
+  type: 'catalog.product.created',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const CATALOG_PRODUCT_UPDATED = {
+  type: 'catalog.product.updated',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const CATALOG_PRODUCT_DEACTIVATED = {
+  type: 'catalog.product.deactivated',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const CATALOG_VARIANT_CREATED = {
+  type: 'catalog.variant.created',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const CATALOG_VARIANT_UPDATED = {
+  type: 'catalog.variant.updated',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const CATALOG_VARIANT_DEACTIVATED = {
+  type: 'catalog.variant.deactivated',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const CATALOG_PRICE_CHANGED = {
+  type: 'catalog.price.changed',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export interface CatalogProductEventPayload {
+  productId: string;
+  name: string;
+  baseUnit: string;
+  categoryId: string | null;
+  brandId: string | null;
+  status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  aggregateVersion: number;
+  updatedAt: string;
+}
+
+export interface CatalogVariantEventPayload {
+  variantId: string;
+  productId: string;
+  skuCode: string;
+  previousSkuCode?: string;
+  barcode: string | null;
+  name: string;
+  basePrice: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+  isDefault: boolean;
+  aggregateVersion: number;
+  updatedAt: string;
+}
+
+export interface CatalogPriceChangedPayload {
+  priceListId: string;
+  priceListName: string;
+  isDefault: boolean;
+  currency: string;
+  variantId: string;
+  skuCode: string;
+  price: string;
+  previousPrice?: string | null;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  aggregateVersion: number;
+  updatedAt: string;
+}

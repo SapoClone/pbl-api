@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SwaggerModule } from '@nestjs/swagger';
+import { type OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 import { Test, TestingModule } from '@nestjs/testing';
 import setupSwagger from './setup-swagger';
 
@@ -54,12 +54,32 @@ describe('setupSwagger', () => {
     expect(createDocumentSpy).toHaveBeenCalled();
   });
 
-  it('should call SwaggerModule.setup with correct parameters', () => {
+  it('should call SwaggerModule.setup with correct parameters and full microservice API catalog', () => {
     const setupSpy = jest.spyOn(SwaggerModule, 'setup');
     setupSwagger(app);
     expect(setupSpy).toHaveBeenCalledWith('api-docs', app, expect.any(Object), {
       customSiteTitle: 'TestApp',
     });
+
+    const mergedDoc = setupSpy.mock.calls[0][2] as OpenAPIObject;
+    expect(mergedDoc.paths['/inventory/api/v1/warehouses']).toBeDefined();
+    expect(
+      mergedDoc.paths['/inventory/api/v1/stock-balances/receipts'],
+    ).toBeDefined();
+    expect(mergedDoc.paths['/internal/v1/reservations']).toBeDefined();
+    expect(mergedDoc.paths['/sales/api/v1/orders']).toBeDefined();
+    expect(mergedDoc.paths['/sales/api/v1/orders/checkouts']).toBeDefined();
+    expect(
+      mergedDoc.paths['/sales/api/v1/orders/checkouts/{id}/recover'],
+    ).toBeDefined();
+    expect(mergedDoc.paths['/insight/api/v1/audit-logs']).toBeDefined();
+    expect(
+      mergedDoc.paths['/insight/api/v1/sales-summary/daily'],
+    ).toBeDefined();
+    expect(mergedDoc.components?.schemas?.CreateCheckoutReqDto).toBeDefined();
+    expect(
+      mergedDoc.components?.schemas?.WarehouseReservationRes,
+    ).toBeDefined();
   });
 
   it('should not register basic auth when no credentials are configured', () => {

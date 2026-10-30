@@ -351,4 +351,193 @@ describe('OrdersService', () => {
       totalPages: 3,
     });
   });
+
+  describe('warehouse checkout workflow & timeout recovery', () => {
+    const checkoutDto = {
+      branchId: 'b1',
+      warehouseId: 'w1',
+      paymentMethod: 'cash' as const,
+      items: [
+        {
+          variantId: '11111111-1111-4111-8111-111111111111',
+          sku: 'AO-01',
+          name: 'Ao thun',
+          qty: '2.000',
+          unitPrice: 120000,
+        },
+      ],
+    };
+
+    it('transitions RESERVING -> STOCK_RESERVED -> CONFIRMED and commits the warehouse reservation', async () => {
+      const checkoutsStore = new Map<string, unknown>();
+      const checkoutsRepo = {
+        findOne: jest.fn(
+          async ({
+            where,
+          }: {
+            where: { id?: string; idempotencyKey?: string };
+          }) => {
+            for (const row of checkoutsStore.values() as Iterable<{
+              id: string;
+              idempotencyKey: string;
+            }>) {
+              if (where.id && row.id === where.id) return row;
+              if (
+                where.idempotencyKey &&
+                row.idempotencyKey === where.idempotencyKey
+              )
+                return row;
+            }
+            return null;
+          },
+        ),
+        save: jest.fn(async (w: { id: string }) => {
+          checkoutsStore.set(w.id, { ...w });
+          return w;
+        }),
+      };
+
+      const invClient = {
+        ...inventory,
+        reserveWarehouseStock: jest.fn().mockResolvedValue({
+          status: 'HELD',
+          replayed: false,
+          reservation: {
+            reservationId: 'rsv-1',
+            tenantId: 't1',
+            warehouseId: 'w1',
+            checkoutId: 'chk-1',
+            state: 'HELD',
+            expiresAt: new Date(Date.now() + 900_000).toISOString(),
+            lines: [
+              {
+                variantId: '11111111-1111-4111-8111-111111111111',
+                qty: '2.000',
+                availableAfter: '8.000',
+              },
+            ],
+          },
+        }),
+        commitWarehouseReservation: jest.fn().mockResolvedValue({
+          reservationId: 'rsv-1',
+          state: 'COMMITTED',
+        }),
+      };
+
+      const svc = new OrdersService(
+        orders as never,
+        branches as never,
+        outbox as never,
+        invClient as never,
+        checkoutsRepo as never,
+      );
+
+      const outcome = await TenantContext.run('t1', () =>
+        svc.checkout('acc-1', KEY, checkoutDto),
+      );
+
+      expect(outcome.state).toBe('CONFIRMED');
+      expect(outcome.reservationId).toBe('rsv-1');
+      expect(outcome.orderId).toBeDefined();
+      expect(invClient.commitWarehouseReservation).toHaveBeenCalledWith(
+        'rsv-1',
+      );
+    });
+
+    it('places checkout into RECOVERY_PENDING on inventory timeout and recovers deterministically without double-reserving', async () => {
+      const checkoutsStore = new Map<string, unknown>();
+      const checkoutsRepo = {
+        findOne: jest.fn(
+          async ({
+            where,
+          }: {
+            where: { id?: string; idempotencyKey?: string };
+          }) => {
+            for (const row of checkoutsStore.values() as Iterable<{
+              id: string;
+              idempotencyKey: string;
+            }>) {
+              if (where.id && row.id === where.id) return row;
+              if (
+                where.idempotencyKey &&
+                row.idempotencyKey === where.idempotencyKey
+              )
+                return row;
+            }
+            return null;
+          },
+        ),
+        save: jest.fn(async (w: { id: string }) => {
+          checkoutsStore.set(w.id, { ...w });
+          return w;
+        }),
+      };
+
+      const invClient = {
+        ...inventory,
+        reserveWarehouseStock: jest
+          .fn()
+          .mockRejectedValueOnce(new ServiceUnavailableException('timeout'))
+          .mockResolvedValueOnce({
+            status: 'HELD',
+            replayed: true,
+            reservation: {
+              reservationId: 'rsv-timeout-1',
+              tenantId: 't1',
+              warehouseId: 'w1',
+              checkoutId: 'chk-1',
+              state: 'HELD',
+              expiresAt: new Date(Date.now() + 900_000).toISOString(),
+              lines: [
+                {
+                  variantId: '11111111-1111-4111-8111-111111111111',
+                  qty: '2.000',
+                  availableAfter: '8.000',
+                },
+              ],
+            },
+          }),
+        commitWarehouseReservation: jest.fn().mockResolvedValue({
+          reservationId: 'rsv-timeout-1',
+          state: 'COMMITTED',
+        }),
+      };
+
+      const svc = new OrdersService(
+        orders as never,
+        branches as never,
+        outbox as never,
+        invClient as never,
+        checkoutsRepo as never,
+      );
+
+      // 1. Initial call fails with timeout -> workflow saved as RECOVERY_PENDING
+      const err = await TenantContext.run('t1', () =>
+        svc.checkout('acc-1', KEY, checkoutDto),
+      ).catch((e) => e);
+
+      expect(err).toBeInstanceOf(ServiceUnavailableException);
+      expect(err.getResponse()).toMatchObject({
+        errorCode: SalesErrorCode.CHECKOUT_RECOVERY_PENDING,
+      });
+
+      const [savedWorkflow] = [...checkoutsStore.values()] as Array<{
+        id: string;
+        state: string;
+        reservationIdempotencyKey: string;
+      }>;
+      expect(savedWorkflow.state).toBe('RECOVERY_PENDING');
+
+      // 2. Recovery call replays the exact same reservationIdempotencyKey and confirms the order
+      const recovered = await TenantContext.run('t1', () =>
+        svc.recoverCheckout(savedWorkflow.id),
+      );
+      expect(recovered.state).toBe('CONFIRMED');
+      expect(recovered.reservationId).toBe('rsv-timeout-1');
+      expect(invClient.reserveWarehouseStock).toHaveBeenCalledTimes(2);
+      expect(invClient.reserveWarehouseStock.mock.calls[0][0]).toBe(
+        invClient.reserveWarehouseStock.mock.calls[1][0],
+      );
+    });
+  });
 });

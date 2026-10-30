@@ -469,6 +469,24 @@ describe('TenantScopedRepository', () => {
       expect(repository.count).not.toHaveBeenCalled();
     });
 
+    it('sets transaction-local app.tenant_id when em.query is present', async () => {
+      const txRepository = repositoryMock();
+      const query = jest.fn().mockResolvedValue([{ set_config: 'tA' }]);
+      const em = { getRepository: jest.fn(() => txRepository), query };
+      repository.manager.transaction.mockImplementation((work) => work(em));
+
+      await asTenant(() =>
+        scoped.transaction(async (tx) => {
+          await tx.count();
+        }),
+      );
+
+      expect(query).toHaveBeenCalledWith(
+        `SELECT set_config('app.tenant_id', $1, true)`,
+        ['tA'],
+      );
+    });
+
     it('exposes no unscoped manager', () => {
       expect('manager' in scoped).toBe(false);
     });
