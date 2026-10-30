@@ -201,6 +201,81 @@ export class InventoryClient {
     );
   }
 
+  async getWarehouseReservationByKey(
+    idempotencyKey: string,
+    callerService = 'sales',
+  ): Promise<WarehouseReservationResponse | null> {
+    this.assertClosed();
+    let response;
+    try {
+      response = await this.http.get<WarehouseReservationResponse>(
+        `/internal/v1/reservations/by-key/${encodeURIComponent(idempotencyKey)}`,
+        {
+          timeout: TIMEOUT_MS,
+          params: { callerService },
+          validateStatus: (status) => status < 500,
+        },
+      );
+    } catch (error) {
+      throw this.failed(error);
+    }
+    if (response.status === 200) {
+      this.failures = 0;
+      return response.data;
+    }
+    if (response.status === 404) {
+      this.failures = 0;
+      return null;
+    }
+    throw this.failed(
+      new Error(
+        `inventory reservation by-key lookup answered ${response.status}`,
+      ),
+      false,
+    );
+  }
+
+  async receiveReturnedStock(req: {
+    warehouseId: string;
+    returnId: string;
+    code?: string;
+    items: { skuId: string; qty: string; unitCost?: string }[];
+  }): Promise<{ receiptId: string }> {
+    this.assertClosed();
+    let response;
+    try {
+      response = await this.http.post<{ id: string }>(
+        '/api/v1/stock-receipts',
+        {
+          warehouseId: req.warehouseId,
+          code: req.code,
+          sourceType: 'RETURN',
+          sourceRefId: req.returnId,
+          autoPost: true,
+          items: req.items.map((item) => ({
+            skuId: item.skuId,
+            qty: item.qty,
+            unitCost: item.unitCost ?? '0.00',
+          })),
+        },
+        {
+          timeout: TIMEOUT_MS,
+          validateStatus: (status) => status < 500,
+        },
+      );
+    } catch (error) {
+      throw this.failed(error);
+    }
+    if (response.status === 200 || response.status === 201) {
+      this.failures = 0;
+      return { receiptId: response.data.id };
+    }
+    throw this.failed(
+      new Error(`inventory return stock receipt answered ${response.status}`),
+      false,
+    );
+  }
+
   async releaseWarehouseReservation(
     reservationId: string,
     reason?: string,

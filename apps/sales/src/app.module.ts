@@ -10,9 +10,11 @@ import {
   PblEventsModule,
 } from '@pbl/events';
 import { BranchProjectionEntity } from './branches/branch-projection.entity';
+import { M3_SALES_ENTITIES } from './infrastructure/persistence/sales.entities';
 import { CreateSalesTables1791800000000 } from './migrations/1791800000000-create-sales-tables';
 import { AddOrderIdempotency1791800000200 } from './migrations/1791800000200-add-order-idempotency';
 import { CreateCheckoutWorkflow1791800000300 } from './migrations/1791800000300-create-checkout-workflow';
+import { CreateM3SalesCore1791900000200 } from './migrations/1791900000200-create-m3-sales-core';
 import { OrderItemEntity } from './orders/entities/order-item.entity';
 import {
   CheckoutWorkflowEntity,
@@ -37,6 +39,7 @@ import { OrdersModule } from './orders/orders.module';
         OrderItemEntity,
         CheckoutWorkflowEntity,
         BranchProjectionEntity,
+        ...M3_SALES_ENTITIES,
         ...PRODUCER_ENTITIES,
         ...CONSUMER_ENTITIES,
       ],
@@ -46,6 +49,7 @@ import { OrdersModule } from './orders/orders.module';
         CreateSalesTables1791800000000,
         AddOrderIdempotency1791800000200,
         CreateCheckoutWorkflow1791800000300,
+        CreateM3SalesCore1791900000200,
       ],
     }),
     PblEventsModule.forRoot({ service: 'sales' }),

@@ -30,6 +30,14 @@ export type AuthUser = {
   exp: number;
 };
 
+export interface AuthenticatedContext {
+  userId: string;
+  tenantId: string;
+  roles: string[];
+  sessionId?: string;
+  subjectType?: AccessTokenSubjectType;
+}
+
 /**
  * `required`: protected routes need a token with `tid` unless marked
  * @TenantOptional(). `optional`: only @CurrentTenant()/@RequireRoles() need

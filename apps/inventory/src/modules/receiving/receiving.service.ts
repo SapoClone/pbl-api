@@ -418,12 +418,20 @@ export class ReceivingService {
     );
 
     if (this.outbox) {
+      let receiptTotalCents = 0n;
+      for (const item of items) {
+        const qtyMilli = parseQtyToMilli(String(item.qty), false, false);
+        const costCents = parseMoneyToCents(String(item.unitCost ?? '0'));
+        receiptTotalCents += (qtyMilli * costCents + 500n) / 1000n;
+      }
       await this.outbox.add(em, INVENTORY_STOCK_RECEIVED, {
         receiptId,
         code: header.code,
         warehouseId: header.warehouse_id,
         sourceType: header.source_type,
         purchaseOrderId: header.purchase_order_id,
+        supplierId: header.supplier_id ?? null,
+        totalAmount: formatCentsToMoney(receiptTotalCents),
         postedAt: occurredAt,
       });
     }

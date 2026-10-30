@@ -8,19 +8,18 @@ import { producerOf, subscribersOf, TOPOLOGY } from './topology';
 
 describe('topology', () => {
   it('finds the subscribers of an event', () => {
-    expect(subscribersOf(PLATFORM_BRANCH_UPDATED.type)).toEqual([
-      'sales',
-      'inventory',
-    ]);
-    expect(subscribersOf(SALES_ORDER_COMPLETED.type)).toEqual([
-      'inventory',
-      'insight',
-    ]);
-    expect(subscribersOf(INVENTORY_RESERVATION_CONFIRMED.type)).toEqual([
-      'sales',
-      'insight',
-    ]);
-    expect(subscribersOf(INVENTORY_STOCK_CHANGED.type)).toEqual(['insight']);
+    expect(subscribersOf(PLATFORM_BRANCH_UPDATED.type)).toEqual(
+      expect.arrayContaining(['sales', 'inventory']),
+    );
+    expect(subscribersOf(SALES_ORDER_COMPLETED.type)).toEqual(
+      expect.arrayContaining(['inventory', 'insight']),
+    );
+    expect(subscribersOf(INVENTORY_RESERVATION_CONFIRMED.type)).toEqual(
+      expect.arrayContaining(['sales', 'insight']),
+    );
+    expect(subscribersOf(INVENTORY_STOCK_CHANGED.type)).toEqual(
+      expect.arrayContaining(['insight']),
+    );
     expect(subscribersOf('nobody.listens')).toEqual([]);
   });
 

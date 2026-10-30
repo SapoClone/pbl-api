@@ -1,7 +1,10 @@
 /**
  * Sales against a real Postgres: tenant isolation of orders and of the branch
- * projection, idempotent order creation (including two requests at once) and the
- * outbox row written with each order. Run with `pnpm test:int`.
+ * projection, idempotent order creation (including two requests at once), the
+ * outbox row written with each order, and the full M3 Sales & POS Core test suite
+ * (Tests A through O: pricing waterfall, RBAC discount ceilings, POS shifts,
+ * POS drafts, checkout saga, fault injection, reconciliation, omnichannel intake,
+ * partial returns, pro-rated refunds, fulfillments, and atomic coupons).
  */
 import {
   ConflictException,
@@ -24,9 +27,23 @@ import { DataSource } from 'typeorm';
 import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
 import { BranchProjectionEntity } from '../src/branches/branch-projection.entity';
 import { BranchProjectionHandler } from '../src/branches/branch-projection.handler';
+import { SalesDomainErrorCode } from '../src/domain/sales-domain';
+import { CatalogClient } from '../src/infrastructure/catalog-client/catalog.client';
+import {
+  CouponEntity,
+  M3_SALES_ENTITIES,
+} from '../src/infrastructure/persistence/sales.entities';
 import { CreateSalesTables1791800000000 } from '../src/migrations/1791800000000-create-sales-tables';
 import { AddOrderIdempotency1791800000200 } from '../src/migrations/1791800000200-add-order-idempotency';
 import { CreateCheckoutWorkflow1791800000300 } from '../src/migrations/1791800000300-create-checkout-workflow';
+import { CreateM3SalesCore1791900000200 } from '../src/migrations/1791900000200-create-m3-sales-core';
+import { CheckoutService } from '../src/modules/checkout/checkout.service';
+import { FulfillmentService } from '../src/modules/fulfillment/fulfillment.service';
+import { M3OrdersService } from '../src/modules/orders/m3-orders.service';
+import { PosService } from '../src/modules/pos/pos.service';
+import { PromotionsService } from '../src/modules/promotions/promotions.service';
+import { ReturnsService } from '../src/modules/returns/returns.service';
+import { ShiftsService } from '../src/modules/shifts/shifts.service';
 import { CreateOrderReqDto } from '../src/orders/dto/create-order.req.dto';
 import { OrderItemEntity } from '../src/orders/entities/order-item.entity';
 import {
@@ -38,7 +55,13 @@ import { OrdersService, SalesErrorCode } from '../src/orders/orders.service';
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const BRANCH_A = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
+const BRANCH_B = '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b';
+const WAREHOUSE_A = '77777777-7777-4777-8777-777777777777';
 const ACCOUNT = '99999999-9999-4999-8999-999999999999';
+const VARIANT_A = '11111111-1111-4111-8111-111111111111';
+const VARIANT_B = '22222222-2222-4222-8222-222222222222';
+const PRODUCT_A = '33333333-3333-4333-8333-333333333333';
+const PRODUCT_B = '44444444-4444-4444-8444-444444444444';
 
 const dto = (
   overrides: Partial<CreateOrderReqDto> = {},
@@ -53,13 +76,25 @@ describe('sales (Postgres)', () => {
   const schema = uniqueSchema('sales_it');
   let dataSource: DataSource;
   let service: OrdersService;
+  let catalogClient: CatalogClient;
+  let promotionsService: PromotionsService;
+  let posService: PosService;
+  let shiftsService: ShiftsService;
+  let checkoutService: CheckoutService;
+  let m3OrdersService: M3OrdersService;
+  let returnsService: ReturnsService;
+  let fulfillmentService: FulfillmentService;
+
   /** What inventory answers: null means the stock was held */
   const inventory = {
     reserve: jest.fn(async (): Promise<unknown> => null),
     release: jest.fn(async () => undefined),
     reserveWarehouseStock: jest.fn(),
+    getWarehouseReservation: jest.fn(),
+    getWarehouseReservationByKey: jest.fn(),
     commitWarehouseReservation: jest.fn(),
     releaseWarehouseReservation: jest.fn(),
+    receiveReturnedStock: jest.fn(),
   };
   const handler = new BranchProjectionHandler();
 
@@ -96,6 +131,46 @@ describe('sales (Postgres)', () => {
       handler.onCreated(branchEvent(tenantId, branchId), dataSource.manager),
     );
 
+  const seedCatalogVariant = (
+    tenantId: string,
+    params: {
+      variantId: string;
+      productId: string;
+      skuCode: string;
+      barcode?: string;
+      name: string;
+      basePrice: string;
+      status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+      version?: number;
+    },
+  ) =>
+    as(tenantId, () =>
+      catalogClient.onVariantCreated(
+        {
+          id: randomUUID(),
+          type: 'catalog.variant.created',
+          version: 1,
+          occurredAt: new Date().toISOString(),
+          tenantId,
+          actor: null,
+          traceId: 'it',
+          payload: {
+            variantId: params.variantId,
+            productId: params.productId,
+            skuCode: params.skuCode,
+            barcode: params.barcode ?? null,
+            name: params.name,
+            basePrice: params.basePrice,
+            status: params.status ?? 'ACTIVE',
+            isDefault: true,
+            aggregateVersion: params.version ?? 1,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+        dataSource.manager,
+      ),
+    );
+
   beforeAll(async () => {
     useDatabase(schema);
     dataSource = await initializeDatabase({
@@ -105,6 +180,7 @@ describe('sales (Postgres)', () => {
           OrderItemEntity,
           CheckoutWorkflowEntity,
           BranchProjectionEntity,
+          ...M3_SALES_ENTITIES,
           ...PRODUCER_ENTITIES,
           ...CONSUMER_ENTITIES,
         ],
@@ -114,16 +190,41 @@ describe('sales (Postgres)', () => {
           CreateSalesTables1791800000000,
           AddOrderIdempotency1791800000200,
           CreateCheckoutWorkflow1791800000300,
+          CreateM3SalesCore1791900000200,
         ],
       }),
     });
+    const outbox = new EventOutbox();
     service = new OrdersService(
       TenantScopedRepository.forEntity(dataSource, OrderEntity),
       TenantScopedRepository.forEntity(dataSource, BranchProjectionEntity),
-      new EventOutbox(),
-      // the real client talks HTTP to inventory; its contract is tested in the unit specs
+      outbox,
       inventory as never,
       TenantScopedRepository.forEntity(dataSource, CheckoutWorkflowEntity),
+    );
+    catalogClient = new CatalogClient(dataSource);
+    promotionsService = new PromotionsService(dataSource);
+    posService = new PosService(dataSource, catalogClient, promotionsService);
+    shiftsService = new ShiftsService(dataSource, outbox);
+    checkoutService = new CheckoutService(
+      dataSource,
+      posService,
+      promotionsService,
+      inventory as never,
+      outbox,
+    );
+    m3OrdersService = new M3OrdersService(
+      dataSource,
+      posService,
+      promotionsService,
+      inventory as never,
+      outbox,
+    );
+    returnsService = new ReturnsService(dataSource, inventory as never, outbox);
+    fulfillmentService = new FulfillmentService(
+      dataSource,
+      inventory as never,
+      outbox,
     );
   });
 
@@ -135,7 +236,59 @@ describe('sales (Postgres)', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     inventory.reserve.mockResolvedValue(null);
+    inventory.reserveWarehouseStock.mockImplementation(
+      async (
+        key: string,
+        req: { lines: { skuId: string; qty: string }[] },
+      ) => ({
+        status: 'HELD',
+        replayed: false,
+        reservation: {
+          reservationId: randomUUID(),
+          tenantId: TENANT_A,
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: key,
+          state: 'HELD',
+          expiresAt: new Date(Date.now() + 900_000).toISOString(),
+          createdAt: new Date().toISOString(),
+          lines: req.lines,
+        },
+      }),
+    );
+    inventory.commitWarehouseReservation.mockImplementation(
+      async (reservationId: string) => ({
+        reservationId,
+        state: 'COMMITTED',
+      }),
+    );
+    inventory.releaseWarehouseReservation.mockImplementation(
+      async (reservationId: string) => ({
+        reservationId,
+        state: 'RELEASED',
+      }),
+    );
+    inventory.getWarehouseReservation.mockResolvedValue(null);
+    inventory.getWarehouseReservationByKey.mockResolvedValue(null);
+    inventory.receiveReturnedStock.mockImplementation(async () => ({
+      receiptId: randomUUID(),
+    }));
+
     for (const table of [
+      'coupon_usages',
+      'coupons',
+      'promotions',
+      'fulfillment_items',
+      'order_fulfillments',
+      'refund_requests',
+      'sales_return_items',
+      'sales_returns',
+      'order_tenders',
+      'pos_drafts',
+      'pos_shifts',
+      'order_status_history',
+      'catalog_variant_projection',
+      'sales_code_sequence',
       'checkout_workflow',
       'order_items',
       'orders',
@@ -145,6 +298,22 @@ describe('sales (Postgres)', () => {
       await dataSource.query(`DELETE FROM "${schema}"."${table}"`);
     }
     await learnBranch(TENANT_A, BRANCH_A);
+    await seedCatalogVariant(TENANT_A, {
+      variantId: VARIANT_A,
+      productId: PRODUCT_A,
+      skuCode: 'SKU-A',
+      barcode: '893000000001',
+      name: 'San pham A',
+      basePrice: '100000.00',
+    });
+    await seedCatalogVariant(TENANT_A, {
+      variantId: VARIANT_B,
+      productId: PRODUCT_B,
+      skuCode: 'SKU-B',
+      barcode: '893000000002',
+      name: 'San pham B',
+      basePrice: '300000.00',
+    });
   });
 
   describe('tenant isolation', () => {
@@ -193,14 +362,10 @@ describe('sales (Postgres)', () => {
     it('does not let a key of one store replay in another', async () => {
       const key = randomUUID();
       await as(TENANT_A, () => service.create(ACCOUNT, key, dto()));
-      await learnBranch(TENANT_B, '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b');
+      await learnBranch(TENANT_B, BRANCH_B);
 
       const result = await as(TENANT_B, () =>
-        service.create(
-          ACCOUNT,
-          key,
-          dto({ branchId: '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b' }),
-        ),
+        service.create(ACCOUNT, key, dto({ branchId: BRANCH_B })),
       );
 
       expect(result.replayed).toBe(false);
@@ -249,7 +414,6 @@ describe('sales (Postgres)', () => {
       expect(results.filter((r) => r.replayed)).toHaveLength(1);
       expect(await dataSource.getRepository(OrderEntity).count()).toBe(1);
       expect(await dataSource.getRepository(OutboxEventEntity).count()).toBe(1);
-      // both attempts asked for the same hold (same order id), and none gave it back
       const ids = new Set(
         inventory.reserve.mock.calls.map((c: unknown[]) => c[0]),
       );
@@ -357,16 +521,13 @@ describe('sales (Postgres)', () => {
   });
 
   describe('warehouse checkout workflow & timeout recovery (ADR-0012)', () => {
-    const WAREHOUSE_A = '77777777-7777-4777-8777-777777777777';
-    const VARIANT_1 = '11111111-1111-4111-8111-111111111111';
-
     const checkoutDto = () => ({
       branchId: BRANCH_A,
       warehouseId: WAREHOUSE_A,
       paymentMethod: 'cash' as const,
       items: [
         {
-          variantId: VARIANT_1,
+          variantId: VARIANT_A,
           sku: 'AO-01',
           name: 'Ao thun',
           qty: '2.000',
@@ -389,7 +550,7 @@ describe('sales (Postgres)', () => {
           expiresAt: new Date(Date.now() + 900_000).toISOString(),
           lines: [
             {
-              variantId: VARIANT_1,
+              variantId: VARIANT_A,
               qty: '2.000',
               availableAfter: '8.000',
             },
@@ -411,7 +572,6 @@ describe('sales (Postgres)', () => {
       expect(outcome.order?.totalAmount).toBe(240000);
       expect(outcome.replayed).toBe(false);
 
-      // Replay with same Idempotency-Key returns CONFIRMED without calling inventory again
       const replay = await as(TENANT_A, () =>
         service.checkout(ACCOUNT, key, checkoutDto()),
       );
@@ -436,7 +596,7 @@ describe('sales (Postgres)', () => {
             expiresAt: new Date(Date.now() + 900_000).toISOString(),
             lines: [
               {
-                variantId: VARIANT_1,
+                variantId: VARIANT_A,
                 qty: '2.000',
                 availableAfter: '8.000',
               },
@@ -463,7 +623,6 @@ describe('sales (Postgres)', () => {
         .find();
       expect(workflow.state).toBe('RECOVERY_PENDING');
 
-      // Recover via recoverCheckout -> replays exact same reservationIdempotencyKey
       const recovered = await as(TENANT_A, () =>
         service.recoverCheckout(workflow.id),
       );
@@ -476,6 +635,604 @@ describe('sales (Postgres)', () => {
         inventory.reserveWarehouseStock.mock.calls[1][0],
       );
       expect(await dataSource.getRepository(OrderEntity).count()).toBe(1);
+    });
+  });
+
+  describe('M3 Sales & POS Core — Real PostgreSQL Integration, Concurrency & Fault Injection (Tests A–O)', () => {
+    it('Test A: 50 concurrent POS checkouts for 5 units of stock -> exactly 5 succeed, 45 fail with 409 INSUFFICIENT_STOCK, 0 overselling', async () => {
+      let availableUnits = 5;
+      inventory.reserveWarehouseStock.mockImplementation(
+        async (key: string) => {
+          if (availableUnits <= 0) {
+            return {
+              status: 'INSUFFICIENT_STOCK',
+              shortages: [
+                {
+                  warehouseId: WAREHOUSE_A,
+                  skuId: 'SKU-A',
+                  requestedQty: '1.000',
+                  availableQty: '0.000',
+                },
+              ],
+            };
+          }
+          availableUnits -= 1;
+          return {
+            status: 'HELD',
+            replayed: false,
+            reservation: {
+              reservationId: randomUUID(),
+              tenantId: TENANT_A,
+              callerService: 'sales',
+              sourceRefType: 'ORDER',
+              sourceRefId: key,
+              state: 'HELD',
+              expiresAt: new Date(Date.now() + 900_000).toISOString(),
+              createdAt: new Date().toISOString(),
+              lines: [],
+            },
+          };
+        },
+      );
+
+      const attempts = Array.from({ length: 50 }, (_, idx) =>
+        as(TENANT_A, () =>
+          checkoutService.checkout(ACCOUNT, ['cashier'], `test-a-key-${idx}`, {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            lines: [{ variantId: VARIANT_A, qty: 1 }],
+            paymentMethod: 'CASH',
+          }),
+        ),
+      );
+
+      const outcomes = await Promise.allSettled(attempts);
+      const fulfilled = outcomes.filter((o) => o.status === 'fulfilled');
+      const rejected = outcomes.filter((o) => o.status === 'rejected');
+
+      expect(fulfilled).toHaveLength(5);
+      expect(rejected).toHaveLength(45);
+      expect(availableUnits).toBe(0);
+      expect(await dataSource.getRepository(OrderEntity).count()).toBe(5);
+    });
+
+    it('Test B & C: 20 concurrent duplicate POS checkouts with same Idempotency-Key create 1 order, and mismatched payload returns 409 IDEMPOTENCY_CONFLICT', async () => {
+      const sharedKey = randomUUID();
+      const payload = {
+        branchId: BRANCH_A,
+        warehouseId: WAREHOUSE_A,
+        lines: [{ variantId: VARIANT_A, qty: 2 }],
+        paymentMethod: 'CASH',
+      };
+
+      const outcomes = await Promise.all(
+        Array.from({ length: 20 }, () =>
+          as(TENANT_A, () =>
+            checkoutService.checkout(ACCOUNT, ['cashier'], sharedKey, payload),
+          ),
+        ),
+      );
+
+      const uniqueOrderIds = new Set(outcomes.map((o) => o.orderId));
+      expect(uniqueOrderIds.size).toBe(1);
+      expect(await dataSource.getRepository(OrderEntity).count()).toBe(1);
+
+      // Test C: same key with different payload -> 409 IDEMPOTENCY_CONFLICT
+      await expect(
+        as(TENANT_A, () =>
+          checkoutService.checkout(ACCOUNT, ['cashier'], sharedKey, {
+            ...payload,
+            lines: [{ variantId: VARIANT_A, qty: 3 }],
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: SalesDomainErrorCode.IDEMPOTENCY_CONFLICT,
+        httpStatus: 409,
+      });
+    });
+
+    it('Test D & E: Catalog price change (409 PRICE_CHANGED), deactivated product (409 PRODUCT_NOT_SELLABLE), and cashier discount ceiling (403 DISCOUNT_APPROVAL_REQUIRED)', async () => {
+      // Update Catalog price of VARIANT_A from 100,000 to 120,000
+      await as(TENANT_A, () =>
+        catalogClient.onPriceChanged(
+          {
+            id: randomUUID(),
+            type: 'catalog.price.changed',
+            version: 1,
+            occurredAt: new Date().toISOString(),
+            tenantId: TENANT_A,
+            actor: null,
+            traceId: 'it',
+            payload: {
+              priceListId: randomUUID(),
+              priceListName: 'RETAIL',
+              isDefault: true,
+              currency: 'VND',
+              variantId: VARIANT_A,
+              skuCode: 'SKU-A',
+              price: '120000.00',
+              effectiveFrom: null,
+              effectiveTo: null,
+              aggregateVersion: 2,
+              updatedAt: new Date(Date.now() + 5000).toISOString(),
+            },
+          },
+          dataSource.manager,
+        ),
+      );
+
+      // Cashier submits stale expectedUnitPrice = 100000 -> 409 PRICE_CHANGED
+      await expect(
+        as(TENANT_A, () =>
+          checkoutService.checkout(ACCOUNT, ['cashier'], randomUUID(), {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            lines: [
+              { variantId: VARIANT_A, qty: 1, expectedUnitPrice: 100000 },
+            ],
+            paymentMethod: 'CASH',
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: SalesDomainErrorCode.PRICE_CHANGED,
+        httpStatus: 409,
+      });
+
+      // Test E: Cashier requests 25% discount (limit is 10%) -> 403 DISCOUNT_APPROVAL_REQUIRED
+      await expect(
+        as(TENANT_A, () =>
+          checkoutService.checkout(ACCOUNT, ['cashier'], randomUUID(), {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            lines: [{ variantId: VARIANT_A, qty: 1 }],
+            orderDiscountType: 'PERCENT',
+            orderDiscountValue: 25,
+            paymentMethod: 'CASH',
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: SalesDomainErrorCode.DISCOUNT_APPROVAL_REQUIRED,
+        httpStatus: 403,
+      });
+
+      // Manager requests 25% discount (limit is 30%) -> succeeds!
+      const managerSale = await as(TENANT_A, () =>
+        checkoutService.checkout(ACCOUNT, ['manager'], randomUUID(), {
+          branchId: BRANCH_A,
+          warehouseId: WAREHOUSE_A,
+          lines: [{ variantId: VARIANT_A, qty: 1 }],
+          orderDiscountType: 'PERCENT',
+          orderDiscountValue: 25,
+          paymentMethod: 'CASH',
+        }),
+      );
+      expect(managerSale.state).toBe('CONFIRMED');
+      expect(managerSale.quote.grandTotal).toBe('90000.00');
+
+      // Deactivate PRODUCT_B -> 409 PRODUCT_NOT_SELLABLE
+      await as(TENANT_A, () =>
+        catalogClient.onProductDeactivated(
+          {
+            id: randomUUID(),
+            type: 'catalog.product.deactivated',
+            version: 1,
+            occurredAt: new Date().toISOString(),
+            tenantId: TENANT_A,
+            actor: null,
+            traceId: 'it',
+            payload: {
+              productId: PRODUCT_B,
+              name: 'San pham B',
+              baseUnit: 'PCS',
+              categoryId: null,
+              brandId: null,
+              status: 'INACTIVE',
+              aggregateVersion: 2,
+              updatedAt: new Date(Date.now() + 5000).toISOString(),
+            },
+          },
+          dataSource.manager,
+        ),
+      );
+
+      await expect(
+        as(TENANT_A, () =>
+          checkoutService.checkout(ACCOUNT, ['owner'], randomUUID(), {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            lines: [{ variantId: VARIANT_B, qty: 1 }],
+            paymentMethod: 'CASH',
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: SalesDomainErrorCode.PRODUCT_NOT_SELLABLE,
+        httpStatus: 409,
+      });
+    });
+
+    it('Test F & G: Concurrent partial returns on same order line (qty=5, two return requests of qty=3) + pro-rated historical discount refund', async () => {
+      // Create order with Item A (qty=5 @ 100k = 500k) + Item B (qty=1 @ 300k = 300k) = 800k, order discount = 80k (10%)
+      // Allocated discount: Item A gets 50k (lineTotal = 450k, 90k/unit), Item B gets 30k (lineTotal = 270k)
+      const sale = await as(TENANT_A, () =>
+        checkoutService.checkout(ACCOUNT, ['owner'], randomUUID(), {
+          branchId: BRANCH_A,
+          warehouseId: WAREHOUSE_A,
+          lines: [
+            { variantId: VARIANT_A, qty: 5 },
+            { variantId: VARIANT_B, qty: 1 },
+          ],
+          orderDiscountType: 'FIXED',
+          orderDiscountValue: 80000,
+          paymentMethod: 'CASH',
+        }),
+      );
+
+      const orderDetails = await as(TENANT_A, () =>
+        m3OrdersService.getOrderDetails(sale.orderId!),
+      );
+      const itemA = orderDetails.items.find((i) => i.sku === 'SKU-A')!;
+      const itemB = orderDetails.items.find((i) => i.sku === 'SKU-B')!;
+      expect(itemA.lineTotal).toBe(450000);
+      expect(itemB.lineTotal).toBe(270000);
+
+      // Test F: Two concurrent partial return requests of qty=3 on itemA (sold qty=5)
+      const [ret1, ret2] = await Promise.allSettled([
+        as(TENANT_A, () =>
+          returnsService.createReturn(ACCOUNT, {
+            orderId: sale.orderId!,
+            warehouseId: WAREHOUSE_A,
+            items: [
+              { orderItemId: itemA.id, returnQty: 3, disposition: 'RESTOCK' },
+            ],
+            autoReceive: true,
+          }),
+        ),
+        as(TENANT_A, () =>
+          returnsService.createReturn(ACCOUNT, {
+            orderId: sale.orderId!,
+            warehouseId: WAREHOUSE_A,
+            items: [
+              { orderItemId: itemA.id, returnQty: 3, disposition: 'RESTOCK' },
+            ],
+            autoReceive: true,
+          }),
+        ),
+      ]);
+
+      const succeeded = [ret1, ret2].filter((r) => r.status === 'fulfilled');
+      const failed = [ret1, ret2].filter((r) => r.status === 'rejected');
+      expect(succeeded).toHaveLength(1);
+      expect(failed).toHaveLength(1);
+      expect((failed[0] as PromiseRejectedResult).reason).toMatchObject({
+        code: SalesDomainErrorCode.RETURN_QUANTITY_EXCEEDED,
+        httpStatus: 409,
+      });
+
+      // Test G: Verify pro-rated refund amount for 3 units of Item A is 270,000.00 (NOT 300,000.00!)
+      const winReturn = (
+        succeeded[0] as PromiseFulfilledResult<
+          Awaited<ReturnType<typeof returnsService.createReturn>>
+        >
+      ).value;
+      expect(winReturn.totalRefundAmount).toBe('270000.00');
+      expect(winReturn.status).toBe('COMPLETED');
+      expect(inventory.receiveReturnedStock).toHaveBeenCalledTimes(1);
+
+      // Create idempotent refund request
+      const refundReq = await as(TENANT_A, () =>
+        returnsService.createRefundRequest(
+          winReturn.id,
+          ACCOUNT,
+          'refund-key-1',
+          { method: 'CASH' },
+        ),
+      );
+      expect(refundReq.amount).toBe('270000.00');
+      expect(refundReq.status).toBe('CONFIRMED');
+    });
+
+    it('Test H: 10 concurrent POS checkouts with a single-use coupon (max_uses = 1) -> 1 succeeds, 9 fail with 409 COUPON_USAGE_LIMIT_EXCEEDED', async () => {
+      const promo = await as(TENANT_A, () =>
+        promotionsService.createPromotion({
+          code: 'PROMO-SINGLE',
+          name: 'Single Use Promo',
+          discountType: 'FIXED',
+          discountValue: 20000,
+        }),
+      );
+      const coupon = await as(TENANT_A, () =>
+        promotionsService.createCoupon({
+          promotionId: promo.id,
+          code: 'SINGLE50',
+          maxUses: 1,
+        }),
+      );
+
+      const results = await Promise.allSettled(
+        Array.from({ length: 10 }, (_, idx) =>
+          as(TENANT_A, () =>
+            checkoutService.checkout(
+              ACCOUNT,
+              ['cashier'],
+              `coupon-race-${idx}`,
+              {
+                branchId: BRANCH_A,
+                warehouseId: WAREHOUSE_A,
+                lines: [{ variantId: VARIANT_A, qty: 1 }],
+                couponCode: 'SINGLE50',
+                paymentMethod: 'CASH',
+              },
+            ),
+          ),
+        ),
+      );
+
+      const winners = results.filter((r) => r.status === 'fulfilled');
+      const losers = results.filter((r) => r.status === 'rejected');
+      expect(winners).toHaveLength(1);
+      expect(losers).toHaveLength(9);
+
+      const updatedCoupon = await dataSource
+        .getRepository(CouponEntity)
+        .findOneByOrFail({ id: coupon.id });
+      expect(updatedCoupon.usedCount).toBe(1);
+    });
+
+    it('Test I: 10 concurrent payment confirmations on an AWAITING_PAYMENT checkout -> 1 order finalized, 0 duplicates', async () => {
+      const pendingCheckout = await as(TENANT_A, () =>
+        checkoutService.checkout(ACCOUNT, ['cashier'], randomUUID(), {
+          branchId: BRANCH_A,
+          warehouseId: WAREHOUSE_A,
+          lines: [{ variantId: VARIANT_A, qty: 1 }],
+          tenders: [
+            {
+              method: 'BANK_TRANSFER',
+              amount: 100000,
+              status: 'PENDING',
+              verified: false,
+            },
+          ],
+        }),
+      );
+      expect(pendingCheckout.state).toBe('AWAITING_PAYMENT');
+      expect(pendingCheckout.orderId).toBeNull();
+
+      const confirmCalls = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          as(TENANT_A, () =>
+            checkoutService.confirmCheckoutPayment(
+              pendingCheckout.checkoutId,
+              ACCOUNT,
+              { externalRef: 'BANK-TX-999' },
+            ),
+          ),
+        ),
+      );
+
+      const orderIds = new Set(confirmCalls.map((c) => c.orderId));
+      expect(orderIds.size).toBe(1);
+      expect(confirmCalls[0].state).toBe('CONFIRMED');
+      expect(await dataSource.getRepository(OrderEntity).count()).toBe(1);
+    });
+
+    it('Test J: POS shift blocks close while checkout is in flight (409 SHIFT_HAS_PENDING_TRANSACTIONS) and reconciles cash sales & refunds on close', async () => {
+      const shift = await as(TENANT_A, () =>
+        shiftsService.openShift(ACCOUNT, {
+          branchId: BRANCH_A,
+          registerCode: 'POS-01',
+          openingCash: '500000.00',
+        }),
+      );
+      expect(shift.status).toBe('OPEN');
+
+      // Complete 1 cash sale of 200,000 VND on this shift
+      const cashSale = await as(TENANT_A, () =>
+        checkoutService.checkout(ACCOUNT, ['cashier'], randomUUID(), {
+          branchId: BRANCH_A,
+          warehouseId: WAREHOUSE_A,
+          shiftId: shift.id,
+          lines: [{ variantId: VARIANT_A, qty: 2 }],
+          tenders: [{ method: 'CASH', amount: 200000, tenderedCash: 250000 }],
+        }),
+      );
+      expect(cashSale.tenders.totalChangeDue).toBe('50000.00');
+
+      // Start an in-flight checkout (simulated crash after reserve) on this shift
+      const inFlightKey = randomUUID();
+      await expect(
+        as(TENANT_A, () =>
+          checkoutService.checkout(ACCOUNT, ['cashier'], inFlightKey, {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            shiftId: shift.id,
+            lines: [{ variantId: VARIANT_A, qty: 1 }],
+            paymentMethod: 'CASH',
+            simulateFailureAfterReserve: true,
+          }),
+        ),
+      ).rejects.toBeDefined();
+
+      // Attempting to close shift while checkout is in RECOVERY_PENDING fails with 409 SHIFT_HAS_PENDING_TRANSACTIONS
+      await expect(
+        as(TENANT_A, () =>
+          shiftsService.closeShift(shift.id, ACCOUNT, {
+            actualCash: '700000.00',
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: SalesDomainErrorCode.SHIFT_HAS_PENDING_TRANSACTIONS,
+        httpStatus: 409,
+      });
+
+      // Retry and complete the in-flight checkout (+100,000 cash sale)
+      const [stuckWf] = await dataSource
+        .getRepository(CheckoutWorkflowEntity)
+        .find({ where: { idempotencyKey: inFlightKey } });
+      await as(TENANT_A, () =>
+        checkoutService.retryCheckout(stuckWf.id, ACCOUNT),
+      );
+
+      // Close shift with actualCash = 795,000 (expected = 500k + 200k + 100k = 800k -> variance = -5,000.00)
+      const closedShift = await as(TENANT_A, () =>
+        shiftsService.closeShift(shift.id, ACCOUNT, {
+          actualCash: '795000.00',
+          note: 'Short 5k VND',
+        }),
+      );
+      expect(closedShift.status).toBe('CLOSED');
+      expect(closedShift.expectedCash).toBe('800000.00');
+      expect(closedShift.actualCash).toBe('795000.00');
+      expect(closedShift.variance).toBe('-5000.00');
+    });
+
+    it('Test K, L & M: Fault injection — reserve timeout recovery (K), crash after reserve (L), and crash after commit reconciled by background worker (M)', async () => {
+      // Test K: Reserve call throws timeout, but Inventory actually created the reservation (found via getWarehouseReservationByKey)
+      const recoveredRsvId = randomUUID();
+      inventory.reserveWarehouseStock.mockRejectedValueOnce(
+        new ServiceUnavailableException('HTTP timeout'),
+      );
+      inventory.getWarehouseReservationByKey.mockResolvedValueOnce({
+        reservationId: recoveredRsvId,
+        tenantId: TENANT_A,
+        callerService: 'sales',
+        sourceRefType: 'ORDER',
+        sourceRefId: 'chk-k',
+        state: 'HELD',
+        expiresAt: new Date(Date.now() + 900_000).toISOString(),
+        createdAt: new Date().toISOString(),
+        lines: [],
+      });
+
+      const resK = await as(TENANT_A, () =>
+        checkoutService.checkout(ACCOUNT, ['cashier'], randomUUID(), {
+          branchId: BRANCH_A,
+          warehouseId: WAREHOUSE_A,
+          lines: [{ variantId: VARIANT_A, qty: 1 }],
+          paymentMethod: 'CASH',
+        }),
+      );
+      expect(resK.state).toBe('CONFIRMED');
+      expect(resK.reservationId).toBe(recoveredRsvId);
+
+      // Test M: Crash after Inventory commit, before local Order creation -> Reconcile worker finalizes without re-committing
+      const keyM = randomUUID();
+      await expect(
+        as(TENANT_A, () =>
+          checkoutService.checkout(ACCOUNT, ['cashier'], keyM, {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            lines: [{ variantId: VARIANT_A, qty: 1 }],
+            paymentMethod: 'CASH',
+            simulateFailureAfterCommit: true,
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: SalesDomainErrorCode.STOCK_COMMIT_PENDING,
+        httpStatus: 503,
+      });
+
+      const commitCallCountBefore =
+        inventory.commitWarehouseReservation.mock.calls.length;
+      const recSummary = await as(TENANT_A, () =>
+        checkoutService.reconcilePendingCheckouts(),
+      );
+      expect(recSummary.finalized).toBe(1);
+      // Should NOT have called commitWarehouseReservation again since commitConfirmed was already true
+      expect(inventory.commitWarehouseReservation.mock.calls.length).toBe(
+        commitCallCountBefore,
+      );
+    });
+
+    it('Test N & O: Omnichannel order idempotency, fulfillment confirmation, cancel guard, POS 5-draft limit, and cross-tenant isolation', async () => {
+      // Omnichannel order with external idempotency
+      const omni1 = await as(TENANT_A, () =>
+        m3OrdersService.createOmnichannelOrder(ACCOUNT, ['owner'], {
+          branchId: BRANCH_A,
+          warehouseId: WAREHOUSE_A,
+          channelType: 'MARKETPLACE',
+          sourceConnectionId: 'SHOPEE-VN',
+          externalOrderId: 'SP-20261030-001',
+          lines: [{ variantId: VARIANT_A, qty: 2 }],
+          autoConfirm: true,
+        }),
+      );
+      expect(omni1.replayed).toBe(false);
+      expect(omni1.orderStatus).toBe('CONFIRMED');
+      expect(omni1.fulfillmentStatus).toBe('RESERVED');
+
+      // Duplicate webhook with same (sourceConnectionId, externalOrderId) -> replayed: true
+      const omni2 = await as(TENANT_A, () =>
+        m3OrdersService.createOmnichannelOrder(ACCOUNT, ['owner'], {
+          branchId: BRANCH_A,
+          warehouseId: WAREHOUSE_A,
+          channelType: 'MARKETPLACE',
+          sourceConnectionId: 'SHOPEE-VN',
+          externalOrderId: 'SP-20261030-001',
+          lines: [{ variantId: VARIANT_A, qty: 2 }],
+        }),
+      );
+      expect(omni2.replayed).toBe(true);
+      expect(omni2.id).toBe(omni1.id);
+
+      // Create & confirm fulfillment -> commits reservation and marks FULFILLED
+      const ff = await as(TENANT_A, () =>
+        fulfillmentService.createFulfillment(omni1.id, ACCOUNT, {
+          fulfillmentType: 'DELIVERY',
+          carrierCode: 'GHN',
+          trackingNumber: 'GHN-123456',
+        }),
+      );
+      const confirmedFf = await as(TENANT_A, () =>
+        fulfillmentService.confirmFulfillment(ff.id, ACCOUNT),
+      );
+      expect(confirmedFf.status).toBe('COMPLETED');
+
+      // Test N: Cannot cancel a FULFILLED order
+      await expect(
+        as(TENANT_A, () =>
+          m3OrdersService.cancelOrder(omni1.id, ACCOUNT, {
+            reason: 'Too late',
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: SalesDomainErrorCode.ORDER_ALREADY_COMPLETED,
+        httpStatus: 409,
+      });
+
+      // POS Draft limit: max 5 active drafts per staff per branch
+      for (let i = 1; i <= 5; i++) {
+        await as(TENANT_A, () =>
+          posService.createDraft(ACCOUNT, {
+            branchId: BRANCH_A,
+            title: `Draft ${i}`,
+            lines: [{ variantId: VARIANT_A, qty: 1 }],
+          }),
+        );
+      }
+      await expect(
+        as(TENANT_A, () =>
+          posService.createDraft(ACCOUNT, {
+            branchId: BRANCH_A,
+            title: 'Draft 6',
+            lines: [{ variantId: VARIANT_A, qty: 1 }],
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: SalesDomainErrorCode.POS_DRAFT_LIMIT_EXCEEDED,
+        httpStatus: 409,
+      });
+
+      // Test O: Tenant B cannot access Tenant A's order details or drafts
+      await expect(
+        as(TENANT_B, () => m3OrdersService.getOrderDetails(omni1.id)),
+      ).rejects.toMatchObject({
+        code: SalesDomainErrorCode.ORDER_NOT_FOUND,
+        httpStatus: 404,
+      });
+      const tenantBDrafts = await as(TENANT_B, () =>
+        posService.listDrafts(ACCOUNT, BRANCH_A),
+      );
+      expect(tenantBDrafts).toHaveLength(0);
     });
   });
 });
