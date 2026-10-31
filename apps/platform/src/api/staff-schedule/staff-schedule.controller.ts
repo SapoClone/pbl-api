@@ -28,7 +28,7 @@ import { UpdateStaffScheduleReqDto } from './dto/update-staff-schedule.req.dto';
 import { StaffScheduleService } from './staff-schedule.service';
 
 /**
- * Permissions (ADR-0012): `staff.view` (GET) and `staff.update` (writes). A shift
+ * Permissions (ADR-0020): `staff.view` (GET) and `staff.update` (writes). A shift
  * in a branch outside the caller's scope is a 404, and the list shows only the
  * allowed branches. The unused `@CurrentTenant()` is what answers 403 for a
  * token without a store (see BranchController).

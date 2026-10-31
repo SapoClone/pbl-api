@@ -90,7 +90,7 @@ touches all six services.
 | Item | Why it was deferred |
 |---|---|
 | Staff invitations; forgot / reset / verify email | Need the mail flow (invitation and reset templates in `pbl-mail-service`) |
-| ~~RBAC (`perms` claim, roles and permissions endpoints, branch assignment)~~ | **Done** in [the RBAC branch](../2026-10-31-rbac/README.md) (ADR-0011, ADR-0012) |
+| ~~RBAC (`perms` claim, roles and permissions endpoints, branch assignment)~~ | **Done** in [the RBAC branch](../2026-10-31-rbac/README.md) (ADR-0019, ADR-0020) |
 | Draft and approve stock receipts; receiving against a PO | Changes the existing receipt endpoint that the demos and tests depend on |
 | Events for the new transitions (order confirmed, cancelled, shipped, payment, shift; stock below minimum; PO and transfer) | Event names live in the shared `libs/contracts`; they are also what feeds the attention items and push notifications |
 | Returns and refunds | Touches stock, payments and customer stats together |

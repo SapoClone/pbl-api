@@ -60,7 +60,7 @@ class PrintReqDto {
 }
 
 /**
- * Permissions (ADR-0012): reads `orders.view`; creating `orders.create` or, for
+ * Permissions (ADR-0020): reads `orders.view`; creating `orders.create` or, for
  * a POS sale (`source: pos`), `pos.create`; the stepper actions and payments
  * `orders.update`; cancelling `orders.delete`. A restricted caller only sees the
  * orders of its branches (404 for any other). Fixed paths (`summary`, `export`)

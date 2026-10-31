@@ -1,5 +1,5 @@
 /**
- * Permission catalog and default roles (ADR-0012). The catalog is code: adding a
+ * Permission catalog and default roles (ADR-0020). The catalog is code: adding a
  * permission ships with the service that enforces it.
  */
 
@@ -92,7 +92,7 @@ export const SEEDED_ROLES: Record<
   },
 };
 
-/** Old role names, still accepted on input (ADR-0012 §3). */
+/** Old role names, still accepted on input (ADR-0020 §3). */
 export const LEGACY_ROLE_CODES = {
   manager: 'branch_manager',
   cashier: 'sales_staff',

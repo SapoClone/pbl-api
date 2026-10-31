@@ -1,6 +1,6 @@
 # RBAC migration: sales
 
-ADR-0012. `@RequireRoles` and `ROLES` are gone from `apps/sales`; every route uses `@RequirePermission` and branch scope.
+ADR-0020. `@RequireRoles` and `ROLES` are gone from `apps/sales`; every route uses `@RequirePermission` and branch scope.
 
 ## Built
 

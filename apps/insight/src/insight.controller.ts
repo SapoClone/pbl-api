@@ -18,7 +18,7 @@ import { ReportExportService } from './reports/report-export.service';
 import { ReportsService } from './reports/reports.service';
 
 /**
- * Dashboard routes need `dashboard.view`, report routes `reports.view` (ADR-0012).
+ * Dashboard routes need `dashboard.view`, report routes `reports.view` (ADR-0020).
  * `@AllowedBranches()` hands the caller's branch scope to the reads: a foreign
  * `branchId` is 404, no `branchId` aggregates the allowed branches only.
  * Audit logs have no branch, so they stay tenant-wide.

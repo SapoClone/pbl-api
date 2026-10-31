@@ -713,7 +713,7 @@ describe('insight (Postgres)', () => {
     });
   });
 
-  describe('branch scope (ADR-0012 §8)', () => {
+  describe('branch scope (ADR-0020 §8)', () => {
     const feed = async (...events: ReturnType<typeof sale>[]) => {
       for (const e of events)
         await handle(e, (m) => summary.onOrderCompleted(e, m));

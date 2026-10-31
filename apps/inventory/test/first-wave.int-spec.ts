@@ -1310,7 +1310,7 @@ describe('inventory first wave (Postgres)', () => {
     });
   });
 
-  describe('branch scope (ADR-0012 §8)', () => {
+  describe('branch scope (ADR-0020 §8)', () => {
     const only3 = [Q3];
     const only7 = [Q7];
     const notFoundErr = { status: 404 };

@@ -11,7 +11,7 @@ import { AccountTenantEntity } from './account-tenant.entity';
 
 /**
  * A branch a member may act in. A member with **no** rows may use every
- * branch (ADR-0012 §8); the owner always may.
+ * branch (ADR-0020 §8); the owner always may.
  */
 @Entity('account_tenant_branch')
 export class AccountTenantBranchEntity extends BaseEntity {

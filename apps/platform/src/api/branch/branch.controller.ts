@@ -32,7 +32,7 @@ import { UpdateBranchSettingReqDto } from './dto/update-branch-setting.req.dto';
 import { UpdateBranchReqDto } from './dto/update-branch.req.dto';
 
 /**
- * Permissions (ADR-0012): creating, changing and deleting a branch and
+ * Permissions (ADR-0020): creating, changing and deleting a branch and
  * changing its settings need `settings.update`, reading the settings
  * `settings.view`; listing and reading branches is open to every member. A
  * branch outside the caller's scope is a 404 (never 403), and the list shows

@@ -31,7 +31,7 @@ import {
 } from './purchase-orders.service';
 
 /**
- * Permissions: `purchasing.view/create/update/approve`; branch scope applies (ADR-0012 §8).
+ * Permissions: `purchasing.view/create/update/approve`; branch scope applies (ADR-0020 §8).
  * Fixed paths before `:id`.
  */
 @ApiTags('purchase-orders')

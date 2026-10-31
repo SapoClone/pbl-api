@@ -34,7 +34,7 @@ import {
 } from './products.service';
 
 /**
- * ADR-0012: `products.view` reads, `products.create|update|delete` write. `summary`
+ * ADR-0020: `products.view` reads, `products.create|update|delete` write. `summary`
  * and `export` are declared before `:id` so that they are not read as an id.
  */
 @ApiTags('products')

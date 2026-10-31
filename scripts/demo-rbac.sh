@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end test of role-based access control (ADR-0011, ADR-0012), through the gateway only
+# End-to-end test of role-based access control (ADR-0019, ADR-0020), through the gateway only
 # (needs the local stack running: docker compose up -d --build). One store, two branches:
 #   1. catalog and seeded roles   owner creates the store, GET /permissions, GET /roles, immutability
 #   2. custom roles               create, unknown permission, duplicate name, patch, delete

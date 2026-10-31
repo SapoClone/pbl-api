@@ -1,4 +1,4 @@
-# ADR-0011: Store users are accounts with a membership, not a separate Staff identity
+# ADR-0019: Store users are accounts with a membership, not a separate Staff identity
 
 - **Status:** Proposed
 - **Date:** 2026-10-31
@@ -21,7 +21,7 @@ credential store.
    password. The ERD's `Staff`, `StaffRole` and `StaffBranch` collapse into `account_tenant` (role, status, code)
    and the membership tables below.
 2. **Membership data lives on `account_tenant`** and in tables keyed by `(account_id, tenant_id)`: role
-   (ADR-0012), status (`active`, `locked`), a per-store code, branch assignment, schedule.
+   (ADR-0020), status (`active`, `locked`), a per-store code, branch assignment, schedule.
 3. **`sub_type` stays `account` for store users.** `staff` is kept in the token type for compatibility but is never
    issued. `platform_admin` stays reserved for the admin identity, which is a separate decision.
 4. **Invitations** (when built) create an `Account` when the email is unknown, or reuse it, then a membership.

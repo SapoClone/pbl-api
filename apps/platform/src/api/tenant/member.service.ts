@@ -47,7 +47,7 @@ export const maskPhone = (phone: string | null): string | null => {
 };
 
 /**
- * Who works in a store, with which role and in which branches (ADR-0012). A
+ * Who works in a store, with which role and in which branches (ADR-0020). A
  * member's role or branches reach their token at the next refresh or sign-in.
  * A role change writes an event in the same transaction.
  */

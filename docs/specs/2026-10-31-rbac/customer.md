@@ -1,6 +1,6 @@
 # RBAC migration: customer
 
-ADR-0012. `@RequireRoles` and `ROLES` are gone from `apps/customer`; every route uses `@RequirePermission`. Customers are store-wide: no branch scope.
+ADR-0020. `@RequireRoles` and `ROLES` are gone from `apps/customer`; every route uses `@RequirePermission`. Customers are store-wide: no branch scope.
 
 ## Built
 

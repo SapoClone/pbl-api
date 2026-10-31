@@ -131,7 +131,7 @@ describe('Inventory first-wave HTTP shell', () => {
     });
   });
 
-  describe('permission matrix (ADR-0012)', () => {
+  describe('permission matrix (ADR-0020)', () => {
     const OTHER = 'products.view';
     const ITEMS = [{ sku: 'A', quantity: 1 }];
     const bodies: Record<string, object> = {

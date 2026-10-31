@@ -2,8 +2,8 @@
 
 **Date:** 2026-10-31. **Branch:** `feat/rbac-permissions`, stacked on `feat/first-wave-screen-apis`.
 
-Roles, permissions and branch scope, as designed in [ADR-0011](../../decisions/0011-store-users-are-accounts.md) and
-[ADR-0012](../../decisions/0012-permissions-and-branch-scope.md). Every endpoint now checks a permission instead of a
+Roles, permissions and branch scope, as designed in [ADR-0019](../../decisions/0019-store-users-are-accounts.md) and
+[ADR-0020](../../decisions/0020-permissions-and-branch-scope.md). Every endpoint now checks a permission instead of a
 role name, and a member can be limited to some branches. Per-service reports: [platform](platform.md),
 [sales](sales.md), [inventory](inventory.md), [insight](insight.md), [catalog](catalog.md),
 [customer](customer.md). End-to-end checks: [e2e.md](e2e.md).
@@ -87,7 +87,7 @@ role name, and a member can be limited to some branches. Per-service reports: [p
 | Instant revocation on a role edit | See decision 5 |
 | Several roles per member, per-branch roles, deny rules | Not in the design |
 | `ROLES.MANAGER` / `ROLES.CASHIER` removal | Deprecated, kept for one release |
-| Removing `Staff`, `StaffRole`, `StaffBranch` from the ERD | pbl-infra change (ADR-0011) |
+| Removing `Staff`, `StaffRole`, `StaffBranch` from the ERD | pbl-infra change (ADR-0019) |
 | Branch-scope coverage in the end-to-end scripts for transfers, stock takes, registers, shifts, schedules, notifications | Covered by unit and integration tests only |
 
 ## Shared files changed
@@ -96,5 +96,5 @@ role name, and a member can be limited to some branches. Per-service reports: [p
 |---|---|
 | `krakend/krakend.json` | +6 routes for `/permissions` and `/roles` |
 | `CLAUDE.md` | Auth rules, current-state table, the local-volume trap, the new scripts |
-| `docs/decisions/` | ADR-0011, ADR-0012 and the index |
+| `docs/decisions/` | ADR-0019, ADR-0020 and the index |
 | `scripts/demo-events.sh`, `scripts/demo-first-wave.sh`, `scripts/demo-rbac.sh` | role names and RBAC assertions; new RBAC script |

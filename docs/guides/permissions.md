@@ -1,6 +1,6 @@
 # Permissions guide
 
-For service authors. Design: [ADR-0012](../decisions/0012-permissions-and-branch-scope.md).
+For service authors. Design: [ADR-0020](../decisions/0020-permissions-and-branch-scope.md).
 A permission is `<module>.<action>`; the catalog and the default roles live in
 `@pbl/contracts` (`libs/contracts/src/permissions.ts`), enforcement in `@pbl/auth`.
 

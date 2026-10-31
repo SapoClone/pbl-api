@@ -21,7 +21,7 @@ import { NotificationsService } from './notifications.service';
 
 /**
  * The bell shows on every store screen, so every member of the store may use it: no
- * permission (ADR-0012 §7). A restricted caller sees notifications of no branch or of
+ * permission (ADR-0020 §7). A restricted caller sees notifications of no branch or of
  * an allowed branch. Fixed paths come before `:id/read`.
  */
 @ApiTags('insight')

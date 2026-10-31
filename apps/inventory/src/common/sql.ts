@@ -24,7 +24,7 @@ export const conflict = (
 export const notFound = (what: string) =>
   new NotFoundException(`${what} not found`);
 
-/** Branches the caller may act in (`allowedBranches`); null = every branch (ADR-0012 §8) */
+/** Branches the caller may act in (`allowedBranches`); null = every branch (ADR-0020 §8) */
 export type Scope = string[] | null;
 
 export const inScope = (scope: Scope, branchId: string): boolean =>

@@ -325,7 +325,7 @@ describe('platform (Postgres)', () => {
 });
 
 /**
- * RBAC (ADR-0012): the migration with legacy data, and the role queries the
+ * RBAC (ADR-0020): the migration with legacy data, and the role queries the
  * service runs, connected the way the service connects (schema option, no
  * search_path). Own schema: the migrations run from the start.
  */

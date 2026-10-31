@@ -1,6 +1,6 @@
 # RBAC end-to-end tests
 
-Design: [ADR-0011](../../decisions/0011-multi-tenant-model.md) is not needed to run these; see [ADR-0012](../../decisions/0012-permissions-and-branch-scope.md) and the per-service tables in this folder.
+Design: [ADR-0019](../../decisions/0011-multi-tenant-model.md) is not needed to run these; see [ADR-0020](../../decisions/0020-permissions-and-branch-scope.md) and the per-service tables in this folder.
 
 ## How to run
 
@@ -32,7 +32,7 @@ Every step is asserted and the script exits non-zero on the first failure.
 
 | Was | Now | Reason |
 | --- | --- | --- |
-| a cashier does not see the full phone (`.phone = null`) | a cashier (sales_staff) sees the full phone | sales_staff holds `customers.update`, which gives the full phone (customer table, ADR-0012) |
+| a cashier does not see the full phone (`.phone = null`) | a cashier (sales_staff) sees the full phone | sales_staff holds `customers.update`, which gives the full phone (customer table, ADR-0020) |
 | 403 "a cashier cannot confirm (orders.update)" | 403 "a cashier cannot cancel (orders.delete)" on the same draft | sales_staff holds `orders.update`, so it may confirm; the owner's later confirm step stays. The denial now checks `orders.delete`, which sales_staff does not hold |
 | 403 "a cashier cannot read the KPIs" | 200 for KPIs, plus 403 for `sales-summary/daily` | sales_staff holds `dashboard.view` but not `reports.view` (insight table) |
 

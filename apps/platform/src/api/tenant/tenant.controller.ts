@@ -37,7 +37,7 @@ import { MemberService } from './member.service';
 import { TenantService } from './tenant.service';
 
 /**
- * Permissions (ADR-0012): `settings.update` edits the store; members need
+ * Permissions (ADR-0020): `settings.update` edits the store; members need
  * `staff.view` (list, summary, detail), `staff.create` (add), `staff.update`
  * (role, branches, lock, unlock) and `staff.delete` (remove). The store list
  * and the context are open to every member.

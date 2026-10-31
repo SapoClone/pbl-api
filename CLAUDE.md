@@ -29,7 +29,7 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 | Tenancy | Implemented (P0): stores, branches, `tid` in tokens, `@CurrentTenant()` ([ADR-0008](docs/decisions/0008-tenancy.md)). Roles and permissions (RBAC) are built: see Auth | Plans/subscriptions |
 | Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every client-facing endpoint of every service + each service's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
-| Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles`/`perms`/`branches`; routes use `@RequirePermission` and branch scope ([ADR-0012](docs/decisions/0012-permissions-and-branch-scope.md), [guide](docs/guides/permissions.md)) | Short access-token TTL (the deny-list stays: every service uses it) ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
+| Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles`/`perms`/`branches`; routes use `@RequirePermission` and branch scope ([ADR-0020](docs/decisions/0020-permissions-and-branch-scope.md), [guide](docs/guides/permissions.md)) | Short access-token TTL (the deny-list stays: every service uses it) ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
 | Events | Built locally (P1): outbox → relay → ElasticMQ queue → consumer with an inbox, retry, DLQ and redrive, in `@pbl/events`; first events: platform branch/login/role events and `sales.order.completed`, consumed by sales, inventory, customer (spend and loyalty points) and insight ([guide](docs/guides/events.md)). The email queue stays separate ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | Production transport: outbox → SNS → SQS ([ADR-0007](docs/decisions/0007-event-bus.md)); the SNS adapter is written and unit-tested, never run against AWS |
 | AWS | All AWS resources were deleted to save credits; pbl-infra keeps the Terraform | Re-apply pbl-infra when deploying |
 
@@ -165,7 +165,7 @@ Rules:
 - Tenant/user identity comes **from the token**, never from body, query, path or headers.
 - Refresh tokens are opaque and handled only by `RefreshTokenService`
   (hashed, rotated, reuse ⇒ family revoked). Never put them in a JWT or log them.
-- Authorization is by **permission**, not role name ([ADR-0012](docs/decisions/0012-permissions-and-branch-scope.md),
+- Authorization is by **permission**, not role name ([ADR-0020](docs/decisions/0020-permissions-and-branch-scope.md),
   [docs/guides/permissions.md](docs/guides/permissions.md)). A permission is `<module>.<action>`
   (`PERMISSION_CATALOG` in `@pbl/contracts`). Each store has five seeded roles (`owner`, `branch_manager`,
   `sales_staff`, `warehouse_staff`, `accountant`, defaults in `DEFAULT_ROLE_PERMISSIONS`) and custom roles the owner
@@ -178,7 +178,7 @@ Rules:
   without a branch filter returns only the allowed branches (`canAccessBranch`, `allowedBranches`,
   `@AllowedBranches()` from `@pbl/auth`). No assignment rows means every branch. A role, permission or branch change
   reaches a member at their next sign-in or refresh.
-- Store users are accounts with a membership ([ADR-0011](docs/decisions/0011-store-users-are-accounts.md)); there is
+- Store users are accounts with a membership ([ADR-0019](docs/decisions/0019-store-users-are-accounts.md)); there is
   no separate staff identity.
 
 ## API conventions

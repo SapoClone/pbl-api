@@ -38,7 +38,7 @@ import {
 
 /**
  * Permissions: `inventory.view/create/update/approve` (see each route). A document whose
- * branch is outside the caller's scope answers 404 (ADR-0012 §8).
+ * branch is outside the caller's scope answers 404 (ADR-0020 §8).
  */
 @ApiTags('stock-transfers')
 @ApiBearerAuth()

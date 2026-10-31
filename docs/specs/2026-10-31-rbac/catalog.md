@@ -1,6 +1,6 @@
 # RBAC migration: catalog
 
-ADR-0012. `@RequireRoles` and `ROLES` are gone from `apps/catalog`; every route uses `@RequirePermission`. The catalog is store-wide, so there is no branch scope.
+ADR-0020. `@RequireRoles` and `ROLES` are gone from `apps/catalog`; every route uses `@RequirePermission`. The catalog is store-wide, so there is no branch scope.
 
 ## Built
 

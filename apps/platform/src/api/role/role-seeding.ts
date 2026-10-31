@@ -12,7 +12,7 @@ export const OWNER_ROLE_CODE = ROLE_CODES.OWNER;
 
 /**
  * The five seeded roles of a new store with their default permissions
- * (ADR-0012 §2). Call it inside the transaction that creates the store. The
+ * (ADR-0020 §2). Call it inside the transaction that creates the store. The
  * owner role gets no `role_permission` rows: it is always every permission.
  * Returns the roles by code.
  */

@@ -30,7 +30,7 @@ import {
 } from './taxonomy.dto';
 
 /**
- * ADR-0012: `products.view` reads, `products.create|update|delete` write.
+ * ADR-0020: `products.view` reads, `products.create|update|delete` write.
  */
 @ApiTags('categories')
 @ApiBearerAuth()

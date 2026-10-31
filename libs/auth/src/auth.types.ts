@@ -11,7 +11,7 @@ export type AccessTokenClaims = {
   sub_type: AccessTokenSubjectType;
   tid?: string;
   roles?: string[];
-  /** Permission codes in the selected store; `['*']` = all (ADR-0012) */
+  /** Permission codes in the selected store; `['*']` = all (ADR-0020) */
   perms?: string[];
   /** Branch ids the member may act in; `['*']` = all */
   branches?: string[];

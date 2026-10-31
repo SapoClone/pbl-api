@@ -1,6 +1,6 @@
 # RBAC migration: inventory
 
-ADR-0012. Scope: `apps/inventory/**` only. No `@RequireRoles` and no `ROLES.*` is left in the service.
+ADR-0020. Scope: `apps/inventory/**` only. No `@RequireRoles` and no `ROLES.*` is left in the service.
 
 ## 1. Built
 

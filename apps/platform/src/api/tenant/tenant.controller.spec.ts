@@ -18,7 +18,7 @@ const ACCOUNT = '44444444-4444-4444-8444-444444444444';
 
 /**
  * The tenant and member routes through the real AuthGuard (with a throwaway
- * key): which permission opens which route (ADR-0012).
+ * key): which permission opens which route (ADR-0020).
  */
 describe('TenantController', () => {
   let app: INestApplication;

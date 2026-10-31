@@ -26,7 +26,7 @@ export type Membership = {
 
 /**
  * The stores an account can act in, with the role, permissions and branches
- * the access token carries for each (ADR-0012). Suspended and deleted stores
+ * the access token carries for each (ADR-0020). Suspended and deleted stores
  * are excluded, and so are locked members, so callers treat them exactly like
  * non-members (404). A member with no branch assignment, and the owner, may
  * use every branch.

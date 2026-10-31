@@ -46,7 +46,7 @@ import {
 const canSeePhone = (user: AuthUser) => hasPermission(user, 'customers.update');
 
 /**
- * Permissions (ADR-0012): GET = customers.view; POST (customers, addresses) = customers.create;
+ * Permissions (ADR-0020): GET = customers.view; POST (customers, addresses) = customers.create;
  * PATCH (customers, addresses) and loyalty adjustments = customers.update; DELETE (customers,
  * addresses) = customers.delete. Fixed paths (`summary`, `export`) come before `:id`.
  */

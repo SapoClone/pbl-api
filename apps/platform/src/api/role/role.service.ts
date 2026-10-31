@@ -46,7 +46,7 @@ export const slugifyRoleName = (name: string): string =>
     .replace(/_+$/g, '') || 'role';
 
 /**
- * Roles of a store and the permission catalog (ADR-0012). The `owner` role is
+ * Roles of a store and the permission catalog (ADR-0020). The `owner` role is
  * immutable and every seeded role is undeletable; a custom role can be deleted
  * only when nobody holds it. A change reaches a member's token at their next
  * refresh or sign-in.

@@ -1,6 +1,6 @@
 # RBAC: platform
 
-Design: [ADR-0012](../../decisions/0012-permissions-and-branch-scope.md). Contract: [01-platform](../2026-10-28-api-contracts/01-platform.md).
+Design: [ADR-0020](../../decisions/0020-permissions-and-branch-scope.md). Contract: [01-platform](../2026-10-28-api-contracts/01-platform.md).
 
 ## 1. Built
 
@@ -26,7 +26,7 @@ Design: [ADR-0012](../../decisions/0012-permissions-and-branch-scope.md). Contra
 
 Members: `POST /tenants/current/members` takes `roleId` or the legacy `role` (`manager`, `cashier`, or a seeded code except `owner`; `roleId` wins when both are sent) and optional `branchIds`. `PATCH .../members/{accountId}` takes `roleId` / `role` and/or `branchIds` (full set; `[]` means every branch). The owner's role and branches cannot change (T003). Member list, detail, summary, lock, unlock, add and update responses gain `roleId`, `roleName`, `roleCode`, `branchIds`; `role` stays and is now the code. List filters: `role` (code or legacy name), `roleId`. `defaultRoleCount` is 5. Events are unchanged in shape; `role` and `previousRole` are role codes.
 
-**Apply timing (ADR-0012)**: a role, permission or branch change reaches a member's token at their next refresh or sign-in (up to the access-token lifetime, 1 day). Nothing revokes live tokens on a role edit.
+**Apply timing (ADR-0020)**: a role, permission or branch change reaches a member's token at their next refresh or sign-in (up to the access-token lifetime, 1 day). Nothing revokes live tokens on a role edit.
 
 **Enforcement**: `RequireRoles` is no longer used in platform. `PATCH /tenants/current`, branch create/update/delete: `settings.update`. Branch settings GET `settings.view`, PATCH `settings.update`. Members list/summary/detail `staff.view`, add `staff.create`, PATCH/lock/unlock `staff.update`, DELETE `staff.delete`. Staff schedules GET `staff.view`, writes `staff.update`. Roles/permissions as above. No permission: `GET /tenants`, `GET /tenants/current`, `GET /tenants/current/context`, `GET /branches`, `GET /branches/{id}`, `accounts/me/*`, auth routes.
 
@@ -40,7 +40,7 @@ Members: `POST /tenants/current/members` takes `roleId` or the legacy `role` (`m
 
 - `platform.role.updated` and `platform.membership.branches_changed` events (the event definitions live in `@pbl/contracts`, not touched here); a branch change writes no event.
 - Invitations (`roleId` / `branchIds` on invitations), `code` on `PATCH members` (T024), `isOnShift` etc. are as before.
-- Revoking live access tokens when a role is edited or a member's role/branches change (ADR-0012 accepts the delay).
+- Revoking live access tokens when a role is edited or a member's role/branches change (ADR-0020 accepts the delay).
 - Role-name case rules at the database level: name uniqueness is checked in the service (case-insensitive); two concurrent creations of the same name are decided by the unique code and answer R001, but two concurrent renames could still collide.
 - Deleting a branch keeps its `account_tenant_branch` rows (see decision 4).
 - CLAUDE.md, ADR status and `docs/guides` updates, and the krakend entries, are for the integrator.

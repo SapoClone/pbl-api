@@ -1,9 +1,9 @@
-# ADR-0012: Permissions are role-based, carried in the token, with branch scope
+# ADR-0020: Permissions are role-based, carried in the token, with branch scope
 
 - **Status:** Proposed
 - **Date:** 2026-10-31
 - **Scope:** `@pbl/contracts` (catalog, defaults), `@pbl/auth` (claims, guard, decorators), `platform` (roles, tokens), every service's controllers
-- **Builds on:** [ADR-0004](0004-authentication-and-tokens.md) step 5, [ADR-0008](0008-tenancy.md), [ADR-0011](0011-store-users-are-accounts.md)
+- **Builds on:** [ADR-0004](0004-authentication-and-tokens.md) step 5, [ADR-0008](0008-tenancy.md), [ADR-0019](0011-store-users-are-accounts.md)
 
 ## Context
 

@@ -1,6 +1,6 @@
 # RBAC migration: insight
 
-ADR-0012. `@RequireRoles` and `ROLES` are gone from `apps/insight`; reports use `@RequirePermission` and branch scope.
+ADR-0020. `@RequireRoles` and `ROLES` are gone from `apps/insight`; reports use `@RequirePermission` and branch scope.
 
 ## Built
 

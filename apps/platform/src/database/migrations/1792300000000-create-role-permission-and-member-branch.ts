@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * RBAC (ADR-0012): `role`, `role_permission`, `account_tenant.role_id` and
+ * RBAC (ADR-0020): `role`, `role_permission`, `account_tenant.role_id` and
  * `account_tenant_branch` (no rows for a member = every branch).
  *
  * Every existing store gets the five seeded roles with their default

@@ -30,7 +30,7 @@ import {
 /**
  * Goods in, and what there is. Permissions: `inventory.view` for reads (lookup also
  * `pos.create`, `orders.create`), `inventory.create` for receipts. A branch outside the
- * caller's scope answers 404 (ADR-0012 §8). Fixed paths come before any `:id`.
+ * caller's scope answers 404 (ADR-0020 §8). Fixed paths come before any `:id`.
  */
 @ApiTags('stock')
 @ApiBearerAuth()

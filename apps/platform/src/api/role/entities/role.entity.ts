@@ -13,7 +13,7 @@ import {
 } from 'typeorm';
 
 /**
- * A store's role (ADR-0012). `code` is stable and appears in tokens and
+ * A store's role (ADR-0020). `code` is stable and appears in tokens and
  * events: the five seeded roles use fixed codes, custom roles a slug of
  * their name. The permissions are in `role_permission`; the owner role has
  * none because it is always every permission.

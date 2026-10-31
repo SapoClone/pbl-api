@@ -77,7 +77,7 @@ export class AccessTokenService implements KeyResolver {
     sessionId: string;
     tenantId?: string;
     roles?: string[];
-    /** Permission codes of the member's role; `['*']` for the owner (ADR-0012) */
+    /** Permission codes of the member's role; `['*']` for the owner (ADR-0020) */
     permissions?: string[];
     /** Branch ids the member may act in; `['*']` = every branch */
     branches?: string[];

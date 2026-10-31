@@ -1042,7 +1042,7 @@ describe('sales order flow (Postgres)', () => {
       expect(csv).toContain('0901234528');
     });
   });
-  describe('branch scope (ADR-0012 §8)', () => {
+  describe('branch scope (ADR-0020 §8)', () => {
     const BRANCH_A2 = '4a4a4a4a-4a4a-4a4a-8a4a-4a4a4a4a4a4a';
     const only = (branch: string) => [branch];
     let inFirst: Awaited<ReturnType<typeof create>>;
