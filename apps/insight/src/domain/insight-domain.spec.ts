@@ -147,9 +147,9 @@ describe('M7 Insight Pure Analytical Domain Engine', () => {
 
       const profit = computeGrossProfit(netRev, '400000', '25000');
       expect(profit).toEqual({
-        netCogs: '375000.00',
-        grossProfit: '475000.00',
-        grossMarginPct: '55.88',
+        netCogs: 375000,
+        grossProfit: 475000,
+        grossMarginPct: 55.88,
       });
 
       expect(computeAov('850000', 4)).toBe(212500);

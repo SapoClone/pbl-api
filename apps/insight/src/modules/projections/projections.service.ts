@@ -345,8 +345,9 @@ export class ProjectionsService {
     manager: EntityManager,
     tenantId: string,
     receivableId: string,
-    paidAmount: number,
+    paidAmountRaw: number | string,
   ): Promise<number> {
+    const paidAmount = Number(paidAmountRaw);
     const dim = qualifiedTable(manager.connection, 'insight_dimension_caches');
     const rows = await manager.query(
       `SELECT "metadata"->>'paidAmount' AS paid FROM ${dim}
@@ -1258,11 +1259,11 @@ export class ProjectionsService {
 
       await manager.query(
         `UPDATE ${lineFactsTable}
-         SET "unit_cost_snapshot" = $1,
-             "cogs_amount" = $2,
-             "gross_profit_amount" = $3,
+         SET "unit_cost_snapshot" = $1::bigint,
+             "cogs_amount" = $2::bigint,
+             "gross_profit_amount" = $3::bigint,
              "cost_status" = 'VERIFIED',
-             "contributed_cogs" = CASE WHEN "contributed_units_sold" > 0 THEN $2::numeric ELSE 0 END,
+             "contributed_cogs" = CASE WHEN "contributed_units_sold" > 0 THEN $2::bigint ELSE 0 END,
              "updated_at" = now()
          WHERE "id" = $4`,
         [unitCostStr, newCogsStr, newGrossProfitStr, line.id],
@@ -1271,8 +1272,8 @@ export class ProjectionsService {
       // Update parent order fact
       await manager.query(
         `UPDATE ${orderFactsTable}
-         SET "cogs_total" = "cogs_total" + $1::numeric,
-             "contributed_cogs" = "contributed_cogs" + $2::numeric,
+         SET "cogs_total" = "cogs_total" + $1::bigint,
+             "contributed_cogs" = "contributed_cogs" + $2::bigint,
              "cost_status" = CASE
                WHEN EXISTS (
                  SELECT 1 FROM ${lineFactsTable} lf

@@ -348,26 +348,26 @@ export function computeGrossProfit(
   netSalesRevenue: string | number,
   cogsAmount: string | number,
   returnedCogsAmount: string | number = 0,
-  decimals = 2,
 ): {
-  netCogs: string;
-  grossProfit: string;
-  grossMarginPct: string;
+  netCogs: number;
+  grossProfit: number;
+  grossMarginPct: number;
 } {
   const netRevScaled = parseScaledDecimal(netSalesRevenue);
   const netCogsScaled =
     parseScaledDecimal(cogsAmount) - parseScaledDecimal(returnedCogsAmount);
   const grossProfitScaled = netRevScaled - netCogsScaled;
 
-  let grossMarginPct = '0.00';
+  let grossMarginPct = 0;
   if (netRevScaled > 0n) {
     const pctScaled = (grossProfitScaled * 100n * DECIMAL_SCALE) / netRevScaled;
-    grossMarginPct = formatScaledDecimal(pctScaled, 2);
+    grossMarginPct = Number(formatScaledDecimal(pctScaled, 2));
   }
 
+  // money is whole VND
   return {
-    netCogs: formatScaledDecimal(netCogsScaled, decimals),
-    grossProfit: formatScaledDecimal(grossProfitScaled, decimals),
+    netCogs: Number(formatScaledDecimal(netCogsScaled, 0)),
+    grossProfit: Number(formatScaledDecimal(grossProfitScaled, 0)),
     grossMarginPct,
   };
 }

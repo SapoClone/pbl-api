@@ -25,7 +25,7 @@ import { InsightExportService } from '../../src/modules/export/insight-export.se
 import { ProjectionsService } from '../../src/modules/projections/projections.service';
 import { InsightRebuildService } from '../../src/modules/rebuild/insight-rebuild.service';
 import { InsightReportingService } from '../../src/modules/reporting/insight-reporting.service';
-import { DailySalesEntity } from '../../src/sales-summary/daily-sales.entity';
+import { NOTIFICATION_ENTITIES } from '../../src/notifications/notification.entities';
 
 const TENANT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const BRANCHES = [
@@ -60,7 +60,7 @@ async function runBenchmark() {
     databaseOptions({
       entities: [
         AuditLogEntity,
-        DailySalesEntity,
+        ...NOTIFICATION_ENTITIES,
         ...M7_INSIGHT_ENTITIES,
         ...PRODUCER_ENTITIES,
         ...CONSUMER_ENTITIES,

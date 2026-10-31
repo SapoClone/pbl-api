@@ -2,7 +2,7 @@
  * Milestone M7 — Insight & Analytics Real-PostgreSQL Integration, Concurrency,
  * Rebuild, Reconciliation & Fault-Injection Suite (Mandatory Scenarios A through T + M0 Baseline).
  */
-import { ForbiddenException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { RequestContext, TenantScopedRepository } from '@pbl/common';
 import {
   CONSUMER_ENTITIES,
@@ -18,20 +18,23 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
 import { AuditLogEntity } from '../src/audit/audit-log.entity';
+import { AuditQueryService } from '../src/audit/audit-query.service';
 import { AuditHandler } from '../src/audit/audit.handler';
+import { resolveScope } from '../src/common/branch-scope';
 import { InsightEventsConsumer } from '../src/consumers/insight-events.consumer';
 import { M7_INSIGHT_ENTITIES } from '../src/infrastructure/persistence/insight.entities';
-import { InsightQueryService } from '../src/insight-query.service';
 import { CreateInsightTables1791800000100 } from '../src/migrations/1791800000100-create-insight-tables';
 import { CreateM7InsightCore1791900000300 } from '../src/migrations/1791900000300-create-m7-insight-core';
-import { resolveAuthorizedBranchScope } from '../src/modules/analytics-auth.helper';
+import { CreateNotifications1792000000200 } from '../src/migrations/1792000000200-create-notifications';
 import { InsightExportService } from '../src/modules/export/insight-export.service';
 import { ProjectionsService } from '../src/modules/projections/projections.service';
 import { InsightRebuildService } from '../src/modules/rebuild/insight-rebuild.service';
 import { InsightReconciliationService } from '../src/modules/reconciliation/insight-reconciliation.service';
 import { InsightReportingService } from '../src/modules/reporting/insight-reporting.service';
-import { DailySalesEntity } from '../src/sales-summary/daily-sales.entity';
-import { SalesSummaryHandler } from '../src/sales-summary/sales-summary.handler';
+import { ScreenExportService } from '../src/modules/screens/screen-export.service';
+import { ScreenReportsService } from '../src/modules/screens/screen-reports.service';
+import { NOTIFICATION_ENTITIES } from '../src/notifications/notification.entities';
+import { NotificationsService } from '../src/notifications/notifications.service';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -95,15 +98,17 @@ const sale = (
 describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenarios A–T)', () => {
   const schema = uniqueSchema('insight_m7_it');
   let dataSource: DataSource;
-  let queries: InsightQueryService;
+  let audit: AuditQueryService;
+  let reports: ScreenReportsService;
+  let exporter: ScreenExportService;
+  let notifications: NotificationsService;
   let projections: ProjectionsService;
   let consumer: InsightEventsConsumer;
   let reporting: InsightReportingService;
   let rebuildService: InsightRebuildService;
   let reconciliationService: InsightReconciliationService;
   let exportService: InsightExportService;
-  const summary = new SalesSummaryHandler();
-  const audit = new AuditHandler();
+  const auditHandler = new AuditHandler();
 
   const as = <T>(tenantId: string, work: () => Promise<T>) =>
     RequestContext.run({ tenantId, requestId: 'it' }, work);
@@ -124,7 +129,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
       databaseOptions({
         entities: [
           AuditLogEntity,
-          DailySalesEntity,
+          ...NOTIFICATION_ENTITIES,
           ...M7_INSIGHT_ENTITIES,
           ...PRODUCER_ENTITIES,
           ...CONSUMER_ENTITIES,
@@ -134,16 +139,18 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           ...CONSUMER_MIGRATIONS,
           CreateInsightTables1791800000100,
           CreateM7InsightCore1791900000300,
+          CreateNotifications1792000000200,
         ],
       }),
     );
 
     const outbox = new EventOutbox();
-    queries = new InsightQueryService(
+    audit = new AuditQueryService(
       TenantScopedRepository.forEntity(dataSource, AuditLogEntity),
-      TenantScopedRepository.forEntity(dataSource, DailySalesEntity),
-      reports,
     );
+    reports = new ScreenReportsService(dataSource);
+    exporter = new ScreenExportService(reports);
+    notifications = new NotificationsService(dataSource);
     projections = new ProjectionsService(dataSource);
     consumer = new InsightEventsConsumer(projections);
     reporting = new InsightReportingService(dataSource, projections);
@@ -171,7 +178,9 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
   beforeEach(async () => {
     for (const tbl of [
       'audit_log',
-      'daily_sales',
+      'notification_read',
+      'notification',
+      'device_token',
       'report_export_jobs',
       'reconciliation_issues',
       'reconciliation_runs',
@@ -194,20 +203,20 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
     }
   });
 
-  describe('M0 Backward Compatibility Suite (daily_sales & audit_log)', () => {
-    it('adds the sales of a branch and a day together and isolates tenants', async () => {
+  describe('Screen contract reads over the M7 facts, and the audit log', () => {
+    it('adds the completed orders of a branch and a day together and isolates tenants', async () => {
       for (const amount of [100000, 250000, 50000]) {
         const e = sale(TENANT_A, BRANCH_1, amount);
-        await handle(e, (m) => summary.onOrderCompleted(e, m));
+        await handle(e, (m) => consumer.onSalesOrderCompleted(e, m));
       }
       const b = sale(TENANT_B, BRANCH_1, 999000);
-      await handle(b, (m) => summary.onOrderCompleted(b, m));
+      await handle(b, (m) => consumer.onSalesOrderCompleted(b, m));
 
       const reportA = await as(TENANT_A, () =>
-        queries.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
+        reports.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
       );
       const reportB = await as(TENANT_B, () =>
-        queries.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
+        reports.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
       );
 
       expect(reportA.totals).toEqual({ orderCount: 3, revenue: 400000 });
@@ -226,14 +235,14 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
         },
         new Date().toISOString(),
       );
-      await handle(loginA, (m) => audit.onLogin(loginA, m));
-      await handle(loginA, (m) => audit.onLogin(loginA, m));
+      await handle(loginA, (m) => auditHandler.onLogin(loginA, m));
+      await handle(loginA, (m) => auditHandler.onLogin(loginA, m));
 
       const pageA = await as(TENANT_A, () =>
-        queries.auditLogs({ page: 1, limit: 10 }),
+        audit.auditLogs({ page: 1, limit: 10 }),
       );
       const pageB = await as(TENANT_B, () =>
-        queries.auditLogs({ page: 1, limit: 10 }),
+        audit.auditLogs({ page: 1, limit: 10 }),
       );
       expect(pageA.pagination.totalRecords).toBe(1);
       expect(pageB.pagination.totalRecords).toBe(0);
@@ -354,15 +363,13 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           to: '2026-10-18',
         }),
       );
-      expect(overviewAfterO1.metrics.gmv.current).toBe('500000.00');
-      expect(overviewAfterO1.metrics.grossSalesRevenue.current).toBe(
-        '500000.00',
-      );
-      expect(overviewAfterO1.metrics.discountTotal.current).toBe('50000.00');
-      expect(overviewAfterO1.metrics.netSalesRevenue.current).toBe('450000.00');
-      expect(overviewAfterO1.metrics.grossProfit.current).toBe('210000.00');
-      expect(overviewAfterO1.metrics.completedOrderCount.current).toBe('1');
-      expect(overviewAfterO1.metrics.orderCount.current).toBe('1');
+      expect(overviewAfterO1.metrics.gmv.current).toBe(500000);
+      expect(overviewAfterO1.metrics.grossSalesRevenue.current).toBe(500000);
+      expect(overviewAfterO1.metrics.discountTotal.current).toBe(50000);
+      expect(overviewAfterO1.metrics.netSalesRevenue.current).toBe(450000);
+      expect(overviewAfterO1.metrics.grossProfit.current).toBe(210000);
+      expect(overviewAfterO1.metrics.completedOrderCount.current).toBe(1);
+      expect(overviewAfterO1.metrics.orderCount.current).toBe(1);
 
       // Verify dimensional breakdowns (Product, Channel, Employee, Customer Group)
       const topProducts = await as(TENANT_A, () =>
@@ -374,8 +381,8 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
         categoryId: 'cat-coffee',
         brandId: 'brand-highlands',
         unitsSold: '2.00',
-        netSalesRevenue: '450000.00',
-        grossProfit: '210000.00',
+        netSalesRevenue: 450000,
+        grossProfit: 210000,
       });
 
       const byEmployee = await as(TENANT_A, () =>
@@ -383,7 +390,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
       );
       expect(byEmployee.data[0]).toMatchObject({
         employeeId: STAFF_1,
-        netSalesRevenue: '450000.00',
+        netSalesRevenue: 450000,
         completedOrderCount: 1,
       });
 
@@ -395,7 +402,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
       );
       expect(byCustGroup.data[0]).toMatchObject({
         customerGroupId: 'VIP_GOLD',
-        netSalesRevenue: '450000.00',
+        netSalesRevenue: 450000,
         completedOrderCount: 1,
       });
 
@@ -426,8 +433,8 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           to: '2026-10-18',
         }),
       );
-      expect(overviewMid.metrics.gmv.current).toBe('800000.00');
-      expect(overviewMid.metrics.netSalesRevenue.current).toBe('450000.00');
+      expect(overviewMid.metrics.gmv.current).toBe(800000);
+      expect(overviewMid.metrics.netSalesRevenue.current).toBe(450000);
 
       const order2Cancelled = envelope(
         TENANT_A,
@@ -454,10 +461,10 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           to: '2026-10-18',
         }),
       );
-      expect(overviewMid.metrics.gmv.current).toBe('500000.00');
-      expect(overviewMid.metrics.netSalesRevenue.current).toBe('450000.00');
-      expect(overviewMid.metrics.cancelledOrderCount.current).toBe('1');
-      expect(overviewMid.metrics.orderCount.current).toBe('2');
+      expect(overviewMid.metrics.gmv.current).toBe(500000);
+      expect(overviewMid.metrics.netSalesRevenue.current).toBe(450000);
+      expect(overviewMid.metrics.cancelledOrderCount.current).toBe(1);
+      expect(overviewMid.metrics.orderCount.current).toBe(2);
     });
   });
 
@@ -537,11 +544,11 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
         }),
       );
       expect(gpReport.summary).toMatchObject({
-        grossSalesRevenue: '400000.00',
-        returnsAmount: '100000.00',
-        netSalesRevenue: '300000.00',
-        grossProfit: '150000.00',
-        grossMarginPct: '50.00',
+        grossSalesRevenue: 400000,
+        returnsAmount: 100000,
+        netSalesRevenue: 300000,
+        grossProfit: 150000,
+        grossMarginPct: 50,
         isProfitProvisional: false,
       });
 
@@ -573,7 +580,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           to: '2026-10-18',
         }),
       );
-      expect(gpReport.summary.grossProfit).toBe('150000.00');
+      expect(gpReport.summary.grossProfit).toBe(150000);
 
       // Test H: Order completed on 2026-10-19 for SKU-NEW-MUG with missing cost (costMissing: true)
       const orderPendingCostId = randomUUID();
@@ -614,7 +621,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
       );
       expect(gpDay2BeforeCost.summary.isProfitProvisional).toBe(true);
       expect(gpDay2BeforeCost.summary.pendingCostLinesCount).toBe(1);
-      expect(gpDay2BeforeCost.summary.grossProfit).toBe('200000.00');
+      expect(gpDay2BeforeCost.summary.grossProfit).toBe(200000);
 
       // Late cost event arrives for SKU-NEW-MUG with unitCost = 60,000 -> resolves 2 units * 60,000 = 120,000 COGS -> Gross profit becomes 80,000
       const lateCostReceipt = envelope(TENANT_A, 'inventory.stock.received', {
@@ -645,8 +652,8 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
       );
       expect(gpDay2AfterCost.summary.isProfitProvisional).toBe(false);
       expect(gpDay2AfterCost.summary.pendingCostLinesCount).toBe(0);
-      expect(gpDay2AfterCost.summary.grossProfit).toBe('80000.00');
-      expect(gpDay2AfterCost.summary.grossMarginPct).toBe('40.00');
+      expect(gpDay2AfterCost.summary.grossProfit).toBe(80000);
+      expect(gpDay2AfterCost.summary.grossMarginPct).toBe(40);
     });
   });
 
@@ -700,9 +707,9 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
       );
       // On-hand is 12 units (1,200,000), in-transit at WH2 is 8 units (800,000), total conserved = 2,000,000
       expect(valuation.totals).toEqual({
-        onHandValuation: '1200000.00',
-        inTransitValuation: '800000.00',
-        totalValuation: '2000000.00',
+        onHandValuation: 1200000,
+        inTransitValuation: 800000,
+        totalValuation: 2000000,
       });
 
       // Receive 8 units at WAREHOUSE_2
@@ -728,9 +735,9 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
 
       valuation = await as(TENANT_A, () => reporting.getInventoryValuation({}));
       expect(valuation.totals).toEqual({
-        onHandValuation: '2000000.00',
-        inTransitValuation: '0.00',
-        totalValuation: '2000000.00',
+        onHandValuation: 2000000,
+        inTransitValuation: 0,
+        totalValuation: 2000000,
       });
 
       // Test J: Credit sale completed for 500,000 VND, followed by receivable debt collection of 500,000 VND
@@ -780,6 +787,23 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
         consumer.onReceivablePaymentApplied(debtPayment, m),
       );
 
+      // the same cumulative paid amount again (a redelivery) collects nothing more
+      const again = envelope(TENANT_A, 'finance.receivable.payment_applied', {
+        ...(debtPayment as unknown as { payload: object }).payload,
+        branchId: BRANCH_1,
+      });
+      await handle(again, (m) => consumer.onReceivablePaymentApplied(again, m));
+      // the cash of the payment arrives as its own cashbook entry
+      const cash = envelope(TENANT_A, 'finance.cashbook.entry_posted', {
+        entryId: randomUUID(),
+        code: 'PT-001',
+        branchId: BRANCH_1,
+        direction: 'RECEIPT',
+        amount: 500000,
+        occurredAt: '2026-10-18T15:00:00.000Z',
+      });
+      await handle(cash, (m) => consumer.onCashbookEntryPosted(cash, m));
+
       const overview = await as(TENANT_A, () =>
         reporting.getDashboardOverview({
           from: '2026-10-18',
@@ -787,9 +811,9 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
         }),
       );
       // Sales revenue is 500,000 (NOT 1,000,000), while debtCollectedAmount is 500,000
-      expect(overview.metrics.netSalesRevenue.current).toBe('500000.00');
-      expect(overview.metrics.debtCollectedAmount).toBe('500000.00');
-      expect(overview.metrics.cashInflowAmount).toBe('500000.00');
+      expect(overview.metrics.netSalesRevenue.current).toBe(500000);
+      expect(overview.metrics.debtCollectedAmount).toBe(500000);
+      expect(overview.metrics.cashInflowAmount).toBe(500000);
     });
   });
 
@@ -826,8 +850,8 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           to: '2026-10-18',
         }),
       );
-      expect(beforeRebuild.metrics.netSalesRevenue.current).toBe('560000.00');
-      expect(beforeRebuild.metrics.grossProfit.current).toBe('240000.00');
+      expect(beforeRebuild.metrics.netSalesRevenue.current).toBe(560000);
+      expect(beforeRebuild.metrics.grossProfit.current).toBe(240000);
 
       // Test R: Simulate a mid-rebuild failure before cutover -> active generation remains untouched!
       await expect(
@@ -847,9 +871,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           to: '2026-10-18',
         }),
       );
-      expect(afterFailedRebuild.metrics.netSalesRevenue.current).toBe(
-        '560000.00',
-      );
+      expect(afterFailedRebuild.metrics.netSalesRevenue.current).toBe(560000);
       expect(afterFailedRebuild.freshness.activeGenerationId).toBe(
         'gen-active',
       );
@@ -912,8 +934,8 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
       expect(afterRebuild.freshness.activeGenerationId).toBe(
         rebuildResult.newGenerationId,
       );
-      expect(afterRebuild.metrics.netSalesRevenue.current).toBe('660000.00');
-      expect(afterRebuild.metrics.grossProfit.current).toBe('300000.00');
+      expect(afterRebuild.metrics.netSalesRevenue.current).toBe(660000);
+      expect(afterRebuild.metrics.grossProfit.current).toBe(300000);
 
       // Clean reconciliation passes with 0 discrepancies
       const cleanRecon = await as(TENANT_A, () =>
@@ -946,9 +968,9 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
       expect(driftRecon.discrepanciesFound).toBeGreaterThanOrEqual(1);
       expect(driftRecon.issues[0]).toMatchObject({
         metricName: 'net_sales_revenue',
-        expectedValue: '660000.00',
-        actualValue: '710000.00',
-        deltaValue: '50000.00',
+        expectedValue: 660000,
+        actualValue: 710000,
+        deltaValue: 50000,
         severity: 'CRITICAL',
       });
     });
@@ -1005,7 +1027,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           to: '2026-10-18',
         }),
       );
-      expect(tenantBOverview.metrics.netSalesRevenue.current).toBe('0.00');
+      expect(tenantBOverview.metrics.netSalesRevenue.current).toBe(0);
 
       // Test P: Branch manager restricted to BRANCH_1 only sees BRANCH_1 in comparison and ranking
       const scopedRanking = await as(TENANT_A, () =>
@@ -1017,17 +1039,11 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
       );
       expect(scopedRanking.ranking).toHaveLength(1);
       expect(scopedRanking.ranking[0].branchId).toBe(BRANCH_1);
-      expect(scopedRanking.ranking[0].netSalesRevenue).toBe('200000.00');
+      expect(scopedRanking.ranking[0].netSalesRevenue).toBe(200000);
 
-      expect(() =>
-        resolveAuthorizedBranchScope(
-          {
-            user: { roles: ['manager'], branchIds: [BRANCH_1] },
-            headers: {},
-          } as never,
-          BRANCH_2,
-        ),
-      ).toThrow(ForbiddenException);
+      expect(() => resolveScope([BRANCH_1], BRANCH_2)).toThrow(
+        NotFoundException,
+      );
 
       // Test Q & S: Create CSV, XLSX, and PDF exports for PRODUCT_SALES and verify formula-injection escaping and branch-scope download protection
       const csvExport = await as(TENANT_A, () =>
@@ -1055,7 +1071,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
         as(TENANT_A, () =>
           exportService.downloadExportJob(csvExport.id, [BRANCH_2]),
         ),
-      ).rejects.toThrow(ForbiddenException);
+      ).rejects.toThrow(NotFoundException);
 
       // Also verify XLSX and PDF exports
       const xlsxExport = await as(TENANT_A, () =>
@@ -1085,7 +1101,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
     });
   });
   describe('migrations', () => {
-    it('undo and redo the read model and notification tables', async () => {
+    it('undo and redo the notification tables and keep the M7 and audit tables', async () => {
       const tables = () =>
         dataSource
           .query(
@@ -1095,24 +1111,43 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           .then((rows: { table_name: string }[]) =>
             rows.map((r) => r.table_name),
           );
+      const money = (table: string, column: string) =>
+        dataSource
+          .query(
+            `SELECT data_type FROM information_schema.columns
+              WHERE table_schema = $1 AND table_name = $2 AND column_name = $3`,
+            [schema, table, column],
+          )
+          .then((rows: { data_type: string }[]) => rows[0]?.data_type);
       expect(await tables()).toEqual(
-        expect.arrayContaining(['hourly_sales', 'notification']),
+        expect.arrayContaining([
+          'audit_log',
+          'sales_order_facts',
+          'notification',
+          'device_token',
+        ]),
       );
+      expect(await tables()).not.toContain('daily_sales');
+      // money is bigint, quantities stay numeric
+      expect(await money('sales_order_facts', 'grand_total')).toBe('bigint');
+      expect(await money('daily_sales_summaries', 'gross_profit')).toBe(
+        'bigint',
+      );
+      expect(await money('inventory_stock_projections', 'avg_unit_cost')).toBe(
+        'bigint',
+      );
+      expect(await money('sales_order_line_facts', 'quantity')).toBe('numeric');
 
-      await dataSource.undoLastMigration();
       await dataSource.undoLastMigration();
       const after = await tables();
       expect(after).not.toContain('notification');
       expect(after).not.toContain('notification_read');
-      expect(after).not.toContain('hourly_sales');
-      expect(after).toContain('daily_sales');
+      expect(after).not.toContain('device_token');
+      expect(after).toContain('sales_order_facts');
 
       await dataSource.runMigrations();
       expect(await tables()).toEqual(
         expect.arrayContaining([
-          'hourly_sales',
-          'product_sales_daily',
-          'customer_sales_daily',
           'notification',
           'notification_read',
           'device_token',
@@ -1124,7 +1159,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
   describe('branch scope (ADR-0020 §8)', () => {
     const feed = async (...events: ReturnType<typeof sale>[]) => {
       for (const e of events)
-        await handle(e, (m) => summary.onOrderCompleted(e, m));
+        await handle(e, (m) => consumer.onSalesOrderCompleted(e, m));
     };
     const ME = randomUUID();
     const only1 = [BRANCH_1];
@@ -1155,8 +1190,8 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
         () => reports.hourly({ branchId: BRANCH_2 }, only1),
         () => reports.byChannel(range, only1),
         () => reports.topProducts(range, only1),
-        () => queries.dailySales(range, only1),
-        () => queries.dailySales({ ...range, groupBy: 'day_channel' }, only1),
+        () => reports.dailySales(range, only1),
+        () => reports.dailySales({ ...range, groupBy: 'day_channel' }, only1),
         () => exporter.export({ ...range, report: 'daily' }, only1),
         () =>
           notifications.list(
@@ -1223,11 +1258,11 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           (b) => b.branchId,
         ),
       ).toEqual([BRANCH_1]);
-      const daily = await as(TENANT_A, () => queries.dailySales(day, only1));
+      const daily = await as(TENANT_A, () => reports.dailySales(day, only1));
       expect(daily.data.map((r) => r.branchId)).toEqual([BRANCH_1]);
       expect(daily.totals.revenue).toBe(110000);
       const perChannel = await as(TENANT_A, () =>
-        queries.dailySales({ ...day, groupBy: 'day_channel' }, only1),
+        reports.dailySales({ ...day, groupBy: 'day_channel' }, only1),
       );
       expect(perChannel.data.map((r) => r.channel)).toEqual(['pos']);
       const csv = await as(TENANT_A, () =>
@@ -1312,6 +1347,372 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
       expect(await as(TENANT_A, () => notifications.unreadCount(ME))).toEqual({
         count: 1,
       });
+    });
+  });
+
+  describe('events as the adopted services emit them', () => {
+    const VARIANT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const q = (sql: string, params: unknown[] = []) =>
+      dataSource.query(sql.replace(/\$S/g, `"${schema}"`), params);
+
+    it('reads sales.order.completed with channel, variant ids and the order cost, in whole VND', async () => {
+      const orderId = randomUUID();
+      const e = envelope(TENANT_A, 'sales.order.completed', {
+        orderId,
+        code: 'DH-9',
+        branchId: BRANCH_1,
+        customerId: CUSTOMER_1,
+        subtotal: 100001,
+        discountTotal: 1,
+        taxTotal: 0,
+        grandTotal: 100000,
+        totalAmount: 100000,
+        itemCount: 3,
+        paymentMethod: 'cash',
+        createdBy: ACCOUNT,
+        completedAt: '2026-10-18T03:00:00.000Z',
+        items: [
+          {
+            sku: 'A',
+            name: 'A',
+            quantity: 1,
+            unitPrice: 60001,
+            variantId: VARIANT,
+          },
+          { sku: 'B', name: 'B', quantity: 2, unitPrice: 20000 },
+        ],
+        channel: 'shopee',
+        channelId: randomUUID(),
+        costAmount: 60000,
+      });
+      await handle(e, (m) => consumer.onSalesOrderCompleted(e, m));
+
+      const [fact] = await q(
+        `SELECT * FROM $S.sales_order_facts WHERE order_id = $1`,
+        [orderId],
+      );
+      expect(fact.channel_type).toBe('SHOPEE');
+      expect(fact.grand_total).toBe('100000');
+      expect(fact.cogs_total).toBe('60000');
+      expect(fact.cost_status).toBe('VERIFIED');
+      const lines = await q(
+        `SELECT sku_code, variant_id, cogs_amount, line_subtotal FROM $S.sales_order_line_facts WHERE order_id = $1 ORDER BY sku_code`,
+        [orderId],
+      );
+      // the cost is spread by subtotal share and sums back to the order cost
+      expect(lines.map((l: { cogs_amount: string }) => l.cogs_amount)).toEqual([
+        '36000',
+        '24000',
+      ]);
+      expect(lines[0].variant_id).toBe(VARIANT);
+
+      const kpis = await as(TENANT_A, () =>
+        reports.kpis({ date: '2026-10-18' }, null),
+      );
+      expect(kpis.revenue.value).toBe(100000);
+      expect(kpis.grossProfit?.value).toBe(40000);
+      const channels = await as(TENANT_A, () =>
+        reports.byChannel({ from: '2026-10-18', to: '2026-10-18' }, null),
+      );
+      expect(channels.data[0]).toMatchObject({
+        type: 'shopee',
+        revenue: 100000,
+      });
+    });
+
+    it('rounds a fractional line half up to whole VND and keeps summaries integer', async () => {
+      const e = envelope(TENANT_A, 'sales.order.completed', {
+        orderId: randomUUID(),
+        code: 'DH-10',
+        branchId: BRANCH_1,
+        grandTotal: 15002,
+        totalAmount: 15002,
+        subtotal: 15002,
+        itemCount: 1,
+        paymentMethod: 'cash',
+        createdBy: ACCOUNT,
+        completedAt: '2026-10-18T03:00:00.000Z',
+        items: [{ sku: 'KG', name: 'Gạo', quantity: 1.5, unitPrice: 10001 }],
+      });
+      await handle(e, (m) => consumer.onSalesOrderCompleted(e, m));
+      const overview = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(overview.metrics.grossSalesRevenue.current).toBe(15002);
+      expect(Number.isInteger(overview.metrics.netSalesRevenue.current)).toBe(
+        true,
+      );
+    });
+
+    it('maps the variant id of stock.changed to the SKU code and does not count a commit twice', async () => {
+      const variant = envelope(TENANT_A, 'catalog.variant.created', {
+        variantId: VARIANT,
+        productId: randomUUID(),
+        skuCode: 'SKU-V',
+        barcode: null,
+        name: 'Variant',
+        basePrice: 1000,
+        status: 'ACTIVE',
+        isDefault: true,
+        aggregateVersion: 1,
+        updatedAt: '2026-10-18T01:00:00.000Z',
+      });
+      await handle(variant, (m) => consumer.onVariantCreated(variant, m));
+      const stock = (type: string, payload: object) =>
+        envelope(TENANT_A, type, payload);
+      const received = stock('inventory.stock.changed', {
+        warehouseId: WAREHOUSE_1,
+        skuId: VARIANT,
+        movementType: 'RECEIPT',
+        qtyDelta: '10.000',
+        onHandAfter: '10.000',
+        reservedAfter: '0.000',
+        unitCost: 5000,
+        avgCostAfter: 5000,
+        referenceType: 'STOCK_RECEIPT',
+        referenceId: randomUUID(),
+        occurredAt: '2026-10-18T02:00:00.000Z',
+      });
+      await handle(received, (m) =>
+        consumer.onInventoryStockChanged(received, m),
+      );
+      // the document-level event carries no stock line: nothing moves
+      const doc = stock('inventory.stock.received', {
+        receiptId: randomUUID(),
+        warehouseId: WAREHOUSE_1,
+        totalAmount: 50000,
+        postedAt: '2026-10-18T02:00:00.000Z',
+      });
+      await handle(doc, (m) => consumer.onInventoryStockReceived(doc, m));
+
+      const held = stock('inventory.reservation.confirmed', {
+        reservationId: randomUUID(),
+        sourceRefType: 'ORDER',
+        sourceRefId: randomUUID(),
+        state: 'HELD',
+        expiresAt: '2026-10-18T03:00:00.000Z',
+        lines: [{ warehouseId: WAREHOUSE_1, skuId: VARIANT, qty: '4.000' }],
+      });
+      await handle(held, (m) => consumer.onReservationConfirmed(held, m));
+      const rows = () =>
+        q(
+          `SELECT sku_code, on_hand_qty, reserved_qty, available_qty, inventory_valuation FROM $S.inventory_stock_projections WHERE tenant_id = $1`,
+          [TENANT_A],
+        );
+      expect(await rows()).toEqual([
+        {
+          sku_code: 'SKU-V',
+          on_hand_qty: '10.0000',
+          reserved_qty: '4.0000',
+          available_qty: '6.0000',
+          inventory_valuation: '50000',
+        },
+      ]);
+
+      // the commit: one stock.changed (balances after) and the reservation event
+      const commitMove = stock('inventory.stock.changed', {
+        warehouseId: WAREHOUSE_1,
+        skuId: VARIANT,
+        movementType: 'SALE_COMMIT',
+        qtyDelta: '-4.000',
+        onHandAfter: '6.000',
+        reservedAfter: '0.000',
+        unitCost: 5000,
+        avgCostAfter: 5000,
+        referenceType: 'ORDER',
+        referenceId: randomUUID(),
+        occurredAt: '2026-10-18T04:00:00.000Z',
+      });
+      await handle(commitMove, (m) =>
+        consumer.onInventoryStockChanged(commitMove, m),
+      );
+      const committed = stock('inventory.reservation.committed', {
+        reservationId: randomUUID(),
+        sourceRefType: 'ORDER',
+        sourceRefId: randomUUID(),
+        state: 'COMMITTED',
+        occurredAt: '2026-10-18T04:00:00.000Z',
+        lines: [{ warehouseId: WAREHOUSE_1, skuId: VARIANT, qty: '4.000' }],
+      });
+      await handle(committed, (m) =>
+        consumer.onReservationCommitted(committed, m),
+      );
+      const [after] = await rows();
+      expect(after.on_hand_qty).toBe('6.0000');
+      expect(after.reserved_qty).toBe('0.0000');
+      expect(after.inventory_valuation).toBe('30000');
+
+      // an expired hold lets go of what it held, never below zero
+      const expired = stock('inventory.reservation.expired', {
+        reservationId: randomUUID(),
+        sourceRefType: 'ORDER',
+        sourceRefId: randomUUID(),
+        state: 'EXPIRED',
+        occurredAt: '2026-10-18T05:00:00.000Z',
+        lines: [{ warehouseId: WAREHOUSE_1, skuId: VARIANT, qty: '2.000' }],
+      });
+      await handle(expired, (m) => consumer.onReservationExpired(expired, m));
+      expect((await rows())[0].reserved_qty).toBe('0.0000');
+    });
+
+    it('clears the in-transit stock of the source when the transfer is received', async () => {
+      const transferId = randomUUID();
+      const move = (
+        warehouseId: string,
+        movementType: string,
+        qtyDelta: string,
+        onHandAfter: string,
+        at: string,
+      ) =>
+        envelope(TENANT_A, 'inventory.stock.changed', {
+          warehouseId,
+          skuId: 'SKU-T',
+          movementType,
+          qtyDelta,
+          onHandAfter,
+          reservedAfter: '0.000',
+          unitCost: 1000,
+          avgCostAfter: 1000,
+          referenceType: 'STOCK_TRANSFER',
+          referenceId: transferId,
+          occurredAt: at,
+        });
+      const seed = envelope(TENANT_A, 'inventory.stock.changed', {
+        warehouseId: WAREHOUSE_1,
+        skuId: 'SKU-T',
+        movementType: 'RECEIPT',
+        qtyDelta: '10.000',
+        onHandAfter: '10.000',
+        reservedAfter: '0.000',
+        unitCost: 1000,
+        avgCostAfter: 1000,
+        referenceType: 'STOCK_RECEIPT',
+        referenceId: randomUUID(),
+        occurredAt: '2026-10-18T01:00:00.000Z',
+      });
+      const dispatch = move(
+        WAREHOUSE_1,
+        'TRANSFER_DISPATCH',
+        '-6.000',
+        '4.000',
+        '2026-10-18T02:00:00.000Z',
+      );
+      const receipt = move(
+        WAREHOUSE_2,
+        'TRANSFER_RECEIPT',
+        '6.000',
+        '6.000',
+        '2026-10-18T03:00:00.000Z',
+      );
+      for (const ev of [seed, dispatch]) {
+        await handle(ev, (m) => consumer.onInventoryStockChanged(ev, m));
+      }
+      const transit = () =>
+        q(
+          `SELECT warehouse_id, in_transit_qty FROM $S.inventory_stock_projections WHERE tenant_id = $1 AND sku_code = 'SKU-T' ORDER BY warehouse_id`,
+          [TENANT_A],
+        );
+      expect((await transit())[0].in_transit_qty).toBe('6.0000');
+      await handle(receipt, (m) =>
+        consumer.onInventoryStockChanged(receipt, m),
+      );
+      const after = await transit();
+      expect(
+        after.every(
+          (r: { in_transit_qty: string }) => r.in_transit_qty === '0.0000',
+        ),
+      ).toBe(true);
+    });
+
+    it('keeps the cached customer code and name when only the group changes', async () => {
+      const created = envelope(TENANT_A, 'customer.created', {
+        customerId: CUSTOMER_1,
+        code: 'KH-001',
+        status: 'ACTIVE',
+        customerGroupId: 'g1',
+        membershipTierId: null,
+        version: 2,
+        occurredAt: '2026-10-18T01:00:00.000Z',
+      });
+      await handle(created, (m) => consumer.onCustomerCreated(created, m));
+      const changed = envelope(TENANT_A, 'customer.group.changed', {
+        customerId: CUSTOMER_1,
+        previousGroupId: 'g1',
+        newGroupId: 'g2',
+        actorId: ACCOUNT,
+        occurredAt: '2026-10-18T02:00:00.000Z',
+      });
+      await handle(changed, (m) => consumer.onCustomerGroupChanged(changed, m));
+      const [row] = await q(
+        `SELECT code, customer_group_id FROM $S.insight_dimension_caches WHERE dimension_type = 'CUSTOMER' AND entity_id = $1`,
+        [CUSTOMER_1],
+      );
+      expect(row).toEqual({ code: 'KH-001', customer_group_id: 'g2' });
+    });
+
+    it('learns the branch of a warehouse from stock.below_min and notifies the branch', async () => {
+      const below = envelope(TENANT_A, 'inventory.stock.below_min', {
+        branchId: BRANCH_1,
+        warehouseId: WAREHOUSE_1,
+        variantId: VARIANT,
+        sku: 'SKU-V',
+        name: 'Variant',
+        available: 1,
+        minQuantity: 5,
+        occurredAt: '2026-10-18T02:00:00.000Z',
+      });
+      await handle(below, (m) => consumer.onStockBelowMin(below, m));
+      const move = envelope(TENANT_A, 'inventory.stock.changed', {
+        warehouseId: WAREHOUSE_1,
+        skuId: VARIANT,
+        movementType: 'RECEIPT',
+        qtyDelta: '1.000',
+        onHandAfter: '1.000',
+        reservedAfter: '0.000',
+        referenceType: 'STOCK_RECEIPT',
+        referenceId: randomUUID(),
+        occurredAt: '2026-10-18T03:00:00.000Z',
+      });
+      await handle(move, (m) => consumer.onInventoryStockChanged(move, m));
+      const [row] = await q(
+        `SELECT branch_id FROM $S.inventory_stock_projections WHERE tenant_id = $1`,
+        [TENANT_A],
+      );
+      expect(row.branch_id).toBe(BRANCH_1);
+    });
+
+    it('reads a receivable payment as the growth of the cumulative paid amount only', async () => {
+      const receivableId = randomUUID();
+      const pay = (paidAmount: number) =>
+        envelope(TENANT_A, 'finance.receivable.payment_applied', {
+          receivableId,
+          code: 'AR-2',
+          customerId: CUSTOMER_1,
+          orderId: null,
+          branchId: BRANCH_1,
+          originalAmount: 300000,
+          paidAmount,
+          outstandingAmount: 300000 - paidAmount,
+          customerTotalDebtAfter: 0,
+          status: 'PARTIALLY_PAID',
+          journalId: randomUUID(),
+          occurredAt: '2026-10-18T15:00:00.000Z',
+        });
+      for (const paid of [100000, 300000]) {
+        const e = pay(paid);
+        await handle(e, (m) => consumer.onReceivablePaymentApplied(e, m));
+      }
+      const overview = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(overview.metrics.debtCollectedAmount).toBe(300000);
+      expect(overview.metrics.cashInflowAmount).toBe(0);
     });
   });
 });
