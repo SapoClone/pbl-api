@@ -44,6 +44,17 @@ export class AccountEntity extends AbstractEntity {
   @Column({ type: 'varchar', length: 20, default: AccountStatus.ACTIVE })
   status!: AccountStatus;
 
+  @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
+  lastLoginAt!: Date | null;
+
+  /** Consecutive failed password logins; reset on success and when the lock starts */
+  @Column({ name: 'failed_login_count', type: 'int', default: 0 })
+  failedLoginCount!: number;
+
+  /** While in the future, password logins are refused (E010) */
+  @Column({ name: 'locked_until', type: 'timestamptz', nullable: true })
+  lockedUntil!: Date | null;
+
   @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', default: null })
   deletedAt: Date;
 

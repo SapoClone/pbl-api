@@ -1,6 +1,7 @@
 import { IsNull, Repository } from 'typeorm';
 import {
   AccountTenantEntity,
+  MemberStatus,
   TenantRole,
 } from './entities/account-tenant.entity';
 import { TenantEntity, TenantStatus } from './entities/tenant.entity';
@@ -37,6 +38,7 @@ describe('MembershipService', () => {
     expect(repository.find).toHaveBeenCalledWith({
       where: {
         accountId: 'a1',
+        status: MemberStatus.ACTIVE,
         tenant: { status: TenantStatus.ACTIVE, deletedAt: IsNull() },
       },
       relations: { tenant: true },
@@ -62,6 +64,7 @@ describe('MembershipService', () => {
         where: {
           accountId: 'a1',
           tenantId: 't2',
+          status: MemberStatus.ACTIVE,
           tenant: { status: TenantStatus.ACTIVE, deletedAt: IsNull() },
         },
       }),

@@ -11,6 +11,8 @@
     "email_exists": "このメールアドレスを持つアカウントは既に存在します",
     "not_found": "ユーザーが見つかりません",
     "invalid_password": "無効なパスワード",
-    "invalid_token": "無効なトークン"
+    "invalid_token": "無効なトークン",
+    "account_locked": "ログインに複数回失敗したため、アカウントは15分間ロックされます",
+    "current_password_wrong": "現在のパスワードが正しくありません"
   }
 }

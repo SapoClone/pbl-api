@@ -27,17 +27,29 @@ export type I18nTranslations = {
             "not_found": string;
             "invalid_password": string;
             "invalid_token": string;
+            "account_locked": string;
+            "current_password_wrong": string;
         };
     };
     "tenant": {
         "error": {
             "subdomain_exists": string;
+            "member_exists": string;
+            "owner_role_locked": string;
+            "owner_protected": string;
+            "cannot_remove_self": string;
+            "branch_not_found": string;
         };
     };
     "branch": {
         "error": {
             "code_exists": string;
             "last_branch": string;
+        };
+    };
+    "schedule": {
+        "error": {
+            "overlap": string;
         };
     };
 };

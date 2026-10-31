@@ -26,6 +26,14 @@ describe('TenantController members', () => {
     list: jest.fn(async () => []),
     add: jest.fn(async () => ({ accountId: ACCOUNT, role: 'cashier' })),
     changeRole: jest.fn(async () => ({ accountId: ACCOUNT, role: 'manager' })),
+    summary: jest.fn(async () => ({ total: 1 })),
+    get: jest.fn(async () => ({ accountId: ACCOUNT })),
+    lock: jest.fn(async () => ({ accountId: ACCOUNT })),
+    unlock: jest.fn(async () => ({ accountId: ACCOUNT })),
+    remove: jest.fn(async () => undefined),
+  };
+  const tenants = {
+    getContext: jest.fn(async () => ({ tenant: { id: TENANT } })),
   };
 
   beforeAll(async () => {
@@ -37,7 +45,7 @@ describe('TenantController members', () => {
       ],
       controllers: [TenantController],
       providers: [
-        { provide: TenantService, useValue: {} },
+        { provide: TenantService, useValue: tenants },
         { provide: AuthService, useValue: {} },
         { provide: MemberService, useValue: members },
       ],
@@ -163,6 +171,75 @@ describe('TenantController members', () => {
         'cashier@example.com',
         'cashier',
       );
+    });
+  });
+
+  describe('member management and the context', () => {
+    const send = (
+      role: string,
+      method: 'get' | 'post' | 'delete',
+      path: string,
+    ) =>
+      request(app.getHttpServer())
+        [method](`${base}${path}`)
+        .set('Authorization', as([role]));
+
+    it.each([
+      ['cashier', 403],
+      ['manager', 200],
+      ['owner', 200],
+    ])('as %s the summary and the detail answer %i', async (role, status) => {
+      await send(role, 'get', '/summary').expect(status);
+      await send(role, 'get', `/${ACCOUNT}`).expect(status);
+    });
+
+    it('routes /summary to the summary, not to the member detail', async () => {
+      await send('owner', 'get', '/summary').expect(200);
+
+      expect(members.summary).toHaveBeenCalledWith(TENANT);
+      expect(members.get).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['cashier', 403],
+      ['manager', 403],
+      ['owner', 200],
+    ])('as %s lock and unlock answer %i', async (role, status) => {
+      await send(role, 'post', `/${ACCOUNT}/lock`).expect(status);
+      await send(role, 'post', `/${ACCOUNT}/unlock`).expect(status);
+      expect(members.lock).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
+    });
+
+    it.each([
+      ['manager', 403],
+      ['owner', 204],
+    ])('as %s removing a member answers %i', async (role, status) => {
+      await send(role, 'delete', `/${ACCOUNT}`).expect(status);
+      expect(members.remove).toHaveBeenCalledTimes(status === 204 ? 1 : 0);
+    });
+
+    it('passes the caller as the actor of a lock', async () => {
+      await send('owner', 'post', `/${ACCOUNT}/lock`).expect(200);
+
+      expect(members.lock).toHaveBeenCalledWith(TENANT, 'account-1', ACCOUNT);
+    });
+
+    it('rejects a malformed account id (400)', async () => {
+      await send('owner', 'post', '/not-a-uuid/lock').expect(400);
+    });
+
+    it('serves the context to every role, and refuses a token without a store', async () => {
+      for (const role of ['owner', 'manager', 'cashier']) {
+        await request(app.getHttpServer())
+          .get('/api/v1/tenants/current/context')
+          .set('Authorization', as([role]))
+          .expect(200);
+      }
+      await request(app.getHttpServer())
+        .get('/api/v1/tenants/current/context')
+        .set('Authorization', as(['owner'], null))
+        .expect(403);
+      expect(tenants.getContext).toHaveBeenCalledWith(TENANT, 'account-1');
     });
   });
 });

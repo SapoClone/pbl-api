@@ -46,6 +46,11 @@ export class BranchService {
     if (query.status) {
       builder.andWhere('branch.status = :status', { status: query.status });
     }
+    if (query.isWarehouse !== undefined) {
+      builder.andWhere('branch.isWarehouse = :isWarehouse', {
+        isWarehouse: query.isWarehouse,
+      });
+    }
     if (query.q) {
       const pattern = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
       builder.andWhere(

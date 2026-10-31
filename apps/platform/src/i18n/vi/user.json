@@ -11,6 +11,8 @@
     "email_exists": "Tài khoản với email này đã tồn tại",
     "not_found": "Người dùng không tồn tại",
     "invalid_password": "Mật khẩu không hợp lệ",
-    "invalid_token": "Token không hợp lệ"
+    "invalid_token": "Token không hợp lệ",
+    "account_locked": "Đăng nhập sai quá nhiều lần. Tài khoản bị khóa trong 15 phút",
+    "current_password_wrong": "Mật khẩu hiện tại không đúng"
   }
 }

@@ -15,6 +15,7 @@ describe('RefreshTokenService', () => {
   let repository: {
     save: jest.Mock;
     findOneBy: jest.Mock;
+    find: jest.Mock;
     update: jest.Mock;
     manager: { transaction: jest.Mock };
   };
@@ -42,6 +43,7 @@ describe('RefreshTokenService', () => {
     repository = {
       save: jest.fn(async (entity) => entity),
       findOneBy: jest.fn(),
+      find: jest.fn(),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
       manager: {
         transaction: jest.fn((work) => work(transactionManager)),
@@ -206,6 +208,59 @@ describe('RefreshTokenService', () => {
         { familyId: 'family-1', revokedAt: IsNull() },
         expect.objectContaining({ revokedAt: expect.any(Date) }),
       );
+    });
+  });
+
+  describe('sessions', () => {
+    it('stores the client with a new family', async () => {
+      await service.issue('user-1', 't1', { userAgent: 'UA', ip: '1.1.1.1' });
+
+      expect(repository.save.mock.calls[0][0]).toMatchObject({
+        userAgent: 'UA',
+        ip: '1.1.1.1',
+      });
+    });
+
+    it('lists only live tokens of the account', async () => {
+      repository.find.mockResolvedValue([]);
+
+      await service.listActive('user-1');
+
+      const where = repository.find.mock.calls[0][0].where;
+      expect(where).toMatchObject({
+        subjectType: 'account',
+        subjectId: 'user-1',
+        revokedAt: IsNull(),
+      });
+      expect(where.expiresAt).toBeDefined();
+    });
+
+    it('revokes the live families of an account in one store, except one', async () => {
+      repository.find.mockResolvedValue([
+        { familyId: 'f1' },
+        { familyId: 'f1' },
+        { familyId: 'f2' },
+        { familyId: 'keep' },
+      ]);
+
+      const ids = await service.revokeActiveFamilies('user-1', {
+        tenantId: 't1',
+        exceptFamilyId: 'keep',
+      });
+
+      expect(ids).toEqual(['f1', 'f2']);
+      expect(repository.find.mock.calls[0][0].where).toMatchObject({
+        subjectId: 'user-1',
+        tenantId: 't1',
+      });
+      expect(repository.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('revokes nothing when no live family matches', async () => {
+      repository.find.mockResolvedValue([]);
+
+      await expect(service.revokeActiveFamilies('user-1')).resolves.toEqual([]);
+      expect(repository.update).not.toHaveBeenCalled();
     });
   });
 });

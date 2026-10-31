@@ -1,3 +1,4 @@
+import { ErrorCode } from '@/constants/error-code.constant';
 import { QueueService } from '@/queue/queue.service';
 import { verifyPassword } from '@/utils/password.util';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -18,9 +19,14 @@ import { AccessTokenService } from './access-token.service';
 import { AuthService } from './auth.service';
 import { RegisterReqDto } from './dto/register.req.dto';
 import {
+  LOGIN_LOCK_DURATION_MS,
+  MAX_FAILED_LOGINS,
+} from './login-lockout.constant';
+import {
   RefreshTokenReuseError,
   RefreshTokenService,
 } from './refresh-token.service';
+import { SessionService } from './session.service';
 
 jest.mock('@/utils/password.util', () => ({ verifyPassword: jest.fn() }));
 
@@ -40,6 +46,7 @@ describe('AuthService', () => {
   let accessTokenServiceValue: { sign: jest.Mock };
   let outboxValue: { add: jest.Mock };
   let dataSourceValue: { transaction: jest.Mock };
+  let sessionServiceValue: { revokeAll: jest.Mock };
   let membershipServiceValue: {
     findActiveMemberships: jest.Mock;
     findActiveMembership: jest.Mock;
@@ -66,7 +73,9 @@ describe('AuthService', () => {
 
     accountRepositoryValue = {
       findOne: jest.fn(),
+      update: jest.fn().mockResolvedValue(undefined),
     };
+    sessionServiceValue = { revokeAll: jest.fn().mockResolvedValue(0) };
 
     queueServiceValue = {
       enqueueEmailVerification: jest.fn(),
@@ -127,6 +136,7 @@ describe('AuthService', () => {
         },
         { provide: getDataSourceToken(), useValue: dataSourceValue },
         { provide: EventOutbox, useValue: outboxValue },
+        { provide: SessionService, useValue: sessionServiceValue },
       ],
     }).compile();
 
@@ -311,6 +321,7 @@ describe('AuthService', () => {
         password: 'hash',
         status: AccountStatus.ACTIVE,
       });
+      accountRepositoryValue.update = jest.fn().mockResolvedValue(undefined);
       (verifyPassword as jest.Mock).mockResolvedValue(true);
       refreshTokenServiceValue.issue.mockResolvedValue({
         token: 'rt',
@@ -450,6 +461,139 @@ describe('AuthService', () => {
         expect(refreshTokenServiceValue.issue).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('signIn lockout', () => {
+    const login = (client?: { userAgent: string; ip: string }) =>
+      service.signIn(
+        { email: 'me@example.com', password: 'Passw0rd!' },
+        client,
+      );
+    const active = {
+      id: 'a1',
+      password: 'hash',
+      status: AccountStatus.ACTIVE,
+      failedLoginCount: 0,
+      lockedUntil: null as Date | null,
+    };
+    let queryBuilder: Record<string, jest.Mock>;
+
+    beforeEach(() => {
+      queryBuilder = {};
+      for (const name of ['update', 'set', 'where', 'setParameters']) {
+        queryBuilder[name] = jest.fn(() => queryBuilder);
+      }
+      queryBuilder.execute = jest.fn().mockResolvedValue(undefined);
+      accountRepositoryValue.createQueryBuilder = jest.fn(() => queryBuilder);
+      accountRepositoryValue.update = jest.fn().mockResolvedValue(undefined);
+      accountRepositoryValue.findOne = jest.fn().mockResolvedValue(active);
+      refreshTokenServiceValue.issue.mockResolvedValue({
+        token: 'rt',
+        familyId: 'family-1',
+      });
+      accessTokenServiceValue.sign.mockResolvedValue('at');
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([]);
+    });
+
+    it('uses thresholds of 5 failures and 15 minutes', () => {
+      expect(MAX_FAILED_LOGINS).toBe(5);
+      expect(LOGIN_LOCK_DURATION_MS).toBe(15 * 60 * 1000);
+    });
+
+    it('counts a wrong password with one atomic update that locks at the limit', async () => {
+      (verifyPassword as jest.Mock).mockResolvedValue(false);
+      const before = Date.now();
+
+      await expect(login()).rejects.toThrow(UnauthorizedException);
+
+      expect(queryBuilder.execute).toHaveBeenCalledTimes(1);
+      expect(queryBuilder.where).toHaveBeenCalledWith('id = :id', { id: 'a1' });
+      const params = queryBuilder.setParameters.mock.calls[0][0];
+      expect(params.max).toBe(MAX_FAILED_LOGINS);
+      expect(params.lockedUntil.getTime()).toBeGreaterThanOrEqual(
+        before + LOGIN_LOCK_DURATION_MS,
+      );
+      const set = queryBuilder.set.mock.calls[0][0];
+      expect(set.failedLoginCount()).toContain(
+        '"failed_login_count" + 1 >= :max',
+      );
+      expect(set.lockedUntil()).toContain(':lockedUntil');
+    });
+
+    it('does not count a failure for an unknown email', async () => {
+      accountRepositoryValue.findOne = jest.fn().mockResolvedValue(null);
+      (verifyPassword as jest.Mock).mockResolvedValue(false);
+
+      await expect(login()).rejects.toThrow(UnauthorizedException);
+      expect(queryBuilder.execute).not.toHaveBeenCalled();
+    });
+
+    it('refuses a locked account with E010 even with the right password, without extending the lock', async () => {
+      accountRepositoryValue.findOne = jest.fn().mockResolvedValue({
+        ...active,
+        lockedUntil: new Date(Date.now() + 60_000),
+      });
+      (verifyPassword as jest.Mock).mockResolvedValue(true);
+
+      await expect(
+        login().catch((e) => e.getResponse().errorCode),
+      ).resolves.toBe(ErrorCode.E010);
+      expect(queryBuilder.execute).not.toHaveBeenCalled();
+      expect(accountRepositoryValue.update).not.toHaveBeenCalled();
+      expect(refreshTokenServiceValue.issue).not.toHaveBeenCalled();
+    });
+
+    it('lets the account in once the lock has expired', async () => {
+      accountRepositoryValue.findOne = jest.fn().mockResolvedValue({
+        ...active,
+        lockedUntil: new Date(Date.now() - 1000),
+      });
+      (verifyPassword as jest.Mock).mockResolvedValue(true);
+
+      await expect(login()).resolves.toMatchObject({ userId: 'a1' });
+    });
+
+    it('resets the counter and sets last_login_at on success', async () => {
+      (verifyPassword as jest.Mock).mockResolvedValue(true);
+
+      await login();
+
+      expect(accountRepositoryValue.update).toHaveBeenCalledWith(
+        { id: 'a1' },
+        {
+          failedLoginCount: 0,
+          lockedUntil: null,
+          lastLoginAt: expect.any(Date),
+        },
+      );
+    });
+
+    it('stores the client of the login with its refresh token', async () => {
+      (verifyPassword as jest.Mock).mockResolvedValue(true);
+      const client = { userAgent: 'Mozilla Chrome/1', ip: '1.2.3.4' };
+
+      await login(client);
+
+      expect(refreshTokenServiceValue.issue).toHaveBeenCalledWith(
+        'a1',
+        null,
+        client,
+      );
+    });
+  });
+
+  describe('logoutAll', () => {
+    it('ends every session of the caller, the current one included', async () => {
+      await service.logoutAll({
+        id: 'user-1',
+        sessionId: 'family-1',
+        subjectType: 'account',
+        roles: [],
+        exp: Math.floor(Date.now() / 1000) + 600,
+      });
+
+      expect(sessionServiceValue.revokeAll).toHaveBeenCalledWith('user-1');
+    });
   });
 
   describe('switchTenant', () => {

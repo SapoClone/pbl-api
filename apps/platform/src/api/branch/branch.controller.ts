@@ -15,10 +15,13 @@ import {
 import { ApiParam, ApiTags } from '@nestjs/swagger';
 import { CurrentTenant, CurrentUser, RequireRoles } from '@pbl/auth';
 import { TenantRole } from '../tenant/entities/account-tenant.entity';
+import { BranchSettingService } from './branch-setting.service';
 import { BranchService } from './branch.service';
+import { BranchSettingResDto } from './dto/branch-setting.res.dto';
 import { BranchResDto } from './dto/branch.res.dto';
 import { CreateBranchReqDto } from './dto/create-branch.req.dto';
 import { ListBranchReqDto } from './dto/list-branch.req.dto';
+import { UpdateBranchSettingReqDto } from './dto/update-branch-setting.req.dto';
 import { UpdateBranchReqDto } from './dto/update-branch.req.dto';
 
 /**
@@ -31,7 +34,10 @@ import { UpdateBranchReqDto } from './dto/update-branch.req.dto';
 @ApiTags('branches')
 @Controller({ path: 'branches', version: '1' })
 export class BranchController {
-  constructor(private readonly branchService: BranchService) {}
+  constructor(
+    private readonly branchService: BranchService,
+    private readonly settingService: BranchSettingService,
+  ) {}
 
   @ApiAuth({
     type: BranchResDto,
@@ -96,5 +102,40 @@ export class BranchController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<void> {
     return this.branchService.remove(id);
+  }
+
+  /**
+   * The contract says owner or the manager of that branch; with no branch
+   * assignment yet, every manager qualifies.
+   */
+  @ApiAuth({
+    type: BranchSettingResDto,
+    summary: 'Invoice and payment settings of a branch (owner, manager)',
+  })
+  @ApiParam({ name: 'id', type: 'String' })
+  @RequireRoles(TenantRole.OWNER, TenantRole.MANAGER)
+  @Get(':id/settings')
+  getSettings(
+    @CurrentTenant() _tenantId: string, // 403 without a selected store
+    @CurrentUser('id') accountId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<BranchSettingResDto> {
+    return this.settingService.get(accountId, id);
+  }
+
+  @ApiAuth({
+    type: BranchSettingResDto,
+    summary: 'Change the settings of a branch (owner, manager)',
+  })
+  @ApiParam({ name: 'id', type: 'String' })
+  @RequireRoles(TenantRole.OWNER, TenantRole.MANAGER)
+  @Patch(':id/settings')
+  updateSettings(
+    @CurrentTenant() _tenantId: string, // 403 without a selected store
+    @CurrentUser('id') accountId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateBranchSettingReqDto,
+  ): Promise<BranchSettingResDto> {
+    return this.settingService.update(accountId, id, dto);
   }
 }

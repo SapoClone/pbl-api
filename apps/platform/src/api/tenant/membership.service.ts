@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import {
   AccountTenantEntity,
+  MemberStatus,
   TenantRole,
 } from './entities/account-tenant.entity';
 import { TenantStatus } from './entities/tenant.entity';
@@ -16,7 +17,8 @@ export type Membership = {
 
 /**
  * The stores an account can act in. Suspended and deleted stores are
- * excluded, so callers treat them exactly like non-members (404).
+ * excluded, and so are locked members, so callers treat them exactly like
+ * non-members (404).
  */
 @Injectable()
 export class MembershipService {
@@ -43,6 +45,8 @@ export class MembershipService {
     const rows = await this.repository.find({
       where: {
         ...where,
+        // a locked member cannot sign in to or switch into the store
+        status: MemberStatus.ACTIVE,
         tenant: { status: TenantStatus.ACTIVE, deletedAt: IsNull() },
       },
       relations: { tenant: true },

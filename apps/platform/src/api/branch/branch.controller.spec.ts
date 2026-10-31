@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { PblAuthModule } from '@pbl/auth';
 import { generateKeyPairSync } from 'crypto';
 import request from 'supertest';
+import { BranchSettingService } from './branch-setting.service';
 import { BranchController } from './branch.controller';
 import { BranchService } from './branch.service';
 
@@ -34,6 +35,10 @@ describe('BranchController without a selected store', () => {
     update: jest.fn().mockResolvedValue({ id: BRANCH_ID }),
     remove: jest.fn().mockResolvedValue(undefined),
   };
+  const settings = {
+    get: jest.fn().mockResolvedValue({ branchId: BRANCH_ID }),
+    update: jest.fn().mockResolvedValue({ branchId: BRANCH_ID }),
+  };
   let app: INestApplication;
 
   const routes: Array<[string, (agent: request.Agent) => request.Test]> = [
@@ -50,6 +55,17 @@ describe('BranchController without a selected store', () => {
     [
       'DELETE /branches/:id',
       (agent) => agent.delete(`/v1/branches/${BRANCH_ID}`),
+    ],
+    [
+      'GET /branches/:id/settings',
+      (agent) => agent.get(`/v1/branches/${BRANCH_ID}/settings`),
+    ],
+    [
+      'PATCH /branches/:id/settings',
+      (agent) =>
+        agent
+          .patch(`/v1/branches/${BRANCH_ID}/settings`)
+          .send({ invoicePrefix: 'Q3' }),
     ],
   ];
 
@@ -69,7 +85,10 @@ describe('BranchController without a selected store', () => {
         }),
       ],
       controllers: [BranchController],
-      providers: [{ provide: BranchService, useValue: service }],
+      providers: [
+        { provide: BranchService, useValue: service },
+        { provide: BranchSettingService, useValue: settings },
+      ],
     }).compile();
     app = moduleRef.createNestApplication({ logger: false });
     app.enableVersioning({ type: VersioningType.URI });
@@ -90,7 +109,10 @@ describe('BranchController without a selected store', () => {
 
       expect(res.status).toBe(403);
       expect(res.body.message).toBe('A store must be selected');
-      for (const method of Object.values(service)) {
+      for (const method of [
+        ...Object.values(service),
+        ...Object.values(settings),
+      ]) {
         expect(method).not.toHaveBeenCalled();
       }
     },
@@ -108,4 +130,44 @@ describe('BranchController without a selected store', () => {
       expect(res.status).toBeLessThan(300);
     },
   );
+
+  describe('branch settings', () => {
+    const settingsRoutes = routes.filter(([name]) =>
+      name.endsWith('/settings'),
+    );
+
+    it.each(settingsRoutes)(
+      '%s is forbidden to a cashier and never reaches the service',
+      async (_, send) => {
+        const token = await sign({ tid: 'store-1', roles: ['cashier'] });
+        const res = await send(request.agent(app.getHttpServer())).set(
+          'Authorization',
+          `Bearer ${token}`,
+        );
+
+        expect(res.status).toBe(403);
+        expect(settings.get).not.toHaveBeenCalled();
+        expect(settings.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('lets a manager read and change the settings', async () => {
+      const token = await sign({ tid: 'store-1', roles: ['manager'] });
+      const agent = request.agent(app.getHttpServer());
+
+      await agent
+        .get(`/v1/branches/${BRANCH_ID}/settings`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      await agent
+        .patch(`/v1/branches/${BRANCH_ID}/settings`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ invoicePrefix: 'Q3' })
+        .expect(200);
+      expect(settings.get).toHaveBeenCalledWith('account-1', BRANCH_ID);
+      expect(settings.update).toHaveBeenCalledWith('account-1', BRANCH_ID, {
+        invoicePrefix: 'Q3',
+      });
+    });
+  });
 });

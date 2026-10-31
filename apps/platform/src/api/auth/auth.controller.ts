@@ -1,5 +1,6 @@
+import { Client, ClientInfo } from '@/decorators/client-info.decorator';
 import { ApiAuth, ApiPublic } from '@/decorators/http.decorators';
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpStatus, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthUser, CurrentUser } from '@pbl/auth';
 import { AuthService } from './auth.service';
@@ -24,8 +25,11 @@ export class AuthController {
     summary: 'Sign in',
   })
   @Post('email/login')
-  async signIn(@Body() userLogin: LoginReqDto): Promise<LoginResDto> {
-    return await this.authService.signIn(userLogin);
+  async signIn(
+    @Body() userLogin: LoginReqDto,
+    @Client() client?: ClientInfo,
+  ): Promise<LoginResDto> {
+    return await this.authService.signIn(userLogin, client);
   }
 
   @ApiPublic()
@@ -41,6 +45,16 @@ export class AuthController {
   @Post('logout')
   async logout(@CurrentUser() userToken: AuthUser): Promise<void> {
     await this.authService.logout(userToken);
+  }
+
+  @ApiAuth({
+    summary: 'Sign out of every device (all sessions of the caller)',
+    statusCode: HttpStatus.NO_CONTENT,
+    errorResponses: [401, 403, 500],
+  })
+  @Post('logout-all')
+  async logoutAll(@CurrentUser() userToken: AuthUser): Promise<void> {
+    await this.authService.logoutAll(userToken);
   }
 
   @ApiPublic({
@@ -61,8 +75,9 @@ export class AuthController {
   async switchTenant(
     @CurrentUser() user: AuthUser,
     @Body() dto: SwitchTenantReqDto,
+    @Client() client?: ClientInfo,
   ): Promise<LoginResDto> {
-    return await this.authService.switchTenant(user, dto.tenantId);
+    return await this.authService.switchTenant(user, dto.tenantId, client);
   }
 
   @ApiPublic()

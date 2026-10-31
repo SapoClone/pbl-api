@@ -1,10 +1,15 @@
 import { ErrorCode } from '@/constants/error-code.constant';
 import { ValidationException } from '@/exceptions/validation.exception';
 import { isUniqueViolation } from '@/utils/db-errors';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PLATFORM_BRANCH_CREATED } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
+import { plainToInstance } from 'class-transformer';
 import { DataSource, Repository } from 'typeorm';
 import {
   AccountEntity,
@@ -15,16 +20,21 @@ import {
   BranchStatus,
   DEFAULT_BRANCH,
 } from '../branch/entities/branch.entity';
+import { STORE_TIMEZONE } from '../staff-schedule/staff-time.util';
 import { CreateTenantReqDto } from './dto/create-tenant.req.dto';
 import { MembershipResDto } from './dto/membership.res.dto';
+import { TenantContextResDto } from './dto/tenant-context.res.dto';
 import { TenantResDto } from './dto/tenant.res.dto';
 import { UpdateTenantReqDto } from './dto/update-tenant.req.dto';
 import {
   AccountTenantEntity,
+  MemberStatus,
   TenantRole,
 } from './entities/account-tenant.entity';
 import { TenantEntity, TenantStatus } from './entities/tenant.entity';
+import { formatMemberCode } from './member-code';
 import { MembershipService } from './membership.service';
+import { ROLE_LABELS } from './role-labels';
 
 @Injectable()
 export class TenantService {
@@ -86,6 +96,8 @@ export class TenantService {
             accountId,
             tenantId: tenant.id,
             role: TenantRole.OWNER,
+            status: MemberStatus.ACTIVE,
+            code: formatMemberCode(1),
           }),
         );
         // Written with the raw EntityManager, not TenantScopedRepository: the
@@ -154,4 +166,75 @@ export class TenantService {
     tenant.updatedBy = accountId;
     return (await this.tenantRepository.save(tenant)).toDto(TenantResDto);
   }
+
+  /**
+   * The global chrome in one call. The plan is a `free` placeholder until
+   * subscriptions exist. Every active branch is listed for every member: there
+   * is no branch assignment yet (D2 needs the `branches` claim).
+   */
+  async getContext(
+    tenantId: string,
+    accountId: string,
+  ): Promise<TenantContextResDto> {
+    const [tenant, membership, branches] = await Promise.all([
+      this.tenantRepository.findOneByOrFail({
+        id: tenantId as TenantEntity['id'],
+      }),
+      this.dataSource.getRepository(AccountTenantEntity).findOne({
+        where: { accountId, tenantId },
+        relations: { account: true },
+      }),
+      this.dataSource.getRepository(BranchEntity).find({
+        where: { tenantId, status: BranchStatus.ACTIVE },
+        order: { createdAt: 'ASC', id: 'ASC' },
+      }),
+    ]);
+    // a token outlives a removal until its session is revoked; treat it as unknown
+    if (!membership?.account) {
+      throw new NotFoundException();
+    }
+    const { account } = membership;
+    return plainToInstance(TenantContextResDto, {
+      tenant: {
+        id: tenant.id,
+        name: tenant.name,
+        subdomain: tenant.subdomain,
+        status: tenant.status,
+      },
+      plan: {
+        code: 'free',
+        name: 'Free',
+        isExpiringSoon: false,
+        expiresAt: null,
+      },
+      branchCount: branches.length,
+      me: {
+        accountId,
+        name: account.name,
+        initials: initialsOf(account.name || account.email),
+        email: account.email,
+        role: membership.role,
+        roleId: null,
+        roleName: ROLE_LABELS[membership.role],
+        isOwner: membership.role === TenantRole.OWNER,
+      },
+      branches: branches.map((b) => ({
+        id: b.id,
+        name: b.name,
+        code: b.code,
+        address: b.address,
+        isWarehouse: b.isWarehouse,
+      })),
+      permissions: [],
+      timezone: STORE_TIMEZONE,
+    });
+  }
 }
+
+/** "Minh Anh" -> "MA"; one word -> its first letter; at most two letters */
+export const initialsOf = (name: string): string => {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const letters =
+    words.length > 1 ? [words[0], words[words.length - 1]] : words.slice(0, 1);
+  return letters.map((w) => w[0].toUpperCase()).join('');
+};

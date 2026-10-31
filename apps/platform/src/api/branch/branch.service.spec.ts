@@ -393,6 +393,24 @@ describe('BranchService', () => {
       });
     });
 
+    it.each([true, false])(
+      'filters on isWarehouse=%s with a bound parameter',
+      async (isWarehouse) => {
+        await as('t1').list(
+          Object.assign(new ListBranchReqDto(), {
+            order: Order.ASC,
+            isWarehouse,
+          }),
+        );
+
+        expect(builder.andWhere).toHaveBeenCalledTimes(1);
+        expect(builder.andWhere).toHaveBeenCalledWith(
+          'branch.isWarehouse = :isWarehouse',
+          { isWarehouse },
+        );
+      },
+    );
+
     it('searches name and code case-insensitively with a bound parameter', async () => {
       await as('t1').list(Object.assign(query, { q: 'kho%' }));
 

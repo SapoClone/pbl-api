@@ -17,6 +17,7 @@ import { AuthService } from './auth.service';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { JwksController } from './jwks.controller';
 import { RefreshTokenService } from './refresh-token.service';
+import { SessionService } from './session.service';
 
 @Module({
   imports: [
@@ -51,7 +52,7 @@ import { RefreshTokenService } from './refresh-token.service';
     }),
   ],
   controllers: [AuthController, JwksController],
-  providers: [AuthService, RefreshTokenService],
-  exports: [AuthService],
+  providers: [AuthService, RefreshTokenService, SessionService],
+  exports: [AuthService, SessionService],
 })
 export class AuthModule {}

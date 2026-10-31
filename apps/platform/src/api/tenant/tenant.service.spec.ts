@@ -1,14 +1,20 @@
 import { ErrorCode } from '@/constants/error-code.constant';
 import { ValidationException } from '@/exceptions/validation.exception';
-import { UnauthorizedException } from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PLATFORM_BRANCH_CREATED } from '@pbl/contracts';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
-import { AccountStatus } from '../account/entities/account.entity';
-import { BranchEntity } from '../branch/entities/branch.entity';
-import { AccountTenantEntity } from './entities/account-tenant.entity';
-import { TenantEntity } from './entities/tenant.entity';
+import {
+  AccountEntity,
+  AccountStatus,
+} from '../account/entities/account.entity';
+import { BranchEntity, BranchStatus } from '../branch/entities/branch.entity';
+import {
+  AccountTenantEntity,
+  TenantRole,
+} from './entities/account-tenant.entity';
+import { TenantEntity, TenantStatus } from './entities/tenant.entity';
 import { MembershipService } from './membership.service';
-import { TenantService } from './tenant.service';
+import { initialsOf, TenantService } from './tenant.service';
 
 describe('TenantService.create', () => {
   const dto = { name: 'My Shop', subdomain: 'my-shop' };
@@ -65,6 +71,8 @@ describe('TenantService.create', () => {
       accountId: 'a1',
       tenantId: 't1',
       role: 'owner',
+      status: 'active',
+      code: 'NV001',
     });
     expect(saved[2]).toBeInstanceOf(BranchEntity);
     expect(saved[2]).toMatchObject({
@@ -223,5 +231,139 @@ describe('TenantService (read and update)', () => {
     expect(saved.email).toBeNull();
     expect(saved.address).toBeNull();
     expect(saved.name).toBe('Old');
+  });
+});
+
+describe('TenantService.getContext', () => {
+  const tenant = new TenantEntity({
+    id: 't1' as TenantEntity['id'],
+    name: 'Mộc Store',
+    subdomain: 'mocstore',
+    status: TenantStatus.ACTIVE,
+  });
+  const membership = (role: TenantRole) =>
+    new AccountTenantEntity({
+      accountId: 'a1',
+      tenantId: 't1',
+      role,
+      account: new AccountEntity({
+        id: 'a1' as AccountEntity['id'],
+        name: 'Minh Anh',
+        email: 'minhanh@mocstore.vn',
+      }),
+    });
+  let membershipRepo: { findOne: jest.Mock };
+  let branchRepo: { find: jest.Mock };
+  let service: TenantService;
+
+  beforeEach(() => {
+    membershipRepo = {
+      findOne: jest.fn().mockResolvedValue(membership(TenantRole.OWNER)),
+    };
+    branchRepo = {
+      find: jest.fn().mockResolvedValue([
+        new BranchEntity({
+          id: 'b1' as BranchEntity['id'],
+          name: 'Chi nhánh Quận 3',
+          code: 'CN01',
+          address: 'Q3',
+          isWarehouse: false,
+          status: BranchStatus.ACTIVE,
+        }),
+      ]),
+    };
+    const dataSource = {
+      getRepository: jest.fn((entity) =>
+        entity === AccountTenantEntity ? membershipRepo : branchRepo,
+      ),
+    };
+    service = new TenantService(
+      { findOneByOrFail: jest.fn().mockResolvedValue(tenant) } as never,
+      dataSource as never,
+      {} as MembershipService,
+      {} as never,
+    );
+  });
+
+  it('returns the store card, the free plan placeholder, my role and the branches', async () => {
+    const context = await service.getContext('t1', 'a1');
+
+    expect(context).toEqual({
+      tenant: {
+        id: 't1',
+        name: 'Mộc Store',
+        subdomain: 'mocstore',
+        status: 'active',
+      },
+      plan: {
+        code: 'free',
+        name: 'Free',
+        isExpiringSoon: false,
+        expiresAt: null,
+      },
+      branchCount: 1,
+      me: {
+        accountId: 'a1',
+        name: 'Minh Anh',
+        initials: 'MA',
+        email: 'minhanh@mocstore.vn',
+        role: 'owner',
+        roleId: null,
+        roleName: 'Chủ cửa hàng',
+        isOwner: true,
+      },
+      branches: [
+        {
+          id: 'b1',
+          name: 'Chi nhánh Quận 3',
+          code: 'CN01',
+          address: 'Q3',
+          isWarehouse: false,
+        },
+      ],
+      permissions: [],
+      timezone: 'Asia/Ho_Chi_Minh',
+    });
+  });
+
+  it('lists only the active branches of the token’s store', async () => {
+    await service.getContext('t1', 'a1');
+
+    expect(branchRepo.find.mock.calls[0][0].where).toEqual({
+      tenantId: 't1',
+      status: 'active',
+    });
+    expect(membershipRepo.findOne.mock.calls[0][0].where).toEqual({
+      accountId: 'a1',
+      tenantId: 't1',
+    });
+  });
+
+  it('knows a cashier is not the owner', async () => {
+    membershipRepo.findOne.mockResolvedValue(membership(TenantRole.CASHIER));
+
+    const { me } = await service.getContext('t1', 'a1');
+
+    expect(me).toMatchObject({
+      isOwner: false,
+      roleName: 'Nhân viên bán hàng',
+    });
+  });
+
+  it('answers 404 when the caller is no longer a member of the store', async () => {
+    membershipRepo.findOne.mockResolvedValue(null);
+
+    await expect(service.getContext('t1', 'a1')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it.each([
+    ['Minh Anh', 'MA'],
+    ['  nguyen van an ', 'NA'],
+    ['Cher', 'C'],
+    ['', ''],
+  ])('derives the initials of "%s" as "%s"', (name, initials) => {
+    expect(initialsOf(name)).toBe(initials);
   });
 });
