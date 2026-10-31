@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { timingSafeEqual } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
+import { mergeMicroserviceOpenApi } from './microservices-openapi';
 
 function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
@@ -51,18 +52,30 @@ function setupSwagger(app: INestApplication) {
 
   const config = new DocumentBuilder()
     .setTitle(appName)
-    .setDescription('A boilerplate project')
+    .setDescription(
+      'SapoClone Full Microservices API — Unified OpenAPI specification covering Platform (IAM, Accounts, Tenants, Branches), Inventory (Warehouses, Stock Balances, East-West Reservations), Sales (POS Orders, Checkout State Machine & Timeout Recovery), Insight (Audit Logs & Daily Sales Summary), and Domain Services.',
+    )
     .setVersion('1.0')
-    .setContact('Company Name', 'https://example.com', 'contact@company.com')
+    .setContact(
+      'SapoClone Engineering',
+      'https://example.com',
+      'contact@company.com',
+    )
     .addBearerAuth()
     .addApiKey({ type: 'apiKey', name: 'Api-Key', in: 'header' }, 'Api-Key')
     .addServer(
       configService.getOrThrow('app.url', { infer: true }),
-      'Development',
+      'Development (Platform Direct)',
+    )
+    .addServer(
+      'http://localhost:8080',
+      'KrakenD API Gateway (All Microservices)',
     )
     .addServer('https://example.com', 'Staging')
     .build();
-  const document = SwaggerModule.createDocument(app, config);
+  const document = mergeMicroserviceOpenApi(
+    SwaggerModule.createDocument(app, config),
+  );
   SwaggerModule.setup('api-docs', app, document, {
     customSiteTitle: appName,
   });

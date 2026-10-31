@@ -1,0 +1,255 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { RequireRoles } from '@pbl/auth';
+import { ROLES } from '@pbl/contracts';
+import {
+  CreateProductReqDto,
+  CreateUnitConversionReqDto,
+  CreateVariantReqDto,
+  GenerateVariantsReqDto,
+  ListProductsReqDto,
+  LookupProductReqDto,
+  ProductRes,
+  UnitConversionRes,
+  UpdateProductReqDto,
+  UpdateProductStatusReqDto,
+  UpdateVariantReqDto,
+  UpdateVariantStatusReqDto,
+  VariantRes,
+} from './products.dto';
+import {
+  ProductListResponse,
+  ProductLookupResponse,
+  ProductsService,
+} from './products.service';
+
+@ApiTags('products')
+@ApiBearerAuth()
+@Controller('api/v1')
+export class ProductsController {
+  constructor(private readonly products: ProductsService) {}
+
+  @Post('products')
+  @HttpCode(HttpStatus.CREATED)
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @ApiOperation({
+    summary: 'Create a product (with optional default variant)',
+    description:
+      'Creates a tenant-scoped product, its base unit conversion, and optionally its default sellable variant, publishing catalog.product.created via transactional outbox.',
+  })
+  @ApiResponse({ status: HttpStatus.CREATED, description: 'Created product' })
+  create(@Body() dto: CreateProductReqDto): Promise<ProductRes> {
+    return this.products.createProduct(dto);
+  }
+
+  @Get('products')
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @ApiOperation({
+    summary: 'List and filter products (offset + keyset cursor pagination)',
+  })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Paginated products' })
+  list(@Query() query: ListProductsReqDto): Promise<ProductListResponse> {
+    return this.products.listProducts(query);
+  }
+
+  @Get('products/lookup')
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @ApiOperation({
+    summary: 'Exact indexed lookup by SKU code or barcode',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Matching variant and parent product',
+  })
+  lookup(@Query() query: LookupProductReqDto): Promise<ProductLookupResponse> {
+    return this.products.lookupBySkuOrBarcode(query);
+  }
+
+  @Get('products/:id')
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @ApiOperation({
+    summary: 'Retrieve product details, variants, and unit conversions',
+  })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Product details' })
+  getById(@Param('id', ParseUUIDPipe) id: string): Promise<ProductRes> {
+    return this.products.getProductById(id);
+  }
+
+  @Patch('products/:id')
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @ApiOperation({
+    summary: 'Update product details (supports optimistic locking via version)',
+  })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Updated product' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProductReqDto,
+  ): Promise<ProductRes> {
+    return this.products.updateProduct(id, dto);
+  }
+
+  @Patch('products/:id/status')
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @ApiOperation({
+    summary:
+      'Transition product lifecycle status (DRAFT/ACTIVE/INACTIVE/ARCHIVED)',
+  })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Updated product' })
+  updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProductStatusReqDto,
+  ): Promise<ProductRes> {
+    return this.products.updateProductStatus(id, dto);
+  }
+
+  @Delete('products/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @ApiOperation({
+    summary:
+      'Soft-delete product and archive its variants (preserves historical SKU/variant references)',
+  })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Soft-deleted' })
+  remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.products.softDeleteProduct(id);
+  }
+
+  @Post('products/:id/variants')
+  @HttpCode(HttpStatus.CREATED)
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @ApiOperation({
+    summary: 'Create a single variant under a product',
+    description:
+      'Validates SKU normalization, GS1/EAN-13 barcode checksum, and canonical single-value-per-attribute combination signature.',
+  })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({ status: HttpStatus.CREATED, description: 'Created variant' })
+  createVariant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateVariantReqDto,
+  ): Promise<VariantRes> {
+    return this.products.createVariant(id, dto);
+  }
+
+  @Post('products/:id/variants/generate')
+  @HttpCode(HttpStatus.CREATED)
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @ApiOperation({
+    summary:
+      'Generate Cartesian attribute-combination variants transactionally',
+    description:
+      'Validates Cartesian product size (max 100), generates canonical combination signatures, and creates all variants atomically in a single transaction.',
+  })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'Generated variants',
+  })
+  generateVariants(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: GenerateVariantsReqDto,
+  ): Promise<VariantRes[]> {
+    return this.products.generateVariants(id, dto);
+  }
+
+  @Get('products/:id/variants')
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @ApiOperation({ summary: 'List variants belonging to a product' })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'List of variants' })
+  listProductVariants(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<VariantRes[]> {
+    return this.products.listProductVariants(id);
+  }
+
+  @Get('variants/:id')
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @ApiOperation({ summary: 'Retrieve variant by ID' })
+  @ApiParam({ name: 'id', description: 'Variant UUID' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Variant details' })
+  getVariantById(@Param('id', ParseUUIDPipe) id: string): Promise<VariantRes> {
+    return this.products.getVariantById(id);
+  }
+
+  @Patch('variants/:id')
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @ApiOperation({
+    summary:
+      'Update variant (SKU, barcode, base price, weight, optimistic version)',
+  })
+  @ApiParam({ name: 'id', description: 'Variant UUID' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Updated variant' })
+  updateVariant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateVariantReqDto,
+  ): Promise<VariantRes> {
+    return this.products.updateVariant(id, dto);
+  }
+
+  @Patch('variants/:id/status')
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @ApiOperation({ summary: 'Activate, deactivate, or archive a variant' })
+  @ApiParam({ name: 'id', description: 'Variant UUID' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Updated variant' })
+  updateVariantStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateVariantStatusReqDto,
+  ): Promise<VariantRes> {
+    return this.products.updateVariantStatus(id, dto);
+  }
+
+  @Post('products/:id/units')
+  @HttpCode(HttpStatus.CREATED)
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @ApiOperation({
+    summary: 'Add a packaging unit conversion to a product (e.g. Pack = 6)',
+  })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'Created unit conversion',
+  })
+  addUnit(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateUnitConversionReqDto,
+  ): Promise<UnitConversionRes> {
+    return this.products.addUnitConversion(id, dto);
+  }
+
+  @Get('products/:id/units')
+  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @ApiOperation({ summary: 'List unit conversions for a product' })
+  @ApiParam({ name: 'id', description: 'Product UUID' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'List of unit conversions',
+  })
+  listUnits(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<UnitConversionRes[]> {
+    return this.products.listUnitConversions(id);
+  }
+}

@@ -440,3 +440,12 @@ or a cross-cutting convention needs a new ADR in `docs/decisions/` (copy
 `Proposed` until the team accepts it) **and** an update to this file in the
 same PR. Superseding an ADR: mark the old one `Superseded by ADR-XXXX`;
 never delete it.
+
+## M1-M6 base
+
+Since the adopt-m1-m6 merge, `catalog`, `inventory`, `sales`, `customer`, `finance` and
+`integration` are the implementations of contributor dhtphu05's M1-M6 stack (PRs #12-#17,
+ADR-0011 to 0018); they replace the earlier implementations of ours. `platform`, `insight`,
+the RBAC libraries and ADR-0019/0020 stay ours. Their services still check roles by name
+(`RequireRoles`/`Permissions`); converting them to `RequirePermission`, integer VND money and the
+screen endpoints they lack are later phases, see `docs/specs/2026-11-01-adopt-m1-m6/phase-1.md`.

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# NOTE: targets the old API shapes of catalog/inventory/sales/customer (pre M1-M6 adoption); to be rewritten in a later phase.
 # End-to-end walk through the first-wave screen APIs, through the gateway only (needs the local
 # stack running: docker compose up -d --build). One story for one store:
 #   1. setup      owner + a second user, the store, a second branch

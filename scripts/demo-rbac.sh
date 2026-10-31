@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# NOTE: targets the old API shapes of catalog/inventory/sales/customer (pre M1-M6 adoption); to be rewritten in a later phase.
 # End-to-end test of role-based access control (ADR-0019, ADR-0020), through the gateway only
 # (needs the local stack running: docker compose up -d --build). One store, two branches:
 #   1. catalog and seeded roles   owner creates the store, GET /permissions, GET /roles, immutability

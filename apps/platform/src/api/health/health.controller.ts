@@ -50,6 +50,13 @@ export class HealthController {
   }
 
   @Public()
+  @ApiOperation({ summary: 'Liveness check' })
+  @Get('live')
+  live() {
+    return { status: 'ok', service: 'platform' };
+  }
+
+  @Public()
   @ApiOperation({ summary: 'Readiness check (database and Redis)' })
   @Get('ready')
   @HealthCheck()

@@ -12,7 +12,7 @@ import {
   REQUIRED_ROLES,
 } from './auth.constants';
 import { allowedBranches } from './auth.helpers';
-import { AuthUser } from './auth.types';
+import { AuthenticatedContext, AuthUser } from './auth.types';
 
 /** Skip authentication for this route/controller. */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
@@ -34,6 +34,10 @@ export const RequireRoles = (...roles: string[]) =>
  */
 export const RequirePermission = (...codes: string[]) =>
   SetMetadata(REQUIRED_PERMISSIONS, codes);
+
+/** Caller must have one of these fine-grained permissions or a role granting them (403 otherwise). */
+export const Permissions = (...permissions: string[]) =>
+  SetMetadata(REQUIRED_ROLES, permissions);
 
 /** The verified caller (AuthUser), or one of its fields: @CurrentUser('id'). */
 export const CurrentUser = createParamDecorator(
@@ -60,5 +64,22 @@ export const AllowedBranches = createParamDecorator(
     const user: AuthUser | undefined = ctx.switchToHttp().getRequest()['user'];
     if (!user) throw new ForbiddenException('A store must be selected');
     return allowedBranches(user);
+  },
+);
+
+/** Verified caller and required store context for tenant-scoped microservices. */
+export const CurrentContext = createParamDecorator(
+  (_: unknown, ctx: ExecutionContext): AuthenticatedContext => {
+    const user: AuthUser | undefined = ctx.switchToHttp().getRequest()['user'];
+    if (!user?.tenantId) {
+      throw new ForbiddenException('A store must be selected');
+    }
+    return {
+      userId: user.id ?? 'system',
+      tenantId: user.tenantId,
+      roles: user.roles ?? [],
+      sessionId: user.sessionId,
+      subjectType: user.subjectType,
+    };
   },
 );

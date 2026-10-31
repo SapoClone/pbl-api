@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# NOTE: targets the old API shapes of catalog/inventory/sales/customer (pre M1-M6 adoption); to be rewritten in a later phase.
 # Demo of the event bus, through the gateway only (needs the local stack running:
 # docker compose up -d --build). It shows three things happening as events:
 #   1. login          platform -> insight   (audit log)

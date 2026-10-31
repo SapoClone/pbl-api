@@ -39,7 +39,11 @@ import { SalesSummaryHandler } from './sales-summary/sales-summary.handler';
   imports: [
     PblLoggingModule.forRoot('insight'),
     PblAuthModule.forRemoteJwks(),
-    PblHealthModule.forRoot({ service: 'insight', redisFromEnv: true }),
+    PblHealthModule.forRoot({
+      service: 'insight',
+      redisFromEnv: true,
+      database: true,
+    }),
     PblDatabaseModule.forRoot({
       entities: [
         AuditLogEntity,

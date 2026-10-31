@@ -12,6 +12,8 @@ export interface ErrorResponse {
   message: string;
   errorCode?: string;
   details?: ErrorDetail[];
+  /** Request/trace correlation ID when present in RequestContext or X-Trace-Id */
+  traceId?: string;
   /** Only with APP_DEBUG=true */
   stack?: string;
 }

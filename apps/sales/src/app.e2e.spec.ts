@@ -8,8 +8,6 @@ import {
 } from '@pbl/common';
 import { AddressInfo } from 'net';
 import request from 'supertest';
-import { OrderActionsService } from './orders/order-actions.service';
-import { OrderQueryService } from './orders/order-query.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
 
@@ -41,11 +39,7 @@ const ordersService = {
     PblHealthModule.forRoot({ service: 'sales', redisFromEnv: true }),
   ],
   controllers: [OrdersController],
-  providers: [
-    { provide: OrdersService, useValue: ordersService },
-    { provide: OrderActionsService, useValue: {} },
-    { provide: OrderQueryService, useValue: {} },
-  ],
+  providers: [{ provide: OrdersService, useValue: ordersService }],
 })
 class TestAppModule {}
 
@@ -70,8 +64,6 @@ describe('Sales service bootstrap', () => {
     `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   const as = (roles: string[], tid: string | null = TENANT) =>
     auth.bearer(roles, tid ?? undefined);
-  const withPerms = (role: string, permissions: string[]) =>
-    auth.bearerWithPermissions(role, permissions, TENANT);
 
   it('GET /health reports the service', async () => {
     const res = await request(url()).get('/health').expect(200);
@@ -130,48 +122,28 @@ describe('Sales service bootstrap', () => {
       },
     );
 
-    it.each([
-      ['owner', as(['owner'])],
-      [
-        'branch_manager',
-        withPerms('branch_manager', ['orders.view', 'orders.create']),
-      ],
-      [
-        'sales_staff',
-        withPerms('sales_staff', ['orders.view', 'orders.create']),
-      ],
-      [
-        'a custom role',
-        withPerms('shop_lead', ['orders.view', 'orders.create']),
-      ],
-    ])('lets %s sell and read orders', async (_name, token) => {
-      await request(url())
-        .get('/api/v1/orders')
-        .set('Authorization', token)
-        .expect(200);
-      await request(url())
-        .post('/api/v1/orders')
-        .set('Authorization', token)
-        .set('Idempotency-Key', KEY)
-        .send(body)
-        .expect(201);
-    });
-
-    it('does not trust the old role names (403)', async () => {
-      for (const role of ['manager', 'cashier']) {
+    it.each([['owner'], ['manager'], ['cashier']])(
+      'lets a %s sell and read orders',
+      async (role) => {
         await request(url())
           .get('/api/v1/orders')
           .set('Authorization', as([role]))
-          .expect(403);
-      }
-    });
+          .expect(200);
+        await request(url())
+          .post('/api/v1/orders')
+          .set('Authorization', as([role]))
+          .set('Idempotency-Key', KEY)
+          .send(body)
+          .expect(201);
+      },
+    );
   });
 
   describe('Idempotency-Key', () => {
     const post = () =>
       request(url())
         .post('/api/v1/orders')
-        .set('Authorization', withPerms('sales_staff', ['orders.create']))
+        .set('Authorization', as(['cashier']))
         .send(body);
 
     it('is required (400 S002)', async () => {
@@ -191,7 +163,6 @@ describe('Sales service bootstrap', () => {
         'account-1',
         KEY,
         expect.objectContaining({ branchId: BRANCH }),
-        null,
       );
     });
 
@@ -211,7 +182,7 @@ describe('Sales service bootstrap', () => {
   it('validates the order body (422)', async () => {
     await request(url())
       .post('/api/v1/orders')
-      .set('Authorization', withPerms('sales_staff', ['orders.create']))
+      .set('Authorization', as(['cashier']))
       .set('Idempotency-Key', KEY)
       .send({ ...body, items: [] })
       .expect(422);
