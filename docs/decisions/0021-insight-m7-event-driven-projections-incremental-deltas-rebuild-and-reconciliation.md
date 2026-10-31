@@ -1,4 +1,4 @@
-# ADR-0019: Insight M7 Event-Driven Analytical Projections, Contribution-Delta Accounting, Generation Rebuild, and Reconciliation
+# ADR-0021: Insight M7 Event-Driven Analytical Projections, Contribution-Delta Accounting, Generation Rebuild, and Reconciliation
 
 - **Status:** Accepted
 - **Date:** 2026-10-30

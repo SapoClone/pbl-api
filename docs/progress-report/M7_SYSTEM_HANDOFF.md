@@ -18,7 +18,7 @@ With the completion of **Milestone M7 — Insight & Analytics Core**, all eight 
 | **M4 / Customer** | `apps/customer` | `customer_db` | Customer profiles, phone/email normalization, dynamic/static segmentation, membership tier progression, and transactional loyalty wallet/point holds (ADR-0016). |
 | **M5 / Finance** | `apps/finance` | `finance_db` | Double-entry balanced journal postings, cashbook vouchers, customer receivables & concurrency-safe credit-limit holds, supplier payables, payment settlements, refunds, and COD carrier reconciliation (ADR-0017). |
 | **M6 / Integration** | `apps/integration` | `integration_db` | Marketplace channel connections (Shopee/Lazada), AES-256-GCM credential encryption, HMAC-SHA256 webhook ingress & replay defense, SKU mapping, omnichannel order sync, and stock availability publication (ADR-0018). |
-| **M7 / Insight** | `apps/insight` | `insight_db` | Event-driven contribution-delta projections, Executive Dashboard, 14 Sales/Inventory/Gross-Profit/Cashflow reports, non-blocking shadow projection rebuilds, automated fact-to-summary reconciliation, and formula-safe CSV/XLSX/PDF exports (ADR-0019). |
+| **M7 / Insight** | `apps/insight` | `insight_db` | Event-driven contribution-delta projections, Executive Dashboard, 14 Sales/Inventory/Gross-Profit/Cashflow reports, non-blocking shadow projection rebuilds, automated fact-to-summary reconciliation, and formula-safe CSV/XLSX/PDF exports (ADR-0021). |
 
 ---
 

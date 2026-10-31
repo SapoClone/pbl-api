@@ -1001,7 +1001,7 @@ export interface IntegrationReconciliationDiscrepancyPayload {
   occurredAt: string;
 }
 
-// ---- insight & analytics (M7 Insight Core — ADR-0019)
+// ---- insight & analytics (M7 Insight Core — ADR-0021)
 
 export const INSIGHT_PROJECTION_REBUILT = {
   type: 'insight.projection.rebuilt',

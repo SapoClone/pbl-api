@@ -46,7 +46,7 @@ export const MICROSERVICE_SWAGGER_TAGS: TagsObject = [
   {
     name: 'Insight — Audit & Analytics',
     description:
-      'Insight Service (M7 Core) — Cross-Service Audit Logs, Executive Dashboard, Revenue/Product/Inventory/Branch/Channel/Customer/Cashflow/Gross-Profit Reports, Export Jobs & Rebuild/Reconciliation (ADR-0019)',
+      'Insight Service (M7 Core) — Cross-Service Audit Logs, Executive Dashboard, Revenue/Product/Inventory/Branch/Channel/Customer/Cashflow/Gross-Profit Reports, Export Jobs & Rebuild/Reconciliation (ADR-0021)',
   },
   {
     name: 'Catalog — Categories, Brands, Products, Variants & Pricing',

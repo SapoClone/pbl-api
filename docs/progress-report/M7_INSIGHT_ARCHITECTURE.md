@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-30
 **Service:** `apps/insight` (`insight_db`)
-**ADR Reference:** [0019-insight-m7-event-driven-projections-incremental-deltas-rebuild-and-reconciliation.md](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/docs/decisions/0019-insight-m7-event-driven-projections-incremental-deltas-rebuild-and-reconciliation.md)
+**ADR Reference:** [0021-insight-m7-event-driven-projections-incremental-deltas-rebuild-and-reconciliation.md](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/docs/decisions/0021-insight-m7-event-driven-projections-incremental-deltas-rebuild-and-reconciliation.md)
 
 ---
 

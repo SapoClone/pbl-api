@@ -1,5 +1,5 @@
 /**
- * Pure Analytical & Reporting Domain Engine (Milestone M7 — ADR-0019).
+ * Pure Analytical & Reporting Domain Engine (Milestone M7 — ADR-0021).
  * Zero framework/infrastructure dependencies. All currency and quantity
  * calculations use exact scaled integer arithmetic (SCALE = 10_000n, i.e. 4 decimal places).
  */
