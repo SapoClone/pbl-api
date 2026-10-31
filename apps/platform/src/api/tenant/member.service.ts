@@ -15,6 +15,11 @@ import { EventOutbox } from '@pbl/events';
 import { plainToInstance } from 'class-transformer';
 import { DataSource, EntityManager, In } from 'typeorm';
 import {
+  PlatformDomainError,
+  PlatformDomainErrorCode,
+  TenantMembershipAggregate,
+} from '../../domain/platform-domain';
+import {
   AccountEntity,
   AccountStatus,
 } from '../account/entities/account.entity';
@@ -297,11 +302,26 @@ export class MemberService {
       if (!membership) {
         throw new NotFoundException();
       }
-      if (
-        membership.role === ROLE_CODES.OWNER &&
-        (changesRole || branchIds !== undefined)
-      ) {
-        throw new ValidationException(ErrorCode.T003);
+      const aggregate = new TenantMembershipAggregate(
+        accountId,
+        tenantId,
+        membership.role,
+      );
+      try {
+        if (changesRole) {
+          // T003: the aggregate refuses any role change on the owner.
+          aggregate.changeRole(membership.role);
+        } else if (branchIds !== undefined) {
+          aggregate.assertNotOwner();
+        }
+      } catch (err) {
+        if (
+          err instanceof PlatformDomainError &&
+          err.code === PlatformDomainErrorCode.OWNER_ROLE_LOCKED
+        ) {
+          throw new ValidationException(ErrorCode.T003);
+        }
+        throw err;
       }
       if (changesRole) {
         const role = await this.resolveRole(em, tenantId, roleInput);

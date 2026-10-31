@@ -33,6 +33,7 @@
     "^@/constants(.*)$": "<rootDir>/constants$1",
     "^@/database(.*)$": "<rootDir>/database$1",
     "^@/decorators(.*)$": "<rootDir>/decorators$1",
+    "^@/domain(.*)$": "<rootDir>/domain$1",
     "^@/exceptions(.*)$": "<rootDir>/exceptions$1",
     "^@/filters(.*)$": "<rootDir>/filters$1",
     "^@/generated(.*)$": "<rootDir>/generated$1",
