@@ -4,8 +4,9 @@ import {
   TenantContext,
   TenantScopedRepository,
 } from '@pbl/common';
-import { Between, FindOptionsWhere } from 'typeorm';
+import { Between, FindOptionsWhere, In } from 'typeorm';
 import { AuditLogEntity } from './audit/audit-log.entity';
+import { BranchScope, assertBranchInScope } from './common/branch-scope';
 import { ListAuditLogsReqDto, SalesSummaryReqDto } from './insight.dto';
 import { ReportsService } from './reports/reports.service';
 import { DailySalesEntity } from './sales-summary/daily-sales.entity';
@@ -51,7 +52,9 @@ export class InsightQueryService {
 
   async dailySales(
     query: SalesSummaryReqDto & { groupBy?: 'day' | 'day_channel' },
+    scope: BranchScope = null,
   ) {
+    assertBranchInScope(scope, query.branchId);
     const today = salesDate(new Date().toISOString());
     const to = query.to ?? today;
     const from =
@@ -63,10 +66,16 @@ export class InsightQueryService {
       salesDate: Between(from, to) as never,
     };
     if (query.branchId) where.branchId = query.branchId;
+    else if (scope) where.branchId = In(scope);
 
     if (query.groupBy === 'day_channel') {
       // the channel only exists in the hourly table (events from before it have none)
-      const data = await this.reports.dailyByChannel(from, to, query.branchId);
+      const data = await this.reports.dailyByChannel(
+        from,
+        to,
+        query.branchId,
+        scope,
+      );
       return {
         data,
         totals: {
@@ -88,6 +97,7 @@ export class InsightQueryService {
       to,
       ['branch_id', 'sales_date'],
       query.branchId,
+      scope,
     );
     const cost = new Map(
       costs.map((c) => [`${c.sales_date}|${c.branch_id}`, c]),

@@ -11,8 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, CurrentUser } from '@pbl/auth';
 import { DeviceTokensService } from './device-tokens.service';
 import {
   ListNotificationsReqDto,
@@ -21,12 +20,12 @@ import {
 import { NotificationsService } from './notifications.service';
 
 /**
- * The bell shows on every store screen, so every role may use it (contract: "tenant").
- * Fixed paths come before `:id/read`.
+ * The bell shows on every store screen, so every member of the store may use it: no
+ * permission (ADR-0012 §7). A restricted caller sees notifications of no branch or of
+ * an allowed branch. Fixed paths come before `:id/read`.
  */
 @ApiTags('insight')
 @ApiBearerAuth()
-@RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
 @Controller('api/v1')
 export class NotificationsController {
   constructor(
@@ -38,19 +37,26 @@ export class NotificationsController {
   list(
     @CurrentUser('id') accountId: string,
     @Query() query: ListNotificationsReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.notifications.list(accountId, query);
+    return this.notifications.list(accountId, query, scope);
   }
 
   @Get('notifications/unread-count')
-  unreadCount(@CurrentUser('id') accountId: string) {
-    return this.notifications.unreadCount(accountId);
+  unreadCount(
+    @CurrentUser('id') accountId: string,
+    @AllowedBranches() scope: string[] | null,
+  ) {
+    return this.notifications.unreadCount(accountId, scope);
   }
 
   @Post('notifications/read-all')
   @HttpCode(HttpStatus.NO_CONTENT)
-  readAll(@CurrentUser('id') accountId: string) {
-    return this.notifications.markAllRead(accountId);
+  readAll(
+    @CurrentUser('id') accountId: string,
+    @AllowedBranches() scope: string[] | null,
+  ) {
+    return this.notifications.markAllRead(accountId, scope);
   }
 
   @Post('notifications/:id/read')
@@ -58,8 +64,9 @@ export class NotificationsController {
   read(
     @CurrentUser('id') accountId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.notifications.markRead(accountId, id);
+    return this.notifications.markRead(accountId, id, scope);
   }
 
   @Post('device-tokens')

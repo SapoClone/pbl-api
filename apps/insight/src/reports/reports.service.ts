@@ -3,6 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { TenantContext } from '@pbl/common';
 import { qualifiedTable } from '@pbl/events';
 import { DataSource } from 'typeorm';
+import { assertBranchInScope, BranchScope } from '../common/branch-scope';
 import { salesDate, salesHour } from '../sales-summary/sales-summary.handler';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -47,7 +48,11 @@ export class ReportsService {
     return salesDate(this.clock().toISOString());
   }
 
-  async kpis(query: { date?: string; branchId?: string }) {
+  async kpis(
+    query: { date?: string; branchId?: string },
+    scope: BranchScope = null,
+  ) {
+    assertBranchInScope(scope, query.branchId);
     const today = this.today();
     const date = query.date ?? today;
     // Hourly granularity: for today the window is 00:00 up to the end of the current hour,
@@ -60,8 +65,8 @@ export class ReportsService {
             Date.parse(`${date}T23:59:59.999Z`) - 7 * 3600 * 1000,
           ).toISOString();
     const [now, before] = await Promise.all([
-      this.window(date, cutoff, query.branchId),
-      this.window(addDays(date, -1), cutoff, query.branchId),
+      this.window(date, cutoff, query.branchId, scope),
+      this.window(addDays(date, -1), cutoff, query.branchId, scope),
     ]);
     const aov = (w: Window) =>
       w.orders > 0 ? Math.round(w.revenue / w.orders) : 0;
@@ -107,6 +112,7 @@ export class ReportsService {
     date: string,
     cutoff: number,
     branchId?: string,
+    scope: BranchScope = null,
   ): Promise<Window> {
     const tenantId = TenantContext.require();
     const [row] = await this.dataSource.query(
@@ -114,15 +120,17 @@ export class ReportsService {
               SUM("cost") AS cost, COALESCE(SUM("costed_revenue"), 0) AS costed
          FROM ${this.table('hourly_sales')}
         WHERE "tenant_id" = $1 AND "sales_date" = $2 AND "hour" <= $3
-          AND ($4::uuid IS NULL OR "branch_id" = $4)`,
-      [tenantId, date, cutoff, branchId ?? null],
+          AND ($4::uuid IS NULL OR "branch_id" = $4)
+          AND ($5::uuid[] IS NULL OR "branch_id" = ANY($5::uuid[]))`,
+      [tenantId, date, cutoff, branchId ?? null, scope],
     );
     const [cust] = await this.dataSource.query(
       `SELECT COUNT(DISTINCT "customer_id") AS customers
          FROM ${this.table('customer_sales_daily')}
         WHERE "tenant_id" = $1 AND "sales_date" = $2 AND "first_hour" <= $3
-          AND ($4::uuid IS NULL OR "branch_id" = $4)`,
-      [tenantId, date, cutoff, branchId ?? null],
+          AND ($4::uuid IS NULL OR "branch_id" = $4)
+          AND ($5::uuid[] IS NULL OR "branch_id" = ANY($5::uuid[]))`,
+      [tenantId, date, cutoff, branchId ?? null, scope],
     );
     return {
       orders: Number(row.orders),
@@ -133,30 +141,40 @@ export class ReportsService {
     };
   }
 
-  async hourly(query: {
-    date?: string;
-    compareDate?: string;
-    branchId?: string;
-  }) {
+  async hourly(
+    query: {
+      date?: string;
+      compareDate?: string;
+      branchId?: string;
+    },
+    scope: BranchScope = null,
+  ) {
+    assertBranchInScope(scope, query.branchId);
     const today = this.today();
     const date = query.date ?? today;
     const compareDate = query.compareDate ?? addDays(date, -1);
     const last = date === today ? salesHour(this.clock().toISOString()) : 23;
     const [points, compare] = await Promise.all([
-      this.hourlySeries(date, last, query.branchId),
-      this.hourlySeries(compareDate, 23, query.branchId),
+      this.hourlySeries(date, last, query.branchId, scope),
+      this.hourlySeries(compareDate, 23, query.branchId, scope),
     ]);
     return { date, points, compare: { date: compareDate, points: compare } };
   }
 
-  private async hourlySeries(date: string, last: number, branchId?: string) {
+  private async hourlySeries(
+    date: string,
+    last: number,
+    branchId?: string,
+    scope: BranchScope = null,
+  ) {
     const rows: { hour: number; revenue: string; orders: string }[] =
       await this.dataSource.query(
         `SELECT "hour", SUM("revenue") AS revenue, SUM("order_count") AS orders
            FROM ${this.table('hourly_sales')}
           WHERE "tenant_id" = $1 AND "sales_date" = $2 AND ($3::uuid IS NULL OR "branch_id" = $3)
+            AND ($4::uuid[] IS NULL OR "branch_id" = ANY($4::uuid[]))
           GROUP BY "hour"`,
-        [TenantContext.require(), date, branchId ?? null],
+        [TenantContext.require(), date, branchId ?? null, scope],
       );
     const byHour = new Map(rows.map((r) => [Number(r.hour), r]));
     return Array.from({ length: last + 1 }, (_, hour) => ({
@@ -171,7 +189,11 @@ export class ReportsService {
     return { from: query.from ?? to, to };
   }
 
-  async byChannel(query: { from?: string; to?: string; branchId?: string }) {
+  async byChannel(
+    query: { from?: string; to?: string; branchId?: string },
+    scope: BranchScope = null,
+  ) {
+    assertBranchInScope(scope, query.branchId);
     const { from, to } = this.range(query);
     const rows: { channel: string; revenue: string; orders: string }[] =
       await this.dataSource.query(
@@ -179,8 +201,9 @@ export class ReportsService {
            FROM ${this.table('hourly_sales')}
           WHERE "tenant_id" = $1 AND "sales_date" BETWEEN $2 AND $3
             AND ($4::uuid IS NULL OR "branch_id" = $4)
+          AND ($5::uuid[] IS NULL OR "branch_id" = ANY($5::uuid[]))
           GROUP BY "channel" ORDER BY SUM("revenue") DESC, "channel"`,
-        [TenantContext.require(), from, to, query.branchId ?? null],
+        [TenantContext.require(), from, to, query.branchId ?? null, scope],
       );
     const total = rows.reduce((sum, r) => sum + Number(r.revenue), 0);
     return {
@@ -199,13 +222,17 @@ export class ReportsService {
     };
   }
 
-  async topProducts(query: {
-    from?: string;
-    to?: string;
-    branchId?: string;
-    limit?: number;
-    sort?: 'revenue' | 'quantity';
-  }) {
+  async topProducts(
+    query: {
+      from?: string;
+      to?: string;
+      branchId?: string;
+      limit?: number;
+      sort?: 'revenue' | 'quantity';
+    },
+    scope: BranchScope = null,
+  ) {
+    assertBranchInScope(scope, query.branchId);
     const { from, to } = this.range(query);
     const order =
       query.sort === 'quantity' ? 'SUM("quantity")' : 'SUM("revenue")';
@@ -219,6 +246,7 @@ export class ReportsService {
            FROM ${this.table('product_sales_daily')}
           WHERE "tenant_id" = $1 AND "sales_date" BETWEEN $2 AND $3
             AND ($4::uuid IS NULL OR "branch_id" = $4)
+          AND ($6::uuid[] IS NULL OR "branch_id" = ANY($6::uuid[]))
           GROUP BY "sku" ORDER BY ${order} DESC, "sku" LIMIT $5`,
       [
         TenantContext.require(),
@@ -226,6 +254,7 @@ export class ReportsService {
         to,
         query.branchId ?? null,
         query.limit ?? 5,
+        scope,
       ],
     );
     return {
@@ -241,7 +270,10 @@ export class ReportsService {
     };
   }
 
-  async byBranch(query: { from?: string; to?: string }) {
+  async byBranch(
+    query: { from?: string; to?: string },
+    scope: BranchScope = null,
+  ) {
     const { from, to } = this.range(query);
     const tenantId = TenantContext.require();
     const [rows, costs] = await Promise.all([
@@ -249,10 +281,11 @@ export class ReportsService {
         `SELECT "branch_id", SUM("order_count") AS orders, SUM("revenue") AS revenue
            FROM ${this.table('daily_sales')}
           WHERE "tenant_id" = $1 AND "sales_date" BETWEEN $2 AND $3
+            AND ($4::uuid[] IS NULL OR "branch_id" = ANY($4::uuid[]))
           GROUP BY "branch_id" ORDER BY SUM("revenue") DESC, "branch_id"`,
-        [tenantId, from, to],
+        [tenantId, from, to, scope],
       ) as Promise<{ branch_id: string; orders: string; revenue: string }[]>,
-      this.costRows(tenantId, from, to, ['branch_id']),
+      this.costRows(tenantId, from, to, ['branch_id'], undefined, scope),
     ]);
     const profit = new Map(costs.map((c) => [c.branch_id, c.profit]));
     return {
@@ -275,6 +308,7 @@ export class ReportsService {
     to: string,
     by: ('branch_id' | 'sales_date' | 'channel')[],
     branchId?: string,
+    scope: BranchScope = null,
   ): Promise<CostRow[]> {
     const select = by.map((c) =>
       c === 'sales_date' ? `"${c}"::text AS "${c}"` : `"${c}"`,
@@ -284,8 +318,9 @@ export class ReportsService {
          FROM ${this.table('hourly_sales')}
         WHERE "tenant_id" = $1 AND "sales_date" BETWEEN $2 AND $3
           AND ($4::uuid IS NULL OR "branch_id" = $4)
+          AND ($5::uuid[] IS NULL OR "branch_id" = ANY($5::uuid[]))
         GROUP BY ${by.map((c) => `"${c}"`).join(', ')}`,
-      [tenantId, from, to, branchId ?? null],
+      [tenantId, from, to, branchId ?? null, scope],
     );
     return rows.map((r) => {
       const cost = r.cost === null ? null : Number(r.cost);
@@ -300,7 +335,12 @@ export class ReportsService {
   }
 
   /** Orders, revenue and cost per branch, day and channel (`groupBy=day_channel`) */
-  async dailyByChannel(from: string, to: string, branchId?: string) {
+  async dailyByChannel(
+    from: string,
+    to: string,
+    branchId?: string,
+    scope: BranchScope = null,
+  ) {
     const rows: {
       branch_id: string;
       sales_date: string;
@@ -315,9 +355,10 @@ export class ReportsService {
          FROM ${this.table('hourly_sales')}
         WHERE "tenant_id" = $1 AND "sales_date" BETWEEN $2 AND $3
           AND ($4::uuid IS NULL OR "branch_id" = $4)
+          AND ($5::uuid[] IS NULL OR "branch_id" = ANY($5::uuid[]))
         GROUP BY "branch_id", "sales_date", "channel"
         ORDER BY "sales_date", "branch_id", "channel"`,
-      [TenantContext.require(), from, to, branchId ?? null],
+      [TenantContext.require(), from, to, branchId ?? null, scope],
     );
     return rows.map((r) => {
       const cost = r.cost === null ? null : Number(r.cost);
