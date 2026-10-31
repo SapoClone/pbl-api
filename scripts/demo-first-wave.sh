@@ -130,7 +130,7 @@ expect_eq "$ctx" .tenant.id "$tenant_id" "the context names the store"
 expect_eq "$ctx" .me.role owner "the context names the caller's role"
 expect_eq "$ctx" '.branches | length' 2 "the context lists both branches"
 expect_eq "$ctx" .timezone Asia/Ho_Chi_Minh "the store timezone"
-expect_eq "$(http GET "$platform/tenants/current/context" "$staff_token")" .me.role cashier "the cashier sees their own role"
+expect_eq "$(http GET "$platform/tenants/current/context" "$staff_token")" .me.role sales_staff "the cashier sees their own role (legacy cashier is now sales_staff)"
 expect_status 401 "context without a token" "$(curl -s -w '\n%{http_code}' "$platform/tenants/current/context")"
 
 step "2b. Platform: members summary, detail, lock and unlock"
@@ -304,7 +304,7 @@ expect_true "$(http GET "$customer/customers?q=Nguyen" "$store_token")" '(.data 
 csum=$(http GET "$customer/customers/summary" "$store_token")
 expect_status 200 "customer summary" "$csum"
 expect_status 200 "customers export" "$(http GET "$customer/customers/export" "$store_token")"
-expect_eq "$(http GET "$customer/customers/$customer_id" "$staff_token")" .phone null "a cashier does not see the full phone"
+expect_eq "$(http GET "$customer/customers/$customer_id" "$staff_token")" .phone "$phone" "a cashier (sales_staff, customers.update) sees the full phone"
 before_spent=$(jv "$got" '.totalSpent // 0')
 [[ "$before_spent" == 0 ]] || fail "a new customer has spent $before_spent"
 ok "a new customer has spent nothing yet"
@@ -438,7 +438,7 @@ expect_eq "$draft" .orderStatus draft "the order is a draft"
 expect_eq "$draft" .totalAmount 300000 "the total is 300.000"
 expect_true "$draft" '.code | startswith("DH")' "the order has a readable code"
 expect_true "$(http GET "$sales/orders?orderStatus=draft" "$store_token")" '(.data // .items) | length >= 1' "drafts are listed only when asked for"
-expect_status 403 "a cashier cannot confirm (orders.update)" "$(http POST "$sales/orders/$order_id/confirm" "$staff_token" '{}')"
+expect_status 403 "a cashier cannot cancel (orders.delete; sales_staff may confirm, which holds orders.update)" "$(http POST "$sales/orders/$order_id/cancel" "$staff_token" '{"reason":"x"}')"
 conf=$(http POST "$sales/orders/$order_id/confirm" "$store_token" '{}')
 expect_status 200 "confirm" "$conf"
 expect_eq "$conf" .orderStatus confirmed "confirmed"
@@ -527,7 +527,8 @@ expect_status 400 "adjust below zero" "$(http POST "$customer/customers/$custome
 step "7b. Events: insight dashboard and reports"
 expect_status 200 "dashboard KPIs" "$(http GET "$insight/dashboard/kpis" "$store_token")"
 wait_for "KPIs show today's revenue (300.000 + 150.000 + 160.000)" get_is "$insight/dashboard/kpis" "$store_token" '(.revenue.value // .revenue.today // .revenue) >= 610000'
-expect_status 403 "a cashier cannot read the KPIs" "$(http GET "$insight/dashboard/kpis" "$staff_token")"
+expect_status 200 "a cashier can read the KPIs (sales_staff holds dashboard.view)" "$(http GET "$insight/dashboard/kpis" "$staff_token")"
+expect_status 403 "a cashier cannot read the daily report (reports.view)" "$(http GET "$insight/sales-summary/daily" "$staff_token")"
 hourly=$(http GET "$insight/sales-summary/hourly" "$store_token")
 expect_status 200 "hourly sales" "$hourly"
 bych=$(http GET "$insight/sales-summary/by-channel" "$store_token")
