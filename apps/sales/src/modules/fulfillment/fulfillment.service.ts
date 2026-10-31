@@ -20,6 +20,7 @@ import { InventoryClient } from '../../inventory/inventory.client';
 import { OrderItemEntity } from '../../orders/entities/order-item.entity';
 import { OrderEntity } from '../../orders/entities/order.entity';
 import { BranchScope, branchAllowed } from '../../presentation/access';
+import { emitOrderCompleted } from '../screen/order-completion';
 import { CreateFulfillmentDto } from './fulfillment.dto';
 
 @Injectable()
@@ -255,6 +256,7 @@ export class FulfillmentService {
         const prevFulfillmentStatus =
           lockedOrder.fulfillmentStatus ?? 'RESERVED';
         lockedOrder.fulfillmentStatus = 'FULFILLED';
+        lockedOrder.fulfillmentStage = null;
         if (lockedOrder.paymentStatus === 'PAID') {
           lockedOrder.orderStatus = 'COMPLETED';
           lockedOrder.status = 'completed';
@@ -279,6 +281,13 @@ export class FulfillmentService {
           createdAt: now,
         });
         await em.save(OrderStatusHistoryEntity, history);
+
+        if (
+          prevOrderStatus !== 'COMPLETED' &&
+          lockedOrder.orderStatus === 'COMPLETED'
+        ) {
+          await emitOrderCompleted(em, this.outbox, lockedOrder, actorId, now);
+        }
 
         await this.outbox.add(em, SALES_FULFILLMENT_COMPLETED, {
           fulfillmentId: lockedF.id,

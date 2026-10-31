@@ -1,3 +1,4 @@
+import { OmitType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -130,12 +131,33 @@ export class UpdateDraftOrderDto {
   @IsInt()
   @Min(1)
   expectedVersion?: number;
+
+  /** Same as `expectedVersion`, under the screen contract's name */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  version?: number;
+
+  /** `confirmed` finalises the draft after the update (reserves stock) */
+  @IsOptional()
+  @IsIn(['confirmed'])
+  orderStatus?: 'confirmed';
+
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
 }
 
 export class ConfirmOrderDto {
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
+
+  /** The order version the client saw (screen contract); a stale one is 409 */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  version?: number;
 }
 
 export class CancelOrderDto {
@@ -143,4 +165,33 @@ export class CancelOrderDto {
   @IsString()
   @MaxLength(255)
   reason?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  version?: number;
+}
+
+/** A line of the internal order route: the marketplace's own price may replace the catalog price */
+export class InternalOrderLineDto extends PosCartLineDto {
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  unitPriceOverride?: number;
+}
+
+/** Body of `POST /internal/v1/orders/omnichannel` (integration -> sales) */
+export class InternalOmnichannelOrderDto extends OmitType(
+  CreateOmnichannelOrderDto,
+  ['lines'] as const,
+) {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => InternalOrderLineDto)
+  lines!: InternalOrderLineDto[];
+
+  @IsOptional()
+  @IsIn(['sku_unmapped', 'stock_shortage'])
+  exceptionCode?: 'sku_unmapped' | 'stock_shortage';
 }

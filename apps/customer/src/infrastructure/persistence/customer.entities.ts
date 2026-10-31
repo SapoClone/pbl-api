@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  PrimaryColumn,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -53,6 +54,9 @@ export class CustomerGroupEntity {
 
   @Column({ type: 'varchar', length: 16, default: 'ACTIVE' })
   status!: 'ACTIVE' | 'INACTIVE';
+
+  @Column({ name: 'is_seeded', type: 'boolean', default: false })
+  isSeeded!: boolean;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
@@ -114,6 +118,12 @@ export class CustomerEntity {
 
   @Column({ type: 'varchar', length: 32 })
   code!: string;
+
+  @Column({ name: 'member_code', type: 'varchar', length: 32, nullable: true })
+  memberCode!: string | null;
+
+  @Column({ name: 'loyalty_enabled', type: 'boolean', default: true })
+  loyaltyEnabled!: boolean;
 
   @Column({ name: 'customer_group_id', type: 'uuid', nullable: true })
   customerGroupId!: string | null;
@@ -669,6 +679,36 @@ export class CustomerDataJobEntity {
   completedAt!: Date | null;
 }
 
+@Entity('customer_tags')
+export class CustomerTagEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ type: 'varchar', length: 60 })
+  name!: string;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+}
+
+@Entity('customer_tag_links')
+export class CustomerTagLinkEntity {
+  @PrimaryColumn({ name: 'customer_id', type: 'uuid' })
+  customerId!: string;
+
+  @PrimaryColumn({ name: 'tag_id', type: 'uuid' })
+  tagId!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+}
+
 export const M4_CUSTOMER_ENTITIES = [
   CustomerCodeSequenceEntity,
   CustomerGroupEntity,
@@ -682,4 +722,6 @@ export const M4_CUSTOMER_ENTITIES = [
   CustomerPurchaseProjectionEntity,
   CustomerMergeHistoryEntity,
   CustomerDataJobEntity,
+  CustomerTagEntity,
+  CustomerTagLinkEntity,
 ];

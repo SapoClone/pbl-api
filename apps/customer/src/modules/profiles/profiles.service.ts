@@ -4,6 +4,7 @@ import {
   CUSTOMER_CREATED,
   CUSTOMER_DEACTIVATED,
   CUSTOMER_GROUP_CHANGED,
+  CUSTOMER_LOYALTY_POINTS_EARNED,
   CUSTOMER_MEMBERSHIP_CHANGED,
   CUSTOMER_UPDATED,
   CustomerGroupChangedPayload,
@@ -12,20 +13,24 @@ import {
   FINANCE_RECEIVABLE_CREATED,
   FINANCE_RECEIVABLE_PAYMENT_APPLIED,
   FinanceReceivableEventPayload,
+  LoyaltyPointsEventPayload,
 } from '@pbl/contracts';
 import { EventOutbox, OnEvent } from '@pbl/events';
-import { DataSource, EntityManager } from 'typeorm';
+import { randomUUID } from 'node:crypto';
+import { DataSource, EntityManager, In } from 'typeorm';
 import { toMoney } from '../../common/money';
 import {
   computeAvailablePoints,
   CustomerDomainError,
   CustomerDomainErrorCode,
+  formatPhoneMasked,
   maskAddressPhones,
   maskPhoneNumber,
   normalizeEmail,
   normalizePhoneNumber,
   parseVndBigInt,
   resolveEligibleMembershipTier,
+  sanitizeCsvCell,
   toVndNumber,
 } from '../../domain/customer-domain';
 import {
@@ -37,19 +42,44 @@ import {
   CustomerEntity,
   CustomerGroupEntity,
   CustomerPurchaseProjectionEntity,
+  CustomerTagEntity,
   LoyaltyAccountEntity,
   LoyaltyHoldEntity,
   LoyaltySettingEntity,
+  LoyaltyTransactionEntity,
   MembershipTierEntity,
 } from '../../infrastructure/persistence/customer.entities';
+import { ensureSeededGroups } from '../../infrastructure/persistence/seeded-groups';
 import {
   CreateCustomerDto,
+  CustomersKpiQueryDto,
   DeactivateCustomerQueryDto,
+  ExportCustomersQueryDto,
   ListCustomerOrdersQueryDto,
   ListCustomersQueryDto,
   LookupCustomerQueryDto,
   UpdateCustomerDto,
 } from './profiles.dto';
+
+type CustomerFilter = ExportCustomersQueryDto & {
+  q?: string;
+};
+
+interface PurchaseStats {
+  orderCount: number;
+  totalSpent: number;
+  lastPurchaseAt: Date | null;
+}
+
+const NO_STATS: PurchaseStats = {
+  orderCount: 0,
+  totalSpent: 0,
+  lastPurchaseAt: null,
+};
+
+function escapeLike(raw: string): string {
+  return raw.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
 
 function isPgUniqueViolation(err: unknown): boolean {
   return (
@@ -104,9 +134,13 @@ export class ProfilesService {
       phoneNormalized: maskPhone
         ? maskPhoneNumber(customer.phoneNormalized)
         : customer.phoneNormalized,
+      phoneMasked: formatPhoneMasked(
+        customer.phone ?? customer.phoneNormalized,
+      ),
       email: customer.email,
       gender: customer.gender,
       dateOfBirth: customer.dateOfBirth,
+      memberCode: customer.memberCode ?? null,
       source: customer.source,
       status: customer.status,
       customerGroupId: customer.customerGroupId,
@@ -146,6 +180,7 @@ export class ProfilesService {
       ...(loyalty
         ? {
             loyalty: {
+              enabled: customer.loyaltyEnabled !== false,
               loyaltyAccountId: loyalty.id,
               postedPointsBalance: loyalty.postedPointsBalance,
               heldPoints: loyalty.heldPoints,
@@ -185,6 +220,22 @@ export class ProfilesService {
         422,
       );
     }
+    if (dto.addresses?.length && dto.initialAddress) {
+      throw new CustomerDomainError(
+        CustomerDomainErrorCode.VALIDATION_ERROR,
+        'Send either addresses or initialAddress, not both',
+        422,
+      );
+    }
+    const loyaltyEnabled = dto.loyalty?.enabled !== false;
+    const initialPoints = dto.loyalty?.initialPoints ?? 0;
+    if (initialPoints > 0 && !loyaltyEnabled) {
+      throw new CustomerDomainError(
+        CustomerDomainErrorCode.VALIDATION_ERROR,
+        'loyalty.initialPoints needs loyalty.enabled',
+        422,
+      );
+    }
 
     const phoneNormalized = normalizePhoneNumber(dto.phone);
     const emailNormalized = normalizeEmail(dto.email);
@@ -192,6 +243,7 @@ export class ProfilesService {
       dto.debtLimit !== undefined && dto.debtLimit !== null
         ? toVndNumber(parseVndBigInt(dto.debtLimit, true))
         : 2000000;
+    const groupId = dto.customerGroupId ?? dto.groupId ?? null;
 
     try {
       return await this.runInTenantTx(tenantId, async (em) => {
@@ -218,14 +270,14 @@ export class ProfilesService {
         }
 
         let group: CustomerGroupEntity | null = null;
-        if (dto.customerGroupId) {
+        if (groupId) {
           group = await em.getRepository(CustomerGroupEntity).findOne({
-            where: { id: dto.customerGroupId, tenantId },
+            where: { id: groupId, tenantId },
           });
           if (!group || group.status !== 'ACTIVE') {
             throw new CustomerDomainError(
               CustomerDomainErrorCode.CUSTOMER_GROUP_NOT_FOUND,
-              `Active customer group '${dto.customerGroupId}' not found`,
+              `Active customer group '${groupId}' not found`,
               404,
             );
           }
@@ -247,7 +299,7 @@ export class ProfilesService {
           const tiers = await em.getRepository(MembershipTierEntity).find({
             where: { tenantId, status: 'ACTIVE' },
           });
-          tier = resolveEligibleMembershipTier(0, tiers);
+          tier = resolveEligibleMembershipTier(initialPoints, tiers);
         }
 
         const code = dto.code?.trim()
@@ -268,12 +320,16 @@ export class ProfilesService {
         const customer = em.getRepository(CustomerEntity).create({
           tenantId,
           code,
+          memberCode: loyaltyEnabled
+            ? await nextCustomerDocumentCode(em, tenantId, 'MB')
+            : null,
+          loyaltyEnabled,
           name: trimmedName,
           phone: dto.phone?.trim() || phoneNormalized,
           phoneNormalized,
           email: emailNormalized,
           gender: dto.gender ?? null,
-          dateOfBirth: dto.dateOfBirth ?? null,
+          dateOfBirth: dto.dateOfBirth ?? dto.dob ?? null,
           source: dto.source?.trim().toUpperCase() || 'POS',
           status: 'ACTIVE',
           customerGroupId: group?.id ?? null,
@@ -292,11 +348,11 @@ export class ProfilesService {
         const loyaltyAccount = em.getRepository(LoyaltyAccountEntity).create({
           tenantId,
           customerId: savedCustomer.id,
-          postedPointsBalance: 0,
+          postedPointsBalance: initialPoints,
           heldPoints: 0,
-          lifetimeEarnedPoints: 0,
+          lifetimeEarnedPoints: initialPoints,
           lifetimeRedeemedPoints: 0,
-          qualifyingPoints: 0,
+          qualifyingPoints: initialPoints,
           tierId: tier?.id ?? null,
           status: 'ACTIVE',
           version: 1,
@@ -305,27 +361,80 @@ export class ProfilesService {
           .getRepository(LoyaltyAccountEntity)
           .save(loyaltyAccount);
 
-        let savedAddress: CustomerAddressEntity | null = null;
-        if (dto.initialAddress) {
-          const addrPhoneRaw = dto.initialAddress.phone ?? dto.phone;
+        if (initialPoints > 0) {
+          const tx = await em.getRepository(LoyaltyTransactionEntity).save(
+            em.getRepository(LoyaltyTransactionEntity).create({
+              id: randomUUID(),
+              tenantId,
+              customerId: savedCustomer.id,
+              loyaltyAccountId: savedLoyalty.id,
+              transactionType: 'MANUAL_ADJUSTMENT',
+              pointsDelta: initialPoints,
+              balanceBefore: 0,
+              balanceAfter: initialPoints,
+              sourceType: 'INITIAL',
+              sourceRefId: `initial:${savedCustomer.id}`,
+              idempotencyKey: `initial_points:${savedCustomer.id}`,
+              actorId: _actorId,
+              reason: 'Initial points at customer creation',
+            }),
+          );
+          await this.outbox.add(
+            em,
+            CUSTOMER_LOYALTY_POINTS_EARNED,
+            {
+              transactionId: tx.id,
+              customerId: savedCustomer.id,
+              loyaltyAccountId: savedLoyalty.id,
+              transactionType: 'MANUAL_ADJUSTMENT',
+              pointsDelta: initialPoints,
+              postedBalanceAfter: initialPoints,
+              occurredAt: tx.createdAt.toISOString(),
+            } satisfies LoyaltyPointsEventPayload,
+            { tenantId },
+          );
+        }
+
+        const addressInputs: Array<{
+          recipientName?: string;
+          phone?: string;
+          addressLine: string;
+          ward?: string;
+          district?: string;
+          province?: string;
+          isDefault?: boolean;
+        }> = dto.addresses?.length
+          ? dto.addresses.map((a) => ({ ...a, phone: a.recipientPhone }))
+          : dto.initialAddress
+            ? [{ ...dto.initialAddress, isDefault: true }]
+            : [];
+        const defaultIdx = Math.max(
+          0,
+          addressInputs.findIndex((a) => a.isDefault === true),
+        );
+        for (let i = 0; i < addressInputs.length; i += 1) {
+          const input = addressInputs[i];
+          const addrPhoneRaw = input.phone ?? dto.phone;
           const addrPhoneNorm = normalizePhoneNumber(addrPhoneRaw);
-          const addr = em.getRepository(CustomerAddressEntity).create({
-            tenantId,
-            customerId: savedCustomer.id,
-            recipientName:
-              dto.initialAddress.recipientName?.trim() || savedCustomer.name,
-            phone: addrPhoneRaw?.trim() || addrPhoneNorm,
-            phoneNormalized: addrPhoneNorm,
-            addressLine: dto.initialAddress.addressLine.trim(),
-            ward: dto.initialAddress.ward?.trim() ?? null,
-            district: dto.initialAddress.district?.trim() ?? null,
-            province: dto.initialAddress.province?.trim() ?? null,
-            isDefault: true,
-            status: 'ACTIVE',
-          });
-          savedAddress = await em
-            .getRepository(CustomerAddressEntity)
-            .save(addr);
+          await em.getRepository(CustomerAddressEntity).save(
+            em.getRepository(CustomerAddressEntity).create({
+              tenantId,
+              customerId: savedCustomer.id,
+              recipientName: input.recipientName?.trim() || savedCustomer.name,
+              phone: addrPhoneRaw?.trim() || addrPhoneNorm,
+              phoneNormalized: addrPhoneNorm,
+              addressLine: input.addressLine.trim(),
+              ward: input.ward?.trim() ?? null,
+              district: input.district?.trim() ?? null,
+              province: input.province?.trim() ?? null,
+              isDefault: i === defaultIdx,
+              status: 'ACTIVE',
+            }),
+          );
+        }
+
+        if (dto.tagIds?.length) {
+          await this.replaceTags(em, tenantId, savedCustomer.id, dto.tagIds);
         }
 
         const eventPayload: CustomerLifecycleEventPayload = {
@@ -339,13 +448,7 @@ export class ProfilesService {
         };
         await this.outbox.add(em, CUSTOMER_CREATED, eventPayload, { tenantId });
 
-        return this.formatCustomerRecord(savedCustomer, {
-          fullPhone,
-          group,
-          tier,
-          loyaltyAccount: savedLoyalty,
-          defaultAddress: savedAddress,
-        });
+        return this.loadDetail(em, tenantId, savedCustomer, fullPhone);
       });
     } catch (err) {
       if (isPgUniqueViolation(err)) {
@@ -359,6 +462,271 @@ export class ProfilesService {
     }
   }
 
+  /** Replaces the tag set of a customer; every id must be a tag of the tenant. */
+  private async replaceTags(
+    em: EntityManager,
+    tenantId: string,
+    customerId: string,
+    tagIds: string[],
+  ): Promise<void> {
+    const unique = [...new Set(tagIds)];
+    if (unique.length > 0) {
+      const found = await em.getRepository(CustomerTagEntity).find({
+        where: { tenantId, id: In(unique) },
+      });
+      if (found.length !== unique.length) {
+        const known = new Set(found.map((t) => t.id));
+        throw new CustomerDomainError(
+          CustomerDomainErrorCode.CUSTOMER_TAG_NOT_FOUND,
+          'One or more customer tags were not found',
+          404,
+          { missingTagIds: unique.filter((id) => !known.has(id)) },
+        );
+      }
+    }
+    await em.query(
+      `DELETE FROM ${this.schemaPrefix}"customer_tag_links"
+       WHERE "tenant_id" = $1 AND "customer_id" = $2`,
+      [tenantId, customerId],
+    );
+    if (unique.length > 0) {
+      await em.query(
+        `INSERT INTO ${this.schemaPrefix}"customer_tag_links" ("tenant_id", "customer_id", "tag_id")
+         SELECT $1, $2, UNNEST($3::uuid[])`,
+        [tenantId, customerId, unique],
+      );
+    }
+  }
+
+  private statsSql(restrictToIds: boolean): string {
+    return `SELECT "customer_id",
+              COUNT(*) FILTER (WHERE "order_status" <> 'PENDING_ORDER_EVENT')::int AS "order_count",
+              COALESCE(SUM(GREATEST(0, "eligible_net_spend" - "returned_amount")), 0)::bigint AS "total_spent",
+              MAX("completed_at") FILTER (WHERE "order_status" <> 'PENDING_ORDER_EVENT') AS "last_purchase_at"
+            FROM ${this.schemaPrefix}"customer_purchase_projections"
+            WHERE "tenant_id" = $1${restrictToIds ? ' AND "customer_id" = ANY($2::uuid[])' : ''}
+            GROUP BY "customer_id"`;
+  }
+
+  /** orderCount / totalSpent / lastPurchaseAt read model, per customer id. */
+  private async loadPurchaseStats(
+    em: EntityManager,
+    tenantId: string,
+    customerIds: string[],
+  ): Promise<Map<string, PurchaseStats>> {
+    const out = new Map<string, PurchaseStats>();
+    if (customerIds.length === 0) return out;
+    const rows: Array<{
+      customer_id: string;
+      order_count: number;
+      total_spent: string;
+      last_purchase_at: Date | null;
+    }> = await em.query(this.statsSql(true), [tenantId, customerIds]);
+    for (const r of rows) {
+      out.set(r.customer_id, {
+        orderCount: Number(r.order_count),
+        totalSpent: toMoney(r.total_spent),
+        lastPurchaseAt: r.last_purchase_at,
+      });
+    }
+    return out;
+  }
+
+  /** Detail shape of the screen contract on top of the existing record. */
+  private async loadDetail(
+    em: EntityManager,
+    tenantId: string,
+    customer: CustomerEntity,
+    fullPhone: boolean,
+  ) {
+    const [
+      group,
+      tier,
+      loyaltyAccount,
+      defaultAddress,
+      addresses,
+      tagRows,
+      stats,
+    ] = await Promise.all([
+      customer.customerGroupId
+        ? em.getRepository(CustomerGroupEntity).findOne({
+            where: { id: customer.customerGroupId, tenantId },
+          })
+        : Promise.resolve(null),
+      customer.membershipTierId
+        ? em.getRepository(MembershipTierEntity).findOne({
+            where: { id: customer.membershipTierId, tenantId },
+          })
+        : Promise.resolve(null),
+      em.getRepository(LoyaltyAccountEntity).findOne({
+        where: { customerId: customer.id, tenantId },
+      }),
+      em.getRepository(CustomerAddressEntity).findOne({
+        where: {
+          customerId: customer.id,
+          tenantId,
+          isDefault: true,
+          status: 'ACTIVE',
+        },
+      }),
+      em.getRepository(CustomerAddressEntity).find({
+        where: { customerId: customer.id, tenantId, status: 'ACTIVE' },
+        order: { isDefault: 'DESC', createdAt: 'ASC' },
+      }),
+      em.query(
+        `SELECT t."id", t."name"
+           FROM ${this.schemaPrefix}"customer_tag_links" l
+           JOIN ${this.schemaPrefix}"customer_tags" t
+             ON t."tenant_id" = l."tenant_id" AND t."id" = l."tag_id"
+           WHERE l."tenant_id" = $1 AND l."customer_id" = $2
+           ORDER BY t."name" ASC`,
+        [tenantId, customer.id],
+      ) as Promise<Array<{ id: string; name: string }>>,
+      this.loadPurchaseStats(em, tenantId, [customer.id]),
+    ]);
+    const s = stats.get(customer.id) ?? NO_STATS;
+    return {
+      ...this.formatCustomerRecord(customer, {
+        fullPhone,
+        group,
+        tier,
+        loyaltyAccount,
+        defaultAddress,
+      }),
+      dob: customer.dateOfBirth,
+      joinedAt: customer.createdAt,
+      tier: tier ? { id: tier.id, code: tier.code, name: tier.name } : null,
+      addresses: addresses.map((a) => ({
+        id: a.id,
+        recipientName: a.recipientName,
+        recipientPhone: fullPhone ? a.phone : maskPhoneNumber(a.phone),
+        province: a.province,
+        district: a.district,
+        ward: a.ward,
+        addressLine: a.addressLine,
+        isDefault: a.isDefault,
+      })),
+      tags: tagRows.map((t) => ({ id: t.id, name: t.name })),
+      orderCount: s.orderCount,
+      totalSpent: s.totalSpent,
+      lastPurchaseAt: s.lastPurchaseAt,
+      loyaltyPoints: loyaltyAccount?.postedPointsBalance ?? 0,
+    };
+  }
+
+  /**
+   * One page of customer ids that match the list filters, with the total.
+   * Spend filters and spend sorts join the purchase read model.
+   */
+  private async findCustomerPage(
+    em: EntityManager,
+    tenantId: string,
+    f: CustomerFilter & { cursor?: string },
+    page: { limit: number; offset: number },
+  ): Promise<{ ids: string[]; total: number }> {
+    const prefix = this.schemaPrefix;
+    const params: unknown[] = [tenantId];
+    const p = (v: unknown) => {
+      params.push(v);
+      return `$${params.length}`;
+    };
+    const where: string[] = ['c."tenant_id" = $1'];
+
+    if (f.status) where.push(`c."status" = ${p(f.status)}`);
+    else where.push('c."deleted_at" IS NULL');
+    if (f.customerGroupId) {
+      where.push(`c."customer_group_id" = ${p(f.customerGroupId)}`);
+    }
+    if (f.membershipTierId) {
+      where.push(`c."membership_tier_id" = ${p(f.membershipTierId)}`);
+    }
+    if (f.source)
+      where.push(`c."source" = ${p(f.source.trim().toUpperCase())}`);
+    const codes = (f.group ?? '')
+      .split(',')
+      .map((x) => x.trim().toLowerCase())
+      .filter((x) => x && x !== 'all');
+    if (codes.length > 0) {
+      where.push(`LOWER(g."code") = ANY(${p(codes)}::text[])`);
+    }
+    if (f.tagId) {
+      where.push(
+        `EXISTS (SELECT 1 FROM ${prefix}"customer_tag_links" tl
+                 WHERE tl."tenant_id" = c."tenant_id" AND tl."customer_id" = c."id"
+                   AND tl."tag_id" = ${p(f.tagId)})`,
+      );
+    }
+    if (f.spendMin !== undefined) {
+      where.push(`COALESCE(s."total_spent", 0) >= ${p(f.spendMin)}`);
+    }
+    if (f.spendMax !== undefined) {
+      where.push(`COALESCE(s."total_spent", 0) <= ${p(f.spendMax)}`);
+    }
+    if (f.q && f.q.trim()) {
+      const rawQ = f.q.trim();
+      let phoneQ: string | null = null;
+      try {
+        phoneQ = normalizePhoneNumber(rawQ);
+      } catch {
+        phoneQ = null;
+      }
+      const like = p(`%${escapeLike(rawQ)}%`);
+      if (phoneQ) {
+        where.push(
+          `(c."phone_normalized" = ${p(phoneQ)} OR c."name" ILIKE ${like} OR c."code" ILIKE ${like} OR c."email" ILIKE ${like})`,
+        );
+      } else {
+        where.push(
+          `(c."name" ILIKE ${like} OR c."code" ILIKE ${like} OR c."phone" ILIKE ${like} OR c."email" ILIKE ${like})`,
+        );
+      }
+    }
+
+    const sort = f.sort ?? 'createdAt';
+    const dir = f.order === 'asc' ? 'ASC' : 'DESC';
+    const defaultOrder = sort === 'createdAt' && dir === 'DESC';
+    if (f.cursor && defaultOrder) {
+      const cursorRow = await em.getRepository(CustomerEntity).findOne({
+        where: { id: f.cursor, tenantId },
+      });
+      if (cursorRow) {
+        const at = p(cursorRow.createdAt);
+        where.push(
+          `(c."created_at" < ${at} OR (c."created_at" = ${at} AND c."id" < ${p(cursorRow.id)}))`,
+        );
+      }
+    }
+
+    const needStats =
+      f.spendMin !== undefined ||
+      f.spendMax !== undefined ||
+      sort === 'totalSpent' ||
+      sort === 'lastPurchaseAt';
+    const from = `FROM ${prefix}"customers" c
+      LEFT JOIN ${prefix}"customer_groups" g
+        ON g."tenant_id" = c."tenant_id" AND g."id" = c."customer_group_id"
+      ${needStats ? `LEFT JOIN (${this.statsSql(false)}) s ON s."customer_id" = c."id"` : ''}
+      WHERE ${where.join(' AND ')}`;
+
+    const orderBy =
+      sort === 'totalSpent'
+        ? `COALESCE(s."total_spent", 0) ${dir}, c."created_at" DESC, c."id" DESC`
+        : sort === 'lastPurchaseAt'
+          ? `s."last_purchase_at" ${dir} NULLS LAST, c."created_at" DESC, c."id" DESC`
+          : `c."created_at" ${dir}, c."id" ${dir}`;
+
+    const totalRows: Array<{ n: number }> = await em.query(
+      `SELECT COUNT(*)::int AS n ${from}`,
+      params,
+    );
+    const rows: Array<{ id: string }> = await em.query(
+      `SELECT c."id" AS id ${from} ORDER BY ${orderBy}
+       LIMIT ${p(page.limit)} OFFSET ${p(f.cursor && defaultOrder ? 0 : page.offset)}`,
+      params,
+    );
+    return { ids: rows.map((r) => r.id), total: totalRows[0]?.n ?? 0 };
+  }
+
   async listCustomers(
     tenantId: string,
     query: ListCustomersQueryDto,
@@ -369,96 +737,45 @@ export class ProfilesService {
     const offset = (page - 1) * limit;
 
     return this.runInTenantTx(tenantId, async (em) => {
-      const qb = em
-        .getRepository(CustomerEntity)
-        .createQueryBuilder('c')
-        .where('c.tenant_id = :tenantId', { tenantId });
-
-      if (query.status) {
-        qb.andWhere('c.status = :status', { status: query.status });
-      } else {
-        qb.andWhere('c.deleted_at IS NULL');
-      }
-
-      if (query.customerGroupId) {
-        qb.andWhere('c.customer_group_id = :customerGroupId', {
-          customerGroupId: query.customerGroupId,
-        });
-      }
-
-      if (query.membershipTierId) {
-        qb.andWhere('c.membership_tier_id = :membershipTierId', {
-          membershipTierId: query.membershipTierId,
-        });
-      }
-
-      if (query.source) {
-        qb.andWhere('c.source = :source', {
-          source: query.source.trim().toUpperCase(),
-        });
-      }
-
-      if (query.q && query.q.trim()) {
-        const rawQ = query.q.trim();
-        let phoneQ: string | null = null;
-        try {
-          phoneQ = normalizePhoneNumber(rawQ);
-        } catch {
-          phoneQ = null;
-        }
-        if (phoneQ) {
-          qb.andWhere(
-            '(c.phone_normalized = :phoneQ OR c.name ILIKE :likeQ OR c.code ILIKE :likeQ)',
-            { phoneQ, likeQ: `%${rawQ}%` },
-          );
-        } else {
-          qb.andWhere(
-            '(c.name ILIKE :likeQ OR c.code ILIKE :likeQ OR c.phone ILIKE :likeQ OR c.email ILIKE :likeQ)',
-            { likeQ: `%${rawQ}%` },
-          );
-        }
-      }
-
-      if (query.cursor) {
-        const cursorRow = await em.getRepository(CustomerEntity).findOne({
-          where: { id: query.cursor, tenantId },
-        });
-        if (cursorRow) {
-          qb.andWhere(
-            '(c.created_at < :cursorCreatedAt OR (c.created_at = :cursorCreatedAt AND c.id < :cursorId))',
-            {
-              cursorCreatedAt: cursorRow.createdAt,
-              cursorId: cursorRow.id,
-            },
-          );
-        }
-      }
-
-      qb.orderBy('c.created_at', 'DESC').addOrderBy('c.id', 'DESC');
-
-      if (!query.cursor) {
-        qb.skip(offset);
-      }
-      qb.take(limit);
-
-      const [items, total] = await qb.getManyAndCount();
-      const customerIds = items.map((c) => c.id);
+      const { ids, total } = await this.findCustomerPage(em, tenantId, query, {
+        limit,
+        offset,
+      });
+      const entities = ids.length
+        ? await em.getRepository(CustomerEntity).find({
+            where: { tenantId, id: In(ids) },
+          })
+        : [];
+      const byId = new Map(entities.map((c) => [c.id, c]));
+      const items = ids.map((id) => byId.get(id)!).filter(Boolean);
 
       const loyaltyByCustomer = new Map<string, LoyaltyAccountEntity>();
-      if (customerIds.length > 0) {
-        const accounts = await em
-          .getRepository(LoyaltyAccountEntity)
-          .createQueryBuilder('la')
-          .where('la.tenant_id = :tenantId', { tenantId })
-          .andWhere('la.customer_id IN (:...customerIds)', { customerIds })
-          .getMany();
+      if (ids.length > 0) {
+        const accounts = await em.getRepository(LoyaltyAccountEntity).find({
+          where: { tenantId, customerId: In(ids) },
+        });
         for (const acc of accounts) {
           loyaltyByCustomer.set(acc.customerId, acc);
         }
       }
+      const groupIds = [
+        ...new Set(items.map((c) => c.customerGroupId).filter(Boolean)),
+      ] as string[];
+      const groups = groupIds.length
+        ? await em.getRepository(CustomerGroupEntity).find({
+            where: { tenantId, id: In(groupIds) },
+          })
+        : [];
+      const groupById = new Map(groups.map((g) => [g.id, g]));
+      const stats = await this.loadPurchaseStats(em, tenantId, ids);
 
+      const defaultOrder =
+        (query.sort ?? 'createdAt') === 'createdAt' && query.order !== 'asc';
       const nextCursor =
-        items.length === limit ? (items[items.length - 1]?.id ?? null) : null;
+        defaultOrder && items.length === limit
+          ? (items[items.length - 1]?.id ?? null)
+          : null;
+      const totalPages = Math.ceil(total / limit);
 
       return {
         items: items.map((c) =>
@@ -471,6 +788,166 @@ export class ProfilesService {
         page,
         limit,
         nextCursor,
+        // Screen contract shape (phone only for customers.update holders).
+        data: items.map((c) => {
+          const g = c.customerGroupId
+            ? groupById.get(c.customerGroupId)
+            : undefined;
+          const st = stats.get(c.id) ?? NO_STATS;
+          return {
+            id: c.id,
+            code: c.code,
+            name: c.name,
+            phone: fullPhone ? c.phone : null,
+            phoneMasked: formatPhoneMasked(c.phone ?? c.phoneNormalized),
+            email: c.email,
+            group: g ? { id: g.id, code: g.code, name: g.name } : null,
+            orderCount: st.orderCount,
+            totalSpent: st.totalSpent,
+            loyaltyPoints:
+              loyaltyByCustomer.get(c.id)?.postedPointsBalance ?? 0,
+            lastPurchaseAt: st.lastPurchaseAt,
+          };
+        }),
+        pagination: {
+          limit,
+          currentPage: page,
+          nextPage: page < totalPages ? page + 1 : null,
+          totalRecords: total,
+          totalPages,
+        },
+      };
+    });
+  }
+
+  /** `GET /customers/export`: the filtered list as CSV (max 5000 rows). */
+  async exportCustomersCsv(
+    tenantId: string,
+    query: ExportCustomersQueryDto,
+    fullPhone = false,
+  ): Promise<string> {
+    return this.runInTenantTx(tenantId, async (em) => {
+      const { ids } = await this.findCustomerPage(em, tenantId, query, {
+        limit: 5000,
+        offset: 0,
+      });
+      const entities = ids.length
+        ? await em.getRepository(CustomerEntity).find({
+            where: { tenantId, id: In(ids) },
+          })
+        : [];
+      const byId = new Map(entities.map((c) => [c.id, c]));
+      const groups = await em.getRepository(CustomerGroupEntity).find({
+        where: { tenantId },
+      });
+      const groupName = new Map(groups.map((g) => [g.id, g.name]));
+      const accounts = ids.length
+        ? await em.getRepository(LoyaltyAccountEntity).find({
+            where: { tenantId, customerId: In(ids) },
+          })
+        : [];
+      const points = new Map(
+        accounts.map((a) => [a.customerId, a.postedPointsBalance]),
+      );
+      const stats = await this.loadPurchaseStats(em, tenantId, ids);
+      const header =
+        'code,name,phone,email,group,orderCount,totalSpent,loyaltyPoints,lastPurchaseAt,source,status,note';
+      const lines = ids
+        .map((id) => byId.get(id))
+        .filter((c): c is CustomerEntity => !!c)
+        .map((c) => {
+          const st = stats.get(c.id) ?? NO_STATS;
+          const rawPhone = c.phone ?? c.phoneNormalized;
+          return [
+            c.code,
+            c.name,
+            fullPhone ? (rawPhone ?? '') : (maskPhoneNumber(rawPhone) ?? ''),
+            c.email ?? '',
+            c.customerGroupId ? (groupName.get(c.customerGroupId) ?? '') : '',
+            st.orderCount,
+            st.totalSpent,
+            points.get(c.id) ?? 0,
+            st.lastPurchaseAt ? st.lastPurchaseAt.toISOString() : '',
+            c.source,
+            c.status,
+            c.note ?? '',
+          ]
+            .map(sanitizeCsvCell)
+            .join(',');
+        });
+      return [header, ...lines].join('\n');
+    });
+  }
+
+  /**
+   * KPI cards and group tab counts of the customer screen. Groups are seeded
+   * on first call; `returningRate` = customers with 2+ orders in the month
+   * over customers with any order in the month.
+   */
+  async getKpiSummary(tenantId: string, query: CustomersKpiQueryDto) {
+    const now = new Date();
+    const [y, m] = query.month
+      ? query.month.split('-').map(Number)
+      : [now.getUTCFullYear(), now.getUTCMonth() + 1];
+    const start = new Date(Date.UTC(y, m - 1, 1));
+    const end = new Date(Date.UTC(y, m, 1));
+    const prevStart = new Date(Date.UTC(y, m - 2, 1));
+    const prefix = this.schemaPrefix;
+
+    return this.runInTenantTx(tenantId, async (em) => {
+      await ensureSeededGroups(em, tenantId);
+      const [totals]: Array<{ total: number; fresh: number }> = await em.query(
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE "created_at" >= $2 AND "created_at" < $3)::int AS fresh
+         FROM ${prefix}"customers"
+         WHERE "tenant_id" = $1 AND "deleted_at" IS NULL`,
+        [tenantId, start, end],
+      );
+      const groupRows: Array<{ code: string; n: number }> = await em.query(
+        `SELECT LOWER(g."code") AS code, COUNT(c."id")::int AS n
+         FROM ${prefix}"customer_groups" g
+         LEFT JOIN ${prefix}"customers" c
+           ON c."tenant_id" = g."tenant_id" AND c."customer_group_id" = g."id"
+          AND c."deleted_at" IS NULL
+         WHERE g."tenant_id" = $1
+         GROUP BY LOWER(g."code")`,
+        [tenantId],
+      );
+      const groupCounts: Record<string, number> = {
+        all: totals?.total ?? 0,
+        retail: 0,
+        member: 0,
+        vip: 0,
+        wholesale: 0,
+      };
+      for (const r of groupRows) groupCounts[r.code] = r.n;
+
+      const rate = async (from: Date, to: Date): Promise<number> => {
+        const [r]: Array<{ buyers: number; repeat: number }> = await em.query(
+          `SELECT COUNT(*)::int AS buyers, COUNT(*) FILTER (WHERE n >= 2)::int AS repeat
+           FROM (SELECT "customer_id", COUNT(*) AS n
+                 FROM ${prefix}"customer_purchase_projections"
+                 WHERE "tenant_id" = $1 AND "completed_at" >= $2 AND "completed_at" < $3
+                   AND "order_status" <> 'PENDING_ORDER_EVENT'
+                 GROUP BY "customer_id") x`,
+          [tenantId, from, to],
+        );
+        return r && r.buyers > 0
+          ? Math.round((r.repeat / r.buyers) * 1000) / 1000
+          : 0;
+      };
+      const returningRate = await rate(start, end);
+      const previous = await rate(prevStart, start);
+
+      return {
+        total: totals?.total ?? 0,
+        newThisMonth: totals?.fresh ?? 0,
+        members: groupCounts.member,
+        vip: groupCounts.vip,
+        returningRate,
+        returningRateDelta:
+          Math.round((returningRate - previous) * 1000) / 1000,
+        groupCounts,
       };
     });
   }
@@ -532,37 +1009,7 @@ export class ProfilesService {
         );
       }
 
-      const [group, tier, loyaltyAccount, defaultAddress] = await Promise.all([
-        customer.customerGroupId
-          ? em.getRepository(CustomerGroupEntity).findOne({
-              where: { id: customer.customerGroupId, tenantId },
-            })
-          : Promise.resolve(null),
-        customer.membershipTierId
-          ? em.getRepository(MembershipTierEntity).findOne({
-              where: { id: customer.membershipTierId, tenantId },
-            })
-          : Promise.resolve(null),
-        em.getRepository(LoyaltyAccountEntity).findOne({
-          where: { customerId: customer.id, tenantId },
-        }),
-        em.getRepository(CustomerAddressEntity).findOne({
-          where: {
-            customerId: customer.id,
-            tenantId,
-            isDefault: true,
-            status: 'ACTIVE',
-          },
-        }),
-      ]);
-
-      return this.formatCustomerRecord(customer, {
-        fullPhone,
-        group,
-        tier,
-        loyaltyAccount,
-        defaultAddress,
-      });
+      return this.loadDetail(em, tenantId, customer, fullPhone);
     });
   }
 
@@ -582,38 +1029,12 @@ export class ProfilesService {
           404,
         );
       }
-
-      const [group, tier, loyaltyAccount, defaultAddress] = await Promise.all([
-        customer.customerGroupId
-          ? em.getRepository(CustomerGroupEntity).findOne({
-              where: { id: customer.customerGroupId, tenantId },
-            })
-          : Promise.resolve(null),
-        customer.membershipTierId
-          ? em.getRepository(MembershipTierEntity).findOne({
-              where: { id: customer.membershipTierId, tenantId },
-            })
-          : Promise.resolve(null),
-        em.getRepository(LoyaltyAccountEntity).findOne({
-          where: { customerId: customer.id, tenantId },
-        }),
-        em.getRepository(CustomerAddressEntity).findOne({
-          where: {
-            customerId: customer.id,
-            tenantId,
-            isDefault: true,
-            status: 'ACTIVE',
-          },
-        }),
-      ]);
-
-      return this.formatCustomerRecord(customer, {
-        fullPhone: options?.fullPhone,
-        group,
-        tier,
-        loyaltyAccount,
-        defaultAddress,
-      });
+      return this.loadDetail(
+        em,
+        tenantId,
+        customer,
+        options?.fullPhone === true,
+      );
     });
   }
 
@@ -707,8 +1128,20 @@ export class ProfilesService {
           customer.gender = dto.gender;
         }
 
-        if (dto.dateOfBirth !== undefined) {
-          customer.dateOfBirth = dto.dateOfBirth;
+        const dob = dto.dateOfBirth !== undefined ? dto.dateOfBirth : dto.dob;
+        if (dob !== undefined) {
+          customer.dateOfBirth = dob;
+        }
+
+        if (dto.loyalty?.enabled !== undefined) {
+          customer.loyaltyEnabled = dto.loyalty.enabled;
+          if (dto.loyalty.enabled && !customer.memberCode) {
+            customer.memberCode = await nextCustomerDocumentCode(
+              em,
+              tenantId,
+              'MB',
+            );
+          }
         }
 
         if (dto.debtLimit !== undefined) {
@@ -724,18 +1157,20 @@ export class ProfilesService {
         }
 
         const previousGroupId = customer.customerGroupId;
+        const groupIdInput =
+          dto.customerGroupId !== undefined ? dto.customerGroupId : dto.groupId;
         let group: CustomerGroupEntity | null = null;
-        if (dto.customerGroupId !== undefined) {
-          if (dto.customerGroupId === null) {
+        if (groupIdInput !== undefined) {
+          if (groupIdInput === null) {
             customer.customerGroupId = null;
           } else {
             group = await em.getRepository(CustomerGroupEntity).findOne({
-              where: { id: dto.customerGroupId, tenantId },
+              where: { id: groupIdInput, tenantId },
             });
             if (!group || group.status !== 'ACTIVE') {
               throw new CustomerDomainError(
                 CustomerDomainErrorCode.CUSTOMER_GROUP_NOT_FOUND,
-                `Active customer group '${dto.customerGroupId}' not found`,
+                `Active customer group '${groupIdInput}' not found`,
                 404,
               );
             }
@@ -769,6 +1204,10 @@ export class ProfilesService {
           tier = await em.getRepository(MembershipTierEntity).findOne({
             where: { id: customer.membershipTierId, tenantId },
           });
+        }
+
+        if (dto.tagIds !== undefined) {
+          await this.replaceTags(em, tenantId, customer.id, dto.tagIds);
         }
 
         customer.version += 1;
@@ -831,12 +1270,7 @@ export class ProfilesService {
           tenantId,
         });
 
-        return this.formatCustomerRecord(saved, {
-          fullPhone,
-          group,
-          tier,
-          loyaltyAccount,
-        });
+        return this.loadDetail(em, tenantId, saved, fullPhone);
       });
     } catch (err) {
       if (isPgUniqueViolation(err)) {
@@ -889,6 +1323,15 @@ export class ProfilesService {
           `Cannot deactivate or anonymize customer '${customerId}' while ${activeHoldsCount} loyalty point hold(s) are active`,
           409,
           { activeHoldsCount },
+        );
+      }
+
+      if (customer.currentDebt > 0) {
+        throw new CustomerDomainError(
+          CustomerDomainErrorCode.CUSTOMER_HAS_OUTSTANDING_DEBT,
+          `Cannot deactivate or anonymize customer '${customerId}' with outstanding debt`,
+          409,
+          { currentDebt: customer.currentDebt },
         );
       }
 

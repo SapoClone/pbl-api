@@ -14,10 +14,14 @@ import { BrandsController } from './modules/brands/brands.controller';
 import { BrandsService } from './modules/brands/brands.service';
 import { CategoriesController } from './modules/categories/categories.controller';
 import { CategoriesService } from './modules/categories/categories.service';
+import { ImportsController } from './modules/imports/imports.controller';
+import { ImportsService } from './modules/imports/imports.service';
 import { PricingController } from './modules/pricing/pricing.controller';
 import { PricingService } from './modules/pricing/pricing.service';
 import { ProductsController } from './modules/products/products.controller';
 import { ProductsService } from './modules/products/products.service';
+import { UploadsController } from './modules/uploads/uploads.controller';
+import { UploadsService } from './modules/uploads/uploads.service';
 
 const auth = createTestAuth();
 const TENANT = '11111111-1111-4111-8111-111111111111';
@@ -49,7 +53,21 @@ const attributesStub = {
   deleteValue: jest.fn(async () => undefined),
 };
 
+const emptyVariantList = {
+  data: [],
+  pagination: { limit: 10, currentPage: 1, totalRecords: 0, totalPages: 0 },
+};
+
 const productsStub = {
+  listVariants: jest.fn(async (_q?: unknown) => emptyVariantList),
+  productSummary: jest.fn(async () => ({
+    productCount: 1,
+    variantCount: 2,
+    activeVariantCount: 1,
+    inactiveVariantCount: 1,
+  })),
+  exportProductsCsv: jest.fn(async () => '\uFEFFname\r\n'),
+  softDeleteVariant: jest.fn(async () => undefined),
   createProduct: jest.fn(async (dto) => ({ id: SAMPLE_UUID, ...dto })),
   listProducts: jest.fn(async () => ({
     items: [],
@@ -92,6 +110,17 @@ const productsStub = {
   listUnitConversions: jest.fn(async () => []),
 };
 
+const uploadsStub = {
+  createImageUpload: jest.fn(async () => ({ imageId: SAMPLE_UUID })),
+  createImportUpload: jest.fn(async () => ({ uploadId: SAMPLE_UUID })),
+  storeContent: jest.fn(async () => ({ id: SAMPLE_UUID, status: 'uploaded' })),
+};
+
+const importsStub = {
+  start: jest.fn(async () => ({ id: SAMPLE_UUID, status: 'processing' })),
+  get: jest.fn(async () => ({ id: SAMPLE_UUID, status: 'completed' })),
+};
+
 const pricingStub = {
   createPriceList: jest.fn(async (dto) => ({ id: SAMPLE_UUID, ...dto })),
   listPriceLists: jest.fn(async () => []),
@@ -119,6 +148,8 @@ const pricingStub = {
     AttributesController,
     ProductsController,
     PricingController,
+    UploadsController,
+    ImportsController,
   ],
   providers: [
     { provide: CategoriesService, useValue: categoriesStub },
@@ -126,6 +157,8 @@ const pricingStub = {
     { provide: AttributesService, useValue: attributesStub },
     { provide: ProductsService, useValue: productsStub },
     { provide: PricingService, useValue: pricingStub },
+    { provide: UploadsService, useValue: uploadsStub },
+    { provide: ImportsService, useValue: importsStub },
   ],
 })
 class TestCatalogHttpModule {}
@@ -206,6 +239,14 @@ describe('Catalog service HTTP & RBAC contract', () => {
       'orders.create',
       'inventory.view',
     ];
+    const pickerPerms = [
+      'products.view',
+      'pos.create',
+      'orders.create',
+      'inventory.view',
+      'inventory.create',
+      'purchasing.create',
+    ];
     // [method, path, permissions that open the route]
     const matrix: Array<[string, string, string[]]> = [
       ['post', '/api/v1/categories', ['products.create']],
@@ -229,6 +270,23 @@ describe('Catalog service HTTP & RBAC contract', () => {
       ['post', '/api/v1/products', ['products.create']],
       ['get', '/api/v1/products', ['products.view']],
       ['get', '/api/v1/products/lookup?sku=A', lookupPerms],
+      ['get', '/api/v1/products/summary', ['products.view']],
+      ['get', '/api/v1/products/export', ['products.view']],
+      ['get', '/api/v1/variants', pickerPerms],
+      ['delete', `/api/v1/variants/${U}`, ['products.delete']],
+      [
+        'post',
+        '/api/v1/uploads/images',
+        ['products.create', 'products.update'],
+      ],
+      ['post', '/api/v1/uploads/imports', ['products.create']],
+      [
+        'put',
+        `/api/v1/uploads/${U}/content`,
+        ['products.create', 'products.update'],
+      ],
+      ['post', '/api/v1/product-imports', ['products.create']],
+      ['get', `/api/v1/product-imports/${U}`, ['products.create']],
       ['get', `/api/v1/products/${U}`, ['products.view']],
       ['patch', `/api/v1/products/${U}`, ['products.update']],
       ['patch', `/api/v1/products/${U}/status`, ['products.update']],
@@ -331,6 +389,139 @@ describe('Catalog service HTTP & RBAC contract', () => {
         .put(`/api/v1/price-lists/${SAMPLE_UUID}/items`)
         .set('Authorization', as(['owner']))
         .send({ items: [{ variantId: SAMPLE_UUID, price: -1 }] })
+        .expect(422);
+    });
+  });
+  describe('Phase 4 screen endpoints', () => {
+    const owner = () => as(['owner']);
+
+    it('routes products/summary and products/export before products/:id', async () => {
+      const summary = await request(url())
+        .get('/api/v1/products/summary')
+        .set('Authorization', owner())
+        .expect(200);
+      expect(summary.body.variantCount).toBe(2);
+      expect(productsStub.getProductById).not.toHaveBeenCalled();
+      const csv = await request(url())
+        .get('/api/v1/products/export')
+        .set('Authorization', owner())
+        .expect(200);
+      expect(csv.headers['content-type']).toMatch(/^text\/csv/);
+      expect(csv.headers['content-disposition']).toContain('products.csv');
+      expect(csv.text.charCodeAt(0)).toBe(0xfeff);
+    });
+
+    it('GET /variants parses filters, normalises status, rejects bad input with 422', async () => {
+      await request(url())
+        .get(
+          `/api/v1/variants?ids=${SAMPLE_UUID},${SAMPLE_UUID}&status=active&sort=price&order=asc&limit=5`,
+        )
+        .set('Authorization', owner())
+        .expect(200);
+      expect(productsStub.listVariants).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ids: [SAMPLE_UUID, SAMPLE_UUID],
+          status: 'ACTIVE',
+          sort: 'price',
+          order: 'ASC',
+          limit: 5,
+        }),
+      );
+      for (const bad of [
+        'limit=101',
+        'ids=nope',
+        'sort=cost',
+        'status=gone',
+        'page=0',
+      ]) {
+        await request(url())
+          .get(`/api/v1/variants?${bad}`)
+          .set('Authorization', owner())
+          .expect(422);
+      }
+      const many = Array.from({ length: 101 }, () => SAMPLE_UUID).join(',');
+      await request(url())
+        .get(`/api/v1/variants?ids=${many}`)
+        .set('Authorization', owner())
+        .expect(422);
+    });
+
+    it('DELETE /variants/:id answers 204 and rejects a non-uuid id', async () => {
+      await request(url())
+        .delete(`/api/v1/variants/${SAMPLE_UUID}`)
+        .set('Authorization', owner())
+        .expect(204);
+      await request(url())
+        .delete('/api/v1/variants/nope')
+        .set('Authorization', owner())
+        .expect(400);
+    });
+
+    it('POST /uploads/images validates type and size (422) and answers 201', async () => {
+      const ok = { fileName: 'a.jpg', contentType: 'image/jpeg', size: 1000 };
+      await request(url())
+        .post('/api/v1/uploads/images')
+        .set('Authorization', owner())
+        .send(ok)
+        .expect(201);
+      for (const bad of [
+        { ...ok, contentType: 'image/gif' },
+        { ...ok, contentType: 'text/csv' },
+        { ...ok, size: 5 * 1024 * 1024 + 1 },
+        { ...ok, size: 0 },
+        { ...ok, size: 1.5 },
+        { ...ok, fileName: '' },
+      ]) {
+        await request(url())
+          .post('/api/v1/uploads/images')
+          .set('Authorization', owner())
+          .send(bad)
+          .expect(422);
+      }
+      await request(url())
+        .post('/api/v1/uploads/imports')
+        .set('Authorization', owner())
+        .send({ fileName: 'p.csv', contentType: 'image/png', size: 10 })
+        .expect(422);
+    });
+
+    it('PUT /uploads/:id/content hands the raw body and content type to the service', async () => {
+      await request(url())
+        .put(`/api/v1/uploads/${SAMPLE_UUID}/content`)
+        .set('Authorization', owner())
+        .set('Content-Type', 'image/png')
+        .send(Buffer.from([1, 2, 3]))
+        .expect(200);
+      const [id, type, body] = uploadsStub.storeContent.mock
+        .calls[0] as unknown as [string, string, Buffer];
+      expect(id).toBe(SAMPLE_UUID);
+      expect(type).toBe('image/png');
+      expect([...body]).toEqual([1, 2, 3]);
+    });
+
+    it('POST /product-imports answers 202 and needs a uuid uploadId', async () => {
+      await request(url())
+        .post('/api/v1/product-imports')
+        .set('Authorization', owner())
+        .send({ uploadId: SAMPLE_UUID })
+        .expect(202);
+      await request(url())
+        .post('/api/v1/product-imports')
+        .set('Authorization', owner())
+        .send({ uploadId: 'x' })
+        .expect(422);
+    });
+
+    it('accepts imageIds on product create and rejects non-uuid entries', async () => {
+      await request(url())
+        .post('/api/v1/products')
+        .set('Authorization', owner())
+        .send({ name: 'P', imageIds: [SAMPLE_UUID] })
+        .expect(201);
+      await request(url())
+        .post('/api/v1/products')
+        .set('Authorization', owner())
+        .send({ name: 'P', imageIds: ['nope'] })
         .expect(422);
     });
   });

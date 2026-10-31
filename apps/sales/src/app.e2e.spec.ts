@@ -8,6 +8,7 @@ import {
 } from '@pbl/common';
 import { AddressInfo } from 'net';
 import request from 'supertest';
+import { OrderQueryService } from './modules/screen/order-query.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
 
@@ -19,6 +20,11 @@ const body = {
   branchId: BRANCH,
   paymentMethod: 'cash',
   items: [{ sku: 'AO-01', name: 'Ao thun', quantity: 1, unitPrice: 120000 }],
+};
+
+const orderQuery = {
+  list: jest.fn(async () => ({ data: [], pagination: {} })),
+  detail: jest.fn(async () => ({ id: 'o1' })),
 };
 
 const ordersService = {
@@ -39,7 +45,10 @@ const ordersService = {
     PblHealthModule.forRoot({ service: 'sales', redisFromEnv: true }),
   ],
   controllers: [OrdersController],
-  providers: [{ provide: OrdersService, useValue: ordersService }],
+  providers: [
+    { provide: OrdersService, useValue: ordersService },
+    { provide: OrderQueryService, useValue: orderQuery },
+  ],
 })
 class TestAppModule {}
 

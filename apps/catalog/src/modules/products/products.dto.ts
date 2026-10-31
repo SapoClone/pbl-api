@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -109,6 +109,18 @@ export class CreateProductReqDto {
   images?: ProductImageDto[];
 
   @ApiPropertyOptional({
+    type: [String],
+    maxItems: 10,
+    description:
+      'Ids from POST /uploads/images, in display order (the first is the cover). Replaces `images` when sent.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUUID('all', { each: true })
+  imageIds?: string[];
+
+  @ApiPropertyOptional({
     default: false,
     description:
       'If true, creates an initial default sellable variant in the same transaction',
@@ -190,6 +202,18 @@ export class UpdateProductReqDto {
   @ValidateNested({ each: true })
   @Type(() => ProductImageDto)
   images?: ProductImageDto[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 10,
+    description:
+      'Ids from POST /uploads/images, in display order (the first is the cover). Replaces `images` when sent.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUUID('all', { each: true })
+  imageIds?: string[];
 
   @ApiPropertyOptional({
     example: 1,
@@ -528,4 +552,114 @@ export interface ProductRes {
   unitConversions?: UnitConversionRes[];
   createdAt: string;
   updatedAt: string;
+}
+
+const lowerStatus = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.toUpperCase() : value;
+
+export class ListVariantsReqDto {
+  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page: number = 1;
+
+  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit: number = 10;
+
+  @ApiPropertyOptional({ description: 'Search name, SKU and barcode' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  q?: string;
+
+  @ApiPropertyOptional({ description: 'Exact barcode match' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  barcode?: string;
+
+  @ApiPropertyOptional({
+    description: 'Comma-separated variant ids, at most 100',
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value
+          .split(',')
+          .map((v) => v.trim())
+          .filter(Boolean)
+      : value,
+  )
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID('all', { each: true })
+  ids?: string[];
+
+  @ApiPropertyOptional({
+    enum: ['active', 'inactive', 'archived'],
+    description: 'Case-insensitive',
+  })
+  @IsOptional()
+  @Transform(lowerStatus)
+  @IsIn(['ACTIVE', 'INACTIVE', 'ARCHIVED'])
+  status?: VariantStatus;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['createdAt', 'name', 'price', 'skuCode'],
+    default: 'createdAt',
+  })
+  @IsOptional()
+  @IsIn(['createdAt', 'name', 'price', 'skuCode'])
+  sort: 'createdAt' | 'name' | 'price' | 'skuCode' = 'createdAt';
+
+  @ApiPropertyOptional({ enum: ['ASC', 'DESC'], default: 'DESC' })
+  @IsOptional()
+  @Transform(lowerStatus)
+  @IsIn(['ASC', 'DESC'])
+  order: 'ASC' | 'DESC' = 'DESC';
+}
+
+export interface VariantRowRes {
+  variantId: string;
+  productId: string;
+  name: string;
+  label: string | null;
+  skuCode: string;
+  barcode: string | null;
+  imageUrl: string | null;
+  category: { id: string; name: string } | null;
+  price: number;
+  /** Owned by inventory (ADR-0013); always null here. */
+  avgCostPrice: number | null;
+  status: 'active' | 'inactive' | 'archived';
+}
+
+export interface VariantListRes {
+  data: VariantRowRes[];
+  pagination: {
+    limit: number;
+    currentPage: number;
+    nextPage?: number;
+    totalRecords: number;
+    totalPages: number;
+  };
+}
+
+export interface ProductSummaryRes {
+  productCount: number;
+  variantCount: number;
+  activeVariantCount: number;
+  inactiveVariantCount: number;
 }

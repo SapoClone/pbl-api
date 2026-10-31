@@ -88,6 +88,8 @@ export class PosService {
     role?: string | null;
     permissions?: string[];
     discountApprovedBy?: string | null;
+    /** Only a trusted internal caller: `unitPriceOverride` of a line replaces the catalog price */
+    allowPriceOverride?: boolean;
   }): Promise<CalculatedOrderQuote & { couponCode: string | null }> {
     const catalogMap = await this.catalogClient.resolveVariants(
       params.lines.map((line) => ({
@@ -95,6 +97,22 @@ export class PosService {
         skuCode: line.skuCode,
       })),
     );
+    if (params.allowPriceOverride) {
+      for (const line of params.lines as (PosCartLineDto & {
+        unitPriceOverride?: number;
+      })[]) {
+        if (line.unitPriceOverride === undefined) continue;
+        const key =
+          line.variantId ??
+          (line.skuCode ? line.skuCode.trim().toUpperCase() : '');
+        const cat = catalogMap.get(key);
+        if (!cat) continue;
+        // an own copy: the same catalog entry may serve another line
+        const priced = { ...cat, unitPrice: line.unitPriceOverride };
+        catalogMap.set(key, priced);
+        catalogMap.set(cat.variantId, priced);
+      }
+    }
 
     const quoteLines: QuoteLineInput[] = params.lines.map((line) => {
       const key =

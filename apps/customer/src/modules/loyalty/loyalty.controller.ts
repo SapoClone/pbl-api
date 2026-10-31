@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -19,11 +20,18 @@ import { InternalTokenGuard } from '../../presentation/internal-token.guard';
 import {
   CommitLoyaltyHoldDto,
   CreateLoyaltyHoldDto,
+  ListLoyaltyTransactionsQueryDto,
+  LoyaltyAdjustmentDto,
   ManualLoyaltyAdjustmentDto,
+  PatchLoyaltySettingsDto,
   ReleaseLoyaltyHoldDto,
   UpdateLoyaltySettingsDto,
 } from './loyalty.dto';
-import { LoyaltyService } from './loyalty.service';
+import {
+  LoyaltyService,
+  screenLoyaltyType,
+  toScreenLoyaltySettings,
+} from './loyalty.service';
 
 @ApiTags('loyalty')
 @ApiBearerAuth()
@@ -51,6 +59,102 @@ export class LoyaltyController {
   ) {
     try {
       return await this.loyaltyService.updateSettings(user.id, dto);
+    } catch (error) {
+      rethrowCustomerHttpError(error);
+    }
+  }
+
+  @Get('v1/loyalty-settings')
+  @RequirePermission('customers.view')
+  @ApiOperation({
+    summary:
+      'Loyalty settings in the screen-contract shape (enabled, pointsExpireMonths)',
+  })
+  async getScreenSettings() {
+    try {
+      return toScreenLoyaltySettings(await this.loyaltyService.getSettings());
+    } catch (error) {
+      rethrowCustomerHttpError(error);
+    }
+  }
+
+  @Patch('v1/loyalty-settings')
+  @RequirePermission('customers.update')
+  @ApiOperation({
+    summary: 'Partial update of the loyalty settings (screen-contract shape)',
+  })
+  async patchScreenSettings(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: PatchLoyaltySettingsDto,
+  ) {
+    try {
+      const { enabled, pointsExpireMonths, ...rest } = dto;
+      const updated = await this.loyaltyService.updateSettings(user.id, {
+        ...rest,
+        ...(enabled !== undefined ? { isEnabled: enabled } : {}),
+        ...(pointsExpireMonths !== undefined
+          ? {
+              pointsExpirationDays:
+                pointsExpireMonths === null ? null : pointsExpireMonths * 30,
+            }
+          : {}),
+      });
+      return toScreenLoyaltySettings(updated);
+    } catch (error) {
+      rethrowCustomerHttpError(error);
+    }
+  }
+
+  @Get('v1/customers/:id/loyalty-transactions')
+  @RequirePermission('customers.view')
+  @ApiOperation({
+    summary:
+      'Loyalty ledger page in the screen-contract shape: { data, pagination }',
+  })
+  async listScreenTransactions(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() query: ListLoyaltyTransactionsQueryDto,
+  ) {
+    try {
+      return await this.loyaltyService.listTransactionsPage(id, query);
+    } catch (error) {
+      rethrowCustomerHttpError(error);
+    }
+  }
+
+  @Post('v1/customers/:id/loyalty-adjustments')
+  @RequirePermission('customers.update')
+  @ApiOperation({
+    summary:
+      'Manual points adjustment (screen-contract body { points, reason }); 201 with the transaction and the new balance',
+  })
+  async adjustScreenPoints(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body() dto: LoyaltyAdjustmentDto,
+  ) {
+    try {
+      const out = await this.loyaltyService.adjustPoints(
+        id,
+        user.id,
+        idempotencyKey,
+        { pointsDelta: dto.points, reason: dto.reason },
+      );
+      return {
+        transaction: {
+          id: out.transaction.id,
+          type: screenLoyaltyType(out.transaction.transactionType),
+          points: out.transaction.pointsDelta,
+          orderId: null,
+          orderCode: null,
+          reason: out.transaction.reason,
+          createdAt: out.transaction.createdAt,
+        },
+        balance: out.account.postedPointsBalance,
+        availablePoints: out.account.availablePoints,
+        replayed: out.replayed,
+      };
     } catch (error) {
       rethrowCustomerHttpError(error);
     }

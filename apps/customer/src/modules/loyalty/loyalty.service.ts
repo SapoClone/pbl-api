@@ -49,6 +49,43 @@ import {
   UpdateLoyaltySettingsDto,
 } from './loyalty.dto';
 
+/** Ledger type names of the screen contract: earn | redeem | adjust | expire | reverse. */
+export function screenLoyaltyType(
+  type: LoyaltyTransactionEntity['transactionType'],
+): 'earn' | 'redeem' | 'adjust' | 'expire' | 'reverse' {
+  switch (type) {
+    case 'EARN':
+      return 'earn';
+    case 'REDEEM':
+      return 'redeem';
+    case 'EXPIRE':
+      return 'expire';
+    case 'EARN_REVERSAL':
+    case 'REDEMPTION_REVERSAL':
+      return 'reverse';
+    default:
+      return 'adjust';
+  }
+}
+
+/** Settings in the screen-contract shape plus the extra service fields. */
+export function toScreenLoyaltySettings(settings: LoyaltySettingEntity) {
+  return {
+    enabled: settings.isEnabled,
+    earnAmountPerPoint: settings.earnAmountPerPoint,
+    redeemValuePerPoint: settings.redeemValuePerPoint,
+    pointsExpireMonths:
+      settings.pointsExpirationDays === null
+        ? null
+        : Math.max(1, Math.round(settings.pointsExpirationDays / 30)),
+    pointsExpirationDays: settings.pointsExpirationDays,
+    minRedeemPoints: settings.minRedeemPoints,
+    maxRedeemPointsPerOrder: settings.maxRedeemPointsPerOrder,
+    holdTtlSeconds: settings.holdTtlSeconds,
+    version: settings.version,
+  };
+}
+
 @Injectable()
 export class LoyaltyService {
   constructor(
@@ -255,6 +292,75 @@ export class LoyaltyService {
         total,
         limit,
         offset,
+      };
+    });
+  }
+
+  /** Screen-contract ledger page: `{ data, pagination }` with mapped types and order codes. */
+  async listTransactionsPage(
+    customerId: string,
+    query: { page?: number; limit?: number } = {},
+  ) {
+    const tenantId = TenantContext.require();
+    const page = Math.max(1, Number(query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Number(query.limit ?? 20)));
+    const prefix = getSchemaPrefix(this.dataSource);
+
+    return this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      const customer = await em.getRepository(CustomerEntity).findOne({
+        where: { id: customerId, tenantId },
+      });
+      if (!customer || customer.deletedAt) {
+        throw new CustomerDomainError(
+          CustomerDomainErrorCode.CUSTOMER_NOT_FOUND,
+          `Customer ${customerId} not found`,
+          404,
+        );
+      }
+      const [rows, total] = await em
+        .getRepository(LoyaltyTransactionEntity)
+        .findAndCount({
+          where: { tenantId, customerId },
+          order: { createdAt: 'DESC', id: 'DESC' },
+          take: limit,
+          skip: (page - 1) * limit,
+        });
+      const orderIds = [
+        ...new Set(rows.map((r) => r.orderId).filter(Boolean)),
+      ] as string[];
+      const codes = new Map<string, string>();
+      if (orderIds.length > 0) {
+        const found: Array<{ order_id: string; order_code: string }> =
+          await em.query(
+            `SELECT "order_id", "order_code"
+             FROM ${prefix}"customer_purchase_projections"
+             WHERE "tenant_id" = $1 AND "order_id" = ANY($2::uuid[])`,
+            [tenantId, orderIds],
+          );
+        for (const r of found) codes.set(r.order_id, r.order_code);
+      }
+      const totalPages = Math.ceil(total / limit);
+      return {
+        data: rows.map((r) => ({
+          id: r.id,
+          type: screenLoyaltyType(r.transactionType),
+          points: r.pointsDelta,
+          orderId: r.orderId,
+          orderCode: r.orderId ? (codes.get(r.orderId) ?? null) : null,
+          balanceAfter: r.balanceAfter,
+          reason: r.reason,
+          createdAt: r.createdAt,
+        })),
+        pagination: {
+          limit,
+          currentPage: page,
+          nextPage: page < totalPages ? page + 1 : null,
+          totalRecords: total,
+          totalPages,
+        },
       };
     });
   }

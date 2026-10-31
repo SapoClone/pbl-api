@@ -25,6 +25,9 @@ export class CreateM3SalesCore1791900000200 implements MigrationInterface {
     const promotions = t('promotions');
     const coupons = t('coupons');
     const couponUsages = t('coupon_usages');
+    const salesChannels = t('sales_channels');
+    const registers = t('registers');
+    const shippingProviders = t('shipping_providers');
 
     // 1. Enable RLS on legacy M0 tables that missed RLS in 1791800000000
     await enableTenantRlsPolicy(queryRunner, orders);
@@ -64,6 +67,8 @@ export class CreateM3SalesCore1791900000200 implements MigrationInterface {
         ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
         ADD COLUMN IF NOT EXISTS "completed_at" TIMESTAMPTZ NULL,
         ADD COLUMN IF NOT EXISTS "cancelled_at" TIMESTAMPTZ NULL,
+        ADD COLUMN IF NOT EXISTS "fulfillment_stage" character varying(16) NULL,
+        ADD COLUMN IF NOT EXISTS "exception_code" character varying(32) NULL,
         ADD CONSTRAINT "UQ_orders_tenant_id" UNIQUE ("tenant_id", "id"),
         ADD CONSTRAINT "CHK_orders_order_status" CHECK (
           "order_status" IN ('DRAFT', 'PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED')
@@ -73,6 +78,9 @@ export class CreateM3SalesCore1791900000200 implements MigrationInterface {
         ),
         ADD CONSTRAINT "CHK_orders_fulfillment_status" CHECK (
           "fulfillment_status" IN ('UNFULFILLED', 'RESERVED', 'PARTIALLY_FULFILLED', 'FULFILLED', 'RETURNED')
+        ),
+        ADD CONSTRAINT "CHK_orders_fulfillment_stage" CHECK (
+          "fulfillment_stage" IS NULL OR "fulfillment_stage" IN ('PACKING', 'SHIPPING')
         ),
         ADD CONSTRAINT "CHK_orders_amounts_non_negative" CHECK (
           "subtotal" >= 0 AND "item_discount_total" >= 0 AND "order_discount_total" >= 0
@@ -239,6 +247,7 @@ export class CreateM3SalesCore1791900000200 implements MigrationInterface {
         "code" character varying(32) NOT NULL,
         "branch_id" uuid NOT NULL,
         "register_code" character varying(32) NOT NULL DEFAULT 'REG-01',
+        "register_id" uuid NULL,
         "staff_id" uuid NOT NULL,
         "status" character varying(16) NOT NULL DEFAULT 'OPEN',
         "opening_cash" bigint NOT NULL DEFAULT 0,
@@ -319,14 +328,18 @@ export class CreateM3SalesCore1791900000200 implements MigrationInterface {
         "external_ref" character varying(128) NULL,
         "confirmed_by" character varying(64) NULL,
         "confirmed_at" TIMESTAMPTZ NULL,
+        "kind" character varying(8) NOT NULL DEFAULT 'PAYMENT',
+        "note" character varying(255) NULL,
+        "paid_at" TIMESTAMPTZ NULL,
         "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
         CONSTRAINT "PK_order_tenders_id" PRIMARY KEY ("id"),
         CONSTRAINT "UQ_order_tenders_idempotency" UNIQUE ("tenant_id", "idempotency_key"),
         CONSTRAINT "FK_order_tenders_order"
           FOREIGN KEY ("tenant_id", "order_id") REFERENCES ${orders}("tenant_id", "id") ON DELETE CASCADE,
         CONSTRAINT "CHK_order_tenders_method" CHECK (
-          "method" IN ('CASH', 'BANK_TRANSFER', 'CARD', 'E_WALLET', 'COD')
+          "method" IN ('CASH', 'BANK_TRANSFER', 'CARD', 'E_WALLET', 'COD', 'MARKETPLACE')
         ),
+        CONSTRAINT "CHK_order_tenders_kind" CHECK ("kind" IN ('PAYMENT', 'REFUND')),
         CONSTRAINT "CHK_order_tenders_status" CHECK (
           "status" IN ('PENDING', 'CONFIRMED', 'FAILED')
         ),
@@ -340,6 +353,64 @@ export class CreateM3SalesCore1791900000200 implements MigrationInterface {
       ON ${tenders} ("tenant_id", "order_id")
     `);
     await enableTenantRlsPolicy(queryRunner, tenders);
+
+    // 10b. Sales channels, POS registers and the shipping provider projection
+    await queryRunner.query(`
+      CREATE TABLE ${salesChannels} (
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+        "tenant_id" uuid NOT NULL,
+        "type" character varying(24) NOT NULL,
+        "name" character varying(100) NOT NULL,
+        "status" character varying(16) NOT NULL DEFAULT 'active',
+        "environment" character varying(16) NULL,
+        "connection_id" character varying(64) NULL,
+        "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_sales_channels_id" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_sales_channels_tenant_id" UNIQUE ("tenant_id", "id"),
+        CONSTRAINT "CHK_sales_channels_status" CHECK ("status" IN ('active', 'disabled'))
+      )
+    `);
+    await queryRunner.query(`
+      CREATE UNIQUE INDEX "UQ_sales_channels_tenant_type"
+      ON ${salesChannels} ("tenant_id", "type")
+      WHERE "connection_id" IS NULL
+    `);
+    await enableTenantRlsPolicy(queryRunner, salesChannels);
+
+    await queryRunner.query(`
+      CREATE TABLE ${registers} (
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+        "tenant_id" uuid NOT NULL,
+        "branch_id" uuid NOT NULL,
+        "code" character varying(32) NOT NULL,
+        "name" character varying(100) NOT NULL,
+        "status" character varying(16) NOT NULL DEFAULT 'active',
+        "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_registers_id" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_registers_tenant_id" UNIQUE ("tenant_id", "id"),
+        CONSTRAINT "UQ_registers_tenant_branch_code" UNIQUE ("tenant_id", "branch_id", "code"),
+        CONSTRAINT "CHK_registers_status" CHECK ("status" IN ('active', 'inactive'))
+      )
+    `);
+    await enableTenantRlsPolicy(queryRunner, registers);
+
+    await queryRunner.query(`
+      CREATE TABLE ${shippingProviders} (
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+        "tenant_id" uuid NOT NULL,
+        "code" character varying(32) NOT NULL,
+        "name" character varying(100) NOT NULL,
+        "type" character varying(24) NOT NULL,
+        "status" character varying(16) NOT NULL DEFAULT 'active',
+        "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_shipping_providers_id" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_shipping_providers_tenant_code" UNIQUE ("tenant_id", "code")
+      )
+    `);
+    await enableTenantRlsPolicy(queryRunner, shippingProviders);
 
     // 11. Sales Returns, Return Items & Refund Requests tables
     await queryRunner.query(`
@@ -547,6 +618,9 @@ export class CreateM3SalesCore1791900000200 implements MigrationInterface {
   async down(queryRunner: QueryRunner): Promise<void> {
     const t = (name: string) => qualifiedTable(queryRunner, name);
     for (const name of [
+      'shipping_providers',
+      'registers',
+      'sales_channels',
       'coupon_usages',
       'coupons',
       'promotions',

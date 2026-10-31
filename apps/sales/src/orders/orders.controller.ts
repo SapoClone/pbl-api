@@ -6,6 +6,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Post,
@@ -22,6 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { AllowedBranches, CurrentUser, RequirePermission } from '@pbl/auth';
 import type { Response } from 'express';
+import { OrderQueryService } from '../modules/screen/order-query.service';
 import { BranchScope } from '../presentation/access';
 import {
   CreateCheckoutReqDto,
@@ -32,7 +34,6 @@ import { OrderRes } from './dto/order.res';
 import {
   CheckoutWorkflowResponse,
   OrdersService,
-  Page,
   SalesErrorCode,
 } from './orders.service';
 
@@ -47,7 +48,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 @ApiBearerAuth()
 @Controller('api/v1/orders')
 export class OrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(
+    private readonly orders: OrdersService,
+    private readonly orderQuery: OrderQueryService,
+  ) {}
 
   /**
    * 201 with the new order. The same `Idempotency-Key` again returns the first
@@ -222,8 +226,8 @@ export class OrdersController {
   list(
     @Query() query: ListOrdersReqDto,
     @AllowedBranches() scope: BranchScope,
-  ): Promise<Page<OrderRes>> {
-    return this.orders.list(query, scope);
+  ) {
+    return this.orderQuery.list(query, scope);
   }
 
   @Get(':id')
@@ -237,10 +241,13 @@ export class OrdersController {
     status: HttpStatus.OK,
     description: 'Sales order details',
   })
-  get(
+  async get(
     @Param('id', ParseUUIDPipe) id: string,
     @AllowedBranches() scope: BranchScope,
-  ): Promise<OrderRes> {
-    return this.orders.get(id, scope);
+  ) {
+    const order = await this.orderQuery.detail(id, scope);
+    // also another store's or another branch's order: never revealed (api-conventions §6, ADR-0020)
+    if (!order) throw new NotFoundException();
+    return order;
   }
 }

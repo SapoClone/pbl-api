@@ -20,6 +20,8 @@ import { MembershipsController } from './modules/memberships/memberships.control
 import { MembershipsService } from './modules/memberships/memberships.service';
 import { ProfilesController } from './modules/profiles/profiles.controller';
 import { ProfilesService } from './modules/profiles/profiles.service';
+import { TagsController } from './modules/tags/tags.controller';
+import { TagsService } from './modules/tags/tags.service';
 import { isValidInternalToken } from './presentation/internal-token.guard';
 
 const auth = createTestAuth();
@@ -72,6 +74,8 @@ const profilesService = {
     items: [],
     total: 0,
   })),
+  getKpiSummary: jest.fn(async () => ({ total: 1, groupCounts: { all: 1 } })),
+  exportCustomersCsv: jest.fn(async () => 'code,name\nKH1,A'),
   getCustomerEligibility: jest.fn(async () => ({
     customerId: CUSTOMER_ID,
     isActive: true,
@@ -83,7 +87,16 @@ const groupsService = {
   createGroup: jest.fn(async (dto: any) => ({ id: 'g1', name: dto.name })),
   listGroups: jest.fn(async () => []),
   updateGroup: jest.fn(async () => ({ id: 'g1' })),
+  deleteGroup: jest.fn(async () => undefined),
   assignCustomerToGroup: jest.fn(async () => ({ id: CUSTOMER_ID })),
+};
+
+const tagsService = {
+  listTags: jest.fn(async () => ({ data: [{ id: 't1', name: 'VIP' }] })),
+  createTag: jest.fn(async (_t: string, dto: any) => ({
+    id: 't1',
+    name: dto.name,
+  })),
 };
 
 const membershipsService = {
@@ -110,15 +123,38 @@ const addressesService = {
 };
 
 const loyaltyService = {
-  getSettings: jest.fn(async () => ({ isEnabled: true })),
-  updateSettings: jest.fn(async () => ({ isEnabled: true, version: 2 })),
+  getSettings: jest.fn(async () => ({
+    isEnabled: true,
+    earnAmountPerPoint: 10000,
+    redeemValuePerPoint: 1000,
+    pointsExpirationDays: 360,
+    version: 1,
+  })),
+  updateSettings: jest.fn(async () => ({
+    isEnabled: true,
+    earnAmountPerPoint: 10000,
+    redeemValuePerPoint: 1000,
+    pointsExpirationDays: 360,
+    version: 2,
+  })),
+  listTransactionsPage: jest.fn(async () => ({ data: [], pagination: {} })),
   getLoyaltyAccount: jest.fn(async () => ({
     postedPointsBalance: 100,
     heldPoints: 0,
     availablePoints: 100,
   })),
   listLoyaltyTransactions: jest.fn(async () => ({ data: [], total: 0 })),
-  adjustPoints: jest.fn(async () => ({ postedPointsBalance: 150 })),
+  adjustPoints: jest.fn(async () => ({
+    transaction: {
+      id: 'lt1',
+      transactionType: 'MANUAL_ADJUSTMENT',
+      pointsDelta: -20,
+      reason: 'Dieu chinh tay',
+      createdAt: new Date(0),
+    },
+    account: { postedPointsBalance: 150, availablePoints: 150 },
+    replayed: false,
+  })),
   reconcileTenantLoyalty: jest.fn(async () => ({ discrepancyCount: 0 })),
   createHold: jest.fn(async () => ({ id: 'h1', state: 'HELD', points: 20 })),
   getHoldById: jest.fn(async () => ({ id: 'h1', state: 'HELD' })),
@@ -131,6 +167,13 @@ const dataManagementService = {
   mergeCustomers: jest.fn(async () => ({
     idempotentReplay: false,
     mergeRecord: { id: 'm1' },
+  })),
+  importCustomersFromFile: jest.fn(async () => ({
+    total: 1,
+    created: 1,
+    updated: 0,
+    failed: 0,
+    errors: [],
   })),
   createImportJob: jest.fn(async () => ({ id: 'j1', status: 'COMPLETED' })),
   getImportJob: jest.fn(async () => ({ id: 'j1', status: 'COMPLETED' })),
@@ -151,10 +194,12 @@ const dataManagementService = {
     DataManagementController,
     AddressesController,
     ProfilesController,
+    TagsController,
   ],
   providers: [
     { provide: ProfilesService, useValue: profilesService },
     { provide: GroupsService, useValue: groupsService },
+    { provide: TagsService, useValue: tagsService },
     { provide: MembershipsService, useValue: membershipsService },
     { provide: AddressesService, useValue: addressesService },
     { provide: LoyaltyService, useValue: loyaltyService },
@@ -275,6 +320,17 @@ describe('Customer & Loyalty M4 HTTP shell & RBAC', () => {
       ['get', `/v1/customers/${C}/loyalty/transactions`, 'customers.view'],
       ['post', `/v1/customers/${C}/loyalty/adjustments`, 'customers.update'],
       ['post', '/v1/loyalty/reconcile', 'customers.update'],
+      ['get', '/v1/customers/summary', 'customers.view'],
+      ['get', '/v1/customers/export', 'customers.view'],
+      ['get', '/v1/customers/import-template', 'customers.create'],
+      ['post', '/v1/customers/import', 'customers.create'],
+      ['delete', `/v1/customer-groups/${C}`, 'customers.delete'],
+      ['get', '/v1/customer-tags', 'customers.view'],
+      ['post', '/v1/customer-tags', 'customers.update'],
+      ['get', `/v1/customers/${C}/loyalty-transactions`, 'customers.view'],
+      ['post', `/v1/customers/${C}/loyalty-adjustments`, 'customers.update'],
+      ['get', '/v1/loyalty-settings', 'customers.view'],
+      ['patch', '/v1/loyalty-settings', 'customers.update'],
       ['get', '/v1/customers/duplicates', 'customers.view'],
       ['post', '/v1/customers/merge', 'customers.update'],
       ['post', '/v1/customers/import-jobs', 'customers.create'],
@@ -414,6 +470,156 @@ describe('Customer & Loyalty M4 HTTP shell & RBAC', () => {
         expect(
           (profilesService.updateCustomer.mock.calls as any[][])[0][4],
         ).toBe(true);
+      });
+    });
+
+    describe('screen endpoints', () => {
+      const withPerms = (permissions: string[]) =>
+        auth.bearerWithPermissions('custom_role', permissions, TENANT);
+      const view = () => withPerms(['customers.view']);
+      const upd = () => withPerms(['customers.update', 'customers.view']);
+
+      it('/customers/summary is not captured by /customers/:id', async () => {
+        await request(url())
+          .get('/v1/customers/summary?month=2026-10')
+          .set('Authorization', view())
+          .expect(200);
+        expect(profilesService.getKpiSummary).toHaveBeenCalled();
+        await request(url())
+          .get('/api/v1/customers/summary')
+          .set('Authorization', view())
+          .expect(200);
+      });
+
+      it('validates the screen query and body inputs (422)', async () => {
+        const bad: Array<[string, string]> = [
+          ['/v1/customers/summary?month=2026-13', 'get'],
+          ['/v1/customers?spendMin=1.5', 'get'],
+          ['/v1/customers?spendMin=-1', 'get'],
+          ['/v1/customers?sort=name', 'get'],
+          ['/v1/customers?order=up', 'get'],
+          ['/v1/customers?tagId=nope', 'get'],
+          ['/v1/customers/export?sort=name', 'get'],
+        ];
+        for (const [path] of bad) {
+          await request(url())
+            .get(path)
+            .set('Authorization', view())
+            .expect(422);
+        }
+        await request(url())
+          .post('/v1/customer-tags')
+          .set('Authorization', upd())
+          .send({ name: '' })
+          .expect(422);
+        await request(url())
+          .post('/v1/customers')
+          .set('Authorization', withPerms(['customers.create']))
+          .send({
+            name: 'A',
+            tagIds: ['nope'],
+            addresses: [{ addressLine: 'x' }],
+            loyalty: { initialPoints: -1 },
+          })
+          .expect(422);
+        for (const points of [1.5, '5']) {
+          await request(url())
+            .post(`/v1/customers/${CUSTOMER_ID}/loyalty-adjustments`)
+            .set('Authorization', upd())
+            .send({ points, reason: 'manual' })
+            .expect(422);
+        }
+        await request(url())
+          .patch('/v1/loyalty-settings')
+          .set('Authorization', upd())
+          .send({ earnAmountPerPoint: 100.5 })
+          .expect(422);
+      });
+
+      it('happy paths: tags, group delete 204, settings mapping, adjustment 201', async () => {
+        const created = await request(url())
+          .post('/v1/customer-tags')
+          .set('Authorization', upd())
+          .send({ name: 'Qua tang' })
+          .expect(201);
+        expect(created.body).toEqual({ id: 't1', name: 'Qua tang' });
+        await request(url())
+          .delete(`/v1/customer-groups/${CUSTOMER_ID}`)
+          .set('Authorization', withPerms(['customers.delete']))
+          .expect(204);
+        const s = await request(url())
+          .patch('/v1/loyalty-settings')
+          .set('Authorization', upd())
+          .send({ enabled: true, pointsExpireMonths: 12 })
+          .expect(200);
+        expect(loyaltyService.updateSettings).toHaveBeenCalledWith(
+          expect.anything(),
+          { isEnabled: true, pointsExpirationDays: 360 },
+        );
+        expect(s.body).toMatchObject({ enabled: true, pointsExpireMonths: 12 });
+        const adj = await request(url())
+          .post(`/v1/customers/${CUSTOMER_ID}/loyalty-adjustments`)
+          .set('Authorization', upd())
+          .send({ points: -20, reason: 'Dieu chinh tay' })
+          .expect(201);
+        expect(adj.body).toMatchObject({
+          transaction: { type: 'adjust', points: -20 },
+          balance: 150,
+        });
+        expect(
+          (loyaltyService.adjustPoints.mock.calls as any[][])[0][3],
+        ).toEqual({ pointsDelta: -20, reason: 'Dieu chinh tay' });
+      });
+
+      it('CSV routes answer text/csv; export phone rule follows customers.update', async () => {
+        const tpl = await request(url())
+          .get('/v1/customers/import-template')
+          .set('Authorization', withPerms(['customers.create']))
+          .expect(200);
+        expect(tpl.headers['content-type']).toMatch(/text\/csv/);
+        expect(tpl.text.split('\n')[0]).toBe(
+          'code,name,phone,email,source,note',
+        );
+        for (const [perms, full] of [
+          [['customers.view'], false],
+          [['customers.view', 'customers.update'], true],
+        ] as Array<[string[], boolean]>) {
+          profilesService.exportCustomersCsv.mockClear();
+          const res = await request(url())
+            .get('/v1/customers/export?group=vip')
+            .set('Authorization', withPerms(perms))
+            .expect(200);
+          expect(res.headers['content-type']).toMatch(/text\/csv/);
+          expect(res.text).toContain('KH1');
+          expect(
+            (profilesService.exportCustomersCsv.mock.calls as any[][])[0][2],
+          ).toBe(full);
+        }
+      });
+
+      it('multipart import: file and dryRun reach the service; missing or non-CSV file is 422', async () => {
+        const authz = withPerms(['customers.create']);
+        await request(url())
+          .post('/v1/customers/import')
+          .set('Authorization', authz)
+          .field('dryRun', 'true')
+          .attach('file', Buffer.from('name\nA'), 'c.csv')
+          .expect(200);
+        expect(
+          (
+            dataManagementService.importCustomersFromFile.mock.calls as any[][]
+          )[0].slice(2),
+        ).toEqual(['name\nA', true]);
+        await request(url())
+          .post('/v1/customers/import')
+          .set('Authorization', authz)
+          .attach('file', Buffer.from('x'), 'c.xlsx')
+          .expect(422);
+        await request(url())
+          .post('/v1/customers/import')
+          .set('Authorization', authz)
+          .field('dryRun', 'false')
+          .expect(422);
       });
     });
 

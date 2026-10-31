@@ -68,8 +68,9 @@ export class ProcurementService {
       const rows = await em.query(
         `
         INSERT INTO ${prefix}"supplier" (
-          id, tenant_id, code, name, phone, email, address, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE')
+          id, tenant_id, code, name, phone, email, address, status,
+          tax_code, note
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', $8, $9)
         RETURNING
           id,
           tenant_id AS "tenantId",
@@ -90,6 +91,8 @@ export class ProcurementService {
           dto.phone ?? null,
           dto.email ?? null,
           dto.address ?? null,
+          dto.taxCode ?? null,
+          dto.note ?? null,
         ],
       );
       return rows[0];
@@ -127,7 +130,7 @@ export class ProcurementService {
           created_at AS "createdAt",
           updated_at AS "updatedAt"
         FROM ${prefix}"supplier"
-        WHERE tenant_id = $1 ${filters.join(' ')}
+        WHERE tenant_id = $1 AND deleted_at IS NULL ${filters.join(' ')}
         ORDER BY code ASC
         `,
         params,
@@ -142,7 +145,7 @@ export class ProcurementService {
         `
         SELECT *
         FROM ${prefix}"supplier"
-        WHERE tenant_id = $1 AND id = $2
+        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
         FOR UPDATE
         `,
         [tenantId, supplierId],
@@ -164,6 +167,8 @@ export class ProcurementService {
           email = $5,
           address = $6,
           status = $7,
+          tax_code = $8,
+          note = $9,
           updated_at = now()
         WHERE tenant_id = $1 AND id = $2
         RETURNING
@@ -186,6 +191,8 @@ export class ProcurementService {
           dto.email !== undefined ? dto.email : cur.email,
           dto.address !== undefined ? dto.address : cur.address,
           dto.status ?? cur.status,
+          dto.taxCode !== undefined ? dto.taxCode : cur.tax_code,
+          dto.note !== undefined ? dto.note : cur.note,
         ],
       );
       const resultRows = Array.isArray(rows[0]) ? rows[0] : rows;
@@ -202,7 +209,7 @@ export class ProcurementService {
         `
         SELECT id, status
         FROM ${prefix}"supplier"
-        WHERE tenant_id = $1 AND id = $2
+        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
         LIMIT 1
         `,
         [tenantId, dto.supplierId],
@@ -275,8 +282,8 @@ export class ProcurementService {
         `
         INSERT INTO ${prefix}"purchase_order" (
           id, tenant_id, code, supplier_id, warehouse_id,
-          status, total_amount, note, created_by
-        ) VALUES ($1, $2, $3, $4, $5, 'DRAFT', $6::bigint, $7, $8)
+          status, total_amount, note, created_by, expected_date
+        ) VALUES ($1, $2, $3, $4, $5, 'DRAFT', $6::bigint, $7, $8, $9::date)
         `,
         [
           poId,
@@ -287,6 +294,7 @@ export class ProcurementService {
           vndToNumber(totalAmountVnd),
           dto.note ?? null,
           RequestContext.get()?.actor?.id ?? null,
+          dto.expectedDate ?? null,
         ],
       );
 
@@ -645,6 +653,7 @@ export class ProcurementService {
         warehouse_id AS "warehouseId",
         status,
         total_amount AS "totalAmount",
+        to_char(expected_date, 'YYYY-MM-DD') AS "expectedDate",
         note,
         approved_by AS "approvedBy",
         approved_at AS "approvedAt",

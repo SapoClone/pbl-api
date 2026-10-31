@@ -39,6 +39,54 @@ import {
 } from './data-management.dto';
 
 const MAX_IMPORT_ROWS = 2000;
+const MAX_FILE_IMPORT_ROWS = 5000;
+
+export const CUSTOMER_IMPORT_TEMPLATE =
+  'code,name,phone,email,source,note\n,Nguyen Van A,0912345678,a@example.com,STORE,Khach quen\n';
+
+export interface CustomerImportResult {
+  total: number;
+  created: number;
+  updated: number;
+  failed: number;
+  errors: Array<{ row: number; field: string; code: string }>;
+}
+
+/** Thrown inside the transaction of a dry run so everything rolls back. */
+class DryRunRollback extends Error {
+  constructor(public readonly result: CustomerImportResult) {
+    super('dry run');
+  }
+}
+
+/** Splits one CSV line, honouring double quotes ("" is an escaped quote). */
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else if (ch === '"') {
+        quoted = false;
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ',') {
+      out.push(cur.trim());
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur.trim());
+  return out;
+}
 
 @Injectable()
 export class DataManagementService {
@@ -696,6 +744,183 @@ export class DataManagementService {
 
       return em.getRepository(CustomerDataJobEntity).save(job);
     });
+  }
+
+  /**
+   * Screen-contract import (`POST /customers/import`): CSV text, up to 5000
+   * rows. A row whose `code` matches an existing customer updates it; a row
+   * whose phone belongs to another customer fails with `duplicate`. With
+   * `dryRun` the full run is made and rolled back. Results carry row numbers,
+   * field names and codes only (no phone values).
+   */
+  async importCustomersFromFile(
+    tenantId: string,
+    actorId: string,
+    csvContent: string,
+    dryRun: boolean,
+  ): Promise<CustomerImportResult> {
+    const lines = csvContent
+      .replace(/^\uFEFF/, '')
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length > 0);
+    const header = (lines[0] ?? '')
+      .split(',')
+      .map((h) => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+    if (!header.includes('name')) {
+      throw new CustomerDomainError(
+        CustomerDomainErrorCode.VALIDATION_ERROR,
+        'CSV header must contain a name column (see import-template)',
+        422,
+      );
+    }
+    const dataLines = lines.slice(1);
+    if (dataLines.length === 0) {
+      throw new CustomerDomainError(
+        CustomerDomainErrorCode.VALIDATION_ERROR,
+        'CSV has no data rows',
+        422,
+      );
+    }
+    if (dataLines.length > MAX_FILE_IMPORT_ROWS) {
+      throw new CustomerDomainError(
+        CustomerDomainErrorCode.IMPORT_LIMIT_EXCEEDED,
+        `Import exceeds maximum of ${MAX_FILE_IMPORT_ROWS} rows (received ${dataLines.length})`,
+        422,
+      );
+    }
+    const rows = dataLines.map((line) => {
+      const cells = splitCsvLine(line);
+      const rec: Record<string, string> = {};
+      header.forEach((col, idx) => {
+        rec[col] = cells[idx] ?? '';
+      });
+      return rec;
+    });
+
+    const work = async (em: EntityManager): Promise<CustomerImportResult> => {
+      const tiers = await em.getRepository(MembershipTierEntity).find({
+        where: { tenantId, status: 'ACTIVE' },
+      });
+      const defaultTier = resolveEligibleMembershipTier(0, tiers);
+      const result: CustomerImportResult = {
+        total: rows.length,
+        created: 0,
+        updated: 0,
+        failed: 0,
+        errors: [],
+      };
+      const fail = (row: number, field: string, code: string) => {
+        result.failed += 1;
+        result.errors.push({ row, field, code });
+      };
+
+      for (let i = 0; i < rows.length; i += 1) {
+        const rowNum = i + 1;
+        const rec = rows[i];
+        const name = rec.name?.trim();
+        if (!name) {
+          fail(rowNum, 'name', 'required');
+          continue;
+        }
+        let phoneNormalized: string | null;
+        let emailNormalized: string | null;
+        try {
+          phoneNormalized = normalizePhoneNumber(rec.phone);
+        } catch {
+          fail(rowNum, 'phone', 'invalid');
+          continue;
+        }
+        try {
+          emailNormalized = normalizeEmail(rec.email);
+        } catch {
+          fail(rowNum, 'email', 'invalid');
+          continue;
+        }
+        const code = rec.code?.trim().toUpperCase() || null;
+
+        const byCode = code
+          ? await em
+              .getRepository(CustomerEntity)
+              .findOne({ where: { tenantId, code } })
+          : null;
+        const byPhone = phoneNormalized
+          ? await em.getRepository(CustomerEntity).findOne({
+              where: { tenantId, phoneNormalized },
+            })
+          : null;
+        const phoneOwner =
+          byPhone && byPhone.deletedAt === null ? byPhone : null;
+
+        if (byCode) {
+          if (phoneOwner && phoneOwner.id !== byCode.id) {
+            fail(rowNum, 'phone', 'duplicate');
+            continue;
+          }
+          byCode.name = name;
+          if (emailNormalized !== null) byCode.email = emailNormalized;
+          if (rec.note) byCode.note = rec.note.trim();
+          if (phoneNormalized && byCode.phoneNormalized !== phoneNormalized) {
+            byCode.phone = rec.phone.trim() || phoneNormalized;
+            byCode.phoneNormalized = phoneNormalized;
+          }
+          byCode.version += 1;
+          await em.getRepository(CustomerEntity).save(byCode);
+          result.updated += 1;
+          continue;
+        }
+        if (phoneOwner) {
+          fail(rowNum, 'phone', 'duplicate');
+          continue;
+        }
+
+        const customer = await em.getRepository(CustomerEntity).save(
+          em.getRepository(CustomerEntity).create({
+            tenantId,
+            code: code ?? (await nextCustomerDocumentCode(em, tenantId, 'KH')),
+            memberCode: await nextCustomerDocumentCode(em, tenantId, 'MB'),
+            name,
+            phone: rec.phone?.trim() || phoneNormalized,
+            phoneNormalized,
+            email: emailNormalized,
+            source: rec.source?.trim().toUpperCase() || 'IMPORT',
+            status: 'ACTIVE',
+            membershipTierId: defaultTier?.id ?? null,
+            debtLimit: 2000000,
+            currentDebt: 0,
+            note: rec.note?.trim() || null,
+            version: 1,
+          }),
+        );
+        await em.getRepository(LoyaltyAccountEntity).save(
+          em.getRepository(LoyaltyAccountEntity).create({
+            tenantId,
+            customerId: customer.id,
+            postedPointsBalance: 0,
+            heldPoints: 0,
+            lifetimeEarnedPoints: 0,
+            lifetimeRedeemedPoints: 0,
+            qualifyingPoints: 0,
+            tierId: defaultTier?.id ?? null,
+            status: 'ACTIVE',
+            version: 1,
+          }),
+        );
+        result.created += 1;
+      }
+      return result;
+    };
+
+    void actorId;
+    try {
+      return await this.runInTenantTx(tenantId, async (em) => {
+        const result = await work(em);
+        if (dryRun) throw new DryRunRollback(result);
+        return result;
+      });
+    } catch (err) {
+      if (err instanceof DryRunRollback) return err.result;
+      throw err;
+    }
   }
 
   async getImportJob(tenantId: string, jobId: string) {

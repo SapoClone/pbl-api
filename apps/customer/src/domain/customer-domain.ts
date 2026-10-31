@@ -33,6 +33,10 @@ export enum CustomerDomainErrorCode {
   PERMISSION_DENIED = 'PERMISSION_DENIED',
   VALIDATION_ERROR = 'VALIDATION_ERROR',
   IMPORT_LIMIT_EXCEEDED = 'IMPORT_LIMIT_EXCEEDED',
+  CUSTOMER_GROUP_SEEDED = 'CUSTOMER_GROUP_SEEDED',
+  CUSTOMER_TAG_NOT_FOUND = 'CUSTOMER_TAG_NOT_FOUND',
+  CUSTOMER_TAG_ALREADY_EXISTS = 'CUSTOMER_TAG_ALREADY_EXISTS',
+  CUSTOMER_HAS_OUTSTANDING_DEBT = 'CUSTOMER_HAS_OUTSTANDING_DEBT',
 }
 
 export class CustomerDomainError extends Error {
@@ -161,6 +165,19 @@ export function maskPhoneNumber(
   if (!phone) return null;
   if (phone.length < 7) return '***';
   return `${phone.slice(0, 3)}***${phone.slice(-4)}`;
+}
+
+/**
+ * Screen format of a masked phone: "090 ••• •• 28" (first 3 and last 2 digits).
+ * Carries no more than the existing `maskPhoneNumber` reveals.
+ */
+export function formatPhoneMasked(
+  phone: string | null | undefined,
+): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 7) return '•••';
+  return `${digits.slice(0, 3)} ••• •• ${digits.slice(-2)}`;
 }
 
 /**

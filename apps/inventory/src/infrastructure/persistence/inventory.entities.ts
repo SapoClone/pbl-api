@@ -30,6 +30,17 @@ export class CatalogSkuProjectionEntity {
   @Column({ name: 'base_unit', type: 'varchar', length: 32, default: 'PCS' })
   baseUnit!: string;
 
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  barcode!: string | null;
+
+  @Column({
+    name: 'base_price',
+    type: 'bigint',
+    nullable: true,
+    transformer: moneyTransformer,
+  })
+  basePrice!: number | null;
+
   @Column({ type: 'varchar', length: 20, default: 'ACTIVE' })
   status!: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 
@@ -102,6 +113,16 @@ export class SupplierEntity {
   @Column({ type: 'text', nullable: true })
   address!: string | null;
 
+  @Column({ name: 'tax_code', type: 'varchar', length: 32, nullable: true })
+  taxCode!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  note!: string | null;
+
+  /** soft delete: a deleted supplier is not listed and takes no new PO */
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt!: Date | null;
+
   @Column({ type: 'varchar', length: 16, default: 'ACTIVE' })
   status!: 'ACTIVE' | 'INACTIVE';
 
@@ -144,6 +165,9 @@ export class PurchaseOrderEntity {
     transformer: moneyTransformer,
   })
   totalAmount!: number;
+
+  @Column({ name: 'expected_date', type: 'date', nullable: true })
+  expectedDate!: string | null;
 
   @Column({ type: 'text', nullable: true })
   note!: string | null;
@@ -243,7 +267,7 @@ export class StockReceiptEntity {
   supplierId!: string | null;
 
   @Column({ type: 'varchar', length: 16, default: 'DRAFT' })
-  status!: 'DRAFT' | 'POSTED' | 'CANCELLED';
+  status!: 'DRAFT' | 'PENDING_APPROVAL' | 'POSTED' | 'CANCELLED';
 
   @Column({
     name: 'idempotency_key',
@@ -255,6 +279,9 @@ export class StockReceiptEntity {
 
   @Column({ type: 'text', nullable: true })
   note!: string | null;
+
+  @Column({ name: 'reject_reason', type: 'text', nullable: true })
+  rejectReason!: string | null;
 
   @Column({ name: 'posted_by', type: 'varchar', length: 64, nullable: true })
   postedBy!: string | null;

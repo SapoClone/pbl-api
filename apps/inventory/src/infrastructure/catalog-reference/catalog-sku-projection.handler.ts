@@ -113,8 +113,8 @@ export class CatalogSkuProjectionHandler {
       `
       INSERT INTO ${table} (
         id, tenant_id, sku_id, product_id, sku_code, name, status,
-        aggregate_version, source_updated_at, synced_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, now())
+        aggregate_version, source_updated_at, synced_at, barcode, base_price
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, now(), $10, $11)
       ON CONFLICT (tenant_id, sku_id) DO UPDATE SET
         product_id = EXCLUDED.product_id,
         sku_code = EXCLUDED.sku_code,
@@ -122,6 +122,8 @@ export class CatalogSkuProjectionHandler {
         status = EXCLUDED.status,
         aggregate_version = EXCLUDED.aggregate_version,
         source_updated_at = EXCLUDED.source_updated_at,
+        barcode = EXCLUDED.barcode,
+        base_price = EXCLUDED.base_price,
         synced_at = now()
       `,
       [
@@ -134,6 +136,8 @@ export class CatalogSkuProjectionHandler {
         p.status,
         p.aggregateVersion ?? 1,
         p.updatedAt ?? new Date().toISOString(),
+        p.barcode ?? null,
+        Number.isSafeInteger(p.basePrice) ? p.basePrice : null,
       ],
     );
   }

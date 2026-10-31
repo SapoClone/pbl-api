@@ -245,6 +245,24 @@ export class OrderEntity {
   @Column({ name: 'cancelled_at', type: 'timestamptz', nullable: true })
   cancelledAt?: Date | null;
 
+  /** `PACKING` or `SHIPPING` while the order is being handed over; null before and after (screen contract) */
+  @Column({
+    name: 'fulfillment_stage',
+    type: 'varchar',
+    length: 16,
+    nullable: true,
+  })
+  fulfillmentStage?: string | null;
+
+  /** `sku_unmapped` or `stock_shortage` while a marketplace order needs a human */
+  @Column({
+    name: 'exception_code',
+    type: 'varchar',
+    length: 32,
+    nullable: true,
+  })
+  exceptionCode?: string | null;
+
   @OneToMany(() => OrderItemEntity, (item) => item.order)
   items?: Relation<OrderItemEntity[]>;
 }

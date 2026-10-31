@@ -93,6 +93,16 @@ export const SALES_ORDER_COMPLETED = {
   version: 1,
 } as const satisfies EventDefinition;
 
+export const SALES_ORDER_PACKING = {
+  type: 'sales.order.packing',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const SALES_ORDER_SHIPPED = {
+  type: 'sales.order.shipped',
+  version: 1,
+} as const satisfies EventDefinition;
+
 export const SALES_CHECKOUT_COMPLETED = {
   type: 'sales.checkout.completed',
   version: 1,
@@ -167,9 +177,18 @@ export interface OrderCompletedPayload {
   paymentMethod: string;
   createdBy: string;
   completedAt: string;
-  items: { sku: string; name: string; quantity: number; unitPrice: number }[];
+  items: {
+    sku: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    /** Catalog variant of the line, when the order was built from variants */
+    variantId?: string;
+  }[];
   /** Where the order was sold (`pos`, `manual`, `website`, `shopee`, ...); absent on older events */
   channel?: string;
+  /** The sales channel row of the order, when it has one */
+  channelId?: string | null;
   /** Integer VND, what the goods cost; absent until costs are tracked */
   costAmount?: number | null;
 }
@@ -193,6 +212,13 @@ export interface SalesOrderLifecycleEventPayload {
   grandTotal: number;
   actorId: string;
   occurredAt: string;
+}
+
+/** `sales.order.shipped` (a lifecycle payload plus how the parcel travels) */
+export interface SalesOrderShippedPayload
+  extends SalesOrderLifecycleEventPayload {
+  shippingProviderId?: string | null;
+  trackingCode?: string | null;
 }
 
 export interface SalesShiftEventPayload {
@@ -361,6 +387,24 @@ export interface StockChangedPayload {
   avgCostAfter?: number;
   referenceType: string;
   referenceId: string;
+  occurredAt: string;
+}
+
+/** A stock threshold change put available stock of a branch SKU below its minimum */
+export const INVENTORY_STOCK_BELOW_MIN = {
+  type: 'inventory.stock.below_min',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export interface StockBelowMinPayload {
+  branchId: string | null;
+  warehouseId: string;
+  /** the catalog variant id (inventory calls it `skuId`) */
+  variantId: string;
+  sku: string | null;
+  name: string | null;
+  available: number;
+  minQuantity: number;
   occurredAt: string;
 }
 

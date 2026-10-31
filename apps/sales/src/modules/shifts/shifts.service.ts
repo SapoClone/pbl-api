@@ -38,6 +38,7 @@ export interface PosShiftResponse {
   code: string;
   branchId: string;
   registerCode: string;
+  registerId: string | null;
   staffId: string;
   status: 'OPEN' | 'CLOSED';
   openingCash: number;
@@ -74,7 +75,7 @@ export class ShiftsService {
     );
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
-    const registerCode = (dto.registerCode ?? 'REG-01').trim().toUpperCase();
+    let registerCode = (dto.registerCode ?? 'REG-01').trim().toUpperCase();
     const openingCash = vndNumber(parseVndAmount(dto.openingCash, true));
 
     try {
@@ -94,6 +95,38 @@ export class ShiftsService {
             `Branch ${dto.branchId} does not exist or is not active`,
             400,
           );
+        }
+
+        // A register of the screen contract: one open shift per register, whoever the staff
+        let registerId: string | null = null;
+        if (dto.registerId) {
+          const registers = await em.query(
+            `SELECT id, code FROM ${prefix}"registers"
+             WHERE tenant_id = $1 AND id = $2 AND branch_id = $3 AND status = 'active'
+             FOR UPDATE`,
+            [tenantId, dto.registerId, dto.branchId],
+          );
+          if (registers.length === 0) {
+            throw new SalesDomainError(
+              SalesDomainErrorCode.REGISTER_NOT_FOUND,
+              `Register ${dto.registerId} not found in this branch`,
+              404,
+            );
+          }
+          registerId = registers[0].id as string;
+          registerCode = String(registers[0].code).toUpperCase();
+          const busy = await em.query(
+            `SELECT id FROM ${prefix}"pos_shifts"
+             WHERE tenant_id = $1 AND register_id = $2 AND status = 'OPEN' LIMIT 1`,
+            [tenantId, registerId],
+          );
+          if (busy.length > 0) {
+            throw new SalesDomainError(
+              SalesDomainErrorCode.SHIFT_ALREADY_OPEN,
+              `Register ${registerCode} already has an OPEN shift`,
+              409,
+            );
+          }
         }
 
         // Advisory lock to serialize concurrent shift opens for same register/staff
@@ -126,8 +159,8 @@ export class ShiftsService {
           INSERT INTO ${prefix}"pos_shifts" (
             id, tenant_id, code, branch_id, register_code, staff_id,
             status, opening_cash, cash_sales_total, cash_refunds_total,
-            expected_cash, open_note, opened_at, version
-          ) VALUES ($1, $2, $3, $4, $5, $6, 'OPEN', $7::bigint, 0, 0, $7::bigint, $8, now(), 1)
+            expected_cash, open_note, register_id, opened_at, version
+          ) VALUES ($1, $2, $3, $4, $5, $6, 'OPEN', $7::bigint, 0, 0, $7::bigint, $8, $9, now(), 1)
           RETURNING *
           `,
           [
@@ -139,6 +172,7 @@ export class ShiftsService {
             staffId,
             openingCash,
             dto.note ?? null,
+            registerId,
           ],
         );
 
@@ -251,6 +285,13 @@ export class ShiftsService {
         );
       }
       const shift = rows[0];
+      if (dto.version !== undefined && Number(shift.version) !== dto.version) {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.RESOURCE_VERSION_CONFLICT,
+          `Shift ${shift.code} version mismatch (expected ${dto.version}, actual ${shift.version})`,
+          409,
+        );
+      }
       if (shift.status === 'CLOSED') {
         throw new SalesDomainError(
           SalesDomainErrorCode.SHIFT_ALREADY_CLOSED,
@@ -424,6 +465,7 @@ export class ShiftsService {
       code: String(row.code),
       branchId: String(row.branch_id),
       registerCode: String(row.register_code),
+      registerId: row.register_id ? String(row.register_id) : null,
       staffId: String(row.staff_id),
       status: row.status as 'OPEN' | 'CLOSED',
       openingCash: toMoney(row.opening_cash),

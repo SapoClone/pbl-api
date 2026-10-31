@@ -154,6 +154,9 @@ export class PosShiftEntity {
   })
   registerCode!: string;
 
+  @Column({ name: 'register_id', type: 'uuid', nullable: true })
+  registerId!: string | null;
+
   @Column({ name: 'staff_id', type: 'uuid' })
   staffId!: string;
 
@@ -377,6 +380,16 @@ export class OrderTenderEntity {
 
   @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true })
   confirmedAt!: Date | null;
+
+  /** `PAYMENT`, or `REFUND` (the amount stays positive) */
+  @Column({ name: 'kind', type: 'varchar', length: 8, default: 'PAYMENT' })
+  kind!: string;
+
+  @Column({ name: 'note', type: 'varchar', length: 255, nullable: true })
+  note!: string | null;
+
+  @Column({ name: 'paid_at', type: 'timestamptz', nullable: true })
+  paidAt!: Date | null;
 
   @Column({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
@@ -751,7 +764,100 @@ export class CouponUsageEntity {
   createdAt!: Date;
 }
 
+@Entity({ name: 'sales_channels' })
+export class SalesChannelEntity {
+  @PrimaryColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ name: 'type', type: 'varchar', length: 24 })
+  type!: string;
+
+  @Column({ name: 'name', type: 'varchar', length: 100 })
+  name!: string;
+
+  @Column({ name: 'status', type: 'varchar', length: 16, default: 'active' })
+  status!: string;
+
+  @Column({ name: 'environment', type: 'varchar', length: 16, nullable: true })
+  environment!: string | null;
+
+  @Column({
+    name: 'connection_id',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
+  connectionId!: string | null;
+
+  @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
+  createdAt!: Date;
+
+  @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
+  updatedAt!: Date;
+}
+
+@Entity({ name: 'registers' })
+export class RegisterEntity {
+  @PrimaryColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ name: 'branch_id', type: 'uuid' })
+  branchId!: string;
+
+  @Column({ name: 'code', type: 'varchar', length: 32 })
+  code!: string;
+
+  @Column({ name: 'name', type: 'varchar', length: 100 })
+  name!: string;
+
+  @Column({ name: 'status', type: 'varchar', length: 16, default: 'active' })
+  status!: string;
+
+  @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
+  createdAt!: Date;
+
+  @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
+  updatedAt!: Date;
+}
+
+/** What sales keeps of finance's shipping providers, so the order form loads them in one call */
+@Entity({ name: 'shipping_providers' })
+export class ShippingProviderEntity {
+  @PrimaryColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ name: 'code', type: 'varchar', length: 32 })
+  code!: string;
+
+  @Column({ name: 'name', type: 'varchar', length: 100 })
+  name!: string;
+
+  @Column({ name: 'type', type: 'varchar', length: 24 })
+  type!: string;
+
+  @Column({ name: 'status', type: 'varchar', length: 16, default: 'active' })
+  status!: string;
+
+  @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
+  createdAt!: Date;
+
+  @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
+  updatedAt!: Date;
+}
+
 export const M3_SALES_ENTITIES = [
+  SalesChannelEntity,
+  RegisterEntity,
+  ShippingProviderEntity,
   SalesCodeSequenceEntity,
   CatalogVariantProjectionEntity,
   OrderStatusHistoryEntity,

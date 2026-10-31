@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InternalHttpClient, RequestContext } from '@pbl/common';
+import { InternalHttpClient } from '@pbl/common';
 import { createHash } from 'node:crypto';
 import {
   INTERNAL_TOKEN_HEADER,
@@ -90,7 +90,7 @@ export class SalesOrderClient {
     let res;
     try {
       res = await this.http.post<any>(
-        `${readSalesUrl()}/api/v1/orders/omnichannel`,
+        `${readSalesUrl()}/internal/v1/orders/omnichannel`,
         {
           branchId: cmd.branchId,
           warehouseId: cmd.warehouseId ?? undefined,
@@ -103,7 +103,7 @@ export class SalesOrderClient {
           autoConfirm: cmd.autoConfirm,
           lines: cmd.lines.map((l) => ({
             variantId: l.variantId,
-            qty: String(l.quantity),
+            qty: l.quantity,
             unitPriceOverride: l.unitPrice,
           })),
         },
@@ -114,7 +114,8 @@ export class SalesOrderClient {
           },
         },
         // jobs and webhooks run outside a request: no user token is forwarded then
-        RequestContext.get() ? undefined : { asService: true },
+        // a job or webhook has no user token: sales takes the tenant from the header once the service token is valid
+        { asService: true, tenantId: cmd.tenantId },
       );
     } catch (err) {
       stripInternalToken(err);

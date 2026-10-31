@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -56,6 +57,20 @@ export class GroupsController {
   ) {
     try {
       return await this.groupsService.updateGroup(id, dto);
+    } catch (error) {
+      rethrowCustomerHttpError(error);
+    }
+  }
+
+  @Delete('customer-groups/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermission('customers.delete')
+  @ApiOperation({
+    summary: 'Delete an empty, non-seeded customer group (204)',
+  })
+  async deleteGroup(@Param('id', new ParseUUIDPipe()) id: string) {
+    try {
+      await this.groupsService.deleteGroup(id);
     } catch (error) {
       rethrowCustomerHttpError(error);
     }

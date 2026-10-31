@@ -363,6 +363,89 @@ export class PriceListItemEntity {
   updatedAt!: Date;
 }
 
+export type UploadKind = 'IMAGE' | 'IMPORT';
+export type UploadStatus = 'PENDING' | 'UPLOADED' | 'ATTACHED';
+
+/** Metadata of a file the client uploads through the storage adapter (images, import CSVs). */
+@Entity('uploads')
+export class UploadEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ type: 'varchar', length: 16 })
+  kind!: UploadKind;
+
+  @Column({ name: 'file_name', type: 'varchar', length: 255 })
+  fileName!: string;
+
+  @Column({ name: 'content_type', type: 'varchar', length: 100 })
+  contentType!: string;
+
+  @Column({ name: 'declared_size', type: 'integer' })
+  declaredSize!: number;
+
+  @Column({ name: 'stored_size', type: 'integer', nullable: true })
+  storedSize!: number | null;
+
+  @Column({ name: 'storage_key', type: 'varchar', length: 255 })
+  storageKey!: string;
+
+  @Column({ name: 'public_url', type: 'varchar', length: 500, nullable: true })
+  publicUrl!: string | null;
+
+  @Column({ type: 'varchar', length: 16, default: 'PENDING' })
+  status!: UploadStatus;
+
+  @Column({ name: 'expires_at', type: 'timestamptz' })
+  expiresAt!: Date;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt!: Date;
+}
+
+export type ProductImportStatus = 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export interface ProductImportRowError {
+  row: number;
+  message: string;
+}
+
+@Entity('product_imports')
+export class ProductImportEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ name: 'upload_id', type: 'uuid' })
+  uploadId!: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'PROCESSING' })
+  status!: ProductImportStatus;
+
+  @Column({ name: 'created_count', type: 'integer', default: 0 })
+  createdCount!: number;
+
+  @Column({ name: 'updated_count', type: 'integer', default: 0 })
+  updatedCount!: number;
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  errors!: ProductImportRowError[];
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt!: Date;
+}
+
 export const CATALOG_ENTITIES = [
   CategoryEntity,
   BrandEntity,
@@ -374,4 +457,6 @@ export const CATALOG_ENTITIES = [
   UnitConversionEntity,
   PriceListEntity,
   PriceListItemEntity,
+  UploadEntity,
+  ProductImportEntity,
 ];

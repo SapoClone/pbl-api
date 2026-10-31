@@ -2,25 +2,43 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Headers,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import {
   AuthUser,
   CurrentUser,
   RequirePermission,
   hasPermission,
 } from '@pbl/auth';
+import {
+  CustomerDomainError,
+  CustomerDomainErrorCode,
+} from '../../domain/customer-domain';
 import { rethrowCustomerHttpError } from '../../presentation/customer-http-error';
 import {
   CreateExportJobDto,
   CreateImportJobDto,
   MergeCustomersDto,
 } from './data-management.dto';
-import { DataManagementService } from './data-management.service';
+import {
+  CUSTOMER_IMPORT_TEMPLATE,
+  DataManagementService,
+} from './data-management.service';
 
 @ApiTags('customer-data-management')
 @ApiBearerAuth()
@@ -58,6 +76,60 @@ export class DataManagementController {
         user.id ?? 'system',
         dto,
         idempotencyKey,
+      );
+    } catch (err) {
+      rethrowCustomerHttpError(err);
+    }
+  }
+
+  @Get('v1/customers/import-template')
+  @RequirePermission('customers.create')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header(
+    'Content-Disposition',
+    'attachment; filename="customer-import-template.csv"',
+  )
+  @ApiOperation({ summary: 'CSV template for POST /customers/import' })
+  importTemplate() {
+    return CUSTOMER_IMPORT_TEMPLATE;
+  }
+
+  @Post('v1/customers/import')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('customers.create')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary:
+      'Import customers from a CSV file (multipart: file, dryRun); dryRun rolls the run back',
+  })
+  async importCustomers(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file: { buffer: Buffer; originalname: string } | undefined,
+    @Body('dryRun') dryRun?: string,
+  ) {
+    try {
+      if (!file) {
+        throw new CustomerDomainError(
+          CustomerDomainErrorCode.VALIDATION_ERROR,
+          'Multipart field "file" (CSV) is required',
+          422,
+        );
+      }
+      if (!/\.csv$/i.test(file.originalname)) {
+        throw new CustomerDomainError(
+          CustomerDomainErrorCode.VALIDATION_ERROR,
+          'Only CSV files are supported (XLSX is not)',
+          422,
+        );
+      }
+      return await this.dataManagementService.importCustomersFromFile(
+        user.tenantId!,
+        user.id ?? 'system',
+        file.buffer.toString('utf8'),
+        String(dryRun).toLowerCase() === 'true',
       );
     } catch (err) {
       rethrowCustomerHttpError(err);

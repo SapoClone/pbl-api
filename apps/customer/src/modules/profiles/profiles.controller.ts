@@ -4,6 +4,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Header,
   Headers,
   Param,
   ParseUUIDPipe,
@@ -24,7 +25,9 @@ import { rethrowCustomerHttpError } from '../../presentation/customer-http-error
 import { InternalTokenGuard } from '../../presentation/internal-token.guard';
 import {
   CreateCustomerDto,
+  CustomersKpiQueryDto,
   DeactivateCustomerQueryDto,
+  ExportCustomersQueryDto,
   ListCustomerOrdersQueryDto,
   ListCustomersQueryDto,
   LookupCustomerQueryDto,
@@ -70,6 +73,45 @@ export class ProfilesController {
   ) {
     try {
       return await this.profilesService.listCustomers(
+        user.tenantId!,
+        query,
+        hasPermission(user, 'customers.update'),
+      );
+    } catch (err) {
+      rethrowCustomerHttpError(err);
+    }
+  }
+
+  @Get('v1/customers/summary')
+  @RequirePermission('customers.view')
+  @ApiOperation({
+    summary: 'KPI cards and group tab counts of the customer screen',
+  })
+  async getKpiSummary(
+    @CurrentUser() user: AuthUser,
+    @Query() query: CustomersKpiQueryDto,
+  ) {
+    try {
+      return await this.profilesService.getKpiSummary(user.tenantId!, query);
+    } catch (err) {
+      rethrowCustomerHttpError(err);
+    }
+  }
+
+  @Get('v1/customers/export')
+  @RequirePermission('customers.view')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="customers.csv"')
+  @ApiOperation({
+    summary:
+      'Direct CSV export of the filtered list; phones masked unless the caller holds customers.update',
+  })
+  async exportCustomers(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ExportCustomersQueryDto,
+  ) {
+    try {
+      return await this.profilesService.exportCustomersCsv(
         user.tenantId!,
         query,
         hasPermission(user, 'customers.update'),

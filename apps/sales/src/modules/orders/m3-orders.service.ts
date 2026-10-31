@@ -51,6 +51,44 @@ function deterministicUuid(seed: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
+/** The client's `version` against the stored one (409), when it sent one */
+function assertVersion(
+  order: { code: string; version?: number },
+  version: number | undefined,
+): void {
+  if (version !== undefined && Number(order.version ?? 1) !== version) {
+    throw new SalesDomainError(
+      SalesDomainErrorCode.RESOURCE_VERSION_CONFLICT,
+      `Order ${order.code} version mismatch (expected ${version}, actual ${order.version})`,
+      409,
+    );
+  }
+}
+
+/** An order handed to the carrier is not cancelled: it comes back through a return */
+function assertNotShipped(order: {
+  fulfillmentStage?: string | null;
+  code: string;
+}): void {
+  if (order.fulfillmentStage === 'SHIPPING') {
+    throw new SalesDomainError(
+      SalesDomainErrorCode.ORDER_INVALID_STATE,
+      `Order ${order.code} is already shipped: use a return instead`,
+      409,
+    );
+  }
+}
+
+/** What only the internal route (a trusted service) may ask for */
+export interface OmnichannelOptions {
+  /** `unitPriceOverride` of a line replaces the catalog price (marketplace price) */
+  allowPriceOverride?: boolean;
+  /** `sku_unmapped` or `stock_shortage`, stored on the order */
+  exceptionCode?: string | null;
+  /** A stock shortage on auto confirmation leaves the order pending and flags it, instead of a 409 */
+  tolerateShortage?: boolean;
+}
+
 @Injectable()
 export class M3OrdersService {
   constructor(
@@ -66,6 +104,7 @@ export class M3OrdersService {
     permissions: string[],
     scope: BranchScope,
     dto: CreateOmnichannelOrderDto,
+    options: OmnichannelOptions = {},
   ) {
     assertBranchAllowed(
       scope,
@@ -106,6 +145,7 @@ export class M3OrdersService {
       shippingFee: dto.shippingFee,
       role: discountTierFor(permissions),
       permissions,
+      allowPriceOverride: options.allowPriceOverride,
     });
 
     const initialStatus: CommercialOrderStatus = dto.initialStatus ?? 'PENDING';
@@ -191,6 +231,7 @@ export class M3OrdersService {
           totalAmount: grandTotalInt,
           itemCount,
           note: dto.note ?? null,
+          exceptionCode: options.exceptionCode ?? null,
           createdBy: actorId,
           version: 1,
           createdAt: now,
@@ -291,20 +332,59 @@ export class M3OrdersService {
       throw error;
     }
 
+    const outcome = options.tolerateShortage
+      ? { shortageDetected: false, shortages: [] as unknown[] }
+      : {};
     if (dto.autoConfirm && dto.warehouseId) {
-      const confirmed = await this.confirmOrder(
-        createdOrderId,
-        actorId,
-        scope,
-        {
-          warehouseId: dto.warehouseId,
-        },
-      );
-      return { ...confirmed, replayed: false };
+      try {
+        const confirmed = await this.confirmOrder(
+          createdOrderId,
+          actorId,
+          scope,
+          {
+            warehouseId: dto.warehouseId,
+          },
+        );
+        return { ...confirmed, replayed: false, ...outcome };
+      } catch (error) {
+        if (
+          !options.tolerateShortage ||
+          !(error instanceof SalesDomainError) ||
+          error.code !== SalesDomainErrorCode.INSUFFICIENT_STOCK
+        ) {
+          throw error;
+        }
+        await this.flagException(createdOrderId, 'stock_shortage');
+        const pending = await this.getOrderDetails(createdOrderId, scope);
+        const shortages = (error.details as { shortages?: unknown[] })
+          ?.shortages;
+        return {
+          ...pending,
+          replayed: false,
+          shortageDetected: true,
+          shortages: shortages ?? [],
+        };
+      }
     }
 
     const details = await this.getOrderDetails(createdOrderId, scope);
-    return { ...details, replayed: false };
+    return { ...details, replayed: false, ...outcome };
+  }
+
+  /** Marks an order that needs a human (marketplace orders the stock or the mapping cannot serve) */
+  private async flagException(orderId: string, code: string): Promise<void> {
+    const tenantId = TenantContext.require();
+    const prefix = getSchemaPrefix(this.dataSource);
+    await this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      await em.query(
+        `UPDATE ${prefix}"orders" SET exception_code = $3, updated_at = now()
+         WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, orderId, code],
+      );
+    });
   }
 
   async updateDraftOrder(
@@ -377,13 +457,15 @@ export class M3OrdersService {
         );
       }
 
+      // `version` is the screen contract's name for `expectedVersion`
+      const expectedVersion = dto.expectedVersion ?? dto.version;
       if (
-        dto.expectedVersion !== undefined &&
-        Number(order.version ?? 1) !== dto.expectedVersion
+        expectedVersion !== undefined &&
+        Number(order.version ?? 1) !== expectedVersion
       ) {
         throw new SalesDomainError(
           SalesDomainErrorCode.RESOURCE_VERSION_CONFLICT,
-          `Order ${order.code} version mismatch (expected ${dto.expectedVersion}, actual ${order.version})`,
+          `Order ${order.code} version mismatch (expected ${expectedVersion}, actual ${order.version})`,
           409,
         );
       }
@@ -488,6 +570,8 @@ export class M3OrdersService {
     if (order.orderStatus === 'CONFIRMED') {
       return this.getOrderDetails(orderId, scope);
     }
+
+    assertVersion(order, dto.version);
 
     if (order.orderStatus !== 'DRAFT' && order.orderStatus !== 'PENDING') {
       throw new SalesDomainError(
@@ -642,6 +726,9 @@ export class M3OrdersService {
       return this.getOrderDetails(orderId, scope);
     }
 
+    assertVersion(order, dto.version);
+    assertNotShipped(order);
+
     assertCanCancelOrder({
       orderStatus: (order.orderStatus ?? 'COMPLETED') as CommercialOrderStatus,
       fulfillmentStatus: (order.fulfillmentStatus ??
@@ -668,6 +755,7 @@ export class M3OrdersService {
         return;
       }
 
+      assertNotShipped(locked);
       assertCanCancelOrder({
         orderStatus: (locked.orderStatus ??
           'COMPLETED') as CommercialOrderStatus,
@@ -688,6 +776,7 @@ export class M3OrdersService {
       locked.status = 'cancelled';
       locked.orderStatus = 'CANCELLED';
       locked.fulfillmentStatus = 'UNFULFILLED';
+      locked.fulfillmentStage = null;
       locked.cancelReason = dto.reason ?? 'CANCELLED_BY_USER';
       locked.cancelledAt = now;
       locked.version = Number(locked.version ?? 1) + 1;

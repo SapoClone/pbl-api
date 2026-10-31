@@ -15,6 +15,12 @@ export interface InternalHttpOptions {
    * user is out of scope for now (follow-up).
    */
   asService?: boolean;
+  /**
+   * With `asService` only: the tenant a job acts for, sent as `X-Tenant-Id`. The
+   * callee honours it only after it has verified the service token, so it is
+   * ignored (and never sent) on a call that forwards a user's token.
+   */
+  tenantId?: string;
 }
 
 /** Thrown when the client is used outside a request context */
@@ -139,6 +145,9 @@ export class InternalHttpClient {
     // context values are written last so nothing above can override them
     if (state?.requestId) headers['X-Request-Id'] = state.requestId;
     if (forwardAuth) headers['Authorization'] = state!.authorization;
+    if (options.asService && options.tenantId) {
+      headers['X-Tenant-Id'] = options.tenantId;
+    }
 
     const final: AxiosRequestConfig = { ...config, headers };
     const resolved = this.resolveUrl(config, forwardAuth);

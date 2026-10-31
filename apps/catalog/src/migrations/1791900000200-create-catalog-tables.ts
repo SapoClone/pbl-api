@@ -27,6 +27,8 @@ export class CreateCatalogTables1791900000200 implements MigrationInterface {
       queryRunner,
       'price_list_customer_groups',
     );
+    const uploads = qualifiedTable(queryRunner, 'uploads');
+    const productImports = qualifiedTable(queryRunner, 'product_imports');
 
     // 1. categories
     await queryRunner.query(`
@@ -374,6 +376,53 @@ export class CreateCatalogTables1791900000200 implements MigrationInterface {
       )
     `);
 
+    // Upload metadata (images, import CSVs); the bytes live behind the storage adapter
+    await queryRunner.query(`
+      CREATE TABLE ${uploads} (
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+        "tenant_id" uuid NOT NULL,
+        "kind" character varying(16) NOT NULL,
+        "file_name" character varying(255) NOT NULL,
+        "content_type" character varying(100) NOT NULL,
+        "declared_size" integer NOT NULL,
+        "stored_size" integer NULL,
+        "storage_key" character varying(255) NOT NULL,
+        "public_url" character varying(500) NULL,
+        "status" character varying(16) NOT NULL DEFAULT 'PENDING',
+        "expires_at" TIMESTAMPTZ NOT NULL,
+        "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_uploads_id" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_uploads_tenant_id_id" UNIQUE ("tenant_id", "id"),
+        CONSTRAINT "CHK_uploads_kind" CHECK ("kind" IN ('IMAGE', 'IMPORT')),
+        CONSTRAINT "CHK_uploads_status" CHECK ("status" IN ('PENDING', 'UPLOADED', 'ATTACHED')),
+        CONSTRAINT "CHK_uploads_declared_size" CHECK ("declared_size" > 0)
+      )
+    `);
+    await queryRunner.query(`
+      CREATE INDEX "IDX_uploads_tenant_status_expires"
+      ON ${uploads} ("tenant_id", "status", "expires_at")
+    `);
+
+    await queryRunner.query(`
+      CREATE TABLE ${productImports} (
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+        "tenant_id" uuid NOT NULL,
+        "upload_id" uuid NOT NULL,
+        "status" character varying(16) NOT NULL DEFAULT 'PROCESSING',
+        "created_count" integer NOT NULL DEFAULT 0,
+        "updated_count" integer NOT NULL DEFAULT 0,
+        "errors" jsonb NOT NULL DEFAULT '[]'::jsonb,
+        "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_product_imports_id" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_product_imports_upload" UNIQUE ("tenant_id", "upload_id"),
+        CONSTRAINT "CHK_product_imports_status" CHECK ("status" IN ('PROCESSING', 'COMPLETED', 'FAILED')),
+        CONSTRAINT "FK_product_imports_upload" FOREIGN KEY ("tenant_id", "upload_id")
+          REFERENCES ${uploads}("tenant_id", "id") ON DELETE RESTRICT
+      )
+    `);
+
     // Enable and force PostgreSQL Row-Level Security on all tenant-owned Catalog tables (ADR-0011)
     for (const table of [
       categories,
@@ -389,6 +438,8 @@ export class CreateCatalogTables1791900000200 implements MigrationInterface {
       comboItems,
       priceListChannels,
       priceListCustomerGroups,
+      uploads,
+      productImports,
     ]) {
       await enableTenantRlsPolicy(queryRunner, table);
     }
@@ -396,6 +447,8 @@ export class CreateCatalogTables1791900000200 implements MigrationInterface {
 
   async down(queryRunner: QueryRunner): Promise<void> {
     for (const name of [
+      'product_imports',
+      'uploads',
       'price_list_customer_groups',
       'price_list_channels',
       'combo_items',

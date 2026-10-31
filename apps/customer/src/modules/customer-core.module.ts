@@ -13,6 +13,8 @@ import { MembershipsController } from './memberships/memberships.controller';
 import { MembershipsService } from './memberships/memberships.service';
 import { ProfilesController } from './profiles/profiles.controller';
 import { ProfilesService } from './profiles/profiles.service';
+import { TagsController } from './tags/tags.controller';
+import { TagsService } from './tags/tags.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature(M4_CUSTOMER_ENTITIES)],
@@ -23,6 +25,7 @@ import { ProfilesService } from './profiles/profiles.service';
     DataManagementController,
     AddressesController,
     ProfilesController,
+    TagsController,
   ],
   providers: [
     GroupsService,
@@ -31,6 +34,7 @@ import { ProfilesService } from './profiles/profiles.service';
     LoyaltyService,
     DataManagementService,
     ProfilesService,
+    TagsService,
   ],
   exports: [
     GroupsService,
@@ -39,6 +43,7 @@ import { ProfilesService } from './profiles/profiles.service';
     LoyaltyService,
     DataManagementService,
     ProfilesService,
+    TagsService,
   ],
 })
 export class CustomerCoreModule {}

@@ -8,7 +8,7 @@ export function getSchemaPrefix(dataSource: DataSource): string {
 export async function nextCustomerDocumentCode(
   em: EntityManager,
   tenantId: string,
-  prefix: 'KH' | 'GRP' | 'TIER' | 'IMP' | 'EXP',
+  prefix: 'KH' | 'MB' | 'GRP' | 'TIER' | 'IMP' | 'EXP',
 ): Promise<string> {
   const schemaPrefix = getSchemaPrefix(em.connection);
   const rows: Array<{ last_value: string | number }> = await em.query(

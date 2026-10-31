@@ -1,9 +1,11 @@
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -115,4 +117,68 @@ export class ReleaseLoyaltyHoldDto {
   @IsString()
   @MaxLength(64)
   actorId?: string;
+}
+
+/** Screen-contract settings body (PATCH /loyalty-settings). */
+export class PatchLoyaltySettingsDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  earnAmountPerPoint?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  redeemValuePerPoint?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  pointsExpireMonths?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  minRedeemPoints?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxRedeemPointsPerOrder?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(30)
+  holdTtlSeconds?: number;
+}
+
+/** Screen-contract adjustment body (POST /customers/:id/loyalty-adjustments). */
+export class LoyaltyAdjustmentDto {
+  @IsInt()
+  points!: number;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(255)
+  reason!: string;
+}
+
+export class ListLoyaltyTransactionsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }

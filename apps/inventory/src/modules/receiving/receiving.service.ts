@@ -231,7 +231,7 @@ export class ReceivingService {
       );
     }
 
-    if (header.status !== 'DRAFT') {
+    if (header.status !== 'DRAFT' && header.status !== 'PENDING_APPROVAL') {
       throw new InventoryDomainError(
         InventoryDomainErrorCode.STOCK_RECEIPT_INVALID_STATE,
         `Cannot post stock receipt in state ${header.status}`,

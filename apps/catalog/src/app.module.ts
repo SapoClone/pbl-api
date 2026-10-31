@@ -17,10 +17,18 @@ import { BrandsController } from './modules/brands/brands.controller';
 import { BrandsService } from './modules/brands/brands.service';
 import { CategoriesController } from './modules/categories/categories.controller';
 import { CategoriesService } from './modules/categories/categories.service';
+import { ImportsController } from './modules/imports/imports.controller';
+import { ImportsService } from './modules/imports/imports.service';
 import { PricingController } from './modules/pricing/pricing.controller';
 import { PricingService } from './modules/pricing/pricing.service';
 import { ProductsController } from './modules/products/products.controller';
 import { ProductsService } from './modules/products/products.service';
+import {
+  createFileStorage,
+  FILE_STORAGE,
+} from './modules/uploads/file-storage';
+import { UploadsController } from './modules/uploads/uploads.controller';
+import { UploadsService } from './modules/uploads/uploads.service';
 
 @Module({
   // Every route requires a platform-issued access token unless @Public()
@@ -54,6 +62,8 @@ import { ProductsService } from './modules/products/products.service';
     AttributesController,
     ProductsController,
     PricingController,
+    UploadsController,
+    ImportsController,
   ],
   providers: [
     CategoriesService,
@@ -61,6 +71,9 @@ import { ProductsService } from './modules/products/products.service';
     AttributesService,
     ProductsService,
     PricingService,
+    UploadsService,
+    ImportsService,
+    { provide: FILE_STORAGE, useFactory: createFileStorage },
   ],
 })
 export class AppModule {}

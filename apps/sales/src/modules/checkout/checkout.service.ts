@@ -12,6 +12,7 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { createHash, randomUUID } from 'node:crypto';
 import { DataSource, In, QueryFailedError } from 'typeorm';
+import { completedEventExtras } from '../../common/order-events';
 import {
   CalculatedOrderQuote,
   SalesDomainError,
@@ -1186,7 +1187,9 @@ export class CheckoutService {
           name: l.productName,
           quantity: Math.max(1, Math.round(Number(l.qty))),
           unitPrice: l.unitPrice,
+          variantId: l.variantId,
         })),
+        ...completedEventExtras({ channelType: 'POS' }, quote.lines),
       } satisfies OrderCompletedPayload);
 
       await this.outbox.add(em, SALES_CHECKOUT_COMPLETED, {

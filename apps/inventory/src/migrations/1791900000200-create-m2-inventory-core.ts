@@ -87,6 +87,8 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
         "sku_code" character varying(64) NOT NULL,
         "name" character varying(255) NOT NULL,
         "base_unit" character varying(32) NOT NULL DEFAULT 'PCS',
+        "barcode" character varying(64) NULL,
+        "base_price" bigint NULL,
         "status" character varying(20) NOT NULL DEFAULT 'ACTIVE',
         "aggregate_version" integer NOT NULL DEFAULT 1,
         "source_updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -98,6 +100,11 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
     await queryRunner.query(`
       CREATE INDEX "IDX_catalog_sku_projection_tenant_code"
       ON ${skuProjection} ("tenant_id", "sku_code")
+    `);
+    await queryRunner.query(`
+      CREATE INDEX "IDX_catalog_sku_projection_tenant_barcode"
+      ON ${skuProjection} ("tenant_id", "barcode")
+      WHERE "barcode" IS NOT NULL
     `);
 
     // 6. Stock Threshold table
@@ -131,7 +138,10 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
         "phone" character varying(32) NULL,
         "email" character varying(160) NULL,
         "address" text NULL,
+        "tax_code" character varying(32) NULL,
+        "note" text NULL,
         "status" character varying(16) NOT NULL DEFAULT 'ACTIVE',
+        "deleted_at" TIMESTAMPTZ NULL,
         "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
         "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
         CONSTRAINT "PK_supplier_id" PRIMARY KEY ("id"),
@@ -151,6 +161,7 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
         "warehouse_id" uuid NOT NULL,
         "status" character varying(24) NOT NULL DEFAULT 'DRAFT',
         "total_amount" bigint NOT NULL DEFAULT 0,
+        "expected_date" date NULL,
         "note" text NULL,
         "approved_by" character varying(64) NULL,
         "approved_at" TIMESTAMPTZ NULL,
@@ -213,6 +224,7 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
         "status" character varying(16) NOT NULL DEFAULT 'DRAFT',
         "idempotency_key" character varying(128) NULL,
         "note" text NULL,
+        "reject_reason" text NULL,
         "posted_by" character varying(64) NULL,
         "posted_at" TIMESTAMPTZ NULL,
         "created_by" character varying(64) NULL,
@@ -221,7 +233,9 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
         CONSTRAINT "PK_stock_receipt_id" PRIMARY KEY ("id"),
         CONSTRAINT "UQ_stock_receipt_tenant_id" UNIQUE ("tenant_id", "id"),
         CONSTRAINT "UQ_stock_receipt_tenant_code" UNIQUE ("tenant_id", "code"),
-        CONSTRAINT "CHK_stock_receipt_status" CHECK ("status" IN ('DRAFT', 'POSTED', 'CANCELLED')),
+        CONSTRAINT "CHK_stock_receipt_status" CHECK (
+          "status" IN ('DRAFT', 'PENDING_APPROVAL', 'POSTED', 'CANCELLED')
+        ),
         CONSTRAINT "CHK_stock_receipt_source" CHECK (
           "source_type" IN ('MANUAL', 'PURCHASE_ORDER', 'RETURN', 'ADJUSTMENT')
         ),

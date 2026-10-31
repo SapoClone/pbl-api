@@ -51,7 +51,7 @@ describe('Customer M4 — Architecture & Boundary Guardrails', () => {
     }
   });
 
-  it('enables PostgreSQL Row-Level Security (enableTenantRlsPolicy) on all 12 M4 Customer tables in migration 1791900000200', () => {
+  it('enables PostgreSQL Row-Level Security (enableTenantRlsPolicy) on all 14 Customer tables in migration 1791900000200', () => {
     const migrationFile = path.join(
       customerSrcDir,
       'migrations',
@@ -71,6 +71,8 @@ describe('Customer M4 — Architecture & Boundary Guardrails', () => {
       'purchaseProj',
       'mergeHistory',
       'dataJobs',
+      'tags',
+      'tagLinks',
     ];
     for (const tableVar of requiredRlsTables) {
       expect(content).toContain(

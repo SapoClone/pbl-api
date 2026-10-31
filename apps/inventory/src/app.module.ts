@@ -20,12 +20,16 @@ import { M2_INVENTORY_ENTITIES } from './infrastructure/persistence/inventory.en
 import { CreateInventoryTables1791900000000 } from './migrations/1791900000000-create-inventory-tables';
 import { AddWarehouseStockBalances1791900000100 } from './migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from './migrations/1791900000200-create-m2-inventory-core';
+import { DocumentsController } from './modules/documents/documents.controller';
+import { DocumentsService } from './modules/documents/documents.service';
 import { IssuingController } from './modules/issuing/issuing.controller';
 import { IssuingService } from './modules/issuing/issuing.service';
 import { ProcurementController } from './modules/procurement/procurement.controller';
 import { ProcurementService } from './modules/procurement/procurement.service';
 import { ReceivingController } from './modules/receiving/receiving.controller';
 import { ReceivingService } from './modules/receiving/receiving.service';
+import { StockViewsController } from './modules/stock-views/stock-views.controller';
+import { StockViewsService } from './modules/stock-views/stock-views.service';
 import { StockQueryController } from './modules/stock/stock-query.controller';
 import { StockQueryService } from './modules/stock/stock-query.service';
 import { StocktakeController } from './modules/stocktake/stocktake.controller';
@@ -92,6 +96,9 @@ import { StockService } from './stock/stock.service';
     ]),
   ],
   controllers: [
+    // before the controllers that own `:id` routes (summary, export, directory)
+    DocumentsController,
+    StockViewsController,
     StockController,
     WarehousesController,
     StockQueryController,
@@ -108,6 +115,8 @@ import { StockService } from './stock/stock.service';
     StockService,
     WarehousesService,
     StockQueryService,
+    StockViewsService,
+    DocumentsService,
     ReceivingService,
     IssuingService,
     TransfersService,

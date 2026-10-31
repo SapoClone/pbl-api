@@ -145,7 +145,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
     await adminDs?.destroy();
   });
 
-  it('creates all 13 Catalog domain tables with RLS enabled and forced', async () => {
+  it('creates all 15 Catalog domain tables with RLS enabled and forced', async () => {
     const rlsRows: {
       relname: string;
       relrowsecurity: boolean;
@@ -171,9 +171,11 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
       'price_list_customer_groups',
       'price_list_items',
       'price_lists',
+      'product_imports',
       'product_variants',
       'products',
       'unit_conversions',
+      'uploads',
       'variant_attribute_values',
     ]);
     for (const row of rlsRows) {

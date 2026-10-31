@@ -16,6 +16,7 @@ import { EventOutbox } from '@pbl/events';
 import { createHash, randomUUID } from 'crypto';
 import { In, QueryFailedError } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
+import { completedEventExtras } from '../common/order-events';
 import {
   InventoryClient,
   InventoryClientErrorCode,
@@ -251,6 +252,7 @@ export class OrdersService {
             quantity: l.quantity,
             unitPrice: l.unitPrice,
           })),
+          ...completedEventExtras({ channelType: 'POS' }, []),
         } satisfies OrderCompletedPayload);
         row.items = lines;
         return { row, replayed: false };
@@ -629,6 +631,7 @@ export class OrdersService {
           quantity: l.quantity,
           unitPrice: l.unitPrice,
         })),
+        ...completedEventExtras({ channelType: 'POS' }, []),
       } satisfies OrderCompletedPayload);
 
       row.items = savedLines;

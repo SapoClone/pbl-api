@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Res,
   UseFilters,
 } from '@nestjs/common';
@@ -23,6 +24,7 @@ import {
 import type { Response } from 'express';
 import { BranchScope } from '../../presentation/access';
 import { SalesExceptionFilter } from '../../presentation/sales-http-error';
+import { OrderQueryService } from '../screen/order-query.service';
 import {
   CancelOrderDto,
   ConfirmOrderDto,
@@ -36,7 +38,10 @@ import { M3OrdersService } from './m3-orders.service';
 @UseFilters(SalesExceptionFilter)
 @Controller('api/v1/orders')
 export class M3OrdersController {
-  constructor(private readonly m3OrdersService: M3OrdersService) {}
+  constructor(
+    private readonly m3OrdersService: M3OrdersService,
+    private readonly orderQuery: OrderQueryService,
+  ) {}
 
   @Post('omnichannel')
   @RequirePermission('orders.create')
@@ -68,24 +73,36 @@ export class M3OrdersController {
   }
 
   @Patch(':id')
-  @RequirePermission('orders.update')
+  @RequirePermission('orders.update', 'pos.create')
   @ApiOperation({
     summary:
       'Update a DRAFT or PENDING order with optimistic concurrency check',
+    description:
+      '`version` is accepted as `expectedVersion`; `orderStatus: "confirmed"` finalises the draft (needs orders.update).',
   })
-  updateDraftOrder(
+  async updateDraftOrder(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthUser,
     @AllowedBranches() scope: BranchScope,
     @Body() dto: UpdateDraftOrderDto,
   ) {
-    return this.m3OrdersService.updateDraftOrder(
+    // finalising reserves stock: a state change that needs its own permission
+    if (dto.orderStatus && !hasPermission(user, 'orders.update')) {
+      throw new ForbiddenException('Confirming an order needs orders.update');
+    }
+    const updated = await this.m3OrdersService.updateDraftOrder(
       id,
       user.id,
       user.permissions,
       scope,
       dto,
     );
+    if (dto.orderStatus === 'confirmed') {
+      return this.m3OrdersService.confirmOrder(id, user.id, scope, {
+        warehouseId: dto.warehouseId,
+      });
+    }
+    return updated;
   }
 
   @Post(':id/confirm')
@@ -134,11 +151,17 @@ export class M3OrdersController {
 
   @Get(':id/history')
   @RequirePermission('orders.view')
-  @ApiOperation({ summary: 'Get 3D status transition history for an order' })
+  @ApiOperation({
+    summary: 'Get 3D status transition history for an order',
+    description:
+      '`view=timeline` answers the screen contract shape: `{data:[{at,statusType,from,to,actor,note}]}`, newest first.',
+  })
   getOrderHistory(
     @Param('id', ParseUUIDPipe) id: string,
     @AllowedBranches() scope: BranchScope,
+    @Query('view') view?: string,
   ) {
+    if (view === 'timeline') return this.orderQuery.timeline(id, scope);
     return this.m3OrdersService.getOrderHistory(id, scope);
   }
 }

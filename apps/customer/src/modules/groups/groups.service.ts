@@ -19,6 +19,7 @@ import {
   CustomerEntity,
   CustomerGroupEntity,
 } from '../../infrastructure/persistence/customer.entities';
+import { ensureSeededGroups } from '../../infrastructure/persistence/seeded-groups';
 import {
   AssignCustomerGroupDto,
   CreateCustomerGroupDto,
@@ -97,16 +98,85 @@ export class GroupsService {
     });
   }
 
-  async listGroups(): Promise<CustomerGroupEntity[]> {
+  /**
+   * The seeded groups are created on first read. Each row carries
+   * `customerCount` (non-deleted customers) and `isSeeded` on top of the
+   * entity fields.
+   */
+  async listGroups(): Promise<
+    Array<CustomerGroupEntity & { customerCount: number }>
+  > {
     const tenantId = TenantContext.require();
+    const prefix = getSchemaPrefix(this.dataSource);
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
         tenantId,
       ]);
-      return em.getRepository(CustomerGroupEntity).find({
+      await ensureSeededGroups(em, tenantId);
+      const groups = await em.getRepository(CustomerGroupEntity).find({
         where: { tenantId },
-        order: { createdAt: 'ASC' },
+        order: { createdAt: 'ASC', code: 'ASC' },
       });
+      const counts: Array<{ group_id: string; n: number }> = await em.query(
+        `SELECT "customer_group_id" AS group_id, COUNT(*)::int AS n
+         FROM ${prefix}"customers"
+         WHERE "tenant_id" = $1 AND "deleted_at" IS NULL
+           AND "customer_group_id" IS NOT NULL
+         GROUP BY "customer_group_id"`,
+        [tenantId],
+      );
+      const byGroup = new Map(counts.map((c) => [c.group_id, c.n]));
+      return groups.map((g) =>
+        Object.assign(g, { customerCount: byGroup.get(g.id) ?? 0 }),
+      );
+    });
+  }
+
+  /** Hard delete of an empty, non-seeded group (screen contract DELETE). */
+  async deleteGroup(groupId: string): Promise<void> {
+    const tenantId = TenantContext.require();
+    await this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      const group = await em.getRepository(CustomerGroupEntity).findOne({
+        where: { id: groupId, tenantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!group) {
+        throw new CustomerDomainError(
+          CustomerDomainErrorCode.CUSTOMER_GROUP_NOT_FOUND,
+          `Customer group ${groupId} not found`,
+          404,
+        );
+      }
+      if (group.isSeeded) {
+        throw new CustomerDomainError(
+          CustomerDomainErrorCode.CUSTOMER_GROUP_SEEDED,
+          `Seeded group ${group.name} cannot be deleted`,
+          409,
+        );
+      }
+      const members = await em
+        .getRepository(CustomerEntity)
+        .createQueryBuilder('c')
+        .where('c.tenant_id = :tenantId AND c.customer_group_id = :groupId', {
+          tenantId,
+          groupId,
+        })
+        .andWhere('c.deleted_at IS NULL')
+        .getCount();
+      if (members > 0) {
+        throw new CustomerDomainError(
+          CustomerDomainErrorCode.CUSTOMER_GROUP_NOT_EMPTY,
+          `Cannot delete group ${group.name} while ${members} customers belong to it`,
+          409,
+          { customerCount: members },
+        );
+      }
+      await em
+        .getRepository(CustomerGroupEntity)
+        .delete({ id: groupId, tenantId });
     });
   }
 

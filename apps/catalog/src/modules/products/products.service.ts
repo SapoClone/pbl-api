@@ -13,7 +13,13 @@ import {
   CATALOG_VARIANT_UPDATED,
 } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
-import { DataSource, EntityManager, In, IsNull } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  In,
+  IsNull,
+  SelectQueryBuilder,
+} from 'typeorm';
 import {
   CatalogDomainError,
   CatalogErrorCode,
@@ -35,19 +41,24 @@ import {
   BrandEntity,
   CategoryEntity,
   ProductEntity,
+  ProductImageMeta,
   ProductVariantEntity,
   UnitConversionEntity,
+  UploadEntity,
   VariantAttributeValueEntity,
 } from '../../infrastructure/persistence/catalog.entities';
 import { toCatalogHttpException } from '../../presentation/catalog-http-error';
+import { csvRow } from './csv';
 import {
   CreateProductReqDto,
   CreateUnitConversionReqDto,
   CreateVariantReqDto,
   GenerateVariantsReqDto,
   ListProductsReqDto,
+  ListVariantsReqDto,
   LookupProductReqDto,
   ProductRes,
+  ProductSummaryRes,
   UnitConversionRes,
   UpdateProductReqDto,
   UpdateProductStatusReqDto,
@@ -55,8 +66,12 @@ import {
   UpdateVariantStatusReqDto,
   VariantAttributeInputDto,
   VariantAttributeRes,
+  VariantListRes,
   VariantRes,
+  VariantRowRes,
 } from './products.dto';
+
+export const MAX_EXPORT_ROWS = 10_000;
 
 export interface ProductListResponse {
   items: ProductRes[];
@@ -240,6 +255,307 @@ export class ProductsService {
     return result;
   }
 
+  /**
+   * Turns upload ids (POST /uploads/images) into the product's image list, in the
+   * given order; the first is the cover. Marks the uploads as attached.
+   */
+  private async resolveImageIds(
+    em: EntityManager,
+    imageIds: string[],
+  ): Promise<ProductImageMeta[]> {
+    const unique = [...new Set(imageIds)];
+    if (unique.length === 0) return [];
+    const scoped = TenantScopedRepository.forEntity(em, UploadEntity);
+    const rows = await scoped.find({
+      where: { id: In(unique), kind: 'IMAGE' },
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const id of unique) {
+      const row = byId.get(id);
+      if (!row || row.status === 'PENDING' || !row.publicUrl) {
+        throw new CatalogDomainError(
+          CatalogErrorCode.UPLOAD_INVALID,
+          `Image ${id} is unknown or its file was not uploaded yet`,
+          'BAD_REQUEST',
+        );
+      }
+    }
+    for (const row of rows) {
+      if (row.status !== 'ATTACHED') {
+        row.status = 'ATTACHED';
+        await scoped.save(row);
+      }
+    }
+    return unique.map((id, i) => ({
+      key: byId.get(id)!.storageKey,
+      url: byId.get(id)!.publicUrl as string,
+      sortOrder: i,
+    }));
+  }
+
+  private applyVariantFilters(
+    qb: SelectQueryBuilder<ProductVariantEntity>,
+    query: Pick<
+      ListVariantsReqDto,
+      'q' | 'barcode' | 'ids' | 'status' | 'categoryId'
+    >,
+  ): void {
+    qb.innerJoin(
+      ProductEntity,
+      'p',
+      'p.id = v.product_id AND p.tenant_id = v.tenant_id AND p.deleted_at IS NULL',
+    ).where('v.deleted_at IS NULL');
+    if (query.status) {
+      qb.andWhere('v.status = :vstatus', { vstatus: query.status });
+    }
+    if (query.categoryId) {
+      qb.andWhere('p.category_id = :categoryId', {
+        categoryId: query.categoryId,
+      });
+    }
+    if (query.barcode?.trim()) {
+      qb.andWhere('v.barcode = :barcode', { barcode: query.barcode.trim() });
+    }
+    if (query.ids?.length) {
+      qb.andWhere('v.id IN (:...ids)', { ids: query.ids });
+    }
+    if (query.q?.trim()) {
+      const like = `%${query.q
+        .trim()
+        .toLowerCase()
+        .replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      qb.andWhere(
+        '(LOWER(v.name) LIKE :like OR LOWER(v.sku_code) LIKE :like OR LOWER(v.barcode) LIKE :like)',
+        { like },
+      );
+    }
+  }
+
+  private variantSortColumn(sort: ListVariantsReqDto['sort']): string {
+    switch (sort) {
+      case 'name':
+        return 'v.name';
+      case 'price':
+        return 'v.basePrice';
+      case 'skuCode':
+        return 'v.skuCode';
+      default:
+        return 'v.createdAt';
+    }
+  }
+
+  private async toVariantRows(
+    em: EntityManager,
+    variants: ProductVariantEntity[],
+  ): Promise<VariantRowRes[]> {
+    if (variants.length === 0) return [];
+    const productIds = [...new Set(variants.map((v) => v.productId))];
+    const products = await TenantScopedRepository.forEntity(
+      em,
+      ProductEntity,
+    ).find({ where: { id: In(productIds) } });
+    const productById = new Map(products.map((p) => [p.id, p]));
+    const categoryIds = [
+      ...new Set(products.map((p) => p.categoryId).filter(Boolean)),
+    ] as string[];
+    const categories = categoryIds.length
+      ? await TenantScopedRepository.forEntity(em, CategoryEntity).find({
+          where: { id: In(categoryIds) },
+        })
+      : [];
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
+    const attrs = await this.loadVariantAttributesMap(
+      em,
+      variants.map((v) => v.id),
+    );
+    return variants.map((v) => {
+      const product = productById.get(v.productId);
+      const category = product?.categoryId
+        ? categoryById.get(product.categoryId)
+        : undefined;
+      const values = (attrs.get(v.id) ?? []).map((a) => a.value);
+      const cover = [...(product?.images ?? [])].sort(
+        (a, b) => a.sortOrder - b.sortOrder,
+      )[0];
+      return {
+        variantId: v.id,
+        productId: v.productId,
+        name: product?.name ?? v.name,
+        label: values.length ? values.join(' / ') : null,
+        skuCode: v.skuCode,
+        barcode: v.barcode,
+        imageUrl: v.imageUrl ?? cover?.url ?? null,
+        category: category ? { id: category.id, name: category.name } : null,
+        price: v.basePrice,
+        avgCostPrice: null,
+        status: v.status.toLowerCase() as VariantRowRes['status'],
+      };
+    });
+  }
+
+  /** GET /variants: one row per variant (table on the products screen and the search pickers). */
+  async listVariants(query: ListVariantsReqDto): Promise<VariantListRes> {
+    try {
+      return await runInTenantTransaction(this.dataSource, async (em) => {
+        const qb = TenantScopedRepository.forEntity(
+          em,
+          ProductVariantEntity,
+        ).createQueryBuilder('v');
+        this.applyVariantFilters(qb, query);
+        qb.orderBy(this.variantSortColumn(query.sort), query.order)
+          .addOrderBy('v.id', query.order)
+          .skip((query.page - 1) * query.limit)
+          .take(query.limit);
+        const [rows, total] = await qb.getManyAndCount();
+        const totalPages = Math.ceil(total / query.limit);
+        return {
+          data: await this.toVariantRows(em, rows),
+          pagination: {
+            limit: query.limit,
+            currentPage: query.page,
+            ...(query.page < totalPages ? { nextPage: query.page + 1 } : {}),
+            totalRecords: total,
+            totalPages,
+          },
+        };
+      });
+    } catch (error) {
+      toCatalogHttpException(error);
+    }
+  }
+
+  async productSummary(): Promise<ProductSummaryRes> {
+    try {
+      return await runInTenantTransaction(this.dataSource, async (em) => {
+        const productCount = await TenantScopedRepository.forEntity(
+          em,
+          ProductEntity,
+        ).count({ where: { deletedAt: IsNull() } });
+        const variants = TenantScopedRepository.forEntity(
+          em,
+          ProductVariantEntity,
+        );
+        const live = await variants
+          .createQueryBuilder('v')
+          .innerJoin(
+            ProductEntity,
+            'p',
+            'p.id = v.product_id AND p.tenant_id = v.tenant_id AND p.deleted_at IS NULL',
+          )
+          .select('v.status', 'status')
+          .addSelect('COUNT(*)', 'n')
+          .where('v.deleted_at IS NULL')
+          .groupBy('v.status')
+          .getRawMany<{ status: string; n: string }>();
+        const n = (status: string) =>
+          Number(live.find((r) => r.status === status)?.n ?? 0);
+        const variantCount = live.reduce((sum, r) => sum + Number(r.n), 0);
+        const activeVariantCount = n('ACTIVE');
+        return {
+          productCount,
+          variantCount,
+          activeVariantCount,
+          inactiveVariantCount: variantCount - activeVariantCount,
+        };
+      });
+    } catch (error) {
+      toCatalogHttpException(error);
+    }
+  }
+
+  /** GET /products/export: CSV with BOM, one row per variant, at most 10,000 rows. */
+  async exportProductsCsv(
+    query: Omit<ListVariantsReqDto, 'page' | 'limit'>,
+  ): Promise<string> {
+    try {
+      return await runInTenantTransaction(this.dataSource, async (em) => {
+        const qb = TenantScopedRepository.forEntity(
+          em,
+          ProductVariantEntity,
+        ).createQueryBuilder('v');
+        this.applyVariantFilters(qb, query);
+        const total = await qb.getCount();
+        if (total > MAX_EXPORT_ROWS) {
+          throw new CatalogDomainError(
+            CatalogErrorCode.EXPORT_LIMIT_EXCEEDED,
+            `Export is limited to ${MAX_EXPORT_ROWS} rows (${total} match); narrow the filters`,
+            'BAD_REQUEST',
+          );
+        }
+        qb.orderBy(this.variantSortColumn(query.sort), query.order).addOrderBy(
+          'v.id',
+          query.order,
+        );
+        const rows = await this.toVariantRows(em, await qb.getMany());
+        const lines = [
+          csvRow([
+            'name',
+            'variant',
+            'skuCode',
+            'barcode',
+            'category',
+            'price',
+            'status',
+          ]),
+          ...rows.map((r) =>
+            csvRow([
+              r.name,
+              r.label,
+              r.skuCode,
+              r.barcode,
+              r.category?.name ?? null,
+              r.price,
+              r.status,
+            ]),
+          ),
+        ];
+        return '\uFEFF' + lines.join('\r\n') + '\r\n';
+      });
+    } catch (error) {
+      toCatalogHttpException(error);
+    }
+  }
+
+  /** DELETE /variants/:id: soft delete; downstream sees catalog.variant.deactivated (ARCHIVED). */
+  async softDeleteVariant(id: string): Promise<void> {
+    try {
+      await runInTenantTransaction(this.dataSource, async (em) => {
+        const scoped = TenantScopedRepository.forEntity(
+          em,
+          ProductVariantEntity,
+        );
+        const variant = await scoped.findOne({
+          where: { id, deletedAt: IsNull() },
+        });
+        if (!variant) {
+          throw new CatalogDomainError(
+            CatalogErrorCode.VARIANT_NOT_FOUND,
+            'Variant not found',
+            'NOT_FOUND',
+          );
+        }
+        variant.status = 'ARCHIVED';
+        variant.version += 1;
+        variant.deletedAt = new Date();
+        const saved = await scoped.save(variant);
+        await this.outbox.add(em, CATALOG_VARIANT_DEACTIVATED, {
+          variantId: saved.id,
+          productId: saved.productId,
+          skuCode: saved.skuCode,
+          barcode: saved.barcode,
+          name: saved.name,
+          basePrice: saved.basePrice,
+          status: saved.status,
+          isDefault: saved.isDefault,
+          aggregateVersion: saved.version,
+          updatedAt: saved.updatedAt.toISOString(),
+        });
+      });
+    } catch (error) {
+      toCatalogHttpException(error);
+    }
+  }
+
   async createProduct(dto: CreateProductReqDto): Promise<ProductRes> {
     try {
       const normalizedName = normalizeName(dto.name);
@@ -277,7 +593,9 @@ export class ProductsService {
           baseUnit,
           isCombo: false,
           status: dto.status ?? 'ACTIVE',
-          images: dto.images ?? [],
+          images: dto.imageIds?.length
+            ? await this.resolveImageIds(em, dto.imageIds)
+            : (dto.images ?? []),
           version: 1,
         });
 
@@ -596,7 +914,9 @@ export class ProductsService {
         if (dto.baseUnit !== undefined) {
           product.baseUnit = dto.baseUnit.trim();
         }
-        if (dto.images !== undefined) {
+        if (dto.imageIds !== undefined) {
+          product.images = await this.resolveImageIds(em, dto.imageIds);
+        } else if (dto.images !== undefined) {
           product.images = dto.images;
         }
         product.version += 1;

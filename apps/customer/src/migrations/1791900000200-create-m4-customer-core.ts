@@ -19,6 +19,8 @@ export class CreateM4CustomerCore1791900000200 implements MigrationInterface {
     const purchaseProj = t('customer_purchase_projections');
     const mergeHistory = t('customer_merge_history');
     const dataJobs = t('customer_data_jobs');
+    const tags = t('customer_tags');
+    const tagLinks = t('customer_tag_links');
 
     // 1. Atomic tenant-scoped sequence counter
     await queryRunner.query(`
@@ -44,6 +46,7 @@ export class CreateM4CustomerCore1791900000200 implements MigrationInterface {
         "description" text NULL,
         "default_discount_rate" numeric(5,2) NOT NULL DEFAULT 0,
         "status" character varying(16) NOT NULL DEFAULT 'ACTIVE',
+        "is_seeded" boolean NOT NULL DEFAULT false,
         "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
         "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
         CONSTRAINT "PK_customer_groups_id" PRIMARY KEY ("id"),
@@ -93,6 +96,8 @@ export class CreateM4CustomerCore1791900000200 implements MigrationInterface {
         "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "tenant_id" uuid NOT NULL,
         "code" character varying(32) NOT NULL,
+        "member_code" character varying(32) NULL,
+        "loyalty_enabled" boolean NOT NULL DEFAULT true,
         "customer_group_id" uuid NULL,
         "membership_tier_id" uuid NULL,
         "name" character varying(160) NOT NULL,
@@ -115,9 +120,9 @@ export class CreateM4CustomerCore1791900000200 implements MigrationInterface {
         CONSTRAINT "UQ_customers_tenant_id" UNIQUE ("tenant_id", "id"),
         CONSTRAINT "UQ_customers_tenant_code" UNIQUE ("tenant_id", "code"),
         CONSTRAINT "FK_customers_group"
-          FOREIGN KEY ("tenant_id", "customer_group_id") REFERENCES ${groups}("tenant_id", "id") ON DELETE SET NULL,
+          FOREIGN KEY ("tenant_id", "customer_group_id") REFERENCES ${groups}("tenant_id", "id") ON DELETE SET NULL ("customer_group_id"),
         CONSTRAINT "FK_customers_tier"
-          FOREIGN KEY ("tenant_id", "membership_tier_id") REFERENCES ${tiers}("tenant_id", "id") ON DELETE SET NULL,
+          FOREIGN KEY ("tenant_id", "membership_tier_id") REFERENCES ${tiers}("tenant_id", "id") ON DELETE SET NULL ("membership_tier_id"),
         CONSTRAINT "CHK_customers_status" CHECK ("status" IN ('ACTIVE', 'INACTIVE', 'ANONYMIZED')),
         CONSTRAINT "CHK_customers_debt_limit" CHECK ("debt_limit" >= 0)
       )
@@ -126,6 +131,11 @@ export class CreateM4CustomerCore1791900000200 implements MigrationInterface {
       CREATE UNIQUE INDEX "UQ_customers_tenant_phone"
       ON ${customers} ("tenant_id", "phone_normalized")
       WHERE "phone_normalized" IS NOT NULL AND "deleted_at" IS NULL
+    `);
+    await queryRunner.query(`
+      CREATE UNIQUE INDEX "UQ_customers_tenant_member_code"
+      ON ${customers} ("tenant_id", "member_code")
+      WHERE "member_code" IS NOT NULL
     `);
     await queryRunner.query(`
       CREATE INDEX "IDX_customers_tenant_status_created"
@@ -413,10 +423,48 @@ export class CreateM4CustomerCore1791900000200 implements MigrationInterface {
       )
     `);
     await enableTenantRlsPolicy(queryRunner, dataJobs);
+
+    // 13. Customer tags (screen contract: customer-tags, tagId filter)
+    await queryRunner.query(`
+      CREATE TABLE ${tags} (
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+        "tenant_id" uuid NOT NULL,
+        "name" character varying(60) NOT NULL,
+        "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_customer_tags_id" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_customer_tags_tenant_id" UNIQUE ("tenant_id", "id")
+      )
+    `);
+    await queryRunner.query(`
+      CREATE UNIQUE INDEX "UQ_customer_tags_tenant_name"
+      ON ${tags} ("tenant_id", LOWER("name"))
+    `);
+    await enableTenantRlsPolicy(queryRunner, tags);
+
+    await queryRunner.query(`
+      CREATE TABLE ${tagLinks} (
+        "tenant_id" uuid NOT NULL,
+        "customer_id" uuid NOT NULL,
+        "tag_id" uuid NOT NULL,
+        "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_customer_tag_links" PRIMARY KEY ("customer_id", "tag_id"),
+        CONSTRAINT "FK_customer_tag_links_customer"
+          FOREIGN KEY ("tenant_id", "customer_id") REFERENCES ${customers}("tenant_id", "id") ON DELETE CASCADE,
+        CONSTRAINT "FK_customer_tag_links_tag"
+          FOREIGN KEY ("tenant_id", "tag_id") REFERENCES ${tags}("tenant_id", "id") ON DELETE CASCADE
+      )
+    `);
+    await queryRunner.query(`
+      CREATE INDEX "IDX_customer_tag_links_tag"
+      ON ${tagLinks} ("tenant_id", "tag_id")
+    `);
+    await enableTenantRlsPolicy(queryRunner, tagLinks);
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
     const t = (name: string) => qualifiedTable(queryRunner, name);
+    await queryRunner.query(`DROP TABLE IF EXISTS ${t('customer_tag_links')}`);
+    await queryRunner.query(`DROP TABLE IF EXISTS ${t('customer_tags')}`);
     await queryRunner.query(`DROP TABLE IF EXISTS ${t('customer_data_jobs')}`);
     await queryRunner.query(
       `DROP TABLE IF EXISTS ${t('customer_merge_history')}`,

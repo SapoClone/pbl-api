@@ -46,6 +46,18 @@ export class CreateSupplierDto {
   @IsString()
   @MaxLength(500)
   address?: string;
+
+  @ApiPropertyOptional({ maxLength: 32 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  taxCode?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }
 
 export class UpdateSupplierDto {
@@ -72,6 +84,18 @@ export class UpdateSupplierDto {
   @IsString()
   @MaxLength(500)
   address?: string;
+
+  @ApiPropertyOptional({ maxLength: 32 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  taxCode?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 
   @ApiPropertyOptional({ enum: ['ACTIVE', 'INACTIVE'] })
   @IsOptional()
@@ -127,6 +151,11 @@ export class CreatePurchaseOrderDto {
   @IsString()
   @MaxLength(64)
   code?: string;
+
+  @ApiPropertyOptional({ example: '2026-10-28', description: 'YYYY-MM-DD' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  expectedDate?: string;
 
   @ApiPropertyOptional({ maxLength: 500 })
   @IsOptional()

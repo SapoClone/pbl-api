@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -25,13 +26,16 @@ import {
   CreateVariantReqDto,
   GenerateVariantsReqDto,
   ListProductsReqDto,
+  ListVariantsReqDto,
   LookupProductReqDto,
   ProductRes,
+  ProductSummaryRes,
   UnitConversionRes,
   UpdateProductReqDto,
   UpdateProductStatusReqDto,
   UpdateVariantReqDto,
   UpdateVariantStatusReqDto,
+  VariantListRes,
   VariantRes,
 } from './products.dto';
 import {
@@ -67,6 +71,53 @@ export class ProductsController {
   @ApiResponse({ status: HttpStatus.OK, description: 'Paginated products' })
   list(@Query() query: ListProductsReqDto): Promise<ProductListResponse> {
     return this.products.listProducts(query);
+  }
+
+  @Get('products/summary')
+  @RequirePermission('products.view')
+  @ApiOperation({
+    summary: 'Product, variant, active and inactive variant counts',
+  })
+  summary(): Promise<ProductSummaryRes> {
+    return this.products.productSummary();
+  }
+
+  @Get('products/export')
+  @RequirePermission('products.view')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="products.csv"')
+  @ApiOperation({
+    summary: 'Export variants as CSV (UTF-8 BOM, at most 10,000 rows)',
+  })
+  export(@Query() query: ListVariantsReqDto): Promise<string> {
+    return this.products.exportProductsCsv(query);
+  }
+
+  @Get('variants')
+  @RequirePermission(
+    'products.view',
+    'pos.create',
+    'orders.create',
+    'inventory.view',
+    'inventory.create',
+    'purchasing.create',
+  )
+  @ApiOperation({
+    summary: 'List or search variants (table rows and product pickers)',
+    description:
+      'One row per variant. Filters: q (name, SKU, barcode), barcode (exact), ids (comma-separated), status, categoryId, sort, order.',
+  })
+  listVariants(@Query() query: ListVariantsReqDto): Promise<VariantListRes> {
+    return this.products.listVariants(query);
+  }
+
+  @Delete('variants/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermission('products.delete')
+  @ApiOperation({ summary: 'Soft-delete a variant' })
+  @ApiParam({ name: 'id', description: 'Variant UUID' })
+  removeVariant(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.products.softDeleteVariant(id);
   }
 
   @Get('products/lookup')

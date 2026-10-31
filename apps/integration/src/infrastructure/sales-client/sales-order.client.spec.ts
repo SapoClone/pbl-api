@@ -37,10 +37,10 @@ describe('SalesOrderClient', () => {
     const res = await client.createOrRecoverOmnichannelOrder(cmd);
     expect(res.internalOrderId).toBe('ord-1');
     const [url, , config, options] = post.mock.calls[0] as unknown as any[];
-    expect(url).toBe('http://sales:3000/api/v1/orders/omnichannel');
+    expect(url).toBe('http://sales:3000/internal/v1/orders/omnichannel');
     expect(config.headers['x-internal-token']).toBe('tok');
     expect(config.headers['Idempotency-Key']).toBe('idem-1');
-    expect(options).toEqual({ asService: true });
+    expect(options).toEqual({ asService: true, tenantId: cmd.tenantId });
   });
 
   it('sends money to sales as JSON numbers', async () => {

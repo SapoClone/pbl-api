@@ -21,6 +21,15 @@ export class OpenShiftReqDto {
   @MaxLength(32)
   registerCode?: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'A register of the branch: its code replaces registerCode and only one open shift is allowed per register',
+  })
+  @IsOptional()
+  @IsUUID()
+  registerId?: string;
+
   @ApiProperty({ example: 1000000, description: 'Integer VND' })
   @IsInt()
   @Min(0)
@@ -34,6 +43,12 @@ export class OpenShiftReqDto {
 }
 
 export class CloseShiftReqDto {
+  @ApiPropertyOptional({ description: 'The shift version the client saw' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  version?: number;
+
   @ApiProperty({ example: 3750000, description: 'Integer VND' })
   @IsInt()
   @Min(0)
