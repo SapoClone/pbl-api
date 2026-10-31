@@ -343,3 +343,361 @@ export function normalizeAndSortWarehouseLines(
 export function computeCanonicalHash(payload: unknown): string {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
+
+// ============================================================================
+// VALUE OBJECTS, STOCK BALANCE AGGREGATE & LIFECYCLE POLICIES (M7.5 DDD)
+// ============================================================================
+
+/**
+ * Immutable Value Object representing an exact NUMERIC(18,3) stock quantity in milli-units.
+ */
+export class InventoryQuantity {
+  public readonly milli: bigint;
+
+  private constructor(milli: bigint) {
+    this.milli = milli;
+  }
+
+  static of(
+    raw: string | number,
+    allowZero = false,
+    allowNegative = false,
+  ): InventoryQuantity {
+    return new InventoryQuantity(
+      parseQtyToMilli(raw, allowZero, allowNegative),
+    );
+  }
+
+  static zero(): InventoryQuantity {
+    return new InventoryQuantity(0n);
+  }
+
+  add(other: InventoryQuantity): InventoryQuantity {
+    return new InventoryQuantity(this.milli + other.milli);
+  }
+
+  subtract(other: InventoryQuantity, allowNegative = false): InventoryQuantity {
+    const res = this.milli - other.milli;
+    if (!allowNegative && res < 0n) {
+      throw new InventoryDomainError(
+        InventoryDomainErrorCode.INSUFFICIENT_STOCK,
+        `Quantity subtraction underflow (${this.toString()} - ${other.toString()})`,
+        409,
+      );
+    }
+    return new InventoryQuantity(res);
+  }
+
+  equals(other: InventoryQuantity): boolean {
+    return this.milli === other.milli;
+  }
+
+  toString(): string {
+    return formatMilliToQty(this.milli);
+  }
+}
+
+/**
+ * Immutable Value Object representing a non-negative NUMERIC(18,2) monetary amount in cents.
+ */
+export class InventoryMoney {
+  public readonly cents: bigint;
+
+  private constructor(cents: bigint) {
+    this.cents = cents;
+  }
+
+  static of(raw: string | number | undefined | null): InventoryMoney {
+    return new InventoryMoney(parseMoneyToCents(raw));
+  }
+
+  toString(): string {
+    return formatCentsToMoney(this.cents);
+  }
+}
+
+/**
+ * Rich Aggregate Root encapsulating Warehouse StockBalance invariants:
+ * - available_qty = on_hand_qty - reserved_qty >= 0 (no overselling)
+ * - weighted-average valuation on receipt & deduction
+ * - version increment on every state mutation
+ */
+export class StockBalanceAggregate {
+  private _onHandMilli: bigint;
+  private _reservedMilli: bigint;
+  private _avgUnitCostCents: bigint;
+  private _version: number;
+
+  constructor(params: {
+    warehouseId: string;
+    skuId: string;
+    onHandQty: string | number;
+    reservedQty: string | number;
+    avgUnitCost?: string | number;
+    version?: number;
+  }) {
+    this.warehouseId = params.warehouseId;
+    this.skuId = params.skuId;
+    this._onHandMilli = parseQtyToMilli(params.onHandQty, true, false);
+    this._reservedMilli = parseQtyToMilli(params.reservedQty, true, false);
+    this._avgUnitCostCents = parseMoneyToCents(params.avgUnitCost ?? '0.00');
+    this._version = params.version ?? 1;
+  }
+
+  public readonly warehouseId: string;
+  public readonly skuId: string;
+
+  get onHandQty(): string {
+    return formatMilliToQty(this._onHandMilli);
+  }
+
+  get reservedQty(): string {
+    return formatMilliToQty(this._reservedMilli);
+  }
+
+  get availableMilli(): bigint {
+    return this._onHandMilli - this._reservedMilli;
+  }
+
+  get availableQty(): string {
+    return formatMilliToQty(this.availableMilli);
+  }
+
+  get avgUnitCost(): string {
+    return formatCentsToMoney(this._avgUnitCostCents);
+  }
+
+  get valuationAmount(): string {
+    if (this._onHandMilli <= 0n) return '0.00';
+    const cents =
+      (this._onHandMilli * this._avgUnitCostCents + QTY_SCALE / 2n) / QTY_SCALE;
+    return formatCentsToMoney(cents);
+  }
+
+  get version(): number {
+    return this._version;
+  }
+
+  canSatisfy(requestedQty: string | number): boolean {
+    const reqMilli = parseQtyToMilli(requestedQty, false, false);
+    return this.availableMilli >= reqMilli;
+  }
+
+  reserve(requestedQty: string | number): void {
+    const reqMilli = parseQtyToMilli(requestedQty, false, false);
+    if (this.availableMilli < reqMilli) {
+      throw new InventoryDomainError(
+        InventoryDomainErrorCode.INSUFFICIENT_STOCK,
+        `Insufficient available stock for SKU ${this.skuId} at warehouse ${this.warehouseId}: requested ${formatMilliToQty(reqMilli)}, available ${this.availableQty}`,
+        409,
+      );
+    }
+    this._reservedMilli += reqMilli;
+    this._version += 1;
+  }
+
+  release(releasedQty: string | number): void {
+    const relMilli = parseQtyToMilli(releasedQty, false, false);
+    if (relMilli > this._reservedMilli) {
+      throw new InventoryDomainError(
+        InventoryDomainErrorCode.RESERVATION_STATE_CONFLICT,
+        `Cannot release ${formatMilliToQty(relMilli)} when only ${this.reservedQty} is reserved`,
+        409,
+      );
+    }
+    this._reservedMilli -= relMilli;
+    this._version += 1;
+  }
+
+  commitReservation(committedQty: string | number): WeightedAverageCostResult {
+    const commitMilli = parseQtyToMilli(committedQty, false, false);
+    if (commitMilli > this._reservedMilli || commitMilli > this._onHandMilli) {
+      throw new InventoryDomainError(
+        InventoryDomainErrorCode.INSUFFICIENT_STOCK,
+        `Cannot commit ${formatMilliToQty(commitMilli)} (onHand=${this.onHandQty}, reserved=${this.reservedQty})`,
+        409,
+      );
+    }
+    const valuation = computeValuationAfterDeduction({
+      currentOnHandQty: this.onHandQty,
+      currentAvgUnitCost: this.avgUnitCost,
+      deductedBaseQty: formatMilliToQty(commitMilli),
+    });
+    this._onHandMilli = valuation.newOnHandMilli;
+    this._reservedMilli -= commitMilli;
+    this._version += 1;
+    return valuation;
+  }
+
+  receive(
+    receivedBaseQty: string | number,
+    receivedUnitCost: string | number,
+  ): WeightedAverageCostResult {
+    const result = computeWeightedAverageCostOnReceipt({
+      currentOnHandQty: this.onHandQty,
+      currentAvgUnitCost: this.avgUnitCost,
+      receivedBaseQty,
+      receivedUnitCost,
+    });
+    this._onHandMilli = result.newOnHandMilli;
+    this._avgUnitCostCents = result.newAvgCostCents;
+    this._version += 1;
+    return result;
+  }
+
+  deductAvailable(deductedBaseQty: string | number): WeightedAverageCostResult {
+    const deductMilli = parseQtyToMilli(deductedBaseQty, false, false);
+    if (this.availableMilli < deductMilli) {
+      throw new InventoryDomainError(
+        InventoryDomainErrorCode.INSUFFICIENT_STOCK,
+        `Cannot deduct ${formatMilliToQty(deductMilli)} from available stock ${this.availableQty}`,
+        409,
+      );
+    }
+    const valuation = computeValuationAfterDeduction({
+      currentOnHandQty: this.onHandQty,
+      currentAvgUnitCost: this.avgUnitCost,
+      deductedBaseQty: formatMilliToQty(deductMilli),
+    });
+    this._onHandMilli = valuation.newOnHandMilli;
+    this._version += 1;
+    return valuation;
+  }
+}
+
+/**
+ * Evaluates StockReceipt posting state transition and idempotency semantics.
+ */
+export function evaluateStockReceiptPostTransition(params: {
+  code: string;
+  receiptId: string;
+  currentStatus: string;
+  storedIdempotencyKey?: string | null;
+  incomingIdempotencyKey?: string | null;
+}): 'PROCEED' | 'IDEMPOTENT_REPLAY' {
+  if (params.currentStatus === 'POSTED') {
+    if (
+      params.incomingIdempotencyKey &&
+      params.storedIdempotencyKey &&
+      params.storedIdempotencyKey === params.incomingIdempotencyKey.trim()
+    ) {
+      return 'IDEMPOTENT_REPLAY';
+    }
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.STOCK_RECEIPT_ALREADY_POSTED,
+      `Stock receipt ${params.code} (${params.receiptId}) has already been posted`,
+      409,
+    );
+  }
+  if (params.currentStatus !== 'DRAFT') {
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.STOCK_RECEIPT_INVALID_STATE,
+      `Cannot post stock receipt in state ${params.currentStatus}`,
+      409,
+    );
+  }
+  return 'PROCEED';
+}
+
+/**
+ * Enforces StockTransfer creation and dispatch state invariants.
+ */
+export function assertValidStockTransferWarehouses(
+  fromWarehouseId: string,
+  toWarehouseId: string,
+): void {
+  if (fromWarehouseId === toWarehouseId) {
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.TRANSFER_SAME_WAREHOUSE,
+      'Source and destination warehouses must be different',
+      400,
+    );
+  }
+}
+
+export function assertCanDispatchStockTransfer(currentStatus: string): void {
+  if (currentStatus !== 'DRAFT') {
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.TRANSFER_INVALID_STATE,
+      `Cannot dispatch stock transfer in state ${currentStatus}`,
+      409,
+    );
+  }
+}
+
+/**
+ * Enforces StockTake snapshot concurrency and reserved-floor invariants on approval.
+ */
+export function evaluateStocktakeApprovalLine(params: {
+  skuId: string;
+  snapshotVersion: number;
+  currentVersion: number;
+  currentOnHandQty: string | number;
+  currentReservedQty: string | number;
+  countedQty: string | number;
+}): {
+  countedQty: string;
+  deltaMilli: bigint;
+  deltaQty: string;
+} {
+  if (Number(params.snapshotVersion) !== Number(params.currentVersion)) {
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.STOCKTAKE_STALE_SNAPSHOT,
+      `Stock balance for SKU ${params.skuId} changed since snapshot (snapshot v${params.snapshotVersion}, current v${params.currentVersion})`,
+      409,
+    );
+  }
+  const countedMilli = parseQtyToMilli(params.countedQty, true, false);
+  const reservedMilli = parseQtyToMilli(params.currentReservedQty, true, false);
+  const onHandMilli = parseQtyToMilli(params.currentOnHandQty, true, false);
+
+  if (countedMilli < reservedMilli) {
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.STOCKTAKE_BELOW_RESERVED,
+      `Counted quantity (${formatMilliToQty(countedMilli)}) cannot be less than reserved quantity (${formatMilliToQty(reservedMilli)}) for SKU ${params.skuId}`,
+      409,
+    );
+  }
+
+  const deltaMilli = countedMilli - onHandMilli;
+  return {
+    countedQty: formatMilliToQty(countedMilli),
+    deltaMilli,
+    deltaQty: formatMilliToQty(deltaMilli),
+  };
+}
+
+/**
+ * Enforces PurchaseOrder receipt ceiling invariant (no over-receipt beyond ordered quantity).
+ */
+export function evaluatePurchaseOrderReceiptLine(params: {
+  skuId: string;
+  orderedBaseQty: string | number;
+  alreadyReceivedBaseQty: string | number;
+  receivingNowBaseQty: string | number;
+}): {
+  newReceivedBaseQty: string;
+  isFullyReceived: boolean;
+} {
+  const orderedMilli = parseQtyToMilli(params.orderedBaseQty, false, false);
+  const prevReceivedMilli = parseQtyToMilli(
+    params.alreadyReceivedBaseQty,
+    true,
+    false,
+  );
+  const nowMilli = parseQtyToMilli(params.receivingNowBaseQty, false, false);
+  const nextReceivedMilli = prevReceivedMilli + nowMilli;
+
+  if (nextReceivedMilli > orderedMilli) {
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.OVER_RECEIPT_NOT_ALLOWED,
+      `Receiving ${formatMilliToQty(nowMilli)} for SKU ${params.skuId} would exceed ordered quantity ${formatMilliToQty(orderedMilli)} (already received ${formatMilliToQty(prevReceivedMilli)})`,
+      409,
+    );
+  }
+
+  return {
+    newReceivedBaseQty: formatMilliToQty(nextReceivedMilli),
+    isFullyReceived: nextReceivedMilli === orderedMilli,
+  };
+}

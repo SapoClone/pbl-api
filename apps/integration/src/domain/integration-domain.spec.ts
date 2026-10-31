@@ -1,4 +1,5 @@
 import {
+  ChannelConnectionAggregate,
   IntegrationDomainError,
   IntegrationDomainErrorCode,
   assertValidConnectionTransition,
@@ -16,6 +17,7 @@ import {
   normalizeProviderOrderStatus,
   redactSensitiveObject,
   shouldApplyInventoryStockVersion,
+  translateExternalOrderToCanonicalSalesImport,
   verifyLazadaWebhookSignature,
   verifyShopeeWebhookSignature,
 } from './integration-domain';
@@ -249,6 +251,70 @@ describe('M6 Integration Domain Model Unit Tests', () => {
         retryAfterSeconds: classified.retryAfterSeconds,
       });
       expect(delay).toBe(7000);
+    });
+  });
+
+  describe('ChannelConnectionAggregate & Anti-Corruption Layer (M7.5 Tactical DDD)', () => {
+    it('enforces ChannelConnectionAggregate transitions and allocation policy', () => {
+      const conn = new ChannelConnectionAggregate(
+        'conn-1',
+        'ten-1',
+        'SHOPEE',
+        'PENDING_AUTH',
+        2,
+        100,
+      );
+      conn.transitionTo('CONNECTED');
+      expect(conn.status).toBe('CONNECTED');
+      expect(conn.computePublishableStock(10, 2)).toBe(6);
+
+      conn.updateAllocationPolicy(3, 50);
+      expect(conn.computePublishableStock(10, 2)).toBe(2);
+    });
+
+    it('translates external marketplace order into canonical internal Sales import command via ACL', () => {
+      const mappings = new Map([
+        [
+          'EXT-SKU-1',
+          {
+            externalSkuId: 'EXT-SKU-1',
+            internalVariantId: 'var-100',
+            internalSkuCode: 'SKU-100',
+            mappingStatus: 'ACTIVE' as const,
+            isSellable: true,
+          },
+        ],
+      ]);
+
+      const translated = translateExternalOrderToCanonicalSalesImport(
+        {
+          provider: 'SHOPEE',
+          connectionId: 'conn-1',
+          branchId: 'br-1',
+          warehouseId: 'wh-1',
+          externalOrderId: 'SHP-ORD-99',
+          rawStatus: 'READY_TO_SHIP',
+          buyerName: 'Nguyen Van A',
+          shippingFee: '15000.00',
+          lines: [
+            {
+              externalSkuId: 'EXT-SKU-1',
+              qty: 2,
+              unitPrice: '150000.00',
+            },
+          ],
+        },
+        mappings,
+      );
+
+      expect(translated.normalizedExternalStatus).toBe('READY_TO_SHIP');
+      expect(translated.initialOrderStatus).toBe('CONFIRMED');
+      expect(translated.autoConfirm).toBe(true);
+      expect(translated.lines[0]).toEqual({
+        variantId: 'var-100',
+        skuCode: 'SKU-100',
+        qty: '2.000',
+      });
     });
   });
 });
