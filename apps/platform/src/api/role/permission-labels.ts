@@ -12,5 +12,6 @@ export const MODULE_LABELS: Record<PermissionModule, string> = {
   purchasing: 'Nhập hàng',
   staff: 'Nhân viên',
   reports: 'Báo cáo',
+  finance: 'Tài chính',
   settings: 'Cài đặt',
 };

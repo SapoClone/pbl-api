@@ -25,7 +25,7 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 
 | Area | Today | Target (build toward this) |
 |---|---|---|
-| Services | `platform`, `catalog`, `customer`, `inventory`, `sales` and `insight` have business logic (first wave of the screen APIs, 2026-10-29: [docs/specs/2026-10-29-first-wave/](docs/specs/2026-10-29-first-wave/README.md) lists what exists and what is deferred); `finance` and `integration` only expose `GET /health` (built from `templates/service/` on `@pbl/common`) | 8 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md), [ADR-0010](docs/decisions/0010-eight-services.md)) |
+| Services | All eight have business logic. `platform`, `insight` and the RBAC libraries are ours; `catalog`, `inventory`, `sales`, `customer`, `finance` and `integration` are the M1-M6 stack of contributor dhtphu05, adopted as the base and converted to our permissions, branch scope and integer VND (see "M1-M6 base" below and [docs/specs/2026-11-01-adopt-m1-m6/](docs/specs/2026-11-01-adopt-m1-m6/phase-1.md)) | 8 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md), [ADR-0010](docs/decisions/0010-eight-services.md)) |
 | Tenancy | Implemented (P0): stores, branches, `tid` in tokens, `@CurrentTenant()` ([ADR-0008](docs/decisions/0008-tenancy.md)). Roles and permissions (RBAC) are built: see Auth | Plans/subscriptions |
 | Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every client-facing endpoint of every service + each service's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
@@ -41,8 +41,7 @@ back away from the target direction.
 ```
 apps/
   platform/src/        auth · account · tenant · branch · staff schedules (TypeORM entities, i18n errors)
-  catalog|customer|inventory|sales|insight/src/   own modules, entities and migrations on `@pbl/common` / `@pbl/events` (raw SQL qualified with `qualifiedTable`)
-  finance|integration/src/   main.ts, app.module.ts, app.e2e.spec.ts only (stubs generated from templates/service/)
+  catalog|customer|inventory|sales|finance|integration|insight/src/   own modules, entities and migrations on `@pbl/common` / `@pbl/events` (raw SQL qualified with `qualifiedTable`)
 libs/
   auth/src/            @pbl/auth — token verification, global AuthGuard, tenant context interceptor, Public/AuthOptional/CurrentUser
   common/src/          @pbl/common — errors, logging/request id, health, bootstrap, request context, tenancy, propagation
@@ -373,6 +372,9 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
   with `docker compose down -v`. Production runs the hand-written migrations, which backfill first.
 - `database "pbl" does not exist` → the Postgres volume predates the init
   script (init only runs on an empty volume). `docker compose down -v`.
+- KrakenD panics at startup (and `krakend check` still says OK) when two routes name the same path segment
+  differently (`{id}` vs `{customerId}`) or register one route twice. Controller routes missing from
+  `krakend.json` answer 404 at the gateway; boot the stack after adding routes.
 - `.env` is in `.dockerignore` on purpose: `Dockerfile.dev` does `COPY . .`
   and `ConfigModule` would load a host `.env` inside the container.
 - KrakenD without `no-op` encoding turns backend 4xx into gateway 500s and
@@ -387,20 +389,17 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
 
 ## Known open work (don't rediscover, don't depend on)
 
-- First wave of the screen APIs (2026-10-29) is built but **deferred on purpose**: staff invitations, forgot/reset/verify
-  email, the platform-admin identity and `/admin` routes,
-  marketplace integration, returns, the draft/approve stock-receipt flow and receiving against a PO, S3 uploads,
-  async imports, and events for the new order/stock/shift transitions. Per-service lists and the decisions awaiting
-  review are in [docs/specs/2026-10-29-first-wave/](docs/specs/2026-10-29-first-wave/README.md).
+- Deferred on purpose: staff invitations, forgot/reset/verify email, the platform-admin identity and `/admin` routes,
+  real object storage for uploads (a local-disk adapter exists), a queue for catalog imports (they run in-process),
+  PO edit/submit/VAT/payments, receipt `PATCH`, issue `submit`, shipping address capture on orders. Per-service lists:
+  `docs/specs/2026-11-01-adopt-m1-m6/phase-4-*.md`; first-wave decisions of ours: [docs/specs/2026-10-29-first-wave/](docs/specs/2026-10-29-first-wave/README.md).
 
 - Events: the SNS adapter, the Terraform for topics/queues and the SNS-to-SQS subscription do not
   exist or have never run against AWS (checklist in [docs/deploy-actions.md](docs/deploy-actions.md)).
   No replay tool beyond the DLQ redrive. Only branch, login, membership and order events exist.
-- Stock is keyed by SKU text (order lines are free text, not catalog variants); payment is only a method
-  on the order. A stock receipt is not idempotent, an order can be cancelled only before it is completed (returns are not built), and a hold completed after it
-  expired is deducted on a best-effort basis ([design](docs/specs/2026-10-19-stock-reservation-design.md)).
-  Order creation needs an `Idempotency-Key` header (a retry returns the first order, 200 +
-  `Idempotency-Replayed`).
+- Inventory keys stock by warehouse and SKU/variant (their model); branch views sum a branch's warehouses and exclude
+  the central and quarantine ones. Order creation and payments need an `Idempotency-Key` header (a retry returns the
+  first order, 200 + `Idempotency-Replayed`).
 - The production `Dockerfile` builds any service (`--build-arg APP_NAME=<service>`,
   default `platform`), but `deploy.yml` and pbl-infra still deploy only
   `platform`; per-service ECR repositories, ECS services and a deploy matrix do
@@ -440,3 +439,24 @@ or a cross-cutting convention needs a new ADR in `docs/decisions/` (copy
 `Proposed` until the team accepts it) **and** an update to this file in the
 same PR. Superseding an ADR: mark the old one `Superseded by ADR-XXXX`;
 never delete it.
+
+## M1-M6 base
+
+`catalog`, `inventory`, `sales`, `customer`, `finance` and `integration` are the implementations of
+contributor dhtphu05's M1-M6 stack (PRs #12-#17, ADR-0011 to 0018); they replaced the earlier
+implementations of ours. `platform`, `insight`, the RBAC libraries and ADR-0019/0020 stay ours.
+Conversion record, one report per phase, in `docs/specs/2026-11-01-adopt-m1-m6/`:
+
+- **Phase 2, authorization:** every route uses `@RequirePermission` (module codes in
+  `libs/contracts/src/permissions.ts`, 42 codes incl. `finance`); inventory and integration scope by branch (404);
+  customer phones are masked without `customers.update`. Internal service routes (not in `krakend.json`) require
+  header `x-internal-token` = env `INTERNAL_S2S_TOKEN` (constant-time, fail closed except `NODE_ENV=test`); the
+  tenant header counts only after the token is valid. Calls with no user token pass `{ asService: true, tenantId }`
+  to `InternalHttpClient`.
+- **Phase 3, money:** all money is integer VND: `bigint` columns read through the service's `money.ts` transformer
+  (throws on unsafe integers), `@IsInt()` DTOs (fractions answer 422), JSON numbers in responses and events,
+  half-up rounding at line level. Quantities stay decimal. Discount values that may be a percent stay `numeric(12,2)`.
+- **Phase 4, screens:** their routes and shapes are kept; the screen contract is served by additive fields and new
+  routes. Remaining contract mismatches and deferred rows are listed in each `phase-4-*.md`.
+- Local dev values in `docker-compose.yml` (`INTERNAL_S2S_TOKEN`, `INTEGRATION_CREDENTIAL_MASTER_KEY`) are local-only.
+- Their progress reports under `docs/progress-report/` describe the original role-name API and are historical.

@@ -7,6 +7,7 @@ import {
   PrimaryColumn,
   Relation,
 } from 'typeorm';
+import { discountValueTransformer, moneyTransformer } from '../../common/money';
 import { bigintNumber, OrderEntity } from './order.entity';
 
 @Entity('order_items')
@@ -24,10 +25,6 @@ export class OrderItemEntity {
   @Column({ name: 'order_id', type: 'uuid' })
   orderId!: string;
 
-  /** Bare catalog variant id; stored as sent, not validated (catalog is another service) */
-  @Column({ name: 'variant_id', type: 'uuid', nullable: true })
-  variantId!: string | null;
-
   @Column({ type: 'varchar', length: 64 })
   sku!: string;
 
@@ -42,6 +39,143 @@ export class OrderItemEntity {
 
   @Column({ name: 'line_total', type: 'bigint', transformer: bigintNumber })
   lineTotal!: number;
+
+  @Column({ name: 'variant_id', type: 'uuid', nullable: true })
+  variantId?: string | null;
+
+  @Column({ name: 'product_id', type: 'uuid', nullable: true })
+  productId?: string | null;
+
+  @Column({
+    name: 'variant_label',
+    type: 'varchar',
+    length: 150,
+    nullable: true,
+  })
+  variantLabel?: string | null;
+
+  @Column({ name: 'unit_code', type: 'varchar', length: 32, default: 'PCS' })
+  unitCode?: string;
+
+  @Column({
+    name: 'conversion_factor',
+    type: 'numeric',
+    precision: 18,
+    scale: 4,
+    default: '1.0000',
+  })
+  conversionFactor?: string;
+
+  @Column({
+    name: 'qty',
+    type: 'numeric',
+    precision: 18,
+    scale: 3,
+    default: '1.000',
+  })
+  qty?: string;
+
+  @Column({
+    name: 'base_qty',
+    type: 'numeric',
+    precision: 18,
+    scale: 3,
+    default: '1.000',
+  })
+  baseQty?: string;
+
+  @Column({
+    name: 'line_gross',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  lineGross?: number;
+
+  @Column({
+    name: 'item_discount_type',
+    type: 'varchar',
+    length: 16,
+    default: 'NONE',
+  })
+  itemDiscountType?: string;
+
+  /** FIXED: whole VND; PERCENT: a percentage */
+  @Column({
+    name: 'item_discount_value',
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    default: 0,
+    transformer: discountValueTransformer,
+  })
+  itemDiscountValue?: number;
+
+  @Column({
+    name: 'item_discount_amount',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  itemDiscountAmount?: number;
+
+  @Column({
+    name: 'allocated_order_discount',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  allocatedOrderDiscount?: number;
+
+  @Column({
+    name: 'line_net',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  lineNet?: number;
+
+  @Column({
+    name: 'tax_rate',
+    type: 'numeric',
+    precision: 6,
+    scale: 2,
+    default: '0.00',
+  })
+  taxRate?: string;
+
+  @Column({
+    name: 'tax_amount',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  taxAmount?: number;
+
+  @Column({
+    name: 'unit_cost_snapshot',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  unitCostSnapshot?: number;
+
+  @Column({
+    name: 'returned_qty',
+    type: 'numeric',
+    precision: 18,
+    scale: 3,
+    default: '0.000',
+  })
+  returnedQty?: string;
+
+  @Column({
+    name: 'refunded_amount',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  refundedAmount?: number;
 
   @ManyToOne(() => OrderEntity, (order) => order.items)
   @JoinColumn({

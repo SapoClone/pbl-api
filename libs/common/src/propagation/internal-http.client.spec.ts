@@ -99,6 +99,25 @@ describe('InternalHttpClient', () => {
     );
     expect(received['x-tenant-id']).toBeUndefined();
   });
+  it('sends the tenant of an asService call only when given tenantId, and no user token', async () => {
+    await inContext(() =>
+      client.get(`${baseUrl}/x`, undefined, {
+        asService: true,
+        tenantId: 'tenant-9',
+      }),
+    );
+    expect(received['x-tenant-id']).toBe('tenant-9');
+    expect(received['authorization']).toBeUndefined();
+  });
+
+  it('ignores tenantId on a call that forwards the user token', async () => {
+    await inContext(() =>
+      client.get(`${baseUrl}/x`, undefined, { tenantId: 'tenant-9' }),
+    );
+    expect(received['x-tenant-id']).toBeUndefined();
+    expect(received['authorization']).toBeDefined();
+  });
+
   it('strips reserved headers inside nested axios blocks (common, get, post)', async () => {
     await inContext(() =>
       client.get(`${baseUrl}/x`, {

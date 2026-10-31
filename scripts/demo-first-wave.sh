@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# End-to-end walk through the first-wave screen APIs, through the gateway only (needs the local
-# stack running: docker compose up -d --build). One story for one store:
-#   1. setup      owner + a second user, the store, a second branch
+# End-to-end walk through the screen APIs of the M1-M6 stack, through the gateway only (needs the
+# local stack running: docker compose up -d --build). One story for one store, with integer VND money:
+#   1. setup      owner + a second user, the store, a second branch, warehouses
 #   2. platform   context, members (summary, detail, lock, unlock), password, sessions, logout-all,
 #                 branch settings, staff schedule, login lockout
-#   3. catalog    category, brand, attribute, product with variants, lookup, summary, export, 409
-#   4. customer   groups, loyalty settings, customer, addresses, list, summary, masking
-#   5. inventory  receipt, stock list/summary/lookup/ledger, thresholds, supplier, purchase order
-#                 (with the VAT maths), transfer between branches, stock take, stock issue
-#   6. sales      channels, providers, register, shift, draft -> confirm -> pack -> ship -> complete,
-#                 cancel, legacy order, order list/summary/history/print/export, close shift
-#   7. events     customer totals and loyalty, insight dashboard and reports, notifications, devices
+#   3. catalog    category, brand, attribute, product with variants, picker, summary, export, lookup, 409/422
+#   4. customer   groups, loyalty settings, customer (masked phone), tags, list, summary, loyalty adjust
+#   5. inventory  stock receipt through the approval flow (submit, reject, approve), stock views, ledger,
+#                 thresholds, supplier, purchase order
+#   6. sales      channels, shipping providers, registers, shift, POS checkout, manual order with the
+#                 stepper (pack, ship, complete) and payments, cancel, list, summary, print, export, close shift
+#   7. events     customer totals and loyalty, insight summaries (channel, cost), finance cashbook and receivables,
+#                 notifications, devices
 # Every step is asserted: the script exits non-zero on the first failure.
-# Needs bash, curl, jq and Docker (only for the outbox check at the end).
+# Needs bash, curl, jq and Docker (only for the projection waits and the outbox check at the end).
 set -euo pipefail
 trap 'echo "FAILED at line $LINENO: $BASH_COMMAND" >&2' ERR
 
@@ -23,6 +24,7 @@ customer="$gateway/customer/api/v1"
 inventory="$gateway/inventory/api/v1"
 sales="$gateway/sales/api/v1"
 insight="$gateway/insight/api/v1"
+finance="$gateway/finance/api/v1/finance"
 run="$(date +%s)"
 password="Passw0rd!"
 new_password="N3wPassw0rd!"
@@ -83,6 +85,15 @@ get_is() { [[ "$(http GET "$1" "$2" | body_of | jq -r "$3" 2>/dev/null)" == "tru
 psql_count() { docker compose exec -T postgres psql -U postgres -d pbl -tAc "$1" | tr -d '[:space:]'; }
 count_is() { [[ "$(psql_count "$1")" == "$2" ]]; } # sql expected
 
+order_version() { jv "$(http GET "$sales/orders/$1" "$store_token")" .version; } # order_version <orderId>
+# one stepper action: step <orderId> <pack|ship|complete> [extra json] -> response
+step_order() {
+  local extra="${3:-}" body
+  [[ -n "$extra" ]] || extra='{}'
+  body=$(jq -nc --argjson v "$(order_version "$1")" --argjson x "$extra" '{version:$v} + $x')
+  http POST "$sales/orders/$1/$2" "$store_token" "$body"
+}
+
 login() { # email [tenantId] [password]
   local body
   body=$(jq -nc --arg e "$1" --arg p "${3:-$password}" --arg t "${2:-}" \
@@ -113,6 +124,10 @@ expect_status 201 "create the second branch Q1" "$branch"
 q1=$(jv "$branch" .id)
 wait_for "sales learned both branches (projection)" count_is "select count(*) from sales.branch_projection where tenant_id='$tenant_id'" 2
 wait_for "inventory learned both branches (projection)" count_is "select count(*) from inventory.branch_projection where tenant_id='$tenant_id'" 2
+wh_main=$(jv "$(http POST "$inventory/warehouses" "$store_token" "{\"code\":\"WH-MAIN\",\"name\":\"Kho chinh\",\"branchId\":\"$main_branch\",\"isDefault\":true}")" .id)
+wh_q1=$(jv "$(http POST "$inventory/warehouses" "$store_token" "{\"code\":\"WH-Q1\",\"name\":\"Kho Quay 1\",\"branchId\":\"$q1\",\"isDefault\":true}")" .id)
+[[ "$wh_main" != null && "$wh_q1" != null ]] || fail "warehouses were not created"
+ok "a warehouse for each branch"
 granted=$(http POST "$platform/tenants/current/members" "$store_token" "{\"email\":\"$staff\",\"role\":\"cashier\"}")
 expect_status 201 "add the second user as a cashier" "$granted"
 staff_id=$(jv "$granted" .accountId)
@@ -241,308 +256,308 @@ expect_status 201 "create a category" "$cat"
 category_id=$(jv "$cat" .id)
 expect_status 201 "create a child category" "$(http POST "$catalog/categories" "$store_token" "{\"name\":\"Ao thun\",\"parentId\":\"$category_id\"}")"
 expect_status 409 "a duplicate category name" "$(http POST "$catalog/categories" "$store_token" '{"name":"ao"}')"
-expect_status 403 "a cashier cannot create a category" "$(http POST "$catalog/categories" "$staff_token" '{"name":"X"}')"
-expect_status 200 "list categories (cashier)" "$(http GET "$catalog/categories" "$staff_token")"
+expect_status 403 "a sales_staff member cannot create a category (products.create)" "$(http POST "$catalog/categories" "$staff_token" '{"name":"X"}')"
+expect_status 200 "list categories (sales_staff has products.view)" "$(http GET "$catalog/categories" "$staff_token")"
 brand=$(http POST "$catalog/brands" "$store_token" '{"name":"Coolmate"}')
 expect_status 201 "create a brand" "$brand"
 brand_id=$(jv "$brand" .id)
 attr=$(http POST "$catalog/attributes" "$store_token" '{"name":"Size"}')
 expect_status 201 "create an attribute" "$attr"
 attr_id=$(jv "$attr" .id)
-size_s=$(jv "$(http POST "$catalog/attributes/$attr_id/values" "$store_token" '{"value":"S"}')" '(.values[] | select(.value=="S") | .id)')
-size_m=$(jv "$(http POST "$catalog/attributes/$attr_id/values" "$store_token" '{"value":"M"}')" '(.values[] | select(.value=="M") | .id)')
+size_s=$(jv "$(http POST "$catalog/attributes/$attr_id/values" "$store_token" '{"value":"S"}')" .id)
+size_m=$(jv "$(http POST "$catalog/attributes/$attr_id/values" "$store_token" '{"value":"M"}')" .id)
 [[ "$size_s" != null && "$size_m" != null ]] || fail "attribute values were not created"
-ok "two attribute values (S, M)"
-product=$(http POST "$catalog/products" "$store_token" "{\"name\":\"Ao thun basic\",\"categoryId\":\"$category_id\",\"brandId\":\"$brand_id\",\"baseUnit\":\"cai\",\"channels\":[\"pos\",\"website\"],\"variants\":[{\"skuCode\":\"AO-S\",\"barcode\":\"893000$run\",\"price\":150000,\"costPrice\":90000},{\"skuCode\":\"AO-M\",\"price\":160000,\"costPrice\":95000}]}")
-expect_status 201 "create a product with two variants" "$product"
-product_id=$(jv "$product" .id)
-expect_eq "$product" '.variants | length' 2 "the product has two variants"
-generated=$(http POST "$catalog/products" "$store_token" "{\"name\":\"Quan jean\",\"baseSku\":\"QJ\",\"price\":350000,\"generateVariants\":true,\"attributes\":[{\"attributeId\":\"$attr_id\",\"valueIds\":[\"$size_s\",\"$size_m\"]}]}")
-expect_status 201 "create a product with generated variants" "$generated"
-expect_eq "$generated" '.variants | length' 2 "two variants were generated (S, M)"
-dup=$(http POST "$catalog/products" "$store_token" '{"name":"Duplicate","variants":[{"skuCode":"AO-S","price":1}]}')
-expect_status 409 "a duplicate SKU" "$dup"
-expect_eq "$dup" .errorCode C001 "the duplicate SKU error code"
-expect_status 403 "a cashier cannot create a product" "$(http POST "$catalog/products" "$staff_token" '{"name":"X","baseSku":"X1","price":1}')"
-lookup=$(http GET "$catalog/variants?sku=AO-S" "$staff_token")
-expect_status 200 "variant lookup by exact SKU (cashier)" "$lookup"
-expect_eq "$lookup" '(.data // .items // .) | length' 1 "the lookup finds one variant"
-expect_eq "$(http GET "$catalog/variants?barcode=893000$run" "$staff_token")" '(.data // .items // .) | length' 1 "variant lookup by barcode"
-expect_true "$(http GET "$catalog/variants?q=ao" "$staff_token")" '(.data // .items // .) | length >= 2' "variant search by q"
-list=$(http GET "$catalog/products?q=AO-&sort=price&order=ASC" "$store_token")
-expect_status 200 "product list (one row per variant)" "$list"
-expect_true "$list" '(.data // .items) | length >= 2' "the list has the variants"
-psum=$(http GET "$catalog/products/summary" "$store_token")
-expect_status 200 "product summary" "$psum"
-expect_status 200 "get the product" "$(http GET "$catalog/products/$product_id" "$store_token")"
-expect_status 422 "an unknown sort field" "$(http GET "$catalog/products?sort=bogus" "$store_token")"
-csv=$(curl -s -D - -o /dev/null -H "Authorization: Bearer $store_token" "$catalog/products/export")
-printf '%s' "$csv" | head -n1 | grep -q ' 200' || fail "export did not answer 200: $csv"
-curl -s -H "Authorization: Bearer $store_token" "$catalog/products/export" | grep -q 'AO-S' || fail "the export has no AO-S row"
-ok "product export is a CSV containing AO-S"
-expect_status 404 "a product of nobody" "$(http GET "$catalog/products/$(new_uuid)" "$store_token")"
+ok "two attribute values: S and M"
+prod=$(http POST "$catalog/products" "$store_token" "{\"name\":\"Ao thun\",\"categoryId\":\"$category_id\",\"brandId\":\"$brand_id\",\"baseUnit\":\"cai\"}")
+expect_status 201 "create a product" "$prod"
+product_id=$(jv "$prod" .id)
+va=$(http POST "$catalog/products/$product_id/variants" "$store_token" "{\"skuCode\":\"AO-S\",\"barcode\":\"8938505974194\",\"basePrice\":120000,\"attributes\":[{\"attributeId\":\"$attr_id\",\"attributeValueId\":\"$size_s\"}]}")
+expect_status 201 "create variant AO-S at 120000 VND" "$va"
+variant_s=$(jv "$va" .id)
+expect_eq "$va" .basePrice 120000 "the price is an integer VND amount"
+vb=$(http POST "$catalog/products/$product_id/variants" "$store_token" "{\"skuCode\":\"AO-M\",\"basePrice\":130000,\"attributes\":[{\"attributeId\":\"$attr_id\",\"attributeValueId\":\"$size_m\"}]}")
+expect_status 201 "create variant AO-M at 130000 VND" "$vb"
+variant_m=$(jv "$vb" .id)
+expect_status 422 "a fractional price is refused (integer VND)" "$(http POST "$catalog/products/$product_id/variants" "$store_token" '{"skuCode":"AO-L","basePrice":1000.5}')"
+expect_status 400 "a barcode with a bad checksum" "$(http POST "$catalog/products/$product_id/variants" "$store_token" '{"skuCode":"AO-XL","basePrice":1000,"barcode":"893000000001"}')"
+code=$(printf '%s' "$(http POST "$catalog/products/$product_id/variants" "$store_token" '{"skuCode":"AO-S","basePrice":1000}')" | status_of)
+[[ "$code" == 409 ]] || fail "a duplicate SKU should answer 409, got $code"
+ok "a duplicate SKU -> 409"
+expect_status 403 "a sales_staff member cannot create a product" "$(http POST "$catalog/products" "$staff_token" '{"name":"No"}')"
+pick=$(http GET "$catalog/variants?q=ao-" "$staff_token")
+expect_status 200 "the variant picker (sales_staff)" "$pick"
+expect_eq "$pick" '.data | length' 2 "the picker finds both variants"
+expect_eq "$pick" '(.data[] | select(.skuCode=="AO-S") | .price)' 120000 "the picker row carries the integer price"
+expect_eq "$pick" '(.data[] | select(.skuCode=="AO-S") | .label)' S "the picker row label comes from the attribute value"
+expect_eq "$(http GET "$catalog/variants?barcode=8938505974194" "$store_token")" '.data[0].skuCode' AO-S "find a variant by barcode"
+summary=$(http GET "$catalog/products/summary" "$store_token")
+expect_status 200 "products summary" "$summary"
+expect_eq "$summary" .variantCount 2 "the summary counts two variants"
+export_csv=$(http GET "$catalog/products/export" "$store_token")
+expect_status 200 "products export (CSV)" "$export_csv"
+printf '%s' "$export_csv" | body_of | grep -q 'AO-S' || fail "the export does not list AO-S"
+ok "the export lists AO-S"
+expect_status 200 "lookup by SKU" "$(http GET "$catalog/products/lookup?sku=AO-S" "$store_token")"
+wait_for "sales and inventory learned both variants (catalog events)" \
+  count_is "select (select count(*) from sales.catalog_variant_projection where tenant_id='$tenant_id') + (select count(*) from inventory.catalog_sku_projection where tenant_id='$tenant_id')" 4
 
 # ---------------------------------------------------------------------------------------------
-step "4. Customer: groups, loyalty settings, customer, addresses"
+step "4. Customer: groups, loyalty settings, customer, tags, loyalty adjustment"
 groups=$(http GET "$customer/customer-groups" "$store_token")
-expect_status 200 "customer groups" "$groups"
-expect_true "$groups" '(.data // .) | length >= 4' "the default groups were seeded"
-lsettings=$(http GET "$customer/loyalty-settings" "$store_token")
-expect_status 200 "loyalty settings" "$lsettings"
-expect_eq "$lsettings" .enabled true "loyalty is on by default"
+expect_status 200 "list customer groups (seeded on first read)" "$groups"
+expect_eq "$groups" 'length' 4 "four seeded groups"
+seeded_group=$(jv "$groups" '.[0].id')
+expect_status 409 "a seeded group cannot be deleted" "$(http DELETE "$customer/customer-groups/$seeded_group" "$store_token")"
+expect_status 200 "read the loyalty settings (customers.view)" "$(http GET "$customer/loyalty-settings" "$staff_token")"
+loy=$(http PATCH "$customer/loyalty-settings" "$store_token" '{"enabled":true,"earnAmountPerPoint":10000,"redeemValuePerPoint":1000}')
+expect_status 200 "update the loyalty settings: 1 point per 10000 VND" "$loy"
+expect_eq "$loy" .earnAmountPerPoint 10000 "earn rate is an integer VND amount"
+tag=$(http POST "$customer/customer-tags" "$store_token" '{"name":"vip-hcm"}')
+expect_status 201 "create a customer tag" "$tag"
+tag_id=$(jv "$tag" .id)
+expect_status 409 "the same tag again" "$(http POST "$customer/customer-tags" "$store_token" '{"name":"vip-hcm"}')"
 phone="09$(printf '%08d' $((run % 100000000)))"
-cust=$(http POST "$customer/customers" "$store_token" "{\"name\":\"Nguyen Van A\",\"phone\":\"$phone\",\"email\":\"a-$run@example.com\",\"addresses\":[{\"recipientName\":\"Nguyen Van A\",\"recipientPhone\":\"$phone\",\"addressLine\":\"1 Le Loi\",\"ward\":\"Ben Nghe\",\"district\":\"Quan 1\",\"province\":\"TP HCM\"}],\"loyalty\":{\"enabled\":true}}")
-expect_status 201 "create a customer" "$cust"
+cust=$(http POST "$customer/customers" "$store_token" "{\"name\":\"Nguyen Van A\",\"phone\":\"$phone\",\"email\":\"a-$run@example.com\",\"tagIds\":[\"$tag_id\"],\"loyalty\":{\"enabled\":true,\"initialPoints\":5}}")
+expect_status 201 "create a customer with a tag and 5 loyalty points" "$cust"
 customer_id=$(jv "$cust" .id)
-dupc=$(http POST "$customer/customers" "$store_token" "{\"name\":\"Other\",\"phone\":\"$phone\"}")
-expect_status 409 "a duplicate phone" "$dupc"
-expect_eq "$dupc" .errorCode U001 "the duplicate phone error code"
-expect_status 201 "add an address" "$(http POST "$customer/customers/$customer_id/addresses" "$store_token" '{"recipientName":"Nguyen Van A","recipientPhone":"0901234567","addressLine":"2 Hai Ba Trung","ward":"Da Kao","district":"Quan 1","province":"TP HCM"}')"
-got=$(http GET "$customer/customers/$customer_id" "$store_token")
-expect_eq "$got" '.addresses | length' 2 "the customer has two addresses"
-expect_true "$(http GET "$customer/customers?q=Nguyen" "$store_token")" '(.data // .items) | length >= 1' "list customers by q"
-csum=$(http GET "$customer/customers/summary" "$store_token")
-expect_status 200 "customer summary" "$csum"
-expect_status 200 "customers export" "$(http GET "$customer/customers/export" "$store_token")"
-expect_eq "$(http GET "$customer/customers/$customer_id" "$staff_token")" .phone "$phone" "a cashier (sales_staff, customers.update) sees the full phone"
-before_spent=$(jv "$got" '.totalSpent // 0')
-[[ "$before_spent" == 0 ]] || fail "a new customer has spent $before_spent"
-ok "a new customer has spent nothing yet"
+expect_eq "$cust" .loyalty.availablePoints 5 "the opening points"
+expect_true "$cust" '.phoneMasked | test("•")' "the response carries a masked phone as well"
+expect_status 409 "the same phone twice" "$(http POST "$customer/customers" "$store_token" "{\"name\":\"Other\",\"phone\":\"$phone\"}")"
+expect_status 201 "a sales_staff member can create customers (customers.create)" "$(http POST "$customer/customers" "$staff_token" "{\"name\":\"Tran Thi B\",\"phone\":\"08$(printf '%08d' $((run % 100000000)))\"}")"
+custs=$(http GET "$customer/customers?q=Nguyen" "$store_token")
+expect_status 200 "customer list filtered by q" "$custs"
+expect_eq "$custs" '.data | length' 1 "q finds the customer"
+expect_eq "$custs" '.data[0].phone' "$phone" "the owner sees the real phone"
+adj=$(http POST "$customer/customers/$customer_id/loyalty-adjustments" "$store_token" '{"points":10,"reason":"welcome bonus"}')
+expect_status 201 "adjust loyalty points" "$adj"
+expect_eq "$adj" .balance 15 "balance after the adjustment (5 + 10)"
+expect_eq "$(http GET "$customer/customers/$customer_id/loyalty-transactions" "$store_token")" '.data | length' 2 "two loyalty transactions"
+expect_eq "$(http GET "$customer/customers/summary" "$store_token")" .total 2 "customer summary counts two customers"
 
 # ---------------------------------------------------------------------------------------------
-step "5. Inventory: receipt, stock views, thresholds"
-stock_of() { # branch sku field -> number
-  http GET "$inventory/stock?branchId=$1&q=$2" "$store_token" | body_of | jq -r "(.data // .items)[0].$3"
-}
-receipt="{\"branchId\":\"$q1\",\"items\":[{\"sku\":\"AO-S\",\"quantity\":20},{\"sku\":\"AO-M\",\"quantity\":10}]}"
-expect_status 201 "receive 20 AO-S and 10 AO-M at Q1" "$(http POST "$inventory/stock-receipts" "$store_token" "$receipt")"
-stock=$(http GET "$inventory/stock?branchId=$q1" "$staff_token")
-expect_status 200 "stock list (cashier)" "$stock"
-expect_eq "$stock" '(.data // .items) | length' 2 "two stock rows at Q1"
-expect_eq "$(http GET "$inventory/stock?branchId=$q1&q=AO-S" "$store_token")" '(.data // .items) | length' 1 "q filters by SKU"
-[[ "$(stock_of "$q1" AO-S onHand)" == 20 ]] || fail "AO-S on hand is not 20"
-ok "AO-S on hand is 20"
-thr=$(http POST "$inventory/stock-thresholds" "$store_token" "{\"branchId\":\"$q1\",\"sku\":\"AO-M\",\"minQuantity\":15,\"maxQuantity\":50}")
-expect_status 200 "set a min/max threshold for AO-M" "$thr"
-expect_status 403 "a cashier cannot set thresholds" "$(http POST "$inventory/stock-thresholds" "$staff_token" "{\"branchId\":\"$q1\",\"sku\":\"AO-M\",\"minQuantity\":1}")"
-expect_status 422 "max below min" "$(http POST "$inventory/stock-thresholds" "$store_token" "{\"branchId\":\"$q1\",\"sku\":\"AO-M\",\"minQuantity\":9,\"maxQuantity\":3}")"
-low=$(http GET "$inventory/stock?branchId=$q1&level=below_min" "$store_token")
-expect_status 200 "stock filtered by level=below_min" "$low"
-expect_eq "$low" '(.data // .items) | map(.sku) | join(",")' AO-M "only AO-M is below its minimum"
-expect_eq "$(http GET "$inventory/stock?branchId=$q1&level=ok" "$store_token")" '(.data // .items) | map(.sku) | join(",")' AO-S "only AO-S is ok"
-ssum=$(http GET "$inventory/stock/summary?branchId=$q1" "$store_token")
-expect_status 200 "stock summary" "$ssum"
-expect_eq "$ssum" .belowMinCount 1 "one SKU below its minimum"
-slk=$(http GET "$inventory/stock/lookup?branchId=$q1&code=AO-S" "$staff_token")
-expect_status 200 "stock lookup by SKU (cashier)" "$slk"
-expect_eq "$slk" .sku AO-S "the lookup returns the SKU"
-expect_status 404 "stock lookup of an unknown code" "$(http GET "$inventory/stock/lookup?branchId=$q1&code=NOPE" "$staff_token")"
-ledger=$(http GET "$inventory/ledger-entries?branchId=$q1&sku=AO-S" "$store_token")
-expect_status 200 "ledger entries" "$ledger"
-expect_eq "$ledger" '(.data // .items) | length' 1 "one ledger row for the receipt"
-expect_status 200 "stock export" "$(http GET "$inventory/stock/export?branchId=$q1" "$store_token")"
-
-step "5b. Inventory: supplier and purchase order (VAT maths)"
-sup=$(http POST "$inventory/suppliers" "$store_token" "{\"name\":\"Cong ty Det May\",\"phone\":\"028 3822 11$((run % 100))\",\"email\":\"ncc-$run@example.com\"}")
+step "5. Inventory: receipts through the approval flow, stock views, thresholds, supplier, purchase order"
+receipt_body="{\"warehouseId\":\"$wh_main\",\"items\":[{\"skuId\":\"$variant_s\",\"qty\":\"10\",\"unitCost\":70000},{\"skuId\":\"$variant_m\",\"qty\":\"5\",\"unitCost\":80000}]}"
+expect_status 403 "a sales_staff member cannot create a receipt (inventory.create)" "$(http POST "$inventory/stock-receipts" "$staff_token" "$receipt_body")"
+expect_status 422 "a fractional unit cost is refused (integer VND)" "$(http POST "$inventory/stock-receipts" "$store_token" "{\"warehouseId\":\"$wh_main\",\"items\":[{\"skuId\":\"$variant_s\",\"qty\":\"1\",\"unitCost\":70000.5}]}")"
+rcpt=$(http POST "$inventory/stock-receipts" "$store_token" "$receipt_body")
+expect_status 201 "create a draft receipt: 10 AO-S and 5 AO-M" "$rcpt"
+receipt_id=$(jv "$rcpt" .id)
+expect_eq "$rcpt" .status DRAFT "the receipt is a draft"
+expect_eq "$(http GET "$inventory/stock/summary" "$store_token")" .onHand 0 "a draft moves no stock"
+expect_eq "$(http POST "$inventory/stock-receipts/$receipt_id/submit" "$store_token" '{}')" .status PENDING_APPROVAL "submit for approval"
+rej=$(http POST "$inventory/stock-receipts/$receipt_id/reject" "$store_token" '{"reason":"count again"}')
+expect_status 200 "reject it (inventory.approve)" "$rej"
+expect_eq "$rej" .status DRAFT "a rejected receipt goes back to draft"
+expect_status 200 "submit again" "$(http POST "$inventory/stock-receipts/$receipt_id/submit" "$store_token" '{}')"
+expect_status 403 "a sales_staff member cannot approve (inventory.approve)" "$(http POST "$inventory/stock-receipts/$receipt_id/approve" "$staff_token" '{}')"
+appr=$(http POST "$inventory/stock-receipts/$receipt_id/approve" "$store_token" '{}')
+expect_status 200 "approve the receipt" "$appr"
+expect_eq "$appr" .status POSTED "the receipt is posted"
+expect_status 409 "approve twice" "$(http POST "$inventory/stock-receipts/$receipt_id/approve" "$store_token" '{}')"
+second=$(http POST "$inventory/stock-receipts" "$store_token" "{\"warehouseId\":\"$wh_q1\",\"items\":[{\"skuId\":\"$variant_s\",\"qty\":\"3\",\"unitCost\":70000}],\"autoPost\":true}")
+expect_status 201 "a receipt with autoPost for the second branch" "$second"
+cancelled=$(http POST "$inventory/stock-receipts" "$store_token" "{\"warehouseId\":\"$wh_main\",\"items\":[{\"skuId\":\"$variant_s\",\"qty\":\"1\"}]}")
+cancel_id=$(jv "$cancelled" .id)
+expect_eq "$(http POST "$inventory/stock-receipts/$cancel_id/cancel" "$store_token" '{}')" .status CANCELLED "cancel a draft receipt"
+expect_status 409 "a cancelled receipt cannot be approved" "$(http POST "$inventory/stock-receipts/$cancel_id/approve" "$store_token" '{}')"
+levels=$(http GET "$inventory/stock-levels?branchId=$main_branch" "$staff_token")
+expect_status 200 "stock levels of the first branch (sales_staff, inventory.view)" "$levels"
+expect_eq "$levels" '(.data[] | select(.variantId=="'"$variant_s"'") | .onHand)' 10 "AO-S: 10 on hand"
+expect_eq "$levels" '(.data[] | select(.variantId=="'"$variant_m"'") | .available)' 5 "AO-M: 5 available"
+stock_sum=$(http GET "$inventory/stock/summary?branchId=$main_branch" "$store_token")
+expect_eq "$stock_sum" .onHand 15 "summary: 15 units on hand"
+expect_eq "$stock_sum" .stockValue 1100000 "stock value = 10 x 70000 + 5 x 80000 VND"
+expect_eq "$(http GET "$inventory/stock/summary" "$store_token")" .onHand 18 "both branches: 18 units"
+wait_for "the stock list names the SKU (catalog projection)" get_is "$inventory/stock-levels?branchId=$main_branch" "$store_token" '[.data[] | select(.sku == "AO-S")] | length == 1'
+look=$(http GET "$inventory/stock/lookup?branchId=$main_branch&code=AO-S" "$staff_token")
+expect_status 200 "stock lookup by SKU code" "$look"
+ledger=$(http GET "$inventory/ledger-entries?branchId=$main_branch&variantId=$variant_s" "$store_token")
+expect_status 200 "the ledger of AO-S" "$ledger"
+expect_true "$ledger" '(.data | length) >= 1' "the receipt left a ledger entry"
+csv=$(http GET "$inventory/stock/export?branchId=$main_branch" "$store_token")
+expect_status 200 "stock export (CSV)" "$csv"
+thr=$(http POST "$inventory/stock-thresholds" "$store_token" "{\"branchId\":\"$main_branch\",\"variantId\":\"$variant_m\",\"minQuantity\":8}")
+expect_status 200 "set a threshold: AO-M minimum 8" "$thr"
+expect_true "$(http GET "$inventory/stock-levels?branchId=$main_branch&level=below_min" "$store_token")" '[.data[].variantId] == ["'"$variant_m"'"]' "AO-M (5 < 8) is the only product below its minimum"
+sup=$(http POST "$inventory/suppliers" "$store_token" "{\"code\":\"NCC-$run\",\"name\":\"Nha cung cap A\",\"phone\":\"0911222333\",\"taxCode\":\"0312345678\"}")
 expect_status 201 "create a supplier" "$sup"
 supplier_id=$(jv "$sup" .id)
-expect_status 200 "list suppliers (q)" "$(http GET "$inventory/suppliers?q=Det" "$store_token")"
-po_body="{\"supplierId\":\"$supplier_id\",\"branchId\":\"$q1\",\"expectedDate\":\"2026-12-01\",\"items\":[{\"sku\":\"AO-S\",\"name\":\"Ao thun S\",\"unitName\":\"cai\",\"quantityOrdered\":100,\"unitCost\":142000,\"vatRate\":8}]}"
-po=$(http POST "$inventory/purchase-orders" "$store_token" "$po_body")
-expect_status 201 "create a purchase order (draft)" "$po"
+expect_status 403 "a sales_staff member cannot create a supplier (purchasing.create)" "$(http POST "$inventory/suppliers" "$staff_token" '{"code":"X","name":"X"}')"
+dir=$(http GET "$inventory/suppliers/directory?q=Nha" "$store_token")
+expect_status 200 "supplier directory" "$dir"
+expect_eq "$dir" '.data | length' 1 "the directory lists the supplier"
+po=$(http POST "$inventory/purchase-orders" "$store_token" "{\"supplierId\":\"$supplier_id\",\"warehouseId\":\"$wh_main\",\"expectedDate\":\"2030-01-31\",\"items\":[{\"skuId\":\"$variant_m\",\"orderedQty\":\"20\",\"unitCost\":65000}]}")
+expect_status 201 "create a purchase order: 20 AO-M at 65000 VND" "$po"
 po_id=$(jv "$po" .id)
-expect_eq "$po" .status draft "the order starts as a draft"
-expect_eq "$po" .subtotal 14200000 "subtotal 14.200.000"
-expect_eq "$po" .vatAmount 1136000 "VAT 8% = 1.136.000"
-expect_eq "$po" .totalAmount 15336000 "total 15.336.000"
-expect_status 400 "a payment on a draft order" "$(http POST "$inventory/purchase-orders/$po_id/payments" "$store_token" '{"amount":1000,"method":"transfer"}')"
-sub=$(http POST "$inventory/purchase-orders/$po_id/submit" "$store_token" '{}')
-expect_status 200 "submit" "$sub"
-expect_eq "$sub" .status pending_approval "pending approval"
-expect_status 403 "a cashier cannot approve" "$(http POST "$inventory/purchase-orders/$po_id/approve" "$staff_token" '{}')"
-app=$(http POST "$inventory/purchase-orders/$po_id/approve" "$store_token" '{}')
-expect_status 200 "approve" "$app"
-expect_eq "$app" .status approved "approved"
-pay=$(http POST "$inventory/purchase-orders/$po_id/payments" "$store_token" '{"amount":5000000,"method":"transfer","note":"deposit"}')
-expect_status 201 "record a payment of 5.000.000" "$pay"
-after=$(http GET "$inventory/purchase-orders/$po_id" "$store_token")
-expect_eq "$after" .paidAmount 5000000 "paid 5.000.000"
-expect_eq "$(http GET "$inventory/suppliers/$supplier_id" "$store_token")" .debtBalance 10336000 "the supplier owes 15.336.000 - 5.000.000"
-expect_status 400 "a payment above the remaining amount" "$(http POST "$inventory/purchase-orders/$po_id/payments" "$store_token" '{"amount":99000000,"method":"transfer"}')"
-posum=$(http GET "$inventory/purchase-orders/summary" "$store_token")
-expect_status 200 "purchase order summary" "$posum"
-expect_status 200 "purchase order list" "$(http GET "$inventory/purchase-orders?status=approved" "$store_token")"
-expect_status 200 "purchase order export" "$(http GET "$inventory/purchase-orders/export" "$store_token")"
-expect_status 409 "a supplier with open orders cannot be deleted" "$(http DELETE "$inventory/suppliers/$supplier_id" "$store_token")"
-
-step "5c. Inventory: transfer, stock take, stock issue"
-tr=$(http POST "$inventory/stock-transfers" "$store_token" "{\"fromBranchId\":\"$q1\",\"toBranchId\":\"$main_branch\",\"items\":[{\"sku\":\"AO-S\",\"quantity\":5}]}")
-expect_status 201 "create a stock transfer Q1 -> main" "$tr"
-tr_id=$(jv "$tr" .id)
-expect_status 200 "ship the transfer" "$(http POST "$inventory/stock-transfers/$tr_id/ship" "$store_token" '{}')"
-[[ "$(stock_of "$q1" AO-S onHand)" == 15 ]] || fail "Q1 AO-S should be 15 after shipping"
-ok "Q1 AO-S is 15 after shipping"
-expect_status 200 "receive the transfer" "$(http POST "$inventory/stock-transfers/$tr_id/receive" "$store_token" '{}')"
-[[ "$(stock_of "$main_branch" AO-S onHand)" == 5 ]] || fail "main AO-S should be 5 after receiving"
-ok "main AO-S is 5 after receiving"
-expect_status 200 "the transfer reads back" "$(http GET "$inventory/stock-transfers/$tr_id" "$store_token")"
-expect_status 400 "a transfer to the same branch" "$(http POST "$inventory/stock-transfers" "$store_token" "{\"fromBranchId\":\"$q1\",\"toBranchId\":\"$q1\",\"items\":[{\"sku\":\"AO-S\",\"quantity\":1}]}")"
-take=$(http POST "$inventory/stock-takes" "$store_token" "{\"branchId\":\"$q1\",\"skus\":[\"AO-M\"]}")
-expect_status 201 "start a stock take of AO-M" "$take"
-take_id=$(jv "$take" .id)
-expect_status 200 "count 9 AO-M" "$(http PATCH "$inventory/stock-takes/$take_id/items" "$store_token" '{"items":[{"sku":"AO-M","countedQuantity":9,"reason":"damaged"}]}')"
-expect_status 200 "complete the stock take" "$(http POST "$inventory/stock-takes/$take_id/complete" "$store_token" '{}')"
-[[ "$(stock_of "$q1" AO-M onHand)" == 9 ]] || fail "AO-M should be 9 after the count"
-ok "AO-M on hand is 9 after the count"
-issue=$(http POST "$inventory/stock-issues" "$store_token" "{\"branchId\":\"$q1\",\"reason\":\"damaged\",\"items\":[{\"sku\":\"AO-M\",\"quantity\":1}]}")
-expect_status 201 "create a stock issue" "$issue"
-issue_id=$(jv "$issue" .id)
-big=$(http POST "$inventory/stock-issues" "$store_token" "{\"branchId\":\"$q1\",\"reason\":\"damaged\",\"items\":[{\"sku\":\"AO-M\",\"quantity\":500}]}")
-big_id=$(jv "$big" .id)
-expect_status 409 "approving an issue above the stock" "$(http POST "$inventory/stock-issues/$big_id/approve" "$store_token" '{}')"
-expect_status 200 "cancel that issue" "$(http POST "$inventory/stock-issues/$big_id/cancel" "$store_token" '{}')"
-expect_status 200 "approve the issue" "$(http POST "$inventory/stock-issues/$issue_id/approve" "$store_token" '{}')"
-[[ "$(stock_of "$q1" AO-M onHand)" == 8 ]] || fail "AO-M should be 8 after the issue"
-ok "AO-M on hand is 8 after the issue"
-types=$(http GET "$inventory/ledger-entries?branchId=$q1&limit=100" "$store_token" | body_of | jq -r '[(.data // .items)[].refType] | unique | join(",")')
-for t in receipt transfer_out stock_take issue; do
-  [[ ",$types," == *",$t,"* ]] || fail "ledger has no $t entry (has: $types)"
-done
-ok "the ledger recorded receipt, transfer_out, stock_take and issue ($types)"
+expect_status 422 "a fractional PO unit cost is refused" "$(http POST "$inventory/purchase-orders" "$store_token" "{\"supplierId\":\"$supplier_id\",\"warehouseId\":\"$wh_main\",\"items\":[{\"skuId\":\"$variant_m\",\"orderedQty\":\"1\",\"unitCost\":0.5}]}")"
+expect_status 403 "a sales_staff member cannot approve a PO (purchasing.approve)" "$(http POST "$inventory/purchase-orders/$po_id/approve" "$staff_token" '{}')"
+expect_status 200 "approve the PO" "$(http POST "$inventory/purchase-orders/$po_id/approve" "$store_token" '{}')"
+expect_status 200 "receive the whole PO" "$(http POST "$inventory/purchase-orders/$po_id/receive" "$store_token" '{}')"
+po_sum=$(http GET "$inventory/purchase-orders/summary" "$store_token")
+expect_status 200 "PO summary" "$po_sum"
+expect_status 200 "PO directory" "$(http GET "$inventory/purchase-orders/directory" "$store_token")"
+wait_for "AO-M: 25 on hand after the PO receipt" get_is "$inventory/stock-levels?branchId=$main_branch" "$store_token" '[.data[] | select(.variantId == "'"$variant_m"'" and .onHand == 25)] | length == 1'
+expect_status 400 "a supplier with an open PO or debt cannot be deleted" "$(http DELETE "$inventory/suppliers/$supplier_id" "$store_token")"
 
 # ---------------------------------------------------------------------------------------------
-step "6. Sales: channels, providers, register and shift"
-channels=$(http GET "$sales/sales-channels" "$staff_token")
-expect_status 200 "sales channels (cashier)" "$channels"
-expect_true "$channels" '(.data // .) | length >= 6' "channels were seeded"
-expect_status 200 "shipping providers" "$(http GET "$sales/shipping-providers" "$staff_token")"
-expect_status 422 "registers need a branchId" "$(http GET "$sales/registers" "$staff_token")"
-reg=$(http POST "$sales/registers" "$store_token" "{\"branchId\":\"$q1\",\"code\":\"POS1\",\"name\":\"Quay thu ngan 1\"}")
-expect_status 201 "create a register" "$reg"
-register_id=$(jv "$reg" .id)
-expect_status 409 "a duplicate register code" "$(http POST "$sales/registers" "$store_token" "{\"branchId\":\"$q1\",\"code\":\"POS1\",\"name\":\"Other\"}")"
-expect_status 200 "list the registers" "$(http GET "$sales/registers?branchId=$q1" "$staff_token")"
+step "6. Sales: channels, shipping providers, registers and the shift"
+chan=$(http GET "$sales/sales-channels" "$staff_token")
+expect_status 200 "sales channels (seeded on first read)" "$chan"
+expect_eq "$chan" '.data | map(.type) | sort | join(",")' "facebook,manual,phone,pos,website,zalo" "six channel types"
+fb_channel=$(jv "$chan" '(.data[] | select(.type=="facebook") | .id)')
+expect_status 403 "a sales_staff member cannot rename a channel (channels.update)" "$(http PATCH "$sales/sales-channels/$fb_channel" "$staff_token" '{"name":"FB Shop"}')"
+expect_status 200 "the owner renames a channel" "$(http PATCH "$sales/sales-channels/$fb_channel" "$store_token" '{"name":"FB Shop"}')"
+expect_eq "$(http GET "$sales/shipping-providers" "$staff_token")" '.data | length' 4 "four shipping providers"
+provider_id=$(jv "$(http GET "$sales/shipping-providers" "$staff_token")" '.data[0].id')
+regs=$(http GET "$sales/registers?branchId=$main_branch" "$staff_token")
+expect_status 200 "registers of the first branch (a default Q01 is created)" "$regs"
+register_id=$(jv "$regs" '.data[0].id')
+expect_eq "$regs" '.data[0].code' Q01 "the default register"
+wait_for "sales knows both variants and the branch warehouse is usable" count_is "select count(*) from sales.catalog_variant_projection where tenant_id='$tenant_id'" 2
 expect_status 404 "no shift is open yet" "$(http GET "$sales/shifts/current?registerId=$register_id" "$staff_token")"
 shift=$(http POST "$sales/shifts" "$staff_token" "{\"registerId\":\"$register_id\",\"openingCash\":500000}")
-expect_status 201 "the cashier opens a shift with 500.000" "$shift"
+expect_status 201 "the cashier opens a shift with 500000 VND" "$shift"
 shift_id=$(jv "$shift" .id)
-expect_status 409 "a second shift on the same register" "$(http POST "$sales/shifts" "$staff_token" "{\"registerId\":\"$register_id\",\"openingCash\":1}")"
-expect_status 200 "current shift" "$(http GET "$sales/shifts/current?registerId=$register_id" "$staff_token")"
+expect_eq "$shift" .status open "the shift is open"
+expect_status 409 "a second shift on the same register" "$(http POST "$sales/shifts" "$store_token" "{\"registerId\":\"$register_id\",\"openingCash\":1}")"
+expect_eq "$(http GET "$sales/shifts/current?registerId=$register_id" "$staff_token")" .id "$shift_id" "the current shift of the register"
 
-step "6b. Sales: draft -> confirm (stock reserved) -> pack -> ship -> complete"
-order_body="{\"branchId\":\"$q1\",\"orderStatus\":\"draft\",\"source\":\"manual\",\"channel\":\"phone\",\"customerId\":\"$customer_id\",\"items\":[{\"sku\":\"AO-S\",\"name\":\"Ao thun S\",\"quantity\":2,\"unitPrice\":150000}],\"shipping\":{\"recipientName\":\"Nguyen Van A\",\"recipientPhone\":\"$phone\",\"addressLine\":\"1 Le Loi\",\"province\":\"TP HCM\",\"shippingProviderCode\":\"ghn\",\"shippingFee\":0}}"
-draft=$(http POST "$sales/orders" "$staff_token" "$order_body" "Idempotency-Key: $(new_uuid)")
-expect_status 201 "create a DRAFT order" "$draft"
-order_id=$(jv "$draft" .id)
-expect_eq "$draft" .orderStatus draft "the order is a draft"
-expect_eq "$draft" .totalAmount 300000 "the total is 300.000"
-expect_true "$draft" '.code | startswith("DH")' "the order has a readable code"
-expect_true "$(http GET "$sales/orders?orderStatus=draft" "$store_token")" '(.data // .items) | length >= 1' "drafts are listed only when asked for"
-expect_status 403 "a cashier cannot cancel (orders.delete; sales_staff may confirm, which holds orders.update)" "$(http POST "$sales/orders/$order_id/cancel" "$staff_token" '{"reason":"x"}')"
-conf=$(http POST "$sales/orders/$order_id/confirm" "$store_token" '{}')
-expect_status 200 "confirm" "$conf"
-expect_eq "$conf" .orderStatus confirmed "confirmed"
-reserved_of() { http GET "$inventory/stock?branchId=$q1&q=$1" "$store_token" | body_of | jq -r '(.data // .items)[0].reserved'; }
-[[ "$(reserved_of AO-S)" == 2 ]] || fail "confirming should hold 2 AO-S, reserved is $(reserved_of AO-S)"
-ok "stock is reserved: 2 AO-S held, still 15 on hand"
-expect_status 400 "ship before packing" "$(http POST "$sales/orders/$order_id/ship" "$store_token" '{}')"
-pack=$(http POST "$sales/orders/$order_id/pack" "$store_token" '{}')
-expect_status 200 "pack" "$pack"
-expect_eq "$pack" .fulfillmentStatus packing "packing"
-shp=$(http POST "$sales/orders/$order_id/ship" "$store_token" '{"shippingProviderCode":"ghn","trackingCode":"GHN123"}')
-expect_status 200 "ship" "$shp"
-expect_eq "$shp" .fulfillmentStatus shipping "shipping"
-expect_status 201 "record the payment of 300.000" "$(http POST "$sales/orders/$order_id/payments" "$store_token" '{"method":"transfer","amount":300000}')"
-done_order=$(http POST "$sales/orders/$order_id/complete" "$store_token" '{}')
-expect_status 200 "complete" "$done_order"
-expect_eq "$done_order" .orderStatus completed "completed"
-expect_eq "$done_order" .paymentStatus paid "paid"
-wait_for "stock deducted through the event: 13 on hand, nothing held" \
-  count_is "select count(*) from inventory.stock_item where tenant_id='$tenant_id' and branch_id='$q1' and sku='AO-S' and quantity_on_hand=13 and quantity_reserved=0" 1
-expect_status 400 "cancelling a completed order" "$(http POST "$sales/orders/$order_id/cancel" "$store_token" '{"reason":"late"}')"
+step "6b. Sales: POS checkout on the shift (cash, change)"
+checkout_key=$(new_uuid)
+checkout_body="{\"idempotencyKey\":\"$checkout_key\",\"branchId\":\"$main_branch\",\"warehouseId\":\"$wh_main\",\"shiftId\":\"$shift_id\",\"lines\":[{\"variantId\":\"$variant_s\",\"qty\":2}],\"tenders\":[{\"method\":\"CASH\",\"amount\":240000,\"tenderedCash\":300000}]}"
+checkout=$(http POST "$sales/pos/checkout" "$staff_token" "$checkout_body")
+expect_status 201 "checkout 2 x AO-S (cashier)" "$checkout"
+expect_eq "$checkout" .state CONFIRMED "the checkout is confirmed"
+expect_eq "$checkout" .paymentStatus PAID "paid in full"
+expect_eq "$checkout" .quote.grandTotal 240000 "the server priced 2 x 120000 VND"
+expect_eq "$checkout" '.tenders.totalChangeDue' 60000 "change of 60000 VND"
+pos_order_id=$(jv "$checkout" .orderId)
+replay=$(http POST "$sales/pos/checkout" "$staff_token" "$checkout_body")
+expect_true "$replay" '.replayed == true or .orderId == "'"$pos_order_id"'"' "the same key again returns the first checkout"
+expect_status 409 "checkout of 999 AO-S is refused for stock" "$(http POST "$sales/pos/checkout" "$staff_token" "{\"branchId\":\"$main_branch\",\"warehouseId\":\"$wh_main\",\"shiftId\":\"$shift_id\",\"lines\":[{\"variantId\":\"$variant_s\",\"qty\":999}],\"tenders\":[{\"method\":\"CASH\",\"amount\":119880000}]}" "Idempotency-Key: $(new_uuid)")"
+expect_status 422 "a fractional tender amount is refused (integer VND)" "$(http POST "$sales/pos/checkout" "$staff_token" "{\"branchId\":\"$main_branch\",\"warehouseId\":\"$wh_main\",\"lines\":[{\"variantId\":\"$variant_s\",\"qty\":1}],\"tenders\":[{\"method\":\"CASH\",\"amount\":100.5}]}" "Idempotency-Key: $(new_uuid)")"
+wait_for "AO-S: 8 on hand after the sale (reservation committed)" get_is "$inventory/stock-levels?branchId=$main_branch" "$store_token" '[.data[] | select(.variantId == "'"$variant_s"'" and .onHand == 8 and .reserved == 0)] | length == 1'
 
-step "6c. Sales: the cancel path releases stock"
-d2=$(http POST "$sales/orders" "$staff_token" "{\"branchId\":\"$q1\",\"orderStatus\":\"draft\",\"items\":[{\"sku\":\"AO-M\",\"name\":\"Ao thun M\",\"quantity\":3,\"unitPrice\":160000}]}" "Idempotency-Key: $(new_uuid)")
-expect_status 201 "create a second draft" "$d2"
-d2_id=$(jv "$d2" .id)
-expect_status 200 "confirm it" "$(http POST "$sales/orders/$d2_id/confirm" "$store_token" '{}')"
-[[ "$(reserved_of AO-M)" == 3 ]] || fail "3 AO-M should be held"
-ok "3 AO-M are held"
-expect_status 422 "cancel needs a reason" "$(http POST "$sales/orders/$d2_id/cancel" "$store_token" '{}')"
-canc=$(http POST "$sales/orders/$d2_id/cancel" "$store_token" '{"reason":"customer changed their mind"}')
-expect_status 200 "cancel" "$canc"
-expect_eq "$canc" .orderStatus cancelled "cancelled"
-wait_for "the hold is released: AO-M 8 on hand, 0 held" \
-  count_is "select count(*) from inventory.stock_item where tenant_id='$tenant_id' and branch_id='$q1' and sku='AO-M' and quantity_on_hand=8 and quantity_reserved=0" 1
+step "6c. Sales: a manual order with the stepper (pack, ship, complete) and payments"
+order_body="{\"branchId\":\"$main_branch\",\"warehouseId\":\"$wh_main\",\"channelType\":\"MANUAL\",\"sourceConnectionId\":\"demo-$run\",\"externalOrderId\":\"MAN-$run\",\"customerId\":\"$customer_id\",\"lines\":[{\"variantId\":\"$variant_m\",\"qty\":3}],\"shippingFee\":20000,\"autoConfirm\":true}"
+order=$(http POST "$sales/orders/omnichannel" "$store_token" "$order_body")
+expect_status 201 "create and confirm a manual order: 3 x AO-M + 20000 shipping" "$order"
+order_id=$(jv "$order" .id)
+expect_eq "$order" .grandTotal 410000 "3 x 130000 + 20000 = 410000 VND"
+expect_eq "$order" .orderStatus CONFIRMED "confirmed"
+retry=$(http POST "$sales/orders/omnichannel" "$store_token" "$order_body")
+expect_status 200 "the same (sourceConnectionId, externalOrderId) again is a replay" "$retry"
+expect_eq "$retry" .id "$order_id" "the replay returns the first order"
+detail=$(http GET "$sales/orders/$order_id" "$staff_token")
+expect_status 200 "order detail (sales_staff)" "$detail"
+expect_eq "$detail" .orderStatus confirmed "three axes: order confirmed"
+expect_eq "$detail" .fulfillmentStatus unfulfilled "fulfilment unfulfilled"
+expect_eq "$detail" .paymentStatus unpaid "payment unpaid"
+expect_eq "$detail" .dueAmount 410000 "due amount"
+expect_eq "$detail" '.allowedActions | join(",")' "pack,cancel" "allowed actions before packing"
+stale=$(http POST "$sales/orders/$order_id/pack" "$store_token" '{"version":1}')
+expect_status 409 "pack with a stale version" "$stale"
+packed=$(step_order "$order_id" pack)
+expect_status 200 "pack" "$packed"
+expect_eq "$packed" .fulfillmentStatus packing "packing"
+expect_status 409 "pack twice" "$(step_order "$order_id" pack)"
+shipped=$(step_order "$order_id" ship "{\"shippingProviderId\":\"$provider_id\",\"trackingCode\":\"TRK-$run\"}")
+expect_status 200 "ship with a provider and a tracking code" "$shipped"
+expect_eq "$shipped" .fulfillmentStatus shipping "shipping"
+expect_status 409 "an order in shipping cannot be cancelled" "$(http POST "$sales/orders/$order_id/cancel" "$store_token" "{\"version\":$(order_version "$order_id")}")"
+delivered=$(step_order "$order_id" complete)
+expect_status 200 "complete the delivery" "$delivered"
+expect_eq "$delivered" .fulfillmentStatus delivered "delivered"
+expect_eq "$delivered" .orderStatus confirmed "a delivered, unpaid (COD) order stays confirmed until paid"
+pay_url="$sales/orders/$order_id/payments"
+expect_status 400 "a payment without an Idempotency-Key" "$(http POST "$pay_url" "$store_token" '{"method":"cash","amount":1000}')"
+expect_status 422 "a fractional payment is refused (integer VND)" "$(http POST "$pay_url" "$store_token" '{"method":"cash","amount":1000.5}' "Idempotency-Key: $(new_uuid)")"
+part=$(http POST "$pay_url" "$store_token" '{"method":"cash","amount":200000}' "Idempotency-Key: $(new_uuid)")
+expect_status 201 "a first payment of 200000 VND" "$part"
+expect_eq "$part" .paymentStatus partially_paid "partially paid"
+expect_eq "$part" .dueAmount 210000 "210000 VND still due"
+expect_status 409 "paying more than is due" "$(http POST "$pay_url" "$store_token" '{"method":"transfer","amount":300000}' "Idempotency-Key: $(new_uuid)")"
+final_pay=$(http POST "$pay_url" "$store_token" '{"method":"transfer","amount":210000}' "Idempotency-Key: $(new_uuid)")
+expect_status 201 "the last payment of 210000 VND" "$final_pay"
+expect_eq "$final_pay" .paymentStatus paid "paid"
+done_order=$(http GET "$sales/orders/$order_id" "$store_token")
+expect_eq "$done_order" .orderStatus completed "the order is completed once paid and delivered"
+expect_eq "$done_order" '.payments | length' 2 "two payments recorded"
+history=$(http GET "$sales/orders/$order_id/history?view=timeline" "$store_token")
+expect_status 200 "order history as a timeline" "$history"
 
-step "6d. Sales: a POS sale on the shift and a legacy-style order"
-pos_sale=$(http POST "$sales/orders" "$staff_token" "{\"branchId\":\"$q1\",\"source\":\"pos\",\"registerId\":\"$register_id\",\"items\":[{\"sku\":\"AO-S\",\"name\":\"Ao thun S\",\"quantity\":1,\"unitPrice\":150000}],\"payments\":[{\"method\":\"cash\",\"amount\":150000}]}" "Idempotency-Key: $(new_uuid)")
-expect_status 201 "a counter sale with cash on the register" "$pos_sale"
-expect_eq "$pos_sale" .orderStatus completed "the counter sale is completed"
-legacy=$(http POST "$sales/orders" "$staff_token" "{\"branchId\":\"$q1\",\"paymentMethod\":\"cash\",\"items\":[{\"sku\":\"AO-M\",\"name\":\"Ao thun M\",\"quantity\":1,\"unitPrice\":160000}]}" "Idempotency-Key: $(new_uuid)")
-expect_status 201 "a legacy-style order (old body) still works" "$legacy"
-expect_eq "$legacy" .orderStatus completed "the legacy order is completed"
-expect_eq "$legacy" .totalAmount 160000 "legacy total"
-wait_for "the stock of both sales was deducted (AO-S 12, AO-M 7)" \
-  count_is "select count(*) from inventory.stock_item where tenant_id='$tenant_id' and branch_id='$q1' and ((sku='AO-S' and quantity_on_hand=12) or (sku='AO-M' and quantity_on_hand=7)) and quantity_reserved=0" 2
-
-step "6e. Sales: order list, summary, history, print, export"
-olist=$(http GET "$sales/orders?orderStatus=completed&channel=pos&sort=totalAmount&order=DESC" "$store_token")
-expect_status 200 "orders filtered by status and channel" "$olist"
-expect_true "$olist" '(.data // .items) | length >= 1' "the counter sale is under channel pos"
-expect_true "$(http GET "$sales/orders?q=$(jv "$draft" .code)" "$store_token")" '(.data // .items) | length == 1' "search by order code"
-expect_true "$(http GET "$sales/orders?customerId=$customer_id" "$store_token")" '(.data // .items) | length == 1' "filter by customer"
-expect_status 200 "orders tab=processing" "$(http GET "$sales/orders?tab=processing" "$store_token")"
+step "6d. Sales: cancel releases the stock; list, summary, print, export; close the shift"
+cancel_order=$(http POST "$sales/orders/omnichannel" "$store_token" "{\"branchId\":\"$main_branch\",\"warehouseId\":\"$wh_main\",\"channelType\":\"MANUAL\",\"lines\":[{\"variantId\":\"$variant_s\",\"qty\":4}],\"autoConfirm\":true}" "Idempotency-Key: $(new_uuid)")
+expect_status 201 "a second order holds 4 AO-S" "$cancel_order"
+cancel_id=$(jv "$cancel_order" .id)
+wait_for "4 AO-S are reserved" get_is "$inventory/stock-levels?branchId=$main_branch" "$store_token" '[.data[] | select(.variantId == "'"$variant_s"'" and .reserved == 4)] | length == 1'
+expect_eq "$(http POST "$sales/orders/$cancel_id/cancel" "$store_token" '{"reason":"customer changed their mind"}')" .orderStatus CANCELLED "cancel the order"
+wait_for "the hold was released" get_is "$inventory/stock-levels?branchId=$main_branch" "$store_token" '[.data[] | select(.variantId == "'"$variant_s"'" and .reserved == 0 and .onHand == 8)] | length == 1'
+orders=$(http GET "$sales/orders?tab=completed" "$staff_token")
+expect_status 200 "order list, tab completed" "$orders"
+expect_true "$orders" '(.data // .items) | map(.id) | index("'"$order_id"'") != null' "the manual order is in the completed tab"
 osum=$(http GET "$sales/orders/summary" "$store_token")
-expect_status 200 "orders summary" "$osum"
-hist=$(http GET "$sales/orders/$order_id/history" "$store_token")
-expect_status 200 "order history" "$hist"
-expect_true "$hist" '(.data // .) | length >= 4' "history has the draft, confirm, pack, ship, complete steps"
-prt=$(http GET "$sales/orders/$order_id/print?type=receipt" "$store_token")
-expect_status 200 "print data" "$prt"
-expect_status 200 "orders export" "$(http GET "$sales/orders/export" "$store_token")"
-curl -s -H "Authorization: Bearer $store_token" "$sales/orders/export" | grep -q 'DH' || fail "the orders export has no order code"
-ok "the export is a CSV with the order codes"
-expect_status 404 "an unknown order" "$(http GET "$sales/orders/$(new_uuid)" "$store_token")"
-
-step "6f. Sales: close the shift"
-expect_status 422 "closing needs the counted cash" "$(http POST "$sales/shifts/$shift_id/close" "$staff_token" '{}')"
-closed=$(http POST "$sales/shifts/$shift_id/close" "$staff_token" '{"closingCashActual":650000,"note":"end of day"}')
-expect_status 200 "close the shift" "$closed"
-expect_eq "$closed" .closingCashExpected 650000 "expected cash = 500.000 opening + 150.000 cash sale"
-expect_eq "$closed" .difference 0 "no difference"
-expect_status 400 "closing again" "$(http POST "$sales/shifts/$shift_id/close" "$staff_token" '{"closingCashActual":1}')"
+expect_status 200 "order summary" "$osum"
+expect_status 200 "print an order" "$(http GET "$sales/orders/$order_id/print?type=receipt&paper=80mm" "$store_token")"
+ocsv=$(http GET "$sales/orders/export" "$store_token")
+expect_status 200 "order export (CSV)" "$ocsv"
+close=$(http POST "$sales/shifts/$shift_id/close" "$staff_token" "{\"version\":$(jv "$(http GET "$sales/shifts/current?registerId=$register_id" "$staff_token")" .version),\"closingCashActual\":740000}")
+expect_status 200 "close the shift: 500000 opening + 240000 cash sale" "$close"
+expect_eq "$close" .cashSales 240000 "the shift counted the cash sale"
+expect_status 404 "no shift is open any more" "$(http GET "$sales/shifts/current?registerId=$register_id" "$staff_token")"
 
 # ---------------------------------------------------------------------------------------------
 step "7. Events: customer totals and loyalty from sales.order.completed"
-total_is() { get_is "$customer/customers/$customer_id" "$store_token" '.totalSpent == 300000 and .orderCount == 1'; }
-wait_for "customer total_spent 300.000 and order_count 1" total_is
-cu=$(http GET "$customer/customers/$customer_id" "$store_token")
-expect_true "$cu" '.loyaltyPoints == 30' "30 loyalty points (300.000 / 10.000 per point)"
-expect_status 200 "loyalty transactions" "$(http GET "$customer/customers/$customer_id/loyalty-transactions" "$store_token")"
-adj=$(http POST "$customer/customers/$customer_id/loyalty-adjustments" "$store_token" '{"points":-5,"reason":"correction"}')
-expect_status 201 "adjust points by -5" "$adj"
-expect_status 400 "adjust below zero" "$(http POST "$customer/customers/$customer_id/loyalty-adjustments" "$store_token" '{"points":-500,"reason":"too much"}')"
+spent_is() { get_is "$customer/customers/$customer_id" "$store_token" '.totalSpent == 390000 and .orderCount == 1'; }
+wait_for "the customer totals picked up the order (390000 VND eligible, shipping excluded; 1 order)" spent_is
+expect_eq "$(http GET "$customer/customers/$customer_id" "$store_token")" .loyaltyPoints 54 "5 + 10 + 39 points (390000 / 10000, shipping earns nothing)"
 
-step "7b. Events: insight dashboard and reports"
+step "7b. Events: insight summaries"
 expect_status 200 "dashboard KPIs" "$(http GET "$insight/dashboard/kpis" "$store_token")"
-wait_for "KPIs show today's revenue (300.000 + 150.000 + 160.000)" get_is "$insight/dashboard/kpis" "$store_token" '(.revenue.value // .revenue.today // .revenue) >= 610000'
-expect_status 200 "a cashier can read the KPIs (sales_staff holds dashboard.view)" "$(http GET "$insight/dashboard/kpis" "$staff_token")"
-expect_status 403 "a cashier cannot read the daily report (reports.view)" "$(http GET "$insight/sales-summary/daily" "$staff_token")"
-hourly=$(http GET "$insight/sales-summary/hourly" "$store_token")
-expect_status 200 "hourly sales" "$hourly"
+wait_for "KPIs show today's revenue (240000 + 410000)" get_is "$insight/dashboard/kpis" "$store_token" '.revenue.value >= 650000'
+expect_status 200 "a sales_staff member can read the KPIs (dashboard.view)" "$(http GET "$insight/dashboard/kpis" "$staff_token")"
+expect_status 403 "a sales_staff member cannot read the daily report (reports.view)" "$(http GET "$insight/sales-summary/daily" "$staff_token")"
+daily=$(http GET "$insight/sales-summary/daily" "$store_token")
+expect_eq "$daily" .totals.orderCount 2 "daily summary: two completed orders"
+expect_eq "$daily" .totals.revenue 650000 "daily summary: 650000 VND"
+expect_true "$(http GET "$insight/sales-summary/daily?groupBy=day_channel" "$store_token")" '.data | map(.channel) | sort == ["manual","pos"]' "groupBy=day_channel splits pos and manual (the channel of sales.order.completed)"
 bych=$(http GET "$insight/sales-summary/by-channel" "$store_token")
-expect_status 200 "sales by channel" "$bych"
-expect_true "$bych" '(.data // .items // .channels) | map(select(.channel == "pos" or .type == "pos")) | length >= 1' "the counter sale is under pos"
+expect_status 200 "by channel" "$bych"
+expect_true "$bych" '(.data | map(.type) | sort == ["manual","pos"]) and ((.data[] | select(.type=="manual") | .revenue) == 410000)' "by-channel splits pos (240000) and manual (410000)"
+expect_status 200 "hourly" "$(http GET "$insight/sales-summary/hourly" "$store_token")"
+expect_status 200 "by branch" "$(http GET "$insight/sales-summary/by-branch" "$store_token")"
 top=$(http GET "$insight/sales-summary/top-products?limit=5" "$store_token")
 expect_status 200 "top products" "$top"
-expect_true "$top" '(.data // .items // .products) | map(.sku) | index("AO-S") != null' "AO-S is a top product"
 expect_status 200 "reports export (by_channel)" "$(http GET "$insight/reports/export?report=by_channel" "$store_token")"
 expect_status 200 "attention items" "$(http GET "$insight/attention-items" "$store_token")"
+expect_true "$top" '(.data // .items // .products) | map(.sku) | index("AO-M") != null' "AO-M is a top product"
 
-step "7c. Events: notifications and device tokens"
-unread_ok() { get_is "$insight/notifications/unread-count" "$store_token" '(.count // .unread // .data) >= 3'; }
-wait_for "the owner has unread notifications (3 orders + the staff grant)" unread_ok
+step "7c. Finance: cash account, cashbook, receivable and its payment"
+acct=$(http POST "$finance/cash-accounts" "$store_token" "{\"code\":\"CASH-$run\",\"name\":\"Quy tien mat\",\"accountType\":\"CASH_DRAWER\",\"branchId\":\"$main_branch\"}")
+expect_status 201 "create a cash account" "$acct"
+cash_account=$(jv "$acct" .id)
+receipt_v=$(http POST "$finance/cashbook/receipts" "$store_token" "{\"cashAccountId\":\"$cash_account\",\"amount\":500000,\"description\":\"Thu khac\",\"autoPost\":true,\"branchId\":\"$main_branch\"}")
+expect_status 201 "post a cashbook receipt of 500000 VND" "$receipt_v"
+expect_eq "$receipt_v" .status POSTED "posted"
+expense_v=$(http POST "$finance/cashbook/expenses" "$store_token" "{\"cashAccountId\":\"$cash_account\",\"amount\":100000,\"description\":\"Chi van phong pham\",\"autoPost\":true,\"branchId\":\"$main_branch\"}")
+expect_status 201 "post a cashbook expense of 100000 VND" "$expense_v"
+expect_status 422 "a fractional amount is refused (integer VND)" "$(http POST "$finance/cashbook/receipts" "$store_token" "{\"cashAccountId\":\"$cash_account\",\"amount\":100.5}")"
+expect_eq "$(http GET "$finance/cash-accounts/$cash_account" "$store_token")" .currentBalance 400000 "balance = 500000 - 100000"
+entries=$(http GET "$finance/cashbook/entries?cashAccountId=$cash_account" "$store_token")
+expect_status 200 "cashbook entries" "$entries"
+expect_eq "$entries" '.data | length' 2 "two entries"
+recv=$(http POST "$finance/receivables" "$store_token" "{\"customerId\":\"$customer_id\",\"amount\":300000,\"orderId\":\"$order_id\"}" "Idempotency-Key: $(new_uuid)")
+expect_status 201 "recognise a receivable of 300000 VND for the customer" "$recv"
+receivable_id=$(jv "$recv" .id)
+expect_eq "$(http GET "$finance/customers/$customer_id/debt" "$store_token")" .postedDebt 300000 "the customer owes 300000 VND"
+paid=$(http POST "$finance/receivables/$receivable_id/payments" "$store_token" "{\"amount\":100000,\"paymentMethod\":\"CASH\",\"cashAccountId\":\"$cash_account\"}" "Idempotency-Key: $(new_uuid)")
+expect_status 200 "the customer pays 100000 VND" "$paid"
+expect_eq "$(http GET "$finance/receivables/$receivable_id" "$store_token")" .outstandingAmount 200000 "200000 VND outstanding"
+expect_eq "$(http GET "$finance/summary" "$store_token")" .receivables.totalOpenCustomerDebt 200000 "the finance summary agrees"
+
+step "7d. Events: notifications and device tokens"
+unread_ok() { get_is "$insight/notifications/unread-count" "$store_token" '(.count // .unread // .data) >= 1'; }
+wait_for "the owner has unread notifications" unread_ok
 unread=$(jv "$(http GET "$insight/notifications/unread-count" "$store_token")" '(.count // .unread // .data)')
 notes=$(http GET "$insight/notifications?unread=true" "$store_token")
 expect_status 200 "list unread notifications" "$notes"
@@ -561,10 +576,10 @@ expect_status 204 "remove the device token" "$(http DELETE "$insight/device-toke
 expect_status 204 "removing it again is harmless" "$(http DELETE "$insight/device-tokens/$device" "$staff_token")"
 
 step "8. Nothing got stuck"
-for svc in platform sales inventory customer insight catalog; do
+for svc in platform catalog sales inventory customer finance insight; do
   exists=$(psql_count "select count(*) from information_schema.tables where table_schema='$svc' and table_name='outbox_event'")
   [[ "$exists" == "1" ]] || continue
-  failed=$(psql_count "select count(*) from $svc.outbox_event where failed_at is not null")
+  failed=$(psql_count "select count(*) from $svc.outbox_event where failed_at is not null and tenant_id='$tenant_id'")
   [[ "$failed" == "0" ]] || fail "$failed outbox event(s) could not be published ($svc)"
   ok "no outbox event failed ($svc)"
 done

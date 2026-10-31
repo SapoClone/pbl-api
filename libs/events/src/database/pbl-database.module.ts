@@ -104,3 +104,89 @@ export class PblDatabaseModule {
     };
   }
 }
+
+/**
+ * Idempotently provisions a non-superuser, NOBYPASSRLS runtime role restricted
+ * to a single service schema (ADR-0002, ADR-0011).
+ */
+export async function provisionServiceRole(
+  queryable: { query: DataSource['query'] },
+  schema: string,
+  roleName = `${schema}_app`,
+  otherSchemas: string[] = [],
+): Promise<string> {
+  await queryable.query(
+    `
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${quoteLiteral(roleName)}) THEN
+        EXECUTE format(
+          'CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS',
+          ${quoteLiteral(roleName)},
+          ${quoteLiteral(roleName)}
+        );
+      ELSE
+        EXECUTE format(
+          'ALTER ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS',
+          ${quoteLiteral(roleName)},
+          ${quoteLiteral(roleName)}
+        );
+      END IF;
+    END
+    $$;
+    `,
+  );
+  await queryable.query(`REVOKE ALL ON SCHEMA "${schema}" FROM PUBLIC`);
+  for (const other of otherSchemas) {
+    if (other !== schema) {
+      await queryable.query(
+        `REVOKE ALL ON SCHEMA "${other}" FROM "${roleName}"`,
+      );
+    }
+  }
+  await queryable.query(`GRANT USAGE ON SCHEMA "${schema}" TO "${roleName}"`);
+  await queryable.query(
+    `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "${schema}" TO "${roleName}"`,
+  );
+  await queryable.query(
+    `GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA "${schema}" TO "${roleName}"`,
+  );
+  await queryable.query(
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA "${schema}" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${roleName}"`,
+  );
+  await queryable.query(
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA "${schema}" GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "${roleName}"`,
+  );
+  return roleName;
+}
+
+/**
+ * Enables and forces PostgreSQL Row-Level Security on a tenant-owned table using
+ * the fail-closed `app.tenant_id` transaction-local setting (ADR-0011).
+ */
+export async function enableTenantRlsPolicy(
+  queryable: { query: DataSource['query'] },
+  qualifiedTableName: string,
+  policyName = 'tenant_isolation_policy',
+): Promise<void> {
+  await queryable.query(
+    `ALTER TABLE ${qualifiedTableName} ENABLE ROW LEVEL SECURITY`,
+  );
+  await queryable.query(
+    `ALTER TABLE ${qualifiedTableName} FORCE ROW LEVEL SECURITY`,
+  );
+  await queryable.query(
+    `DROP POLICY IF EXISTS "${policyName}" ON ${qualifiedTableName}`,
+  );
+  await queryable.query(
+    `
+    CREATE POLICY "${policyName}" ON ${qualifiedTableName}
+      USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+      WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+    `,
+  );
+}
+
+function quoteLiteral(val: string): string {
+  return `'${val.replace(/'/g, "''")}'`;
+}

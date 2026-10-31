@@ -6,15 +6,11 @@ import {
   PrimaryColumn,
   Relation,
 } from 'typeorm';
+import { discountValueTransformer, moneyTransformer } from '../../common/money';
 import { OrderItemEntity } from './order-item.entity';
-import type { OrderPaymentEntity } from './order-payment.entity';
 
-/** bigint columns come back as strings; money is integer VND (api-conventions §3) */
-export const bigintNumber = {
-  to: (value?: number) => value,
-  from: (value?: string | null) =>
-    value === null || value === undefined ? value : Number(value),
-};
+/** Kept for existing imports: bigint money columns share the service's money transformer */
+export const bigintNumber = moneyTransformer;
 
 @Entity('orders')
 @Index('UQ_orders_tenant_code', ['tenantId', 'code'], { unique: true })
@@ -68,205 +64,330 @@ export class OrderEntity {
   @Column({ name: 'request_hash', type: 'varchar', length: 64, nullable: true })
   requestHash!: string | null;
 
-  @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
-  createdAt!: Date;
+  @Column({ name: 'channel_type', type: 'varchar', length: 24, default: 'POS' })
+  channelType?: string;
 
-  /** `payment_status`, `fulfillment_status`: only sales writes them (ADR-0010) */
+  @Column({ name: 'channel_id', type: 'uuid', nullable: true })
+  channelId?: string | null;
+
+  @Column({
+    name: 'source_connection_id',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
+  sourceConnectionId?: string | null;
+
+  @Column({
+    name: 'external_order_id',
+    type: 'varchar',
+    length: 128,
+    nullable: true,
+  })
+  externalOrderId?: string | null;
+
+  @Column({ name: 'warehouse_id', type: 'uuid', nullable: true })
+  warehouseId?: string | null;
+
+  @Column({ name: 'customer_id', type: 'uuid', nullable: true })
+  customerId?: string | null;
+
+  @Column({ name: 'shift_id', type: 'uuid', nullable: true })
+  shiftId?: string | null;
+
+  @Column({
+    name: 'order_status',
+    type: 'varchar',
+    length: 24,
+    default: 'COMPLETED',
+  })
+  orderStatus?: string;
+
   @Column({
     name: 'payment_status',
     type: 'varchar',
-    length: 20,
-    default: 'unpaid',
+    length: 24,
+    default: 'PAID',
   })
-  paymentStatus!: string;
+  paymentStatus?: string;
 
   @Column({
     name: 'fulfillment_status',
     type: 'varchar',
-    length: 20,
-    default: 'unfulfilled',
+    length: 24,
+    default: 'FULFILLED',
   })
-  fulfillmentStatus!: string;
-
-  /** `sku_unmapped` or `stock_shortage` while the order needs action */
-  @Column({
-    name: 'exception_code',
-    type: 'varchar',
-    length: 30,
-    nullable: true,
-  })
-  exceptionCode!: string | null;
-
-  /** `pos` or `manual` (marketplace orders arrive later) */
-  @Column({ type: 'varchar', length: 20, default: 'pos' })
-  source!: string;
-
-  /** Stable code of the sales channel (`pos`, `manual`, `website`, ...) */
-  @Column({ type: 'varchar', length: 30, default: 'pos' })
-  channel!: string;
-
-  /** Bare id of a customer-service customer */
-  @Column({ name: 'customer_id', type: 'uuid', nullable: true })
-  customerId!: string | null;
+  fulfillmentStatus?: string;
 
   @Column({
-    name: 'customer_phone',
-    type: 'varchar',
-    length: 20,
-    nullable: true,
-  })
-  customerPhone!: string | null;
-
-  @Column({
-    name: 'shipping_recipient',
-    type: 'varchar',
-    length: 150,
-    nullable: true,
-  })
-  shippingRecipient!: string | null;
-
-  @Column({
-    name: 'shipping_phone',
-    type: 'varchar',
-    length: 20,
-    nullable: true,
-  })
-  shippingPhone!: string | null;
-
-  @Column({
-    name: 'shipping_address_line',
-    type: 'varchar',
-    length: 250,
-    nullable: true,
-  })
-  shippingAddressLine!: string | null;
-
-  @Column({
-    name: 'shipping_ward',
-    type: 'varchar',
-    length: 100,
-    nullable: true,
-  })
-  shippingWard!: string | null;
-
-  @Column({
-    name: 'shipping_district',
-    type: 'varchar',
-    length: 100,
-    nullable: true,
-  })
-  shippingDistrict!: string | null;
-
-  @Column({
-    name: 'shipping_province',
-    type: 'varchar',
-    length: 100,
-    nullable: true,
-  })
-  shippingProvince!: string | null;
-
-  @Column({
-    name: 'shipping_provider_code',
-    type: 'varchar',
-    length: 30,
-    nullable: true,
-  })
-  shippingProviderCode!: string | null;
-
-  @Column({
-    name: 'tracking_code',
-    type: 'varchar',
-    length: 60,
-    nullable: true,
-  })
-  trackingCode!: string | null;
-
-  /** `customer` or `shop` */
-  @Column({
-    name: 'shipping_fee_payer',
-    type: 'varchar',
-    length: 10,
-    nullable: true,
-  })
-  shippingFeePayer!: string | null;
-
-  @Column({
+    name: 'subtotal',
     type: 'bigint',
     default: 0,
-    transformer: bigintNumber,
+    transformer: moneyTransformer,
   })
-  subtotal!: number;
+  subtotal?: number;
 
   @Column({
-    name: 'discount_amount',
+    name: 'item_discount_total',
     type: 'bigint',
     default: 0,
-    transformer: bigintNumber,
+    transformer: moneyTransformer,
   })
-  discountAmount!: number;
+  itemDiscountTotal?: number;
+
+  @Column({
+    name: 'order_discount_type',
+    type: 'varchar',
+    length: 16,
+    default: 'NONE',
+  })
+  orderDiscountType?: string;
+
+  /** FIXED: whole VND; PERCENT: a percentage */
+  @Column({
+    name: 'order_discount_value',
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    default: 0,
+    transformer: discountValueTransformer,
+  })
+  orderDiscountValue?: number;
+
+  @Column({
+    name: 'order_discount_total',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  orderDiscountTotal?: number;
+
+  @Column({
+    name: 'promotion_discount_total',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  promotionDiscountTotal?: number;
+
+  @Column({ name: 'coupon_code', type: 'varchar', length: 64, nullable: true })
+  couponCode?: string | null;
 
   @Column({
     name: 'shipping_fee',
     type: 'bigint',
     default: 0,
-    transformer: bigintNumber,
+    transformer: moneyTransformer,
   })
-  shippingFee!: number;
+  shippingFee?: number;
+
+  @Column({
+    name: 'tax_total',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  taxTotal?: number;
+
+  @Column({
+    name: 'grand_total',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
+  })
+  grandTotal?: number;
 
   @Column({
     name: 'paid_amount',
     type: 'bigint',
     default: 0,
-    transformer: bigintNumber,
+    transformer: moneyTransformer,
   })
-  paidAmount!: number;
+  paidAmount?: number;
 
-  /** Cash handed back at a POS checkout (paid more than the total) */
   @Column({
-    name: 'change_amount',
+    name: 'refunded_amount',
     type: 'bigint',
     default: 0,
-    transformer: bigintNumber,
+    transformer: moneyTransformer,
   })
-  changeAmount!: number;
+  refundedAmount?: number;
 
-  @Column({ type: 'text', nullable: true })
-  note!: string | null;
+  @Column({ name: 'currency', type: 'varchar', length: 8, default: 'VND' })
+  currency?: string;
 
-  @Column({ name: 'cancel_reason', type: 'text', nullable: true })
-  cancelReason!: string | null;
+  @Column({ name: 'reservation_id', type: 'uuid', nullable: true })
+  reservationId?: string | null;
+
+  @Column({ name: 'note', type: 'text', nullable: true })
+  note?: string | null;
 
   @Column({
-    name: 'external_order_code',
+    name: 'cancel_reason',
     type: 'varchar',
-    length: 60,
+    length: 255,
     nullable: true,
   })
-  externalOrderCode!: string | null;
+  cancelReason?: string | null;
 
-  /** Optimistic lock: every write through an action bumps it */
-  @Column({ type: 'int', default: 1 })
-  version!: number;
+  @Column({ name: 'version', type: 'int', default: 1 })
+  version?: number;
 
-  @Column({ name: 'shift_id', type: 'uuid', nullable: true })
-  shiftId!: string | null;
-
-  @Column({ name: 'register_id', type: 'uuid', nullable: true })
-  registerId!: string | null;
-
-  /** True while inventory holds this order's stock (so cancel knows to release) */
-  @Column({ name: 'stock_reserved', type: 'boolean', default: false })
-  stockReserved!: boolean;
+  @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
+  createdAt!: Date;
 
   @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
-  updatedAt!: Date;
+  updatedAt?: Date;
 
   @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
-  completedAt!: Date | null;
+  completedAt?: Date | null;
+
+  @Column({ name: 'cancelled_at', type: 'timestamptz', nullable: true })
+  cancelledAt?: Date | null;
+
+  /** `PACKING` or `SHIPPING` while the order is being handed over; null before and after (screen contract) */
+  @Column({
+    name: 'fulfillment_stage',
+    type: 'varchar',
+    length: 16,
+    nullable: true,
+  })
+  fulfillmentStage?: string | null;
+
+  /** `sku_unmapped` or `stock_shortage` while a marketplace order needs a human */
+  @Column({
+    name: 'exception_code',
+    type: 'varchar',
+    length: 32,
+    nullable: true,
+  })
+  exceptionCode?: string | null;
 
   @OneToMany(() => OrderItemEntity, (item) => item.order)
   items?: Relation<OrderItemEntity[]>;
+}
 
-  @OneToMany('OrderPaymentEntity', 'order')
-  payments?: Relation<OrderPaymentEntity[]>;
+export type CheckoutWorkflowState =
+  | 'PENDING_STOCK'
+  | 'RESERVING'
+  | 'RESERVING_STOCK'
+  | 'STOCK_RESERVED'
+  | 'AWAITING_PAYMENT'
+  | 'COMMITTING_STOCK'
+  | 'FINALIZING'
+  | 'CONFIRMED'
+  | 'COMPLETED'
+  | 'RECOVERY_PENDING'
+  | 'REQUIRES_RECONCILIATION'
+  | 'REJECTED'
+  | 'CANCELLED';
+
+export interface CheckoutWorkflowLine {
+  variantId: string;
+  sku: string;
+  name: string;
+  qty: string;
+  unitPrice: number;
+}
+
+@Entity('checkout_workflow')
+@Index(
+  'UQ_checkout_workflow_tenant_idempotency',
+  ['tenantId', 'idempotencyKey'],
+  { unique: true },
+)
+export class CheckoutWorkflowEntity {
+  @PrimaryColumn({
+    type: 'uuid',
+    primaryKeyConstraintName: 'PK_checkout_workflow_id',
+  })
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ name: 'idempotency_key', type: 'varchar', length: 128 })
+  idempotencyKey!: string;
+
+  @Column({ name: 'request_sha256', type: 'char', length: 64 })
+  requestSha256!: string;
+
+  @Column({ name: 'branch_id', type: 'uuid' })
+  branchId!: string;
+
+  @Column({ name: 'warehouse_id', type: 'uuid' })
+  warehouseId!: string;
+
+  @Column({ name: 'payment_method', type: 'varchar', length: 32 })
+  paymentMethod!: string;
+
+  @Column({
+    name: 'customer_name',
+    type: 'varchar',
+    length: 120,
+    nullable: true,
+  })
+  customerName!: string | null;
+
+  @Column({ name: 'lines_json', type: 'jsonb' })
+  linesJson!: CheckoutWorkflowLine[];
+
+  @Column({
+    name: 'total_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  totalAmount!: number;
+
+  @Column({ name: 'state', type: 'varchar', length: 32 })
+  state!: CheckoutWorkflowState;
+
+  @Column({
+    name: 'reservation_idempotency_key',
+    type: 'varchar',
+    length: 128,
+  })
+  reservationIdempotencyKey!: string;
+
+  @Column({ name: 'reservation_id', type: 'uuid', nullable: true })
+  reservationId!: string | null;
+
+  @Column({ name: 'order_id', type: 'uuid', nullable: true })
+  orderId!: string | null;
+
+  @Column({ name: 'last_error', type: 'text', nullable: true })
+  lastError!: string | null;
+
+  @Column({ name: 'shift_id', type: 'uuid', nullable: true })
+  shiftId?: string | null;
+
+  @Column({ name: 'draft_id', type: 'uuid', nullable: true })
+  draftId?: string | null;
+
+  @Column({ name: 'customer_id', type: 'uuid', nullable: true })
+  customerId?: string | null;
+
+  @Column({ name: 'coupon_code', type: 'varchar', length: 64, nullable: true })
+  couponCode?: string | null;
+
+  @Column({ name: 'quote_json', type: 'jsonb', nullable: true })
+  quoteJson?: unknown | null;
+
+  @Column({ name: 'tenders_json', type: 'jsonb', nullable: true })
+  tendersJson?: unknown | null;
+
+  @Column({ name: 'commit_confirmed', type: 'boolean', default: false })
+  commitConfirmed?: boolean;
+
+  @Column({ name: 'retry_count', type: 'int', default: 0 })
+  retryCount?: number;
+
+  @Column({ name: 'created_by', type: 'uuid' })
+  createdBy!: string;
+
+  @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
+  createdAt!: Date;
+
+  @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
+  updatedAt!: Date;
 }

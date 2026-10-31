@@ -2,25 +2,34 @@ import { Module } from '@nestjs/common';
 import { PblPropagationModule, TenancyModule } from '@pbl/common';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
 import { BranchProjectionHandler } from '../branches/branch-projection.handler';
-import { CodeSequenceService } from '../common/code-sequence.service';
 import { readInventoryUrl } from '../config/sales.config';
+import { CatalogClient } from '../infrastructure/catalog-client/catalog.client';
+import { M3_SALES_ENTITIES } from '../infrastructure/persistence/sales.entities';
+import { InternalOrdersController } from '../internal/internal-orders.controller';
 import { InventoryClient } from '../inventory/inventory.client';
-import { ReferenceController } from '../reference/reference.controller';
-import { ReferenceService } from '../reference/reference.service';
-import { SalesChannelEntity } from '../reference/sales-channel.entity';
-import { ShippingProviderEntity } from '../reference/shipping-provider.entity';
-import { RegisterEntity } from '../registers/register.entity';
-import { RegistersController } from '../registers/registers.controller';
-import { RegistersService } from '../registers/registers.service';
-import { ShiftEntity } from '../shifts/shift.entity';
-import { ShiftsController } from '../shifts/shifts.controller';
-import { ShiftsService } from '../shifts/shifts.service';
+import { CheckoutController } from '../modules/checkout/checkout.controller';
+import { CheckoutService } from '../modules/checkout/checkout.service';
+import { FulfillmentController } from '../modules/fulfillment/fulfillment.controller';
+import { FulfillmentService } from '../modules/fulfillment/fulfillment.service';
+import { M3OrdersController } from '../modules/orders/m3-orders.controller';
+import { M3OrdersService } from '../modules/orders/m3-orders.service';
+import { PosController } from '../modules/pos/pos.controller';
+import { PosService } from '../modules/pos/pos.service';
+import { PromotionsController } from '../modules/promotions/promotions.controller';
+import { PromotionsService } from '../modules/promotions/promotions.service';
+import { ReferenceController } from '../modules/reference/reference.controller';
+import { ReferenceService } from '../modules/reference/reference.service';
+import { ReturnsController } from '../modules/returns/returns.controller';
+import { ReturnsService } from '../modules/returns/returns.service';
+import { OrderActionsService } from '../modules/screen/order-actions.service';
+import { OrderQueryService } from '../modules/screen/order-query.service';
+import { OrderViewsController } from '../modules/screen/order-views.controller';
+import { ScreenShiftsController } from '../modules/screen/screen-shifts.controller';
+import { ShiftViewService } from '../modules/screen/shift-view.service';
+import { ShiftsController } from '../modules/shifts/shifts.controller';
+import { ShiftsService } from '../modules/shifts/shifts.service';
 import { OrderItemEntity } from './entities/order-item.entity';
-import { OrderPaymentEntity } from './entities/order-payment.entity';
-import { OrderStatusHistoryEntity } from './entities/order-status-history.entity';
-import { OrderEntity } from './entities/order.entity';
-import { OrderActionsService } from './order-actions.service';
-import { OrderQueryService } from './order-query.service';
+import { CheckoutWorkflowEntity, OrderEntity } from './entities/order.entity';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 
@@ -33,31 +42,53 @@ import { OrdersService } from './orders.service';
     TenancyModule.forFeature([
       OrderEntity,
       OrderItemEntity,
-      OrderPaymentEntity,
-      OrderStatusHistoryEntity,
+      CheckoutWorkflowEntity,
       BranchProjectionEntity,
-      SalesChannelEntity,
-      ShippingProviderEntity,
-      RegisterEntity,
-      ShiftEntity,
+      ...M3_SALES_ENTITIES,
     ]),
   ],
   controllers: [
-    // fixed-path controllers first: `shifts/current` etc. never meet a `:id`
-    ReferenceController,
-    RegistersController,
-    ShiftsController,
+    // before OrdersController: `/orders/summary` and `/orders/export` are not order ids
+    OrderViewsController,
     OrdersController,
+    M3OrdersController,
+    ShiftsController,
+    PosController,
+    CheckoutController,
+    ReturnsController,
+    FulfillmentController,
+    PromotionsController,
+    ReferenceController,
+    ScreenShiftsController,
+    InternalOrdersController,
   ],
   providers: [
-    OrdersService,
-    OrderActionsService,
     OrderQueryService,
+    OrderActionsService,
+    ShiftViewService,
     ReferenceService,
-    RegistersService,
+    OrdersService,
+    M3OrdersService,
     ShiftsService,
-    CodeSequenceService,
+    PosService,
+    CheckoutService,
+    ReturnsService,
+    FulfillmentService,
+    PromotionsService,
+    CatalogClient,
     BranchProjectionHandler,
+    InventoryClient,
+  ],
+  exports: [
+    OrdersService,
+    M3OrdersService,
+    ShiftsService,
+    PosService,
+    CheckoutService,
+    ReturnsService,
+    FulfillmentService,
+    PromotionsService,
+    CatalogClient,
     InventoryClient,
   ],
 })

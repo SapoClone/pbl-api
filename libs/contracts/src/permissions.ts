@@ -14,6 +14,7 @@ export const PERMISSION_CATALOG = {
   purchasing: ['view', 'create', 'update', 'delete', 'approve'],
   staff: ['view', 'create', 'update', 'delete'],
   reports: ['view'],
+  finance: ['view', 'create', 'update', 'approve'],
   settings: ['view', 'update'],
 } as const;
 
@@ -130,6 +131,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     'customers.view',
     'customers.create',
     'customers.update',
+    'finance.view',
+    'finance.create',
   ],
   warehouse_staff: [
     'dashboard.view',
@@ -149,5 +152,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     'purchasing.view',
     'purchasing.update',
     'reports.view',
+    'finance.view',
+    'finance.create',
+    'finance.update',
+    'finance.approve',
   ],
 };

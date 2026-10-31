@@ -65,6 +65,40 @@ const assertSameTenant = (value: unknown, tenantId: string, what: string) => {
 const EMPTY_WRITE = { raw: [], affected: 0, generatedMaps: [] };
 
 /**
+ * Sets PostgreSQL transaction-local `app.tenant_id` (`is_local = true`) so
+ * Row-Level Security policies evaluate against the active tenant for the
+ * lifetime of the current transaction only (ADR-0011).
+ */
+export async function setLocalTenantContext(
+  manager: { query?: EntityManager['query'] },
+  tenantId: string = TenantContext.require(),
+): Promise<string> {
+  if (typeof manager.query === 'function') {
+    await manager.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+      tenantId,
+    ]);
+  }
+  return tenantId;
+}
+
+/**
+ * Runs `work` inside a database transaction with `app.tenant_id` bound
+ * transaction-locally (`set_config('app.tenant_id', tenantId, true)`).
+ * Throws `MissingTenantContextError` before opening a transaction if no
+ * tenant is active in `TenantContext`.
+ */
+export async function runInTenantTransaction<R>(
+  source: Pick<DataSource | EntityManager, 'transaction'>,
+  work: (em: EntityManager, tenantId: string) => Promise<R>,
+): Promise<R> {
+  const tenantId = TenantContext.require();
+  return source.transaction(async (em) => {
+    await setLocalTenantContext(em, tenantId);
+    return work(em, tenantId);
+  });
+}
+
+/**
  * Data access for an entity with a `tenantId` column, scoped to
  * TenantContext.require() (ADR-0008, Jira SCRUM-32):
  *
@@ -109,14 +143,19 @@ export class TenantScopedRepository<T extends TenantOwned> {
   /**
    * Runs `work` in a transaction, with this wrapper bound to it (`scoped`)
    * and the transaction's EntityManager (`em`, unscoped: for other entities,
-   * locks, ...).
+   * locks, ...). Automatically sets transaction-local `app.tenant_id` when
+   * `em.query` is available and a tenant context is active.
    */
   transaction<R>(
     work: (scoped: TenantScopedRepository<T>, em: EntityManager) => Promise<R>,
   ): Promise<R> {
-    return this.repository.manager.transaction((em) =>
-      work(this.withManager(em), em),
-    );
+    const tenantId = TenantContext.current();
+    return this.repository.manager.transaction(async (em) => {
+      if (tenantId) {
+        await setLocalTenantContext(em, tenantId);
+      }
+      return work(this.withManager(em), em);
+    });
   }
 
   async find(options: FindManyOptions<T> = {}): Promise<T[]> {

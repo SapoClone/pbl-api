@@ -41,6 +41,21 @@ export class EventOutbox {
     return envelope;
   }
 
+  async enqueue<P>(
+    manager: EntityManager,
+    event: EventDefinition,
+    params: {
+      tenantId: string;
+      aggregateId?: string;
+      actor?: { id: string; type: string };
+      payload: P;
+    },
+  ): Promise<EventEnvelope<P>> {
+    return this.add(manager, event, params.payload, {
+      tenantId: params.tenantId,
+    });
+  }
+
   private envelopeFor<P>(
     tenantId: string,
     event: EventDefinition,

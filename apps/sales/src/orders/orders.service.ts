@@ -3,53 +3,52 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   InjectTenantScopedRepository,
   TenantContext,
   TenantScopedRepository,
 } from '@pbl/common';
-import { SALES_ORDER_COMPLETED } from '@pbl/contracts';
+import { OrderCompletedPayload, SALES_ORDER_COMPLETED } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
 import { createHash, randomUUID } from 'crypto';
-import { EntityManager, QueryFailedError } from 'typeorm';
+import { In, QueryFailedError } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
-import { assertBranchInScope, BranchScope } from '../common/branch-scope';
+import { completedEventExtras } from '../common/order-events';
 import {
-  CodeSequenceService,
-  ORDER_CODE_START,
-  orderCode,
-} from '../common/code-sequence.service';
-import { SalesErrorCode } from '../common/errors';
-import { InventoryClient } from '../inventory/inventory.client';
-import { RegisterEntity } from '../registers/register.entity';
-import { ShiftEntity } from '../shifts/shift.entity';
+  InventoryClient,
+  InventoryClientErrorCode,
+} from '../inventory/inventory.client';
 import {
+  BranchScope,
+  assertBranchAllowed,
+  branchAllowed,
+  branchFilter,
+} from '../presentation/access';
+import {
+  CreateCheckoutReqDto,
   CreateOrderReqDto,
-  OrderFieldsReqDto,
-  OrderLineReqDto,
-  PaymentReqDto,
-  ShippingReqDto,
-  UpdateOrderReqDto,
 } from './dto/create-order.req.dto';
 import { ListOrdersReqDto } from './dto/list-orders.req.dto';
 import { OrderRes, toOrderRes } from './dto/order.res';
 import { OrderItemEntity } from './entities/order-item.entity';
-import { OrderPaymentEntity } from './entities/order-payment.entity';
-import { OrderStatusHistoryEntity } from './entities/order-status-history.entity';
-import { OrderEntity } from './entities/order.entity';
 import {
-  applyShipping,
-  computeMoney,
-  OrderStatus,
-  paymentStatusOf,
-  planPayments,
-  shippingOf,
-} from './order-calc';
-import { completedPayload, HistoryInput, historyRows } from './order-events';
-import { buildOrderWhere } from './order-filters';
+  CheckoutWorkflowEntity,
+  CheckoutWorkflowLine,
+  CheckoutWorkflowState,
+  OrderEntity,
+} from './entities/order.entity';
 
-export { SalesErrorCode };
+/** Error codes of this service (a domain letter plus 3 digits, api-conventions §6) */
+export const SalesErrorCode = {
+  UNKNOWN_BRANCH: 'S001',
+  IDEMPOTENCY_KEY_REQUIRED: 'S002',
+  IDEMPOTENCY_KEY_REUSED: 'S003',
+  OUT_OF_STOCK: 'S004',
+  CHECKOUT_RECOVERY_PENDING: InventoryClientErrorCode.TIMEOUT_RECOVERY_PENDING,
+} as const;
 
 /** The order id derives from the key, so a racing retry can hit the primary key first */
 const ORDER_PRIMARY_KEY = 'PK_orders_id';
@@ -72,34 +71,65 @@ export interface CreateOrderResult {
   replayed: boolean;
 }
 
+export interface CheckoutWorkflowResponse {
+  checkoutId: string;
+  tenantId: string;
+  branchId: string;
+  warehouseId: string;
+  state: CheckoutWorkflowState;
+  reservationIdempotencyKey: string;
+  reservationId: string | null;
+  orderId: string | null;
+  order?: OrderRes;
+  replayed: boolean;
+}
+
 /** What identifies a request: the same key with another body is a client bug */
 export function hashRequest(dto: CreateOrderReqDto): string {
-  const identity: Record<string, unknown> = {
-    branchId: dto.branchId,
-    paymentMethod: dto.paymentMethod,
-    customerName: dto.customerName ?? null,
-    items: dto.items.map((i) => [i.sku, i.name, i.quantity, i.unitPrice]),
-  };
-  // new fields count only when sent, so a legacy body hashes as it always did
-  for (const key of [
-    'orderStatus',
-    'source',
-    'channel',
-    'customerId',
-    'customerPhone',
-    'registerId',
-    'shiftId',
-    'shipping',
-    'discountAmount',
-    'payments',
-    'note',
-  ] as const) {
-    if (dto[key] !== undefined) identity[key] = dto[key];
-  }
-  const withVariants = dto.items.some((i) => i.variantId !== undefined);
-  if (withVariants)
-    identity['variants'] = dto.items.map((i) => i.variantId ?? null);
-  return createHash('sha256').update(JSON.stringify(identity)).digest('hex');
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        branchId: dto.branchId,
+        paymentMethod: dto.paymentMethod,
+        customerName: dto.customerName ?? null,
+        items: dto.items.map((i) => [i.sku, i.name, i.quantity, i.unitPrice]),
+      }),
+    )
+    .digest('hex');
+}
+
+export function hashCheckoutRequest(dto: CreateCheckoutReqDto): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        branchId: dto.branchId,
+        warehouseId: dto.warehouseId,
+        paymentMethod: dto.paymentMethod,
+        customerName: dto.customerName ?? null,
+        items: dto.items.map((i) => [
+          i.variantId,
+          i.sku,
+          i.name,
+          i.qty,
+          i.unitPrice,
+        ]),
+      }),
+    )
+    .digest('hex');
+}
+
+/**
+ * Deterministic reservation idempotency key derived from `(tenantId, checkoutIdempotencyKey)`.
+ * Ensures timeout recovery replays the exact same reservation key without double-reserving stock.
+ */
+export function reservationIdempotencyKeyFor(
+  tenantId: string,
+  checkoutIdempotencyKey: string,
+): string {
+  const h = createHash('sha256')
+    .update(`rsv:${tenantId}:${checkoutIdempotencyKey}`)
+    .digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
 /** A stable UUID for the order of this tenant and key (the hold is keyed by it) */
@@ -110,36 +140,12 @@ function orderIdFor(tenantId: string, idempotencyKey: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
-/** Another request with the same Idempotency-Key committed first */
-class IdempotencyRace extends Error {}
-
-export function outOfStock(shortages: unknown[]): ConflictException {
-  return new ConflictException({
-    errorCode: SalesErrorCode.OUT_OF_STOCK,
-    message: 'Not enough stock for this order',
-    details: shortages,
-  });
-}
-
-export function versionConflict(): ConflictException {
-  return new ConflictException({
-    errorCode: SalesErrorCode.VERSION_CONFLICT,
-    message: 'The order changed since it was read; reload and retry',
-  });
-}
-
-/** Everything an order write needs, from a create request or a merged draft edit */
-interface Spec extends OrderFieldsReqDto {
-  items: OrderLineReqDto[];
-  paymentMethod?: string;
-}
-
 /**
- * Sells at the counter and takes orders: the order, its lines, payments, status
- * history and (for a completed order) the `sales.order.completed` event commit in
- * one transaction. Every read and write is scoped to the token's store by
- * TenantScopedRepository (ADR-0008). Creating is idempotent per `Idempotency-Key`,
- * so a client that retries on a bad network never sells twice.
+ * Sells at the counter: the order, its lines and the `sales.order.completed`
+ * event commit in one transaction. Every read and write is scoped to the
+ * token's store by TenantScopedRepository (ADR-0008). Creating is idempotent
+ * per `Idempotency-Key`, so a client that retries on a bad network never sells
+ * twice.
  */
 @Injectable()
 export class OrdersService {
@@ -150,249 +156,305 @@ export class OrdersService {
     private readonly branches: TenantScopedRepository<BranchProjectionEntity>,
     private readonly outbox: EventOutbox,
     private readonly inventory: InventoryClient,
-    private readonly codes: CodeSequenceService,
-    @InjectTenantScopedRepository(RegisterEntity)
-    private readonly registers: TenantScopedRepository<RegisterEntity>,
-    @InjectTenantScopedRepository(ShiftEntity)
-    private readonly shifts: TenantScopedRepository<ShiftEntity>,
+    @Optional()
+    @InjectTenantScopedRepository(CheckoutWorkflowEntity)
+    private readonly checkouts?: TenantScopedRepository<CheckoutWorkflowEntity>,
   ) {}
 
   async create(
     accountId: string,
+    scope: BranchScope,
     idempotencyKey: string,
     dto: CreateOrderReqDto,
-    scope: BranchScope = null,
   ): Promise<CreateOrderResult> {
-    assertBranchInScope(scope, dto.branchId);
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'ORDER_NOT_FOUND',
+      'Branch not found',
+    );
     const requestHash = hashRequest(dto);
     const earlier = await this.findByKey(idempotencyKey);
     if (earlier) return this.replay(earlier, requestHash);
 
     await this.assertActiveBranch(dto.branchId);
 
-    const orderStatus: OrderStatus = dto.orderStatus ?? 'completed';
-    const counter = await this.resolveCounter(
-      dto.branchId,
-      dto.registerId,
-      dto.shiftId,
-      dto.source,
-      orderStatus,
-    );
-    const fields = this.fields(dto, orderStatus, counter);
-
     // The order id is the reservation key, so it exists before the order does. It
     // derives from the Idempotency-Key: a concurrent retry asks for the same hold
     // (inventory is idempotent per order) instead of taking a second one.
     const orderId = orderIdFor(TenantContext.require(), idempotencyKey);
-    if (orderStatus !== 'draft') {
-      await this.reserve(orderId, dto.branchId, dto.items);
+    const shortages = await this.inventory.reserve(
+      orderId,
+      dto.branchId,
+      dto.items.map(({ sku, quantity }) => ({ sku, quantity })),
+    );
+    if (shortages) {
+      throw new ConflictException({
+        errorCode: SalesErrorCode.OUT_OF_STOCK,
+        message: 'Not enough stock for this order',
+        details: shortages,
+      });
     }
-    const items = this.buildItems(orderId, dto.items);
-    const plan = this.planOf(dto, orderStatus, fields.totalAmount ?? 0);
-    const order = Object.assign(new OrderEntity(), fields);
+    const items = dto.items.map((line) => {
+      const item = new OrderItemEntity();
+      item.id = randomUUID();
+      item.orderId = orderId;
+      item.sku = line.sku;
+      item.name = line.name;
+      item.quantity = line.quantity;
+      item.unitPrice = line.unitPrice;
+      item.lineTotal = line.quantity * line.unitPrice;
+      return item;
+    });
+    const order = new OrderEntity();
     order.id = orderId;
+    order.code = this.newCode();
     order.branchId = dto.branchId;
+    order.status = 'completed';
+    order.paymentMethod = dto.paymentMethod;
+    order.customerName = dto.customerName ?? null;
+    order.totalAmount = items.reduce((sum, item) => sum + item.lineTotal, 0);
+    order.itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
     order.createdBy = accountId;
     order.createdAt = new Date();
     order.idempotencyKey = idempotencyKey;
     order.requestHash = requestHash;
-    order.version = 1;
-    order.externalOrderCode = null;
-    order.trackingCode = null;
-    order.cancelReason = null;
 
     try {
-      const saved = await this.orders.transaction(async (orders, em) => {
-        // The code counter row serialises concurrent creates; a request that waited
-        // for it finds the winner's order here (save() would silently UPDATE it).
-        const code = await this.codes.next(em, 'order', ORDER_CODE_START);
-        if (await orders.findOne({ where: { id: orderId } })) {
-          throw new IdempotencyRace();
+      const txResult = await this.orders.transaction(async (orders, em) => {
+        await em.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+          `${TenantContext.require()}:${idempotencyKey}`,
+        ]);
+        const winner = await orders.findOne({
+          where: { idempotencyKey },
+          relations: { items: true },
+        });
+        if (winner) {
+          return { row: winner, replayed: true };
         }
-        order.code = orderCode(code);
         const row = await orders.save(order);
         const lines = await TenantScopedRepository.forEntity(
           em,
           OrderItemEntity,
         ).save(items);
-        const paid = await this.savePayments(em, orderId, accountId, plan.rows);
-        const history: HistoryInput[] = [
-          { statusType: 'order', from: null, to: orderStatus },
-        ];
-        if (row.paymentStatus && row.paymentStatus !== 'unpaid') {
-          history.push({
-            statusType: 'payment',
-            from: null,
-            to: row.paymentStatus,
-          });
-        }
-        await TenantScopedRepository.forEntity(
-          em,
-          OrderStatusHistoryEntity,
-        ).save(historyRows(orderId, accountId, history));
-        if (orderStatus === 'completed') {
-          await this.outbox.add(
-            em,
-            SALES_ORDER_COMPLETED,
-            completedPayload(row, lines, accountId),
-          );
-        }
+        await this.outbox.add(em, SALES_ORDER_COMPLETED, {
+          orderId: row.id,
+          code: row.code,
+          branchId: row.branchId,
+          totalAmount: row.totalAmount,
+          itemCount: row.itemCount,
+          paymentMethod: row.paymentMethod,
+          createdBy: accountId,
+          completedAt: new Date().toISOString(),
+          items: lines.map((l) => ({
+            sku: l.sku,
+            name: l.name,
+            quantity: l.quantity,
+            unitPrice: l.unitPrice,
+          })),
+          ...completedEventExtras({ channelType: 'POS' }, []),
+        } satisfies OrderCompletedPayload);
         row.items = lines;
-        row.payments = paid;
-        return row;
+        return { row, replayed: false };
       });
-      return { order: toOrderRes(saved), replayed: false };
+      if (txResult.replayed) {
+        return this.replay(txResult.row, requestHash);
+      }
+      return { order: toOrderRes(txResult.row), replayed: false };
     } catch (error) {
       // Two requests with the same key raced past the lookup; the index decided.
       // They share one hold, which belongs to the winner: nothing to give back.
-      if (error instanceof IdempotencyRace || this.isKeyViolation(error)) {
+      if (this.isKeyViolation(error)) {
         const winner = await this.findByKey(idempotencyKey);
         if (winner) return this.replay(winner, requestHash);
       }
-      if (orderStatus !== 'draft') {
-        await this.releaseUnlessCreated(orderId, idempotencyKey);
-      }
+      await this.releaseUnlessCreated(orderId, idempotencyKey);
       throw error;
     }
   }
 
   /**
-   * Edits a draft. `orderStatus: confirmed | completed` finalises it: stock is held
-   * as for a new order and, when completed, the event is written.
+   * Warehouse-backed checkout state machine (ADR-0012):
+   * `PENDING_STOCK -> RESERVING -> STOCK_RESERVED -> CONFIRMED` with
+   * deterministic timeout recovery (`RECOVERY_PENDING`) when Inventory is
+   * unreachable or times out mid-reservation.
    */
-  async update(
+  async checkout(
     accountId: string,
-    id: string,
-    dto: UpdateOrderReqDto,
-    scope: BranchScope = null,
-  ): Promise<OrderRes> {
-    const order = await this.orders.findOne({
-      where: { id },
-      relations: { items: true, payments: true },
-    });
-    if (!order) throw new NotFoundException();
-    assertBranchInScope(scope, order.branchId);
-    if (order.status !== 'draft') {
-      throw new BadRequestException({
-        errorCode: SalesErrorCode.NOT_A_DRAFT,
-        message: `Only a draft can be edited (this order is ${order.status})`,
-      });
-    }
-    if (dto.version !== undefined && dto.version !== order.version) {
-      throw versionConflict();
-    }
-    const orderStatus: OrderStatus = dto.orderStatus ?? 'draft';
-    const keepPayments = dto.payments === undefined && order.payments?.length;
-    const spec: Spec = {
-      source: dto.source ?? (order.source as 'pos' | 'manual'),
-      channel: dto.channel ?? order.channel,
-      customerId: dto.customerId ?? order.customerId ?? undefined,
-      customerName: dto.customerName ?? order.customerName ?? undefined,
-      customerPhone: dto.customerPhone ?? order.customerPhone ?? undefined,
-      shipping: dto.shipping ?? shippingOf(order) ?? undefined,
-      discountAmount: dto.discountAmount ?? order.discountAmount,
-      note: dto.note ?? order.note ?? undefined,
-      payments:
-        dto.payments ??
-        (keepPayments
-          ? (order.payments!.map((p) => ({
-              method: p.method,
-              amount: p.amount,
-            })) as PaymentReqDto[])
-          : undefined),
-      paymentMethod: dto.paymentMethod ?? order.paymentMethod,
-      items:
-        dto.items ??
-        (order.items ?? []).map((i) => ({
-          sku: i.sku,
-          name: i.name,
-          variantId: i.variantId ?? undefined,
-          quantity: i.quantity,
-          unitPrice: i.unitPrice,
-        })),
-    };
-    const counter = await this.resolveCounter(
-      order.branchId,
-      dto.registerId ?? order.registerId ?? undefined,
-      dto.shiftId ?? order.shiftId ?? undefined,
-      spec.source,
-      orderStatus,
+    scope: BranchScope,
+    idempotencyKey: string,
+    dto: CreateCheckoutReqDto,
+  ): Promise<CheckoutWorkflowResponse> {
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'ORDER_NOT_FOUND',
+      'Branch not found',
     );
-    const fields = this.fields(spec, orderStatus, counter);
-    const plan = this.planOf(spec, orderStatus, fields.totalAmount ?? 0);
-    const reserveNow = orderStatus !== 'draft';
-    if (reserveNow) await this.reserve(order.id, order.branchId, spec.items);
+    const checkoutsRepo = this.requireCheckoutsRepo();
+    const tenantId = TenantContext.require();
+    const requestSha256 = hashCheckoutRequest(dto);
 
-    try {
-      await this.orders.transaction(async (orders, em) => {
-        const changes = {
-          ...fields,
-          updatedAt: new Date(),
-          version: () => '"version" + 1',
-        };
-        const res = await orders.update(
-          { id, status: 'draft', version: order.version },
-          changes as never,
-        );
-        if (!res.affected) throw versionConflict();
-        const lines = this.buildItems(id, spec.items);
-        if (dto.items) {
-          await TenantScopedRepository.forEntity(em, OrderItemEntity).delete({
-            orderId: id,
-          });
-          await TenantScopedRepository.forEntity(em, OrderItemEntity).save(
-            lines,
-          );
-        }
-        if (dto.payments !== undefined || !keepPayments) {
-          await TenantScopedRepository.forEntity(em, OrderPaymentEntity).delete(
-            { orderId: id },
-          );
-          await this.savePayments(em, id, accountId, plan.rows);
-        }
-        const history: HistoryInput[] = [];
-        if (orderStatus !== 'draft') {
-          history.push({ statusType: 'order', from: 'draft', to: orderStatus });
-        }
-        if (fields.paymentStatus !== order.paymentStatus) {
-          history.push({
-            statusType: 'payment',
-            from: order.paymentStatus,
-            to: fields.paymentStatus!,
-          });
-        }
-        if (history.length) {
-          await TenantScopedRepository.forEntity(
-            em,
-            OrderStatusHistoryEntity,
-          ).save(historyRows(id, accountId, history));
-        }
-        if (orderStatus === 'completed') {
-          const saved = Object.assign(new OrderEntity(), order, fields);
-          await this.outbox.add(
-            em,
-            SALES_ORDER_COMPLETED,
-            completedPayload(saved, lines, accountId),
-          );
-        }
-      });
-    } catch (error) {
-      if (reserveNow) await this.releaseIfNotHeld(id);
-      throw error;
+    const existing = await checkoutsRepo.findOne({
+      where: { idempotencyKey },
+    });
+    if (existing) {
+      assertBranchAllowed(
+        scope,
+        existing.branchId,
+        'CHECKOUT_NOT_FOUND',
+        'Checkout workflow not found',
+      );
+      if (existing.requestSha256 !== requestSha256) {
+        throw new ConflictException({
+          errorCode: SalesErrorCode.IDEMPOTENCY_KEY_REUSED,
+          message:
+            'The Idempotency-Key was already used for a different checkout request',
+        });
+      }
+      if (
+        existing.state === 'RECOVERY_PENDING' ||
+        existing.state === 'RESERVING' ||
+        existing.state === 'STOCK_RESERVED'
+      ) {
+        return this.reconcileCheckout(existing, true);
+      }
+      return this.toCheckoutResponse(existing, true);
     }
-    return this.get(id);
+
+    await this.assertActiveBranch(dto.branchId);
+
+    const checkoutId = orderIdFor(tenantId, `chk:${idempotencyKey}`);
+    const reservationIdempotencyKey = reservationIdempotencyKeyFor(
+      tenantId,
+      idempotencyKey,
+    );
+    const linesJson: CheckoutWorkflowLine[] = dto.items.map((item) => ({
+      variantId: item.variantId,
+      sku: item.sku,
+      name: item.name,
+      qty: item.qty,
+      unitPrice: item.unitPrice,
+    }));
+    const totalAmount = linesJson.reduce(
+      (sum, line) => sum + Math.round(Number(line.qty) * line.unitPrice),
+      0,
+    );
+
+    const workflow = new CheckoutWorkflowEntity();
+    workflow.id = checkoutId;
+    workflow.tenantId = tenantId;
+    workflow.idempotencyKey = idempotencyKey;
+    workflow.requestSha256 = requestSha256;
+    workflow.branchId = dto.branchId;
+    workflow.warehouseId = dto.warehouseId;
+    workflow.paymentMethod = dto.paymentMethod;
+    workflow.customerName = dto.customerName ?? null;
+    workflow.linesJson = linesJson;
+    workflow.totalAmount = totalAmount;
+    workflow.state = 'RESERVING';
+    workflow.reservationIdempotencyKey = reservationIdempotencyKey;
+    workflow.reservationId = null;
+    workflow.orderId = null;
+    workflow.lastError = null;
+    workflow.createdBy = accountId;
+    workflow.createdAt = new Date();
+    workflow.updatedAt = new Date();
+
+    await checkoutsRepo.save(workflow);
+
+    return this.executeReservationAndConfirm(workflow, false);
+  }
+
+  async getCheckout(
+    checkoutId: string,
+    scope: BranchScope,
+  ): Promise<CheckoutWorkflowResponse> {
+    const checkoutsRepo = this.requireCheckoutsRepo();
+    const workflow = await checkoutsRepo.findOne({
+      where: { id: checkoutId },
+    });
+    if (!workflow || !branchAllowed(scope, workflow.branchId)) {
+      throw new NotFoundException({
+        errorCode: 'CHECKOUT_NOT_FOUND',
+        message: 'Checkout workflow not found',
+      });
+    }
+    return this.toCheckoutResponse(workflow, false);
+  }
+
+  /**
+   * Deterministic recovery for a checkout workflow stuck in `RECOVERY_PENDING`
+   * after an ambiguous network timeout calling Inventory (`POST /internal/v1/reservations`).
+   */
+  async recoverCheckout(
+    checkoutId: string,
+    scope: BranchScope,
+  ): Promise<CheckoutWorkflowResponse> {
+    const checkoutsRepo = this.requireCheckoutsRepo();
+    const workflow = await checkoutsRepo.findOne({
+      where: { id: checkoutId },
+    });
+    if (!workflow || !branchAllowed(scope, workflow.branchId)) {
+      throw new NotFoundException({
+        errorCode: 'CHECKOUT_NOT_FOUND',
+        message: 'Checkout workflow not found',
+      });
+    }
+    if (workflow.state === 'CONFIRMED') {
+      return this.toCheckoutResponse(workflow, true);
+    }
+    return this.reconcileCheckout(workflow, false);
+  }
+
+  async cancelCheckout(
+    checkoutId: string,
+    scope: BranchScope,
+  ): Promise<CheckoutWorkflowResponse> {
+    const checkoutsRepo = this.requireCheckoutsRepo();
+    const workflow = await checkoutsRepo.findOne({
+      where: { id: checkoutId },
+    });
+    if (!workflow || !branchAllowed(scope, workflow.branchId)) {
+      throw new NotFoundException({
+        errorCode: 'CHECKOUT_NOT_FOUND',
+        message: 'Checkout workflow not found',
+      });
+    }
+    if (workflow.state === 'CANCELLED') {
+      return this.toCheckoutResponse(workflow, true);
+    }
+    if (workflow.reservationId) {
+      await this.inventory.releaseWarehouseReservation(
+        workflow.reservationId,
+        'CHECKOUT_CANCELLED',
+      );
+    }
+    workflow.state = 'CANCELLED';
+    workflow.updatedAt = new Date();
+    await checkoutsRepo.save(workflow);
+    return this.toCheckoutResponse(workflow, false);
   }
 
   async list(
     query: ListOrdersReqDto,
-    scope: BranchScope = null,
+    scope: BranchScope,
   ): Promise<Page<OrderRes>> {
-    const [rows, total] = await this.orders.findAndCount({
-      where: buildOrderWhere(query, scope),
-      order: { [query.sort ?? 'createdAt']: query.order ?? 'DESC' },
-      take: query.limit,
-      skip: (query.page - 1) * query.limit,
-    });
+    const branchIds = branchFilter(
+      scope,
+      query.branchId,
+      'ORDER_NOT_FOUND',
+      'Branch not found',
+    );
+    const [rows, total] =
+      branchIds?.length === 0
+        ? [[], 0]
+        : await this.orders.findAndCount({
+            where: branchIds ? { branchId: In(branchIds) } : {},
+            order: { createdAt: 'DESC' },
+            take: query.limit,
+            skip: (query.page - 1) * query.limit,
+          });
     const totalPages = Math.max(1, Math.ceil(total / query.limit));
     return {
       data: rows.map(toOrderRes),
@@ -406,200 +468,231 @@ export class OrdersService {
     };
   }
 
-  async get(id: string, scope: BranchScope = null): Promise<OrderRes> {
+  async get(id: string, scope: BranchScope): Promise<OrderRes> {
     const order = await this.orders.findOne({
       where: { id },
-      relations: { items: true, payments: true },
+      relations: { items: true },
     });
-    if (!order) {
-      // also another store's order: never revealed (api-conventions §6)
+    if (!order || !branchAllowed(scope, order.branchId)) {
+      // also another store's or another branch's order: never revealed (api-conventions §6, ADR-0020)
       throw new NotFoundException();
     }
-    assertBranchInScope(scope, order.branchId);
     return toOrderRes(order);
   }
 
-  /** Columns of the order for a spec: totals computed here, never taken from the client */
-  private fields(
-    spec: Spec,
-    orderStatus: OrderStatus,
-    counter: { registerId: string | null; shiftId: string | null },
-  ): Partial<OrderEntity> {
-    const money = computeMoney(
-      spec.items,
-      spec.discountAmount ?? 0,
-      spec.shipping,
-    );
-    const plan = this.planOf(spec, orderStatus, money.totalAmount);
-    const probe = new OrderEntity();
-    applyShipping(probe, spec.shipping);
-    const completed = orderStatus === 'completed';
-    return {
-      status: orderStatus,
-      fulfillmentStatus: completed ? 'delivered' : 'unfulfilled',
-      paymentStatus: paymentStatusOf(money.totalAmount, plan.paidAmount),
-      exceptionCode: null,
-      source: spec.source ?? 'pos',
-      channel: spec.channel ?? 'pos',
-      customerId: spec.customerId ?? null,
-      customerName: spec.customerName ?? null,
-      customerPhone: spec.customerPhone ?? null,
-      shippingRecipient: probe.shippingRecipient,
-      shippingPhone: probe.shippingPhone,
-      shippingAddressLine: probe.shippingAddressLine,
-      shippingWard: probe.shippingWard,
-      shippingDistrict: probe.shippingDistrict,
-      shippingProvince: probe.shippingProvince,
-      shippingProviderCode: probe.shippingProviderCode,
-      shippingFeePayer: money.feePayer,
-      subtotal: money.subtotal,
-      discountAmount: money.discountAmount,
-      shippingFee: money.shippingFee,
-      totalAmount: money.totalAmount,
-      itemCount: spec.items.reduce((sum, i) => sum + i.quantity, 0),
-      paymentMethod: plan.method,
-      paidAmount: plan.paidAmount,
-      changeAmount: plan.changeAmount,
-      note: spec.note ?? null,
-      registerId: counter.registerId,
-      shiftId: counter.shiftId,
-      stockReserved: orderStatus !== 'draft',
-      completedAt: completed ? new Date() : null,
-    };
+  private async reconcileCheckout(
+    workflow: CheckoutWorkflowEntity,
+    replayed: boolean,
+  ): Promise<CheckoutWorkflowResponse> {
+    if (workflow.state === 'STOCK_RESERVED' && workflow.reservationId) {
+      return this.confirmReservedOrder(workflow, replayed);
+    }
+    return this.executeReservationAndConfirm(workflow, replayed);
   }
 
-  private planOf(spec: Spec, orderStatus: OrderStatus, total: number) {
-    const planInput = {
-      orderStatus,
-      totalAmount: total,
-      source: spec.source,
-      paymentMethod: spec.paymentMethod,
-      payments: spec.payments,
-    };
-    const plan = planPayments(planInput);
-    const cod =
-      spec.payments?.some((p) => p.method === 'cod') ||
-      (spec.paymentMethod === 'cod' &&
-        (spec.source !== undefined || orderStatus !== 'completed'));
-    if (
-      cod &&
-      !spec.customerId &&
-      !spec.customerName &&
-      !spec.shipping?.recipientName
-    ) {
-      throw new BadRequestException({
-        errorCode: SalesErrorCode.CUSTOMER_REQUIRED_FOR_COD,
-        message: 'A customer is required for cash on delivery',
+  private async executeReservationAndConfirm(
+    workflow: CheckoutWorkflowEntity,
+    replayed: boolean,
+  ): Promise<CheckoutWorkflowResponse> {
+    const checkoutsRepo = this.requireCheckoutsRepo();
+    let reserveOutcome;
+    try {
+      reserveOutcome = await this.inventory.reserveWarehouseStock(
+        workflow.reservationIdempotencyKey,
+        {
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: workflow.id,
+          ttlSeconds: 900,
+          lines: workflow.linesJson.map((line) => ({
+            warehouseId: workflow.warehouseId,
+            skuId: line.variantId,
+            qty: line.qty,
+          })),
+        },
+      );
+    } catch (error) {
+      workflow.state = 'RECOVERY_PENDING';
+      workflow.lastError =
+        error instanceof Error ? error.message : 'Inventory unreachable';
+      workflow.updatedAt = new Date();
+      await checkoutsRepo.save(workflow);
+
+      throw new ServiceUnavailableException({
+        errorCode: SalesErrorCode.CHECKOUT_RECOVERY_PENDING,
+        message:
+          'Inventory reservation outcome is ambiguous; checkout placed in RECOVERY_PENDING',
+        details: {
+          checkoutId: workflow.id,
+          state: workflow.state,
+          reservationIdempotencyKey: workflow.reservationIdempotencyKey,
+        },
       });
     }
-    return plan;
+
+    if (reserveOutcome.status === 'INSUFFICIENT_STOCK') {
+      workflow.state = 'REJECTED';
+      workflow.lastError = 'INSUFFICIENT_STOCK';
+      workflow.updatedAt = new Date();
+      await checkoutsRepo.save(workflow);
+
+      throw new ConflictException({
+        errorCode: SalesErrorCode.OUT_OF_STOCK,
+        message: 'Not enough stock for this checkout',
+        details: reserveOutcome.shortages,
+      });
+    }
+
+    workflow.state = 'STOCK_RESERVED';
+    workflow.reservationId = reserveOutcome.reservation.reservationId;
+    workflow.lastError = null;
+    workflow.updatedAt = new Date();
+    await checkoutsRepo.save(workflow);
+
+    return this.confirmReservedOrder(workflow, replayed);
   }
 
-  private buildItems(orderId: string, lines: OrderLineReqDto[]) {
-    return lines.map((line) => {
+  private async confirmReservedOrder(
+    workflow: CheckoutWorkflowEntity,
+    replayed: boolean,
+  ): Promise<CheckoutWorkflowResponse> {
+    const tenantId = TenantContext.require();
+    const orderId =
+      workflow.orderId ?? orderIdFor(tenantId, workflow.idempotencyKey);
+
+    const existingOrder = await this.orders.findOne({
+      where: { id: orderId },
+      relations: { items: true },
+    });
+    if (existingOrder) {
+      workflow.orderId = existingOrder.id;
+      workflow.state = 'CONFIRMED';
+      workflow.updatedAt = new Date();
+      await this.requireCheckoutsRepo().save(workflow);
+      return {
+        ...(await this.toCheckoutResponse(workflow, replayed)),
+        order: toOrderRes(existingOrder),
+      };
+    }
+
+    const items = workflow.linesJson.map((line) => {
+      const qtyInt = Math.max(1, Math.round(Number(line.qty)));
       const item = new OrderItemEntity();
       item.id = randomUUID();
       item.orderId = orderId;
-      item.variantId = line.variantId ?? null;
       item.sku = line.sku;
       item.name = line.name;
-      item.quantity = line.quantity;
+      item.quantity = qtyInt;
       item.unitPrice = line.unitPrice;
-      item.lineTotal = line.quantity * line.unitPrice;
+      item.lineTotal = Math.round(Number(line.qty) * line.unitPrice);
       return item;
     });
-  }
 
-  private async savePayments(
-    em: EntityManager,
-    orderId: string,
-    accountId: string,
-    rows: { method: string; amount: number }[],
-  ): Promise<OrderPaymentEntity[]> {
-    if (rows.length === 0) return [];
-    const now = new Date();
-    return TenantScopedRepository.forEntity(em, OrderPaymentEntity).save(
-      rows.map((r) =>
-        Object.assign(new OrderPaymentEntity(), {
-          id: randomUUID(),
-          orderId,
-          method: r.method,
-          amount: r.amount,
-          paidAt: now,
-          note: null,
-          createdBy: accountId,
-          createdAt: now,
-        }),
-      ),
-    );
-  }
+    const order = new OrderEntity();
+    order.id = orderId;
+    order.code = this.newCode();
+    order.branchId = workflow.branchId;
+    order.status = 'completed';
+    order.paymentMethod = workflow.paymentMethod;
+    order.customerName = workflow.customerName;
+    order.totalAmount = workflow.totalAmount;
+    order.itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+    order.createdBy = workflow.createdBy;
+    order.createdAt = new Date();
+    order.idempotencyKey = workflow.idempotencyKey;
+    order.requestHash = workflow.requestSha256;
 
-  /** Holds the stock of the lines under the order id, or refuses with the shortages */
-  private async reserve(
-    orderId: string,
-    branchId: string,
-    lines: { sku: string; quantity: number }[],
-  ): Promise<void> {
-    const shortages = await this.inventory.reserve(
-      orderId,
-      branchId,
-      lines.map(({ sku, quantity }) => ({ sku, quantity })),
-    );
-    if (shortages) throw outOfStock(shortages);
-  }
+    const savedOrder = await this.orders.transaction(async (orders, em) => {
+      const row = await orders.save(order);
+      const savedLines = await TenantScopedRepository.forEntity(
+        em,
+        OrderItemEntity,
+      ).save(items);
 
-  /**
-   * The register and shift an order belongs to. A shift must be open (S010); a
-   * register alone picks up its open shift, and a `pos` checkout needs one.
-   * Without either (the legacy counter sale) the order belongs to no shift.
-   */
-  private async resolveCounter(
-    branchId: string,
-    registerId: string | undefined,
-    shiftId: string | undefined,
-    source: string | undefined,
-    orderStatus: OrderStatus,
-  ): Promise<{ registerId: string | null; shiftId: string | null }> {
-    if (!registerId && !shiftId) return { registerId: null, shiftId: null };
-    if (shiftId) {
-      const shift = await this.shifts.findOne({ where: { id: shiftId } });
-      if (
-        !shift ||
-        shift.status !== 'open' ||
-        shift.branchId !== branchId ||
-        (registerId && shift.registerId !== registerId)
-      ) {
-        throw this.shiftNotOpen();
+      workflow.orderId = row.id;
+      workflow.state = 'CONFIRMED';
+      workflow.updatedAt = new Date();
+      await TenantScopedRepository.forEntity(em, CheckoutWorkflowEntity).save(
+        workflow,
+      );
+
+      await this.outbox.add(em, SALES_ORDER_COMPLETED, {
+        orderId: row.id,
+        code: row.code,
+        branchId: row.branchId,
+        totalAmount: row.totalAmount,
+        itemCount: row.itemCount,
+        paymentMethod: row.paymentMethod,
+        createdBy: workflow.createdBy,
+        completedAt: new Date().toISOString(),
+        items: savedLines.map((l) => ({
+          sku: l.sku,
+          name: l.name,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+        })),
+        ...completedEventExtras({ channelType: 'POS' }, []),
+      } satisfies OrderCompletedPayload);
+
+      row.items = savedLines;
+      return row;
+    });
+
+    if (workflow.reservationId) {
+      try {
+        await this.inventory.commitWarehouseReservation(workflow.reservationId);
+      } catch {
+        // Reservation remains HELD in inventory and can be reconciled asynchronously
       }
-      return { registerId: shift.registerId, shiftId: shift.id };
     }
-    const register = await this.registers.findOne({
-      where: { id: registerId! },
-    });
-    if (
-      !register ||
-      register.status !== 'active' ||
-      register.branchId !== branchId
-    ) {
-      throw new BadRequestException({
-        errorCode: SalesErrorCode.UNKNOWN_REGISTER,
-        message: 'The register does not exist in this branch or is not active',
-      });
-    }
-    const open = await this.shifts.findOne({
-      where: { registerId: register.id, status: 'open' },
-    });
-    if (!open && source === 'pos' && orderStatus === 'completed') {
-      throw this.shiftNotOpen();
-    }
-    return { registerId: register.id, shiftId: open?.id ?? null };
+
+    return {
+      checkoutId: workflow.id,
+      tenantId: workflow.tenantId,
+      branchId: workflow.branchId,
+      warehouseId: workflow.warehouseId,
+      state: workflow.state,
+      reservationIdempotencyKey: workflow.reservationIdempotencyKey,
+      reservationId: workflow.reservationId,
+      orderId: savedOrder.id,
+      order: toOrderRes(savedOrder),
+      replayed,
+    };
   }
 
-  private shiftNotOpen(): BadRequestException {
-    return new BadRequestException({
-      errorCode: SalesErrorCode.SHIFT_NOT_OPEN,
-      message: 'The shift is not open for this register',
-    });
+  private async toCheckoutResponse(
+    workflow: CheckoutWorkflowEntity,
+    replayed: boolean,
+  ): Promise<CheckoutWorkflowResponse> {
+    let orderRes: OrderRes | undefined;
+    if (workflow.orderId) {
+      const order = await this.orders.findOne({
+        where: { id: workflow.orderId },
+        relations: { items: true },
+      });
+      if (order) {
+        orderRes = toOrderRes(order);
+      }
+    }
+    return {
+      checkoutId: workflow.id,
+      tenantId: workflow.tenantId,
+      branchId: workflow.branchId,
+      warehouseId: workflow.warehouseId,
+      state: workflow.state,
+      reservationIdempotencyKey: workflow.reservationIdempotencyKey,
+      reservationId: workflow.reservationId,
+      orderId: workflow.orderId,
+      ...(orderRes ? { order: orderRes } : {}),
+      replayed,
+    };
+  }
+
+  private requireCheckoutsRepo(): TenantScopedRepository<CheckoutWorkflowEntity> {
+    if (!this.checkouts) {
+      throw new Error('CheckoutWorkflowEntity repository is not configured');
+    }
+    return this.checkouts;
   }
 
   /**
@@ -619,22 +712,10 @@ export class OrdersService {
     }
   }
 
-  /** A failed finalise: give the hold back unless a concurrent request got the order to hold it */
-  private async releaseIfNotHeld(orderId: string): Promise<void> {
-    try {
-      const current = await this.orders.findOne({ where: { id: orderId } });
-      if (current && !current.stockReserved) {
-        await this.inventory.release(orderId);
-      }
-    } catch {
-      // the hold expires after its time to live
-    }
-  }
-
   private findByKey(idempotencyKey: string): Promise<OrderEntity | null> {
     return this.orders.findOne({
       where: { idempotencyKey },
-      relations: { items: true, payments: true },
+      relations: { items: true },
     });
   }
 
@@ -671,6 +752,10 @@ export class OrdersService {
       });
     }
   }
-}
 
-export type { ShippingReqDto };
+  private newCode(): string {
+    const stamp = Date.now().toString(36).toUpperCase();
+    const salt = randomUUID().slice(0, 3).toUpperCase();
+    return `DH-${stamp}${salt}`;
+  }
+}

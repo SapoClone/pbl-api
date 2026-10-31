@@ -1,748 +1,958 @@
-/**
- * Customer against a real Postgres: the migration, codes, phone uniqueness, groups seeded
- * lazily, addresses, loyalty and the order-completed consumer, tenant isolation, and the
- * database's own constraints. Run with `pnpm test:int`.
- */
-import { RequestContext } from '@pbl/common';
-import { OrderCompletedPayload } from '@pbl/contracts';
+import { EventEnvelope, RequestContext } from '@pbl/common';
+import {
+  OrderCompletedPayload,
+  SALES_ORDER_COMPLETED,
+  SALES_RETURN_COMPLETED,
+  SalesReturnEventPayload,
+} from '@pbl/contracts';
 import {
   CONSUMER_ENTITIES,
   CONSUMER_MIGRATIONS,
+  EventOutbox,
+  OutboxEventEntity,
+  PRODUCER_ENTITIES,
+  PRODUCER_MIGRATIONS,
   databaseOptions,
   initializeDatabase,
 } from '@pbl/events';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
-import { CustomersService } from '../src/customers/customers.service';
-import { CUSTOMER_APP_ENTITIES } from '../src/entities/customer.entities';
-import { GroupsService } from '../src/groups/groups.service';
-import { TagsService } from '../src/groups/tags.service';
-import { LoyaltyService } from '../src/loyalty/loyalty.service';
-import { CreateCustomerTables1792000000000 } from '../src/migrations/1792000000000-create-customer-tables';
+import {
+  CustomerDomainError,
+  CustomerDomainErrorCode,
+} from '../src/domain/customer-domain';
+import { M4_CUSTOMER_ENTITIES } from '../src/infrastructure/persistence/customer.entities';
+import { CreateM4CustomerCore1791900000200 } from '../src/migrations/1791900000200-create-m4-customer-core';
+import { AddressesService } from '../src/modules/addresses/addresses.service';
+import { DataManagementService } from '../src/modules/data-management/data-management.service';
+import { GroupsService } from '../src/modules/groups/groups.service';
+import { LoyaltyService } from '../src/modules/loyalty/loyalty.service';
+import { MembershipsService } from '../src/modules/memberships/memberships.service';
+import { ProfilesService } from '../src/modules/profiles/profiles.service';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const BRANCH_A = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
+const ACTOR_MANAGER = '99999999-9999-4999-8999-999999999999';
 
-const address = (over: Record<string, unknown> = {}) => ({
-  recipientName: 'Ha',
-  recipientPhone: '0901234528',
-  addressLine: '24 Hoa Mai',
-  ward: 'Cau Kieu',
-  district: 'Phu Nhuan',
-  province: 'HCM',
-  ...over,
-});
+function runAsTenant<T>(
+  tenantId: string,
+  fn: () => Promise<T>,
+  actorId = ACTOR_MANAGER,
+): Promise<T> {
+  return RequestContext.run(
+    {
+      requestId: randomUUID(),
+      tenantId,
+      actor: { id: actorId, type: 'account' },
+    },
+    fn,
+  );
+}
 
-const listQuery = (over: Record<string, unknown> = {}) =>
-  ({ page: 1, limit: 10, sort: 'createdAt', order: 'DESC', ...over }) as never;
-
-describe('customer (Postgres)', () => {
-  const schema = uniqueSchema('customer_it');
-  let ds: DataSource;
-  let customers: CustomersService;
-  let groups: GroupsService;
-  let tags: TagsService;
-  let loyalty: LoyaltyService;
-
-  const as = <T>(tenantId: string, work: () => Promise<T>) =>
-    RequestContext.run({ tenantId, requestId: 'it' }, work);
-  const table = (name: string) => `"${schema}"."${name}"`;
-  const create = (tenantId: string, body: Record<string, unknown>) =>
-    as(tenantId, () =>
-      customers.create(
-        { name: 'Nguyen Ngoc Ha', phone: '0901234528', ...body } as never,
-        true,
-      ),
-    );
-  const completed = (
-    customerId: string | null | undefined,
-    totalAmount: number,
-    orderId = randomUUID(),
-  ) =>
-    ({
-      orderId,
-      code: 'DH000001',
-      branchId: randomUUID(),
-      totalAmount,
-      itemCount: 1,
-      paymentMethod: 'cash',
-      createdBy: randomUUID(),
-      completedAt: '2026-10-20T07:20:00.000Z',
-      items: [],
-      customerId,
-    }) as OrderCompletedPayload;
-  const consume = (tenantId: string, payload: OrderCompletedPayload) =>
-    as(tenantId, () =>
-      ds.transaction((em) => loyalty.onOrderCompleted(em, tenantId, payload)),
-    );
+describe('Customer & Loyalty M4 Core (Real PostgreSQL Integration & Concurrency)', () => {
+  const schema = uniqueSchema('customer_m4_it');
+  let dataSource: DataSource;
+  let outbox: EventOutbox;
+  let groupsService: GroupsService;
+  let membershipsService: MembershipsService;
+  let addressesService: AddressesService;
+  let loyaltyService: LoyaltyService;
+  let profilesService: ProfilesService;
+  let dataManagementService: DataManagementService;
 
   beforeAll(async () => {
     useDatabase(schema);
-    ds = await initializeDatabase(
-      databaseOptions({
-        entities: [...CUSTOMER_APP_ENTITIES, ...CONSUMER_ENTITIES],
-        migrations: [...CONSUMER_MIGRATIONS, CreateCustomerTables1792000000000],
+    dataSource = await initializeDatabase({
+      ...databaseOptions({
+        entities: [
+          ...M4_CUSTOMER_ENTITIES,
+          ...PRODUCER_ENTITIES,
+          ...CONSUMER_ENTITIES,
+        ],
+        migrations: [
+          ...PRODUCER_MIGRATIONS,
+          ...CONSUMER_MIGRATIONS,
+          CreateM4CustomerCore1791900000200,
+        ],
       }),
-    );
-    customers = new CustomersService(ds);
-    groups = new GroupsService(ds);
-    tags = new TagsService(ds);
-    loyalty = new LoyaltyService(ds);
+    });
+
+    outbox = new EventOutbox();
+    groupsService = new GroupsService(dataSource, outbox);
+    membershipsService = new MembershipsService(dataSource, outbox);
+    addressesService = new AddressesService(dataSource);
+    loyaltyService = new LoyaltyService(dataSource, membershipsService, outbox);
+    profilesService = new ProfilesService(dataSource, outbox);
+    dataManagementService = new DataManagementService(dataSource, outbox);
   });
 
   afterAll(async () => {
-    await ds.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await ds.destroy();
-  });
-
-  beforeEach(async () => {
-    for (const name of [
-      'loyalty_transaction',
-      'loyalty_setting',
-      'customer_address',
-      'customer_tag_link',
-      'customer_tag',
-      'customer',
-      'customer_group',
-      'code_sequence',
-    ]) {
-      await ds.query(`DELETE FROM ${table(name)}`);
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
     }
   });
 
-  it('migrates down and up again', async () => {
-    await ds.undoLastMigration();
-    expect(
-      await ds.query(`SELECT to_regclass('${table('customer')}') AS t`),
-    ).toEqual([{ t: null }]);
-    await ds.runMigrations();
-    expect(
-      (await ds.query(`SELECT to_regclass('${table('customer')}') AS t`))[0].t,
-    ).not.toBeNull();
-  });
-
-  describe('groups', () => {
-    it('seeds the four defaults on first access, once, per tenant', async () => {
-      const first = await as(TENANT_A, () => groups.list());
-      expect(first.data.map((g) => [g.code, g.name, g.isSeeded])).toEqual([
-        ['retail', 'Khách lẻ', true],
-        ['member', 'Thành viên', true],
-        ['vip', 'VIP', true],
-        ['wholesale', 'Sỉ', true],
-      ]);
-      await as(TENANT_A, () => groups.list());
-      await Promise.all([
-        as(TENANT_B, () => groups.list()),
-        as(TENANT_B, () => groups.list()),
-      ]);
-      const rows = await ds.query(
-        `SELECT "tenant_id", count(*)::int AS n FROM ${table('customer_group')} GROUP BY 1`,
-      );
-      expect(rows.map((r: { n: number }) => r.n)).toEqual([4, 4]);
-    });
-
-    it('creates and renames a custom group; names are unique per tenant', async () => {
-      const created = await as(TENANT_A, () => groups.create('Khách quen'));
-      expect(created).toMatchObject({ code: 'khach-quen', isSeeded: false });
-      const renamed = await as(TENANT_A, () =>
-        groups.rename(created.id, 'Quen lắm'),
-      );
-      expect(renamed.name).toBe('Quen lắm');
-      await expect(
-        as(TENANT_A, () => groups.create('vip')),
-      ).rejects.toMatchObject({ response: { errorCode: 'U007' } });
-      // another store may use the name, and cannot touch this group
-      await as(TENANT_B, () => groups.create('Quen lắm'));
-      await expect(
-        as(TENANT_B, () => groups.rename(created.id, 'x')),
-      ).rejects.toMatchObject({ status: 404 });
-    });
-  });
-
-  describe('customers', () => {
-    it('numbers customers per tenant and puts them in the retail group', async () => {
-      const a1 = await create(TENANT_A, {});
-      const a2 = await create(TENANT_A, { phone: '0901111111' });
-      const b1 = await create(TENANT_B, {});
-      expect([a1.code, a2.code, b1.code]).toEqual([
-        'KH000001',
-        'KH000002',
-        'KH000001',
-      ]);
-      expect(a1.group).toMatchObject({ code: 'retail' });
-      expect(a1.phoneMasked).toBe('090 ••• •• 28');
-      expect(a1).toMatchObject({
-        memberCode: null,
-        orderCount: 0,
-        loyaltyPoints: 0,
-      });
-    });
-
-    it('refuses a phone already used by a live customer (U001) and allows it after a delete', async () => {
-      const first = await create(TENANT_A, {});
-      await expect(create(TENANT_A, {})).rejects.toMatchObject({
-        status: 409,
-        response: {
-          errorCode: 'U001',
-          details: [{ existingCustomerId: first.id }],
+  it('Test A: Concurrent customer creation with equivalent Vietnamese phone formats allows only 1 winner', async () => {
+    const results = await Promise.allSettled([
+      profilesService.createCustomer(
+        TENANT_A,
+        ACTOR_MANAGER,
+        {
+          name: 'Nguyen Van A1',
+          phone: '+84 912 345 678',
+          email: 'a1@example.com',
+          initialAddress: {
+            addressLine: '123 Le Loi',
+            district: 'Quan 1',
+            province: 'TP.HCM',
+          },
         },
-      });
-      // another store is a different phone book
-      await create(TENANT_B, {});
-      await as(TENANT_A, () => customers.remove(first.id));
-      await expect(
-        as(TENANT_A, () => customers.get(first.id, true)),
-      ).rejects.toMatchObject({ status: 404 });
-      const again = await create(TENANT_A, {});
-      expect(again.id).not.toBe(first.id);
-      // the same phone on update is U001 too
-      const other = await create(TENANT_A, { phone: '0902222222' });
-      await expect(
-        as(TENANT_A, () =>
-          customers.update(other.id, { phone: '0901234528' } as never, true),
-        ),
-      ).rejects.toMatchObject({
-        status: 409,
-        response: { errorCode: 'U001' },
-      });
+        true,
+      ),
+      profilesService.createCustomer(
+        TENANT_A,
+        ACTOR_MANAGER,
+        {
+          name: 'Nguyen Van A2',
+          phone: '0912-345-678',
+          email: 'a2@example.com',
+        },
+        true,
+      ),
+    ]);
+
+    const fulfilled = results.filter(
+      (r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled',
+    );
+    const rejected = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0].reason as CustomerDomainError).code).toBe(
+      CustomerDomainErrorCode.CUSTOMER_ALREADY_EXISTS,
+    );
+
+    const winner = fulfilled[0].value;
+    expect(winner.phoneNormalized).toBe('0912345678');
+    expect(winner.loyalty).toMatchObject({
+      postedPointsBalance: 0,
+      heldPoints: 0,
+      availablePoints: 0,
+      qualifyingPoints: 0,
     });
 
-    it('two simultaneous creates with one phone: one wins, one gets U001', async () => {
-      const results = await Promise.allSettled([
-        create(TENANT_A, {}),
-        create(TENANT_A, {}),
-      ]);
-      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-      const rejected = results.find(
-        (r) => r.status === 'rejected',
-      ) as PromiseRejectedResult;
-      expect(rejected.reason.response.errorCode).toBe('U001');
+    // Lookup by raw unnormalized phone finds the same customer
+    const lookedUp = await profilesService.lookupCustomer(TENANT_A, {
+      phone: '84912345678',
     });
+    expect(lookedUp.id).toBe(winner.id);
+  });
 
-    it('creates with addresses, tags, a member card and initial points', async () => {
-      const tag = await as(TENANT_A, () => tags.create('Mua nhiều'));
-      const vip = (await as(TENANT_A, () => groups.list())).data.find(
-        (g) => g.code === 'vip',
-      )!;
-      const c = await create(TENANT_A, {
-        groupId: vip.id,
-        tagIds: [tag.id],
-        addresses: [address(), address({ addressLine: 'Other' })],
-        loyalty: { enabled: true, initialPoints: 50 },
-        email: 'n.ha@example.com',
-        dob: '1995-04-12',
-        gender: 'female',
-        source: 'shopee',
-      });
-      expect(c.memberCode).toBe('TV000001');
-      expect(c.loyaltyPoints).toBe(50);
-      expect(c.group).toMatchObject({ code: 'vip' });
-      expect(c.tags).toEqual([{ id: tag.id, name: 'Mua nhiều' }]);
-      expect(c.addresses.map((a) => a.isDefault)).toEqual([true, false]);
-      expect(c).toMatchObject({
-        dob: '1995-04-12',
-        gender: 'female',
-        source: 'shopee',
-      });
-      const history = await as(TENANT_A, () =>
-        loyalty.listTransactions(c.id, { page: 1, limit: 10 }),
-      );
-      expect(history.data).toMatchObject([
-        { type: 'adjust', points: 50, balanceAfter: 50 },
-      ]);
-      // the next card gets the next number
-      const d = await create(TENANT_A, {
-        phone: '0903333333',
-        loyalty: { enabled: true },
-      });
-      expect(d.memberCode).toBe('TV000002');
-    });
+  it('Test B: Concurrent profile updates with optimistic version checking reject stale version with RESOURCE_VERSION_CONFLICT', async () => {
+    const created = await profilesService.createCustomer(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        name: 'Tran Thi Optimistic',
+        phone: '0988111222',
+      },
+    );
+    expect(created.version).toBe(1);
 
-    it("rejects another store's group or tag (U006) and two default addresses (U002)", async () => {
-      const otherGroup = (await as(TENANT_B, () => groups.list())).data[0];
-      await expect(
-        create(TENANT_A, { groupId: otherGroup.id }),
-      ).rejects.toMatchObject({
-        response: { errorCode: 'U006' },
-      });
-      const otherTag = await as(TENANT_B, () => tags.create('x'));
-      await expect(
-        create(TENANT_A, { tagIds: [otherTag.id] }),
-      ).rejects.toMatchObject({
-        response: { errorCode: 'U006' },
-      });
-      await expect(
-        create(TENANT_A, {
-          addresses: [
-            address({ isDefault: true }),
-            address({ isDefault: true }),
-          ],
-        }),
-      ).rejects.toMatchObject({ response: { errorCode: 'U002' } });
-      // nothing was left behind by the failures, not even a code
-      expect(await create(TENANT_A, {})).toMatchObject({ code: 'KH000001' });
-    });
+    const updates = await Promise.allSettled([
+      profilesService.updateCustomer(TENANT_A, created.id, ACTOR_MANAGER, {
+        name: 'Tran Thi Update 1',
+        version: 1,
+      }),
+      profilesService.updateCustomer(TENANT_A, created.id, ACTOR_MANAGER, {
+        name: 'Tran Thi Update 2',
+        version: 1,
+      }),
+    ]);
 
-    it('updates fields, replaces tags, clears optional fields and gives a card on request', async () => {
-      const t1 = await as(TENANT_A, () => tags.create('A'));
-      const t2 = await as(TENANT_A, () => tags.create('B'));
-      const c = await create(TENANT_A, {
-        tagIds: [t1.id],
-        email: 'a@b.co',
-        note: 'n',
-      });
-      const updated = await as(TENANT_A, () =>
-        customers.update(
-          c.id,
-          {
-            name: 'New',
-            email: null,
-            tagIds: [t2.id],
-            status: 'inactive',
-            loyalty: { enabled: true },
-          } as never,
-          true,
-        ),
-      );
-      expect(updated).toMatchObject({
-        name: 'New',
-        email: null,
-        note: 'n',
-        status: 'inactive',
-        memberCode: 'TV000001',
-      });
-      expect(updated.tags.map((t) => t.name)).toEqual(['B']);
-      const again = await as(TENANT_A, () =>
-        customers.update(c.id, { loyalty: { enabled: true } } as never, true),
-      );
-      expect(again.memberCode).toBe('TV000001');
-    });
+    const fulfilled = updates.filter((r) => r.status === 'fulfilled');
+    const rejected = updates.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
 
-    it("cannot read, change or delete another store's customer", async () => {
-      const c = await create(TENANT_A, {});
-      await expect(
-        as(TENANT_B, () => customers.get(c.id, true)),
-      ).rejects.toMatchObject({ status: 404 });
-      await expect(
-        as(TENANT_B, () =>
-          customers.update(c.id, { name: 'x' } as never, true),
-        ),
-      ).rejects.toMatchObject({ status: 404 });
-      await expect(
-        as(TENANT_B, () => customers.remove(c.id)),
-      ).rejects.toMatchObject({ status: 404 });
-      await expect(
-        as(TENANT_B, () =>
-          customers.addAddress(c.id, address() as never, true),
-        ),
-      ).rejects.toMatchObject({ status: 404 });
-      await expect(
-        as(TENANT_B, () => loyalty.adjust(c.id, { points: 5, reason: 'x' })),
-      ).rejects.toMatchObject({ status: 404 });
-      await expect(
-        as(TENANT_B, () =>
-          loyalty.listTransactions(c.id, { page: 1, limit: 5 }),
-        ),
-      ).rejects.toMatchObject({ status: 404 });
-      expect(
-        (await as(TENANT_B, () => customers.list(listQuery(), true))).data,
-      ).toEqual([]);
-    });
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0].reason as CustomerDomainError).code).toBe(
+      CustomerDomainErrorCode.RESOURCE_VERSION_CONFLICT,
+    );
 
-    it('keeps one default address across add, change, delete', async () => {
-      const c = await create(TENANT_A, {});
-      const one = await as(TENANT_A, () =>
-        customers.addAddress(
-          c.id,
-          address({ addressLine: 'one' }) as never,
-          true,
-        ),
-      );
-      expect(one.addresses.map((a) => [a.addressLine, a.isDefault])).toEqual([
-        ['one', true],
-      ]);
-      const two = await as(TENANT_A, () =>
-        customers.addAddress(
-          c.id,
-          address({ addressLine: 'two', isDefault: true }) as never,
-          true,
-        ),
-      );
-      expect(two.addresses.map((a) => [a.addressLine, a.isDefault])).toEqual([
-        ['two', true],
-        ['one', false],
-      ]);
-      const oneId = two.addresses.find((a) => a.addressLine === 'one')!.id;
-      const twoId = two.addresses.find((a) => a.addressLine === 'two')!.id;
-      const flipped = await as(TENANT_A, () =>
-        customers.updateAddress(
-          c.id,
-          oneId,
-          { isDefault: true, ward: 'W' } as never,
-          true,
-        ),
-      );
-      expect(flipped.addresses.find((a) => a.id === oneId)).toMatchObject({
+    const latest = await profilesService.getCustomerById(TENANT_A, created.id);
+    expect(latest.version).toBe(2);
+  });
+
+  it('Test C: Address default invariant enforces at most one active default address under concurrent switching', async () => {
+    const customer = await profilesService.createCustomer(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        name: 'Le Van Address',
+        phone: '0977111222',
+      },
+    );
+
+    const [addr1, addr2, addr3] = await runAsTenant(TENANT_A, async () => {
+      const a1 = await addressesService.addAddress(customer.id, {
+        recipientName: 'Home',
+        addressLine: '10 Nguyen Hue',
         isDefault: true,
-        ward: 'W',
       });
-      expect(flipped.addresses.filter((a) => a.isDefault)).toHaveLength(1);
-      await expect(
-        as(TENANT_A, () =>
-          customers.updateAddress(
-            c.id,
-            oneId,
-            { isDefault: false } as never,
-            true,
-          ),
-        ),
-      ).rejects.toMatchObject({ response: { errorCode: 'U002' } });
-      // deleting the default hands it to the remaining one
-      await as(TENANT_A, () => customers.removeAddress(c.id, oneId));
-      const after = await as(TENANT_A, () => customers.get(c.id, true));
-      expect(after.addresses).toMatchObject([{ id: twoId, isDefault: true }]);
-      await expect(
-        as(TENANT_A, () => customers.removeAddress(c.id, oneId)),
-      ).rejects.toMatchObject({ status: 404 });
-      // the database allows one default per customer
-      await expect(
-        ds.query(
-          `INSERT INTO ${table('customer_address')} (id, tenant_id, customer_id, recipient_name, phone, address_line, ward, district, province, is_default)
-           VALUES ($1, $2, $3, 'x', '1', 'x', 'x', 'x', 'x', true)`,
-          [randomUUID(), TENANT_A, c.id],
-        ),
-      ).rejects.toMatchObject({ constraint: 'UQ_customer_address_default' });
+      const a2 = await addressesService.addAddress(customer.id, {
+        recipientName: 'Office',
+        addressLine: '20 Pasteur',
+        isDefault: false,
+      });
+      const a3 = await addressesService.addAddress(customer.id, {
+        recipientName: 'Warehouse',
+        addressLine: '30 Dien Bien Phu',
+        isDefault: false,
+      });
+      return [a1, a2, a3];
     });
+
+    await Promise.all([
+      runAsTenant(TENANT_A, () =>
+        addressesService.setDefaultAddress(customer.id, addr2.id),
+      ),
+      runAsTenant(TENANT_A, () =>
+        addressesService.setDefaultAddress(customer.id, addr3.id),
+      ),
+      runAsTenant(TENANT_A, () =>
+        addressesService.setDefaultAddress(customer.id, addr1.id),
+      ),
+    ]);
+
+    const addresses = await runAsTenant(TENANT_A, () =>
+      addressesService.listAddresses(customer.id),
+    );
+    const defaults = addresses.filter((a) => a.isDefault);
+    expect(defaults).toHaveLength(1);
   });
 
-  describe('list, summary and export', () => {
-    beforeEach(async () => {
-      const vip = (await as(TENANT_A, () => groups.list())).data.find(
-        (g) => g.code === 'vip',
-      )!;
-      const tag = await as(TENANT_A, () => tags.create('Quà tặng'));
-      await create(TENANT_A, {
-        name: 'An',
-        phone: '0900000001',
-        email: 'an@x.vn',
-      });
-      await create(TENANT_A, {
-        name: 'Binh',
-        phone: '0900000002',
-        groupId: vip.id,
-        tagIds: [tag.id],
-      });
-      await create(TENANT_A, {
-        name: '=cmd, "x"',
-        phone: '0900000003',
-        loyalty: { enabled: true },
-      });
-      await create(TENANT_B, { name: 'Other store', phone: '0900000001' });
+  it('Test D: Customer group assignment emits event and blocks deactivating non-empty group until unassigned', async () => {
+    const customer = await profilesService.createCustomer(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        name: 'Pham Thi Group',
+        phone: '0966111222',
+      },
+    );
+
+    const vipGroup = await runAsTenant(TENANT_A, () =>
+      groupsService.createGroup({
+        code: 'VIP_RETAIL',
+        name: 'VIP Retail Group',
+        defaultDiscountRate: 5,
+      }),
+    );
+
+    await runAsTenant(TENANT_A, () =>
+      groupsService.assignCustomerToGroup(customer.id, ACTOR_MANAGER, {
+        customerGroupId: vipGroup.id,
+      }),
+    );
+
+    // Attempting to deactivate non-empty group must fail with 409 CUSTOMER_GROUP_NOT_EMPTY
+    await expect(
+      runAsTenant(TENANT_A, () =>
+        groupsService.updateGroup(vipGroup.id, { status: 'INACTIVE' }),
+      ),
+    ).rejects.toMatchObject({
+      code: CustomerDomainErrorCode.CUSTOMER_GROUP_NOT_EMPTY,
+      httpStatus: 409,
     });
 
-    it('searches name, phone, email and code; filters group and tag; pages', async () => {
-      const names = async (q: Record<string, unknown>) =>
-        (
-          await as(TENANT_A, () =>
-            customers.list(
-              listQuery({ sort: 'name', order: 'ASC', ...q }),
-              true,
-            ),
-          )
-        ).data.map((c) => c.name);
-      expect(await names({ q: 'bin' })).toEqual(['Binh']);
-      expect(await names({ q: '0900000001' })).toEqual(['An']);
-      expect(await names({ q: 'an@x' })).toEqual(['An']);
-      expect(await names({ q: 'KH000003' })).toEqual(['=cmd, "x"']);
-      expect(await names({ q: 'TV000001' })).toEqual(['=cmd, "x"']);
-      expect(await names({ q: '%' })).toEqual([]);
-      expect(await names({ groupCode: ['vip'] })).toEqual(['Binh']);
-      expect(await names({ groupCode: ['vip', 'retail'] })).toHaveLength(3);
-      const tag = (await as(TENANT_A, () => tags.list())).data[0];
-      expect(await names({ tagId: tag.id })).toEqual(['Binh']);
-      const page = await as(TENANT_A, () =>
-        customers.list(listQuery({ limit: 2, page: 2 }), true),
-      );
-      expect(page.pagination).toEqual({
-        limit: 2,
-        currentPage: 2,
-        totalRecords: 3,
-        totalPages: 2,
-      });
-      expect(page.data).toHaveLength(1);
-    });
+    // Unassign customer then deactivate group
+    await runAsTenant(TENANT_A, () =>
+      groupsService.assignCustomerToGroup(customer.id, ACTOR_MANAGER, {
+        customerGroupId: null,
+      }),
+    );
 
-    it('sorts by spend, order count and last purchase (nulls last) and masks phones', async () => {
-      const [an, binh] = (
-        await as(TENANT_A, () =>
-          customers.list(listQuery({ sort: 'name', order: 'ASC' }), true),
-        )
-      ).data;
-      await consume(TENANT_A, completed(an.id, 100_000));
-      await consume(TENANT_A, completed(binh.id, 300_000));
-      await consume(TENANT_A, completed(binh.id, 50_000));
-      const by = async (sort: string, order: string, extra = {}) =>
-        (
-          await as(TENANT_A, () =>
-            customers.list(listQuery({ sort, order, ...extra }), false),
-          )
-        ).data;
-      expect((await by('totalSpent', 'DESC')).map((c) => c.name)).toEqual([
-        'Binh',
-        'An',
-        '=cmd, "x"',
-      ]);
-      expect((await by('orderCount', 'DESC'))[0]).toMatchObject({
-        name: 'Binh',
-        orderCount: 2,
-        totalSpent: 350_000,
-      });
-      // never-purchased customers sort last in both directions
-      expect((await by('lastPurchaseAt', 'ASC')).at(-1)!.name).toBe(
-        '=cmd, "x"',
-      );
-      expect((await by('lastPurchaseAt', 'DESC')).at(-1)!.name).toBe(
-        '=cmd, "x"',
-      );
-      expect(
-        (await by('totalSpent', 'DESC', { spendMin: 200_000 })).map(
-          (c) => c.name,
-        ),
-      ).toEqual(['Binh']);
-      expect(
-        (await by('totalSpent', 'DESC', { spendMax: 100_000 }))
-          .map((c) => c.name)
-          .sort(),
-      ).toEqual(['=cmd, "x"', 'An']);
-      const masked = (await by('name', 'ASC'))[0];
-      expect(masked.phone).toBeNull();
-      expect(masked.phoneMasked).toBe('090 ••• •• 01');
-    });
-
-    it("summarises the store: totals, groups and this month's new customers", async () => {
-      const summary = await as(TENANT_A, () => customers.summary({}));
-      expect(summary).toEqual({
-        total: 3,
-        newThisMonth: 3,
-        members: 0,
-        vip: 1,
-        returningRate: null,
-        returningRateDelta: null,
-        groupCounts: { all: 3, retail: 2, member: 0, vip: 1, wholesale: 0 },
-      });
-      expect(
-        (await as(TENANT_A, () => customers.summary({ month: '2020-01' })))
-          .newThisMonth,
-      ).toBe(0);
-      const before = await as(TENANT_B, () => customers.summary({}));
-      expect(before.total).toBe(1);
-    });
-
-    it('exports CSV with a BOM, escaped cells, neutralised formulas and masked phones', async () => {
-      const full = await as(TENANT_A, () =>
-        customers.exportCsv(listQuery({ sort: 'name', order: 'ASC' }), true),
-      );
-      expect(full.startsWith('﻿code,name,phone,')).toBe(true);
-      const lines = full.trim().split('\r\n');
-      expect(lines).toHaveLength(4);
-      expect(lines[3]).toContain(`"'=cmd, ""x"""`);
-      expect(lines[1]).toContain('0900000001');
-      const masked = await as(TENANT_A, () =>
-        customers.exportCsv(listQuery({ sort: 'name', order: 'ASC' }), false),
-      );
-      expect(masked).not.toContain('0900000001');
-      expect(masked).toContain('090 ••• •• 01');
-      expect(masked).not.toContain('Other store');
-    });
+    const deactivatedGroup = await runAsTenant(TENANT_A, () =>
+      groupsService.updateGroup(vipGroup.id, { status: 'INACTIVE' }),
+    );
+    expect(deactivatedGroup.status).toBe('INACTIVE');
   });
 
-  describe('loyalty', () => {
-    it('creates the setting lazily with defaults and updates it', async () => {
-      expect(await as(TENANT_A, () => loyalty.getSettings())).toEqual({
-        enabled: true,
+  it('Test E & L: Loyalty earning from completed order, idempotent duplicate event replay, automatic tier upgrade, and non-downgrade on redemption', async () => {
+    await runAsTenant(TENANT_A, async () => {
+      await loyaltyService.updateSettings(ACTOR_MANAGER, {
+        isEnabled: true,
         earnAmountPerPoint: 10000,
         redeemValuePerPoint: 1000,
-        pointsExpireMonths: null,
+        minRedeemPoints: 10,
+        maxRedeemPointsPerOrder: 1000,
+        holdTtlSeconds: 900,
       });
-      const updated = await as(TENANT_A, () =>
-        loyalty.updateSettings({
-          earnAmountPerPoint: 20000,
-          pointsExpireMonths: 12,
+
+      await membershipsService.createTier({
+        code: 'MEMBER',
+        name: 'Member',
+        minPoints: 0,
+        discountRate: 0,
+      });
+      await membershipsService.createTier({
+        code: 'SILVER',
+        name: 'Silver',
+        minPoints: 100,
+        discountRate: 2,
+      });
+      await membershipsService.createTier({
+        code: 'GOLD',
+        name: 'Gold',
+        minPoints: 500,
+        discountRate: 5,
+      });
+      await membershipsService.createTier({
+        code: 'PLATINUM',
+        name: 'Platinum',
+        minPoints: 2000,
+        discountRate: 10,
+      });
+    });
+
+    const customer = await profilesService.createCustomer(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        name: 'Hoang Van Loyalty',
+        phone: '0955111222',
+      },
+    );
+
+    const orderId = randomUUID();
+    const orderEvent: EventEnvelope<OrderCompletedPayload> = {
+      id: randomUUID(),
+      type: SALES_ORDER_COMPLETED.type,
+      version: 1,
+      occurredAt: new Date().toISOString(),
+      tenantId: TENANT_A,
+      actor: null,
+      traceId: randomUUID(),
+      payload: {
+        orderId,
+        code: 'DH000501',
+        branchId: BRANCH_A,
+        customerId: customer.id,
+        totalAmount: 5500000,
+        itemCount: 1,
+        subtotal: 5500000,
+        discountTotal: 0,
+        taxTotal: 0,
+        grandTotal: 5500000,
+        paymentMethod: 'CASH',
+        createdBy: ACTOR_MANAGER,
+        completedAt: new Date().toISOString(),
+        items: [],
+      },
+    };
+
+    // Process order completion event (5,500,000 VND / 10,000 = 550 points -> upgrades to GOLD)
+    await loyaltyService.onSalesOrderCompleted(orderEvent);
+
+    // Replay the exact same event -> idempotent no-op
+    await loyaltyService.onSalesOrderCompleted(orderEvent);
+
+    const accountAfterEarn = await runAsTenant(TENANT_A, () =>
+      loyaltyService.getLoyaltyAccount(customer.id),
+    );
+    expect(accountAfterEarn.postedPointsBalance).toBe(550);
+    expect(accountAfterEarn.qualifyingPoints).toBe(550);
+    expect(accountAfterEarn.availablePoints).toBe(550);
+
+    const membershipAfterEarn = await runAsTenant(TENANT_A, () =>
+      membershipsService.getCustomerMembership(customer.id),
+    );
+    expect(membershipAfterEarn.tier?.code).toBe('GOLD');
+    expect(membershipAfterEarn.nextTier?.code).toBe('PLATINUM');
+    expect(membershipAfterEarn.nextTier?.pointsNeeded).toBe(1450);
+
+    // Redeem 480 points via hold + commit -> postedPointsBalance drops to 70, but qualifyingPoints stays 550 and tier remains GOLD!
+    const hold = await runAsTenant(TENANT_A, () =>
+      loyaltyService.createHold('hold-gold-redeem-1', {
+        customerId: customer.id,
+        points: 480,
+        sourceRefType: 'CHECKOUT',
+        sourceRefId: 'chk-gold-1',
+      }),
+    );
+    expect(hold.replayed).toBe(false);
+    expect(hold.points).toBe(480);
+
+    const committed = await runAsTenant(TENANT_A, () =>
+      loyaltyService.commitHold(hold.holdId, {
+        orderId: randomUUID(),
+      }),
+    );
+    expect(committed.state).toBe('COMMITTED');
+
+    const accountAfterRedeem = await runAsTenant(TENANT_A, () =>
+      loyaltyService.getLoyaltyAccount(customer.id),
+    );
+    expect(accountAfterRedeem.postedPointsBalance).toBe(70);
+    expect(accountAfterRedeem.heldPoints).toBe(0);
+    expect(accountAfterRedeem.availablePoints).toBe(70);
+    expect(accountAfterRedeem.qualifyingPoints).toBe(550);
+
+    const membershipAfterRedeem = await runAsTenant(TENANT_A, () =>
+      membershipsService.getCustomerMembership(customer.id),
+    );
+    expect(membershipAfterRedeem.tier?.code).toBe('GOLD');
+  });
+
+  it('Test F & G: 10 concurrent point holds on a single customer prevent overspending and enforce idempotency hash check', async () => {
+    const customer = await profilesService.createCustomer(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        name: 'Concurrent Hold Tester',
+        phone: '0944111222',
+      },
+    );
+
+    // Seed 150 points via manual adjustment
+    await runAsTenant(TENANT_A, () =>
+      loyaltyService.adjustPoints(customer.id, ACTOR_MANAGER, 'seed-150', {
+        pointsDelta: 150,
+        reason: 'Initial points for concurrency test',
+      }),
+    );
+
+    // Fire 10 concurrent holds of 50 points each (only 3 can succeed since 3 * 50 = 150)
+    const holdResults = await Promise.allSettled(
+      Array.from({ length: 10 }, (_, idx) =>
+        runAsTenant(TENANT_A, () =>
+          loyaltyService.createHold(`conc-hold-key-${idx}`, {
+            customerId: customer.id,
+            points: 50,
+            sourceRefType: 'CHECKOUT',
+            sourceRefId: `chk-conc-${idx}`,
+          }),
+        ),
+      ),
+    );
+
+    const succeeded = holdResults.filter((r) => r.status === 'fulfilled');
+    const failed = holdResults.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+
+    expect(succeeded).toHaveLength(3);
+    expect(failed).toHaveLength(7);
+    for (const f of failed) {
+      expect((f.reason as CustomerDomainError).code).toBe(
+        CustomerDomainErrorCode.INSUFFICIENT_LOYALTY_POINTS,
+      );
+    }
+
+    const wallet = await runAsTenant(TENANT_A, () =>
+      loyaltyService.getLoyaltyAccount(customer.id),
+    );
+    expect(wallet.postedPointsBalance).toBe(150);
+    expect(wallet.heldPoints).toBe(150);
+    expect(wallet.availablePoints).toBe(0);
+
+    // Test G: Idempotent replay with same key & payload returns replayed=true
+    const winnerIdx = holdResults.findIndex((r) => r.status === 'fulfilled');
+    const replaySame = await runAsTenant(TENANT_A, () =>
+      loyaltyService.createHold(`conc-hold-key-${winnerIdx}`, {
+        customerId: customer.id,
+        points: 50,
+        sourceRefType: 'CHECKOUT',
+        sourceRefId: `chk-conc-${winnerIdx}`,
+      }),
+    );
+    expect(replaySame.replayed).toBe(true);
+
+    // Replay with same key but mutated points throws IDEMPOTENCY_CONFLICT
+    await expect(
+      runAsTenant(TENANT_A, () =>
+        loyaltyService.createHold(`conc-hold-key-${winnerIdx}`, {
+          customerId: customer.id,
+          points: 60,
+          sourceRefType: 'CHECKOUT',
+          sourceRefId: `chk-conc-${winnerIdx}`,
         }),
-      );
-      expect(updated).toMatchObject({
-        enabled: true,
-        earnAmountPerPoint: 20000,
-        pointsExpireMonths: 12,
-      });
-      expect(
-        (await as(TENANT_B, () => loyalty.getSettings())).earnAmountPerPoint,
-      ).toBe(10000);
-    });
-
-    it('adjusts points and refuses to go below zero', async () => {
-      const c = await create(TENANT_A, {});
-      const up = await as(TENANT_A, () =>
-        loyalty.adjust(c.id, { points: 100, reason: 'gift' }),
-      );
-      expect(up).toMatchObject({
-        balance: 100,
-        transaction: {
-          type: 'adjust',
-          points: 100,
-          balanceAfter: 100,
-          note: 'gift',
-        },
-      });
-      const down = await as(TENANT_A, () =>
-        loyalty.adjust(c.id, { points: -30, reason: 'fix' }),
-      );
-      expect(down.balance).toBe(70);
-      await expect(
-        as(TENANT_A, () =>
-          loyalty.adjust(c.id, { points: -71, reason: 'too much' }),
-        ),
-      ).rejects.toMatchObject({ response: { errorCode: 'U005' } });
-      expect(
-        (await as(TENANT_A, () => customers.get(c.id, true))).loyaltyPoints,
-      ).toBe(70);
-      const history = await as(TENANT_A, () =>
-        loyalty.listTransactions(c.id, { page: 1, limit: 10 }),
-      );
-      expect(history.data.map((t) => t.points)).toEqual([-30, 100]);
-    });
-
-    it('never lets concurrent deductions overdraw', async () => {
-      const c = await create(TENANT_A, {});
-      await as(TENANT_A, () =>
-        loyalty.adjust(c.id, { points: 100, reason: 'seed' }),
-      );
-      const results = await Promise.allSettled(
-        Array.from({ length: 5 }, () =>
-          as(TENANT_A, () =>
-            loyalty.adjust(c.id, { points: -30, reason: 'race' }),
-          ),
-        ),
-      );
-      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(3);
-      expect(
-        (await as(TENANT_A, () => customers.get(c.id, true))).loyaltyPoints,
-      ).toBe(10);
-      // the database refuses a negative balance whatever the code does
-      await expect(
-        ds.query(
-          `UPDATE ${table('customer')} SET points_balance = -1 WHERE id = $1`,
-          [c.id],
-        ),
-      ).rejects.toMatchObject({ constraint: 'CHK_customer_points_balance' });
+      ),
+    ).rejects.toMatchObject({
+      code: CustomerDomainErrorCode.IDEMPOTENCY_CONFLICT,
+      httpStatus: 409,
     });
   });
 
-  describe('sales.order.completed', () => {
-    it('adds the order to the buyer and earns floor(total / amountPerPoint) points', async () => {
-      const c = await create(TENANT_A, {});
-      const order = completed(c.id, 259_000, randomUUID());
-      await consume(TENANT_A, order);
-      const after = await as(TENANT_A, () => customers.get(c.id, true));
-      expect(after).toMatchObject({
-        orderCount: 1,
-        totalSpent: 259_000,
-        loyaltyPoints: 25,
-      });
-      expect(after.lastPurchaseAt).toBe('2026-10-20T07:20:00.000Z');
-      const history = await as(TENANT_A, () =>
-        loyalty.listTransactions(c.id, { page: 1, limit: 5 }),
-      );
-      expect(history.data).toMatchObject([
-        {
-          type: 'earn',
-          points: 25,
-          balanceAfter: 25,
-          orderId: order.orderId,
-          orderCode: 'DH000001',
+  it('Test H & I: Concurrent hold commit vs release race, hold expiration, and loyalty reconciliation worker', async () => {
+    const customer = await profilesService.createCustomer(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        name: 'Hold Race & Expiry Tester',
+        phone: '0933111222',
+      },
+    );
+
+    await runAsTenant(TENANT_A, () =>
+      loyaltyService.adjustPoints(customer.id, ACTOR_MANAGER, 'seed-200', {
+        pointsDelta: 200,
+        reason: 'Seed points for race and expiration tests',
+      }),
+    );
+
+    const createdHold = await runAsTenant(TENANT_A, () =>
+      loyaltyService.createHold('race-hold-1', {
+        customerId: customer.id,
+        points: 60,
+        sourceRefType: 'CHECKOUT',
+        sourceRefId: 'chk-race-1',
+      }),
+    );
+
+    // Race commitHold and releaseHold concurrently
+    const raceResults = await Promise.allSettled([
+      runAsTenant(TENANT_A, () =>
+        loyaltyService.commitHold(createdHold.holdId, {
+          orderId: randomUUID(),
+        }),
+      ),
+      runAsTenant(TENANT_A, () =>
+        loyaltyService.releaseHold(createdHold.holdId, {
+          reason: 'Concurrent cancel attempt',
+        }),
+      ),
+    ]);
+
+    const raceFulfilled = raceResults.filter((r) => r.status === 'fulfilled');
+    const raceRejected = raceResults.filter((r) => r.status === 'rejected');
+    expect(raceFulfilled).toHaveLength(1);
+    expect(raceRejected).toHaveLength(1);
+
+    // Create a second hold and backdate expires_at to test late commit rejection & reconciliation
+    const expiringHold = await runAsTenant(TENANT_A, () =>
+      loyaltyService.createHold('expiring-hold-1', {
+        customerId: customer.id,
+        points: 40,
+        sourceRefType: 'CHECKOUT',
+        sourceRefId: 'chk-exp-1',
+        ttlSeconds: 30,
+      }),
+    );
+
+    await dataSource.query(
+      `UPDATE "${schema}"."loyalty_holds"
+       SET "expires_at" = now() - interval '5 minutes'
+       WHERE "id" = $1`,
+      [expiringHold.holdId],
+    );
+
+    await expect(
+      runAsTenant(TENANT_A, () =>
+        loyaltyService.commitHold(expiringHold.holdId, {
+          orderId: randomUUID(),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: CustomerDomainErrorCode.LOYALTY_HOLD_EXPIRED,
+      httpStatus: 409,
+    });
+
+    // Run reconciliation worker -> 0 discrepancies between wallet balances, ledger sums, and active holds
+    const reconReport = await runAsTenant(TENANT_A, () =>
+      loyaltyService.reconcileTenantLoyalty(),
+    );
+    expect(reconReport.discrepancyCount).toBe(0);
+  });
+
+  it('Test J & K: Multi-step partial return reversal using historical snapshot rate, negative clawback after redemption, and out-of-order return event reconciliation', async () => {
+    const customer = await profilesService.createCustomer(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        name: 'Return Reversal Tester',
+        phone: '0922111222',
+      },
+    );
+
+    // Ensure rate is 10,000 VND / point when Order 1 completes
+    await runAsTenant(TENANT_A, () =>
+      loyaltyService.updateSettings(ACTOR_MANAGER, {
+        earnAmountPerPoint: 10000,
+      }),
+    );
+
+    const order1Id = randomUUID();
+    await loyaltyService.onSalesOrderCompleted({
+      id: randomUUID(),
+      type: SALES_ORDER_COMPLETED.type,
+      version: 1,
+      occurredAt: new Date().toISOString(),
+      tenantId: TENANT_A,
+      actor: null,
+      traceId: randomUUID(),
+      payload: {
+        orderId: order1Id,
+        code: 'DH-RET-001',
+        branchId: BRANCH_A,
+        customerId: customer.id,
+        totalAmount: 1500000,
+        itemCount: 1,
+        subtotal: 1500000,
+        discountTotal: 0,
+        taxTotal: 0,
+        grandTotal: 1500000,
+        paymentMethod: 'CASH',
+        createdBy: ACTOR_MANAGER,
+        completedAt: new Date().toISOString(),
+        items: [],
+      },
+    });
+
+    // Customer earned 150 points. Now change tenant earn rate to 25,000 VND / point!
+    await runAsTenant(TENANT_A, () =>
+      loyaltyService.updateSettings(ACTOR_MANAGER, {
+        earnAmountPerPoint: 25000,
+      }),
+    );
+
+    // Customer redeems 120 points on another purchase -> postedPointsBalance = 30
+    const hold = await runAsTenant(TENANT_A, () =>
+      loyaltyService.createHold('hold-before-return', {
+        customerId: customer.id,
+        points: 120,
+        sourceRefType: 'CHECKOUT',
+        sourceRefId: 'chk-before-ret',
+      }),
+    );
+    await runAsTenant(TENANT_A, () =>
+      loyaltyService.commitHold(hold.holdId, { orderId: randomUUID() }),
+    );
+
+    // Partial return 1: 500,000 VND of 1,500,000 VND -> reverses 50 points (using historical 150 pts snapshot)
+    // Balance goes from 30 -> -20 (clawback debt = 20, available = 0)
+    const return1Id = randomUUID();
+    const return1Event: EventEnvelope<SalesReturnEventPayload> = {
+      id: randomUUID(),
+      type: SALES_RETURN_COMPLETED.type,
+      version: 1,
+      occurredAt: new Date().toISOString(),
+      tenantId: TENANT_A,
+      actor: null,
+      traceId: randomUUID(),
+      payload: {
+        returnId: return1Id,
+        code: 'TH000001',
+        orderId: order1Id,
+        customerId: customer.id,
+        branchId: BRANCH_A,
+        status: 'COMPLETED',
+        totalRefundAmount: 500000,
+        occurredAt: new Date().toISOString(),
+      },
+    };
+    await loyaltyService.onSalesReturnCompleted(return1Event);
+    // Replay return1Event -> idempotent no-op
+    await loyaltyService.onSalesReturnCompleted(return1Event);
+
+    const accAfterRet1 = await runAsTenant(TENANT_A, () =>
+      loyaltyService.getLoyaltyAccount(customer.id),
+    );
+    expect(accAfterRet1.postedPointsBalance).toBe(-20);
+    expect(accAfterRet1.availablePoints).toBe(0);
+
+    // Partial return 2: remaining 1,000,000 VND -> reverses remaining 100 points (total reversed = 150, balance = -120)
+    await loyaltyService.onSalesReturnCompleted({
+      id: randomUUID(),
+      type: SALES_RETURN_COMPLETED.type,
+      version: 1,
+      occurredAt: new Date().toISOString(),
+      tenantId: TENANT_A,
+      actor: null,
+      traceId: randomUUID(),
+      payload: {
+        returnId: randomUUID(),
+        code: 'TH000002',
+        orderId: order1Id,
+        customerId: customer.id,
+        branchId: BRANCH_A,
+        status: 'COMPLETED',
+        totalRefundAmount: 1000000,
+        occurredAt: new Date().toISOString(),
+      },
+    });
+
+    const accAfterRet2 = await runAsTenant(TENANT_A, () =>
+      loyaltyService.getLoyaltyAccount(customer.id),
+    );
+    expect(accAfterRet2.postedPointsBalance).toBe(-120);
+    expect(accAfterRet2.availablePoints).toBe(0);
+
+    // Restore rate to 10,000 VND / point and test out-of-order return arriving BEFORE order completion
+    await runAsTenant(TENANT_A, () =>
+      loyaltyService.updateSettings(ACTOR_MANAGER, {
+        earnAmountPerPoint: 10000,
+      }),
+    );
+
+    const outOfOrderCustomer = await profilesService.createCustomer(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        name: 'Out Of Order Event Customer',
+        phone: '0919888777',
+      },
+    );
+    const order2Id = randomUUID();
+    const earlyReturnId = randomUUID();
+
+    // Return event arrives FIRST
+    await loyaltyService.onSalesReturnCompleted({
+      id: randomUUID(),
+      type: SALES_RETURN_COMPLETED.type,
+      version: 1,
+      occurredAt: new Date().toISOString(),
+      tenantId: TENANT_A,
+      actor: null,
+      traceId: randomUUID(),
+      payload: {
+        returnId: earlyReturnId,
+        code: 'TH-EARLY-01',
+        orderId: order2Id,
+        customerId: outOfOrderCustomer.id,
+        branchId: BRANCH_A,
+        status: 'COMPLETED',
+        totalRefundAmount: 400000,
+        occurredAt: new Date().toISOString(),
+      },
+    });
+
+    // Order completion (1,000,000 VND -> 100 pts) arrives SECOND -> awards 100 pts and immediately reverses 40 pts -> net 60 pts!
+    await loyaltyService.onSalesOrderCompleted({
+      id: randomUUID(),
+      type: SALES_ORDER_COMPLETED.type,
+      version: 1,
+      occurredAt: new Date().toISOString(),
+      tenantId: TENANT_A,
+      actor: null,
+      traceId: randomUUID(),
+      payload: {
+        orderId: order2Id,
+        code: 'DH-LATE-01',
+        branchId: BRANCH_A,
+        customerId: outOfOrderCustomer.id,
+        totalAmount: 1000000,
+        itemCount: 1,
+        subtotal: 1000000,
+        discountTotal: 0,
+        taxTotal: 0,
+        grandTotal: 1000000,
+        paymentMethod: 'CASH',
+        createdBy: ACTOR_MANAGER,
+        completedAt: new Date().toISOString(),
+        items: [],
+      },
+    });
+
+    const oooAccount = await runAsTenant(TENANT_A, () =>
+      loyaltyService.getLoyaltyAccount(outOfOrderCustomer.id),
+    );
+    expect(oooAccount.postedPointsBalance).toBe(60);
+    expect(oooAccount.qualifyingPoints).toBe(60);
+  });
+
+  it('Test M & N: Manual point adjustments, duplicate detection, atomic customer merge with ledger transfer, and CSV import/export formula-injection protection', async () => {
+    const sourceCust = await profilesService.createCustomer(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        name: 'Duplicate Customer Merge',
+        phone: '0911222333',
+        email: 'dup-merge@example.com',
+        initialAddress: {
+          addressLine: '99 Source Street',
         },
-      ]);
+      },
+    );
+    const targetCust = await profilesService.createCustomer(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        name: 'Duplicate Customer Merge',
+        phone: '0911222444',
+        email: 'dup-merge@example.com',
+      },
+    );
+
+    // Reject 0-delta manual adjustment
+    await expect(
+      runAsTenant(TENANT_A, () =>
+        loyaltyService.adjustPoints(sourceCust.id, ACTOR_MANAGER, 'bad-adj', {
+          pointsDelta: 0,
+          reason: 'Zero delta not allowed',
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: CustomerDomainErrorCode.VALIDATION_ERROR,
+      httpStatus: 422,
     });
 
-    it('keeps the latest purchase date when an older order arrives late', async () => {
-      const c = await create(TENANT_A, {});
-      await consume(TENANT_A, completed(c.id, 1000));
-      await consume(TENANT_A, {
-        ...completed(c.id, 1000),
-        completedAt: '2026-01-01T00:00:00.000Z',
-      });
-      expect(
-        (await as(TENANT_A, () => customers.get(c.id, true))).lastPurchaseAt,
-      ).toBe('2026-10-20T07:20:00.000Z');
+    // Credit 120 points to sourceCust and 80 points to targetCust
+    await runAsTenant(TENANT_A, () =>
+      loyaltyService.adjustPoints(sourceCust.id, ACTOR_MANAGER, 'adj-src-120', {
+        pointsDelta: 120,
+        reason: 'Source customer bonus',
+      }),
+    );
+    await runAsTenant(TENANT_A, () =>
+      loyaltyService.adjustPoints(targetCust.id, ACTOR_MANAGER, 'adj-tgt-80', {
+        pointsDelta: 80,
+        reason: 'Target customer bonus',
+      }),
+    );
+
+    // Detect duplicates
+    const duplicates = await dataManagementService.findDuplicates(TENANT_A);
+    expect(duplicates.total).toBeGreaterThanOrEqual(1);
+
+    // Merge sourceCust into targetCust
+    const mergeRes = await dataManagementService.mergeCustomers(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        sourceCustomerId: sourceCust.id,
+        targetCustomerId: targetCust.id,
+        reason: 'Consolidate duplicate profiles',
+        idempotencyKey: 'merge-src-tgt-001',
+      },
+    );
+    expect(mergeRes.idempotentReplay).toBe(false);
+    expect(mergeRes.mergeRecord?.transferredPoints).toBe(120);
+    expect(mergeRes.mergeRecord?.movedAddressesCount).toBe(1);
+    expect(mergeRes.targetCustomer?.postedPointsBalance).toBe(200);
+
+    // Idempotent replay of the merge
+    const mergeReplay = await dataManagementService.mergeCustomers(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        sourceCustomerId: sourceCust.id,
+        targetCustomerId: targetCust.id,
+        idempotencyKey: 'merge-src-tgt-001',
+      },
+    );
+    expect(mergeReplay.idempotentReplay).toBe(true);
+
+    // Import job with formula injection payload and export with sanitization + PII masking
+    const importJob = await dataManagementService.createImportJob(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {
+        conflictPolicy: 'SKIP',
+        rows: [
+          {
+            name: "=CMD|' /C calc'!A0",
+            phone: '0905123456',
+            email: 'csvinject@example.com',
+            note: '+SUM(A1:A10)',
+          },
+          {
+            name: 'Invalid Phone Row',
+            phone: 'not-a-phone',
+          },
+        ],
+      },
+    );
+    expect(importJob.totalRows).toBe(2);
+    expect(importJob.successRows).toBe(1);
+    expect(importJob.failedRows).toBe(1);
+
+    const exportJob = await dataManagementService.createExportJob(
+      TENANT_A,
+      ACTOR_MANAGER,
+      {},
+    );
+    expect(exportJob.resultCsv).toContain("'=CMD|");
+    expect(exportJob.resultCsv).toContain('090***3456');
+  });
+
+  it('Test O: Strict cross-tenant isolation, 360-degree summary, S2S eligibility, and GDPR/privacy anonymization', async () => {
+    // Tenant B can create a customer with the exact same phone number as Tenant A
+    const tenantBCust = await profilesService.createCustomer(
+      TENANT_B,
+      ACTOR_MANAGER,
+      {
+        name: 'Tenant B Customer',
+        phone: '0912345678',
+        email: 'tenantb@example.com',
+      },
+      true,
+    );
+    expect(tenantBCust.phoneNormalized).toBe('0912345678');
+
+    // Tenant A cannot read Tenant B's customer
+    await expect(
+      profilesService.getCustomerById(TENANT_A, tenantBCust.id),
+    ).rejects.toMatchObject({
+      code: CustomerDomainErrorCode.CUSTOMER_NOT_FOUND,
+      httpStatus: 404,
     });
 
-    it("uses the store's setting: another rate, or none when the programme is off", async () => {
-      const c = await create(TENANT_A, {});
-      await as(TENANT_A, () =>
-        loyalty.updateSettings({ earnAmountPerPoint: 1000 }),
-      );
-      await consume(TENANT_A, completed(c.id, 5_500));
-      expect(
-        (await as(TENANT_A, () => customers.get(c.id, true))).loyaltyPoints,
-      ).toBe(5);
-      await as(TENANT_A, () => loyalty.updateSettings({ enabled: false }));
-      await consume(TENANT_A, completed(c.id, 50_000));
-      const after = await as(TENANT_A, () => customers.get(c.id, true));
-      expect(after).toMatchObject({
-        orderCount: 2,
-        totalSpent: 55_500,
-        loyaltyPoints: 5,
-      });
-    });
+    // S2S Eligibility & 360 Summary on Tenant B customer
+    const eligibility = await profilesService.getCustomerEligibility(
+      TENANT_B,
+      tenantBCust.id,
+    );
+    expect(eligibility.isActive).toBe(true);
+    expect(eligibility.customerId).toBe(tenantBCust.id);
 
-    it('earns nothing below one point, but still counts the order', async () => {
-      const c = await create(TENANT_A, {});
-      await consume(TENANT_A, completed(c.id, 9_999));
-      expect(await as(TENANT_A, () => customers.get(c.id, true))).toMatchObject(
-        { orderCount: 1, loyaltyPoints: 0 },
-      );
-      expect(
-        (
-          await as(TENANT_A, () =>
-            loyalty.listTransactions(c.id, { page: 1, limit: 5 }),
-          )
-        ).data,
-      ).toEqual([]);
-    });
+    const summary = await profilesService.getCustomerSummary(
+      TENANT_B,
+      tenantBCust.id,
+    );
+    expect(summary.financialSummary.authoritativeSource).toBe(
+      'PENDING_M5_FINANCE',
+    );
 
-    it("ignores an order without a customer, an unknown customer, another store's and a deleted one", async () => {
-      const a = await create(TENANT_A, {});
-      const b = await create(TENANT_B, {});
-      const deleted = await create(TENANT_A, { phone: '0907777777' });
-      await as(TENANT_A, () => customers.remove(deleted.id));
-      await consume(TENANT_A, completed(null, 100_000));
-      await consume(TENANT_A, completed(undefined, 100_000));
-      await consume(TENANT_A, completed(randomUUID(), 100_000));
-      await consume(TENANT_A, completed(b.id, 100_000)); // B's customer, A's event
-      await consume(TENANT_A, completed(deleted.id, 100_000));
-      expect(await as(TENANT_A, () => customers.get(a.id, true))).toMatchObject(
-        { orderCount: 0, totalSpent: 0 },
-      );
-      expect(await as(TENANT_B, () => customers.get(b.id, true))).toMatchObject(
-        { orderCount: 0, totalSpent: 0, loyaltyPoints: 0 },
-      );
-      expect(
-        await ds.query(`SELECT 1 FROM ${table('loyalty_transaction')}`),
-      ).toEqual([]);
-    });
+    // Anonymize Tenant B customer
+    const anonymized = await profilesService.deactivateCustomer(
+      TENANT_B,
+      tenantBCust.id,
+      ACTOR_MANAGER,
+      {
+        anonymize: true,
+        reason: 'Customer privacy deletion request',
+      },
+    );
+    expect(anonymized.status).toBe('ANONYMIZED');
+    expect(anonymized.phone).toBeNull();
+    expect(anonymized.phoneNormalized).toBeNull();
+    expect(anonymized.email).toBeNull();
+    expect(anonymized.name).toBe(`ANONYMIZED-${tenantBCust.code}`);
 
-    it('rolls the whole handler back on failure (the inbox retries it)', async () => {
-      const c = await create(TENANT_A, {});
-      const order = completed(c.id, 100_000);
-      await consume(TENANT_A, order);
-      // the same order again would earn twice: the unique reference stops it, and nothing else sticks
-      await expect(consume(TENANT_A, order)).rejects.toMatchObject({
-        constraint: 'UQ_loyalty_transaction_ref',
-      });
-      expect(await as(TENANT_A, () => customers.get(c.id, true))).toMatchObject(
-        { orderCount: 1, totalSpent: 100_000, loyaltyPoints: 10 },
+    // Verify all outbox events were recorded atomically
+    const outboxCount = await dataSource
+      .getRepository(OutboxEventEntity)
+      .count();
+    expect(outboxCount).toBeGreaterThan(10);
+
+    // Verify global ledger invariant across all loyalty accounts in both tenants
+    const ledgerAudit: Array<{ mismatch_count: string }> =
+      await dataSource.query(
+        `SELECT COUNT(*)::text AS mismatch_count
+         FROM "${schema}"."loyalty_accounts" a
+         WHERE a.posted_points_balance != COALESCE((
+           SELECT SUM(t.points_delta)
+           FROM "${schema}"."loyalty_transactions" t
+           WHERE t.tenant_id = a.tenant_id AND t.loyalty_account_id = a.id
+         ), 0)`,
       );
-    });
+    expect(Number(ledgerAudit[0]?.mismatch_count ?? 0)).toBe(0);
   });
 });

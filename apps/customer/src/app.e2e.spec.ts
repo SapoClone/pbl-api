@@ -8,56 +8,179 @@ import {
 } from '@pbl/common';
 import { AddressInfo } from 'net';
 import request from 'supertest';
-import { CustomersController } from './customers/customers.controller';
-import { CustomersService } from './customers/customers.service';
-import {
-  CustomerGroupsController,
-  CustomerTagsController,
-} from './groups/groups.controller';
-import { GroupsService } from './groups/groups.service';
-import { TagsService } from './groups/tags.service';
-import { LoyaltySettingsController } from './loyalty/loyalty-settings.controller';
-import { LoyaltyService } from './loyalty/loyalty.service';
+import { AddressesController } from './modules/addresses/addresses.controller';
+import { AddressesService } from './modules/addresses/addresses.service';
+import { DataManagementController } from './modules/data-management/data-management.controller';
+import { DataManagementService } from './modules/data-management/data-management.service';
+import { GroupsController } from './modules/groups/groups.controller';
+import { GroupsService } from './modules/groups/groups.service';
+import { LoyaltyController } from './modules/loyalty/loyalty.controller';
+import { LoyaltyService } from './modules/loyalty/loyalty.service';
+import { MembershipsController } from './modules/memberships/memberships.controller';
+import { MembershipsService } from './modules/memberships/memberships.service';
+import { ProfilesController } from './modules/profiles/profiles.controller';
+import { ProfilesService } from './modules/profiles/profiles.service';
+import { TagsController } from './modules/tags/tags.controller';
+import { TagsService } from './modules/tags/tags.service';
+import { isValidInternalToken } from './presentation/internal-token.guard';
 
 const auth = createTestAuth();
 const TENANT = '11111111-1111-4111-8111-111111111111';
-const ID = '33333333-3333-4333-8333-333333333333';
-const ADDR = '44444444-4444-4444-8444-444444444444';
+const CUSTOMER_ID = '22222222-2222-4222-8222-222222222222';
 
-const customers = {
-  list: jest.fn(async () => ({ data: [], pagination: {} })),
-  summary: jest.fn(async () => ({ total: 0 })),
-  exportCsv: jest.fn(async () => 'code,name\r\n'),
-  create: jest.fn(async () => ({ id: ID })),
-  get: jest.fn(async () => ({ id: ID })),
-  update: jest.fn(async () => ({ id: ID })),
-  remove: jest.fn(async () => undefined),
-  addAddress: jest.fn(async () => ({ id: ID })),
-  updateAddress: jest.fn(async () => ({ id: ID })),
-  removeAddress: jest.fn(async () => undefined),
-};
-const loyalty = {
-  listTransactions: jest.fn(async () => ({ data: [], pagination: {} })),
-  adjust: jest.fn(async () => ({ transaction: {}, balance: 1 })),
-  getSettings: jest.fn(async () => ({ enabled: true })),
-  updateSettings: jest.fn(async () => ({ enabled: false })),
-};
-const groups = {
-  list: jest.fn(async () => ({ data: [] })),
-  create: jest.fn(async () => ({ id: ID })),
-  rename: jest.fn(async () => ({ id: ID })),
-};
-const tags = {
-  list: jest.fn(async () => ({ data: [] })),
-  create: jest.fn(async () => ({ id: ID })),
+const profilesService = {
+  createCustomer: jest.fn(async (_tid: string, _actor: string, dto: any) => ({
+    id: CUSTOMER_ID,
+    code: 'KH000001',
+    name: dto.name,
+    status: 'ACTIVE',
+    version: 1,
+  })),
+  listCustomers: jest.fn(async () => ({
+    items: [],
+    total: 0,
+    page: 1,
+    limit: 20,
+  })),
+  lookupCustomer: jest.fn(async () => ({
+    id: CUSTOMER_ID,
+    code: 'KH000001',
+    phoneNormalized: '0912345678',
+  })),
+  getCustomerById: jest.fn(async () => ({
+    id: CUSTOMER_ID,
+    code: 'KH000001',
+    name: 'Nguyen Van A',
+  })),
+  updateCustomer: jest.fn(async () => ({
+    id: CUSTOMER_ID,
+    version: 2,
+  })),
+  deactivateCustomer: jest.fn(async () => ({
+    id: CUSTOMER_ID,
+    status: 'INACTIVE',
+    version: 2,
+  })),
+  getCustomerSummary: jest.fn(async () => ({
+    customer: { id: CUSTOMER_ID },
+    loyalty: { availablePoints: 100 },
+  })),
+  getPurchaseSummary: jest.fn(async () => ({
+    customerId: CUSTOMER_ID,
+    completedOrderCount: 2,
+  })),
+  listCustomerOrders: jest.fn(async () => ({
+    customerId: CUSTOMER_ID,
+    items: [],
+    total: 0,
+  })),
+  getKpiSummary: jest.fn(async () => ({ total: 1, groupCounts: { all: 1 } })),
+  exportCustomersCsv: jest.fn(async () => 'code,name\nKH1,A'),
+  getCustomerEligibility: jest.fn(async () => ({
+    customerId: CUSTOMER_ID,
+    isActive: true,
+    loyalty: { availablePoints: 50 },
+  })),
 };
 
-/**
- * The service's HTTP shell without a database: logging, the real auth guard (with a
- * throwaway key), health and the controllers over stub services. AppModule needs
- * Postgres and the queue; the integration tests (`pnpm test:int`) and the local stack
- * cover those.
- */
+const groupsService = {
+  createGroup: jest.fn(async (dto: any) => ({ id: 'g1', name: dto.name })),
+  listGroups: jest.fn(async () => []),
+  updateGroup: jest.fn(async () => ({ id: 'g1' })),
+  deleteGroup: jest.fn(async () => undefined),
+  assignCustomerToGroup: jest.fn(async () => ({ id: CUSTOMER_ID })),
+};
+
+const tagsService = {
+  listTags: jest.fn(async () => ({ data: [{ id: 't1', name: 'VIP' }] })),
+  createTag: jest.fn(async (_t: string, dto: any) => ({
+    id: 't1',
+    name: dto.name,
+  })),
+};
+
+const membershipsService = {
+  createTier: jest.fn(async (dto: any) => ({ id: 't1', name: dto.name })),
+  listTiers: jest.fn(async () => []),
+  updateTier: jest.fn(async () => ({ id: 't1' })),
+  getCustomerMembership: jest.fn(async () => ({ customerId: CUSTOMER_ID })),
+};
+
+const addressRow = () => ({
+  id: 'a1',
+  phone: '0912345678',
+  phoneNormalized: '0912345678',
+});
+const addressesService = {
+  addAddress: jest.fn(async () => addressRow()),
+  listAddresses: jest.fn(async () => [addressRow()]),
+  updateAddress: jest.fn(async () => addressRow()),
+  deactivateAddress: jest.fn(async () => ({ id: 'a1', status: 'INACTIVE' })),
+  setDefaultAddress: jest.fn(async () => ({
+    ...addressRow(),
+    isDefault: true,
+  })),
+};
+
+const loyaltyService = {
+  getSettings: jest.fn(async () => ({
+    isEnabled: true,
+    earnAmountPerPoint: 10000,
+    redeemValuePerPoint: 1000,
+    pointsExpirationDays: 360,
+    version: 1,
+  })),
+  updateSettings: jest.fn(async () => ({
+    isEnabled: true,
+    earnAmountPerPoint: 10000,
+    redeemValuePerPoint: 1000,
+    pointsExpirationDays: 360,
+    version: 2,
+  })),
+  listTransactionsPage: jest.fn(async () => ({ data: [], pagination: {} })),
+  getLoyaltyAccount: jest.fn(async () => ({
+    postedPointsBalance: 100,
+    heldPoints: 0,
+    availablePoints: 100,
+  })),
+  listLoyaltyTransactions: jest.fn(async () => ({ data: [], total: 0 })),
+  adjustPoints: jest.fn(async () => ({
+    transaction: {
+      id: 'lt1',
+      transactionType: 'MANUAL_ADJUSTMENT',
+      pointsDelta: -20,
+      reason: 'Dieu chinh tay',
+      createdAt: new Date(0),
+    },
+    account: { postedPointsBalance: 150, availablePoints: 150 },
+    replayed: false,
+  })),
+  reconcileTenantLoyalty: jest.fn(async () => ({ discrepancyCount: 0 })),
+  createHold: jest.fn(async () => ({ id: 'h1', state: 'HELD', points: 20 })),
+  getHoldById: jest.fn(async () => ({ id: 'h1', state: 'HELD' })),
+  commitHold: jest.fn(async () => ({ id: 'h1', state: 'COMMITTED' })),
+  releaseHold: jest.fn(async () => ({ id: 'h1', state: 'RELEASED' })),
+};
+
+const dataManagementService = {
+  findDuplicates: jest.fn(async () => ({ items: [], total: 0 })),
+  mergeCustomers: jest.fn(async () => ({
+    idempotentReplay: false,
+    mergeRecord: { id: 'm1' },
+  })),
+  importCustomersFromFile: jest.fn(async () => ({
+    total: 1,
+    created: 1,
+    updated: 0,
+    failed: 0,
+    errors: [],
+  })),
+  createImportJob: jest.fn(async () => ({ id: 'j1', status: 'COMPLETED' })),
+  getImportJob: jest.fn(async () => ({ id: 'j1', status: 'COMPLETED' })),
+  createExportJob: jest.fn(async () => ({ id: 'j2', status: 'COMPLETED' })),
+  getExportJob: jest.fn(async () => ({ id: 'j2', status: 'COMPLETED' })),
+};
+
 @Module({
   imports: [
     PblLoggingModule.forRoot('customer'),
@@ -65,37 +188,37 @@ const tags = {
     PblHealthModule.forRoot({ service: 'customer', redisFromEnv: true }),
   ],
   controllers: [
-    CustomersController,
-    CustomerGroupsController,
-    CustomerTagsController,
-    LoyaltySettingsController,
+    GroupsController,
+    MembershipsController,
+    LoyaltyController,
+    DataManagementController,
+    AddressesController,
+    ProfilesController,
+    TagsController,
   ],
   providers: [
-    { provide: CustomersService, useValue: customers },
-    { provide: LoyaltyService, useValue: loyalty },
-    { provide: GroupsService, useValue: groups },
-    { provide: TagsService, useValue: tags },
+    { provide: ProfilesService, useValue: profilesService },
+    { provide: GroupsService, useValue: groupsService },
+    { provide: TagsService, useValue: tagsService },
+    { provide: MembershipsService, useValue: membershipsService },
+    { provide: AddressesService, useValue: addressesService },
+    { provide: LoyaltyService, useValue: loyaltyService },
+    { provide: DataManagementService, useValue: dataManagementService },
   ],
 })
-class TestAppModule {}
+class TestCustomerAppModule {}
 
-const validAddress = {
-  recipientName: 'Ha',
-  recipientPhone: '0901234528',
-  addressLine: '24 Hoa Mai',
-  ward: 'Cau Kieu',
-  district: 'Phu Nhuan',
-  province: 'HCM',
-};
-
-describe('Customer service bootstrap', () => {
+describe('Customer & Loyalty M4 HTTP shell & RBAC', () => {
   let app: INestApplication;
   const saved = { ...process.env };
 
   beforeAll(async () => {
     process.env.APP_SWAGGER_ENABLED = 'false';
-    delete process.env.REDIS_HOST; // no Redis under test
-    app = await bootstrapService(TestAppModule, { name: 'customer', port: 0 });
+    delete process.env.REDIS_HOST;
+    app = await bootstrapService(TestCustomerAppModule, {
+      name: 'customer',
+      port: 0,
+    });
   });
 
   afterAll(async () => {
@@ -109,12 +232,6 @@ describe('Customer service bootstrap', () => {
     `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   const as = (roles: string[], tid: string | null = TENANT) =>
     auth.bearer(roles, tid ?? undefined);
-  const withPerms = (permissions: string[]) =>
-    auth.bearerWithPermissions('sales_staff', permissions, TENANT);
-  const call = (method: string, path: string, roles: string[] | null) => {
-    const req = (request(url()) as any)[method](path);
-    return roles ? req.set('Authorization', as(roles)) : req;
-  };
 
   it('GET /health reports the service', async () => {
     const res = await request(url()).get('/health').expect(200);
@@ -143,253 +260,461 @@ describe('Customer service bootstrap', () => {
     });
   });
 
-  describe('permissions', () => {
-    const base = '/api/v1';
-    const body: Record<string, unknown> = {
-      create: { name: 'Ha', phone: '0901234528' },
-      address: validAddress,
-      adjust: { points: 5, reason: 'x' },
-      name: { name: 'x' },
-      empty: {},
-    };
-    // method, path, success status, required permission, body
-    const routes: [string, string, number, string, string][] = [
-      ['get', `${base}/customers`, 200, 'customers.view', ''],
-      ['get', `${base}/customers/summary`, 200, 'customers.view', ''],
-      ['get', `${base}/customers/export`, 200, 'customers.view', ''],
-      ['post', `${base}/customers`, 201, 'customers.create', 'create'],
-      ['get', `${base}/customers/${ID}`, 200, 'customers.view', ''],
-      ['patch', `${base}/customers/${ID}`, 200, 'customers.update', 'name'],
-      ['delete', `${base}/customers/${ID}`, 204, 'customers.delete', ''],
+  describe('Authentication & Tenant Isolation Guardrails', () => {
+    it('rejects unauthenticated requests with 401', async () => {
+      await request(url()).get('/v1/customers').expect(401);
+      await request(url())
+        .post('/v1/customers')
+        .send({ name: 'A' })
+        .expect(401);
+      await request(url()).get('/v1/customer-groups').expect(401);
+      await request(url()).get('/v1/loyalty/settings').expect(401);
+    });
+
+    it('rejects tokens without a selected store (tenantId) with 403', async () => {
+      await request(url())
+        .get('/v1/customers')
+        .set('Authorization', as(['owner'], null))
+        .expect(403);
+    });
+
+    const C = CUSTOMER_ID;
+    const withPerms = (permissions: string[]) =>
+      auth.bearerWithPermissions('custom_role', permissions, TENANT);
+    const call = (method: string, path: string, authz: string) =>
+      (request(url()) as any)
+        [method](path)
+        .set('Authorization', authz)
+        .send({});
+    // [method, path, permission that opens the route]
+    const matrix: Array<[string, string, string]> = [
+      ['post', '/v1/customers', 'customers.create'],
+      ['get', '/v1/customers', 'customers.view'],
+      ['get', '/v1/customers/lookup?phone=0912345678', 'customers.view'],
+      ['get', `/v1/customers/${C}`, 'customers.view'],
+      ['patch', `/v1/customers/${C}`, 'customers.update'],
+      ['delete', `/v1/customers/${C}`, 'customers.delete'],
+      ['get', `/v1/customers/${C}/summary`, 'customers.view'],
+      ['get', `/v1/customers/${C}/purchase-summary`, 'customers.view'],
+      ['get', `/v1/customers/${C}/orders`, 'customers.view'],
+      ['post', '/v1/customer-groups', 'customers.create'],
+      ['get', '/v1/customer-groups', 'customers.view'],
+      ['patch', `/v1/customer-groups/${C}`, 'customers.update'],
+      ['post', `/v1/customers/${C}/assign-group`, 'customers.update'],
+      ['post', '/v1/membership-tiers', 'customers.create'],
+      ['get', '/v1/membership-tiers', 'customers.view'],
+      ['patch', `/v1/membership-tiers/${C}`, 'customers.update'],
+      ['get', `/v1/customers/${C}/membership`, 'customers.view'],
+      ['post', `/v1/customers/${C}/addresses`, 'customers.create'],
+      ['get', `/v1/customers/${C}/addresses`, 'customers.view'],
+      ['patch', `/v1/customers/${C}/addresses/${C}`, 'customers.update'],
+      ['delete', `/v1/customers/${C}/addresses/${C}`, 'customers.delete'],
       [
         'post',
-        `${base}/customers/${ID}/addresses`,
-        201,
-        'customers.create',
-        'address',
-      ],
-      [
-        'patch',
-        `${base}/customers/${ID}/addresses/${ADDR}`,
-        200,
+        `/v1/customers/${C}/addresses/${C}/set-default`,
         'customers.update',
-        'empty',
       ],
-      [
-        'delete',
-        `${base}/customers/${ID}/addresses/${ADDR}`,
-        204,
-        'customers.delete',
-        '',
-      ],
-      [
-        'get',
-        `${base}/customers/${ID}/loyalty-transactions`,
-        200,
-        'customers.view',
-        '',
-      ],
-      [
-        'post',
-        `${base}/customers/${ID}/loyalty-adjustments`,
-        201,
-        'customers.update',
-        'adjust',
-      ],
-      ['get', `${base}/customer-groups`, 200, 'customers.view', ''],
-      ['post', `${base}/customer-groups`, 201, 'customers.create', 'name'],
-      [
-        'patch',
-        `${base}/customer-groups/${ID}`,
-        200,
-        'customers.update',
-        'name',
-      ],
-      ['get', `${base}/customer-tags`, 200, 'customers.view', ''],
-      ['post', `${base}/customer-tags`, 201, 'customers.create', 'name'],
-      ['get', `${base}/loyalty-settings`, 200, 'customers.view', ''],
-      ['patch', `${base}/loyalty-settings`, 200, 'customers.update', 'empty'],
+      ['get', '/v1/loyalty/settings', 'customers.view'],
+      ['put', '/v1/loyalty/settings', 'customers.update'],
+      ['get', `/v1/customers/${C}/loyalty`, 'customers.view'],
+      ['get', `/v1/customers/${C}/loyalty/transactions`, 'customers.view'],
+      ['post', `/v1/customers/${C}/loyalty/adjustments`, 'customers.update'],
+      ['post', '/v1/loyalty/reconcile', 'customers.update'],
+      ['get', '/v1/customers/summary', 'customers.view'],
+      ['get', '/v1/customers/export', 'customers.view'],
+      ['get', '/v1/customers/import-template', 'customers.create'],
+      ['post', '/v1/customers/import', 'customers.create'],
+      ['delete', `/v1/customer-groups/${C}`, 'customers.delete'],
+      ['get', '/v1/customer-tags', 'customers.view'],
+      ['post', '/v1/customer-tags', 'customers.update'],
+      ['get', `/v1/customers/${C}/loyalty-transactions`, 'customers.view'],
+      ['post', `/v1/customers/${C}/loyalty-adjustments`, 'customers.update'],
+      ['get', '/v1/loyalty-settings', 'customers.view'],
+      ['patch', '/v1/loyalty-settings', 'customers.update'],
+      ['get', '/v1/customers/duplicates', 'customers.view'],
+      ['post', '/v1/customers/merge', 'customers.update'],
+      ['post', '/v1/customers/import-jobs', 'customers.create'],
+      ['get', `/v1/customers/import-jobs/${C}`, 'customers.view'],
+      ['post', '/v1/customers/export-jobs', 'customers.view'],
+      ['get', `/v1/customers/export-jobs/${C}`, 'customers.view'],
     ];
-    it.each(routes)(
-      '%s %s refuses a request without a token (401)',
-      async (method, path, _ok, _a, b) => {
-        await call(method, path, null)
-          .send(b ? body[b] : undefined)
-          .expect(401);
+
+    it.each(matrix)(
+      '%s %s: allowed with %s, 403 without, owner passes',
+      async (method, path, perm) => {
+        const ok = await call(method, path, withPerms([perm]));
+        expect(ok.status).not.toBe(403);
+        expect(ok.status).not.toBe(401);
+        expect(
+          (await call(method, path, withPerms(['orders.view']))).status,
+        ).toBe(403);
+        expect((await call(method, path, withPerms([]))).status).toBe(403);
+        const owner = await call(method, path, as(['owner']));
+        expect(owner.status).not.toBe(403);
+        expect(owner.status).not.toBe(401);
       },
     );
 
-    it.each(routes)(
-      '%s %s refuses a token without a store (403)',
-      async (method, path, _ok, _a, b) => {
-        await (request(url()) as any)
-          [method](path)
-          .set('Authorization', as(['owner'], null))
-          .send(b ? body[b] : undefined)
-          .expect(403);
-      },
-    );
-
-    it.each(routes)(
-      '%s %s needs its permission (and no other)',
-      async (method, path, ok, code, b) => {
-        const send = (header: string) =>
-          (request(url()) as any)
-            [method](path)
-            .set('Authorization', header)
-            .send(b ? body[b] : undefined);
-        const others = [
-          'customers.view',
-          'customers.create',
-          'customers.update',
-          'customers.delete',
-        ].filter((c) => c !== code);
-        expect((await send(withPerms([code]))).status).toBe(ok);
-        expect((await send(withPerms(others))).status).toBe(403);
-        expect((await send(withPerms([]))).status).toBe(403);
-        expect((await send(withPerms(['orders.view']))).status).toBe(403);
-        expect((await send(as(['owner']))).status).toBe(ok);
-        // legacy role names carry no permissions
-        for (const role of ['manager', 'cashier', 'viewer']) {
-          expect((await send(as([role]))).status).toBe(403);
-        }
-      },
-    );
-  });
-
-  describe('routing and phone masking', () => {
-    it('serves /customers/summary and /customers/export before /customers/:id', async () => {
-      await call('get', '/api/v1/customers/summary', ['owner']).expect(200);
-      await call('get', '/api/v1/customers/export', ['owner']).expect(200);
-      expect(customers.summary).toHaveBeenCalledTimes(1);
-      expect(customers.exportCsv).toHaveBeenCalledTimes(1);
-      expect(customers.get).not.toHaveBeenCalled();
+    it('does not map a role name to permissions', async () => {
+      await request(url())
+        .get('/v1/customers')
+        .set('Authorization', as(['sales_staff']))
+        .expect(403);
     });
 
-    it('shows whole phones only with customers.update', async () => {
-      const seen: boolean[] = [];
-      const tokens = [
-        as(['owner']),
-        withPerms(['customers.update', 'customers.view']),
-        withPerms(['customers.view', 'customers.create', 'customers.delete']),
-      ];
-      for (const token of tokens) {
+    describe('phone masking follows customers.update, not a query parameter', () => {
+      it.each([
+        [['customers.view'], false],
+        [['customers.view', 'customers.update'], true],
+      ])('%s -> fullPhone=%s', async (perms, full) => {
         await request(url())
-          .get('/api/v1/customers')
-          .set('Authorization', token)
+          .get('/v1/customers?maskPii=false')
+          .set('Authorization', withPerms(perms as string[]))
           .expect(200);
-        seen.push(
+        expect(
+          (profilesService.listCustomers.mock.calls as any[][])[0][2],
+        ).toBe(full);
+        await request(url())
+          .get(`/v1/customers/${CUSTOMER_ID}?maskPii=false`)
+          .set('Authorization', withPerms(perms as string[]))
+          .expect(200);
+        expect(
+          (profilesService.getCustomerById.mock.calls as any[][])[0][2],
+        ).toEqual({
+          fullPhone: full,
+        });
+        await request(url())
+          .get('/v1/customers/lookup?phone=0912345678')
+          .set('Authorization', withPerms(perms as string[]))
+          .expect(200);
+        expect(
+          (profilesService.lookupCustomer.mock.calls as any[][])[0][2],
+        ).toBe(full);
+        await request(url())
+          .post('/v1/customers/export-jobs')
+          .set('Authorization', withPerms(perms as string[]))
+          .send({})
+          .expect(201);
+        expect(
+          (dataManagementService.createExportJob.mock.calls as any[][])[0][3],
+        ).toBe(full);
+      });
+
+      it.each([
+        [['customers.view', 'customers.create'], '091***5678'],
+        [
+          ['customers.view', 'customers.create', 'customers.update'],
+          '0912345678',
+        ],
+      ])('address responses: %s -> phone %s', async (perms, expected) => {
+        const base = `/v1/customers/${CUSTOMER_ID}/addresses`;
+        const authz = withPerms(perms as string[]);
+        const bodies = [
           (
-            customers.list.mock.calls.at(-1) as unknown as unknown[]
-          )[1] as boolean,
+            await request(url())
+              .post(base)
+              .set('Authorization', authz)
+              .send({ recipientName: 'A', addressLine: '1 Le Loi' })
+          ).body,
+          (await request(url()).get(base).set('Authorization', authz)).body[0],
+        ];
+        if ((perms as string[]).includes('customers.update')) {
+          bodies.push(
+            (
+              await request(url())
+                .patch(`${base}/${CUSTOMER_ID}`)
+                .set('Authorization', authz)
+                .send({})
+            ).body,
+            (
+              await request(url())
+                .post(`${base}/${CUSTOMER_ID}/set-default`)
+                .set('Authorization', authz)
+                .send({})
+            ).body,
+          );
+        }
+        for (const body of bodies) {
+          expect(body.phone).toBe(expected);
+          expect(body.phoneNormalized).toBe(expected);
+        }
+        expect(bodies.length).toBe(
+          (perms as string[]).includes('customers.update') ? 4 : 2,
         );
-      }
-      expect(seen).toEqual([true, true, false]);
-    });
+      });
 
-    it('exports a CSV download', async () => {
-      const res = await call(
-        'get',
-        '/api/v1/customers/export?q=ha&sort=totalSpent',
-        ['owner'],
-      ).expect(200);
-      expect(res.headers['content-type']).toMatch(/^text\/csv/);
-      expect(res.headers['content-disposition']).toContain('attachment');
-      expect(res.text).toBe('code,name\r\n');
-      const filters = (
-        customers.exportCsv.mock.calls[0] as unknown as unknown[]
-      )[0];
-      expect(filters).toMatchObject({
-        q: 'ha',
-        sort: 'totalSpent',
-        order: 'DESC',
+      it('passes the creator check to the stored export read', async () => {
+        await request(url())
+          .get(`/v1/customers/export-jobs/${CUSTOMER_ID}`)
+          .set('Authorization', withPerms(['customers.view']))
+          .expect(200);
+        expect(
+          (dataManagementService.getExportJob.mock.calls as any[][])[0][3],
+        ).toBe(false);
+      });
+
+      it('create and update responses follow the same rule', async () => {
+        await request(url())
+          .post('/v1/customers')
+          .set('Authorization', withPerms(['customers.create']))
+          .send({ name: 'A', phone: '0912345678' })
+          .expect(201);
+        expect(
+          (profilesService.createCustomer.mock.calls as any[][])[0][3],
+        ).toBe(false);
+        await request(url())
+          .patch(`/v1/customers/${CUSTOMER_ID}`)
+          .set('Authorization', withPerms(['customers.update']))
+          .send({})
+          .expect(200);
+        expect(
+          (profilesService.updateCustomer.mock.calls as any[][])[0][4],
+        ).toBe(true);
       });
     });
-  });
 
-  describe('validation (422)', () => {
-    const bad = async (method: string, path: string, b?: unknown) =>
-      call(method, path, ['owner'])
-        .send(b as object)
+    describe('screen endpoints', () => {
+      const withPerms = (permissions: string[]) =>
+        auth.bearerWithPermissions('custom_role', permissions, TENANT);
+      const view = () => withPerms(['customers.view']);
+      const upd = () => withPerms(['customers.update', 'customers.view']);
+
+      it('/customers/summary is not captured by /customers/:id', async () => {
+        await request(url())
+          .get('/v1/customers/summary?month=2026-10')
+          .set('Authorization', view())
+          .expect(200);
+        expect(profilesService.getKpiSummary).toHaveBeenCalled();
+        await request(url())
+          .get('/api/v1/customers/summary')
+          .set('Authorization', view())
+          .expect(200);
+      });
+
+      it('validates the screen query and body inputs (422)', async () => {
+        const bad: Array<[string, string]> = [
+          ['/v1/customers/summary?month=2026-13', 'get'],
+          ['/v1/customers?spendMin=1.5', 'get'],
+          ['/v1/customers?spendMin=-1', 'get'],
+          ['/v1/customers?sort=name', 'get'],
+          ['/v1/customers?order=up', 'get'],
+          ['/v1/customers?tagId=nope', 'get'],
+          ['/v1/customers/export?sort=name', 'get'],
+        ];
+        for (const [path] of bad) {
+          await request(url())
+            .get(path)
+            .set('Authorization', view())
+            .expect(422);
+        }
+        await request(url())
+          .post('/v1/customer-tags')
+          .set('Authorization', upd())
+          .send({ name: '' })
+          .expect(422);
+        await request(url())
+          .post('/v1/customers')
+          .set('Authorization', withPerms(['customers.create']))
+          .send({
+            name: 'A',
+            tagIds: ['nope'],
+            addresses: [{ addressLine: 'x' }],
+            loyalty: { initialPoints: -1 },
+          })
+          .expect(422);
+        for (const points of [1.5, '5']) {
+          await request(url())
+            .post(`/v1/customers/${CUSTOMER_ID}/loyalty-adjustments`)
+            .set('Authorization', upd())
+            .send({ points, reason: 'manual' })
+            .expect(422);
+        }
+        await request(url())
+          .patch('/v1/loyalty-settings')
+          .set('Authorization', upd())
+          .send({ earnAmountPerPoint: 100.5 })
+          .expect(422);
+      });
+
+      it('happy paths: tags, group delete 204, settings mapping, adjustment 201', async () => {
+        const created = await request(url())
+          .post('/v1/customer-tags')
+          .set('Authorization', upd())
+          .send({ name: 'Qua tang' })
+          .expect(201);
+        expect(created.body).toEqual({ id: 't1', name: 'Qua tang' });
+        await request(url())
+          .delete(`/v1/customer-groups/${CUSTOMER_ID}`)
+          .set('Authorization', withPerms(['customers.delete']))
+          .expect(204);
+        const s = await request(url())
+          .patch('/v1/loyalty-settings')
+          .set('Authorization', upd())
+          .send({ enabled: true, pointsExpireMonths: 12 })
+          .expect(200);
+        expect(loyaltyService.updateSettings).toHaveBeenCalledWith(
+          expect.anything(),
+          { isEnabled: true, pointsExpirationDays: 360 },
+        );
+        expect(s.body).toMatchObject({ enabled: true, pointsExpireMonths: 12 });
+        const adj = await request(url())
+          .post(`/v1/customers/${CUSTOMER_ID}/loyalty-adjustments`)
+          .set('Authorization', upd())
+          .send({ points: -20, reason: 'Dieu chinh tay' })
+          .expect(201);
+        expect(adj.body).toMatchObject({
+          transaction: { type: 'adjust', points: -20 },
+          balance: 150,
+        });
+        expect(
+          (loyaltyService.adjustPoints.mock.calls as any[][])[0][3],
+        ).toEqual({ pointsDelta: -20, reason: 'Dieu chinh tay' });
+      });
+
+      it('CSV routes answer text/csv; export phone rule follows customers.update', async () => {
+        const tpl = await request(url())
+          .get('/v1/customers/import-template')
+          .set('Authorization', withPerms(['customers.create']))
+          .expect(200);
+        expect(tpl.headers['content-type']).toMatch(/text\/csv/);
+        expect(tpl.text.split('\n')[0]).toBe(
+          'code,name,phone,email,source,note',
+        );
+        for (const [perms, full] of [
+          [['customers.view'], false],
+          [['customers.view', 'customers.update'], true],
+        ] as Array<[string[], boolean]>) {
+          profilesService.exportCustomersCsv.mockClear();
+          const res = await request(url())
+            .get('/v1/customers/export?group=vip')
+            .set('Authorization', withPerms(perms))
+            .expect(200);
+          expect(res.headers['content-type']).toMatch(/text\/csv/);
+          expect(res.text).toContain('KH1');
+          expect(
+            (profilesService.exportCustomersCsv.mock.calls as any[][])[0][2],
+          ).toBe(full);
+        }
+      });
+
+      it('multipart import: file and dryRun reach the service; missing or non-CSV file is 422', async () => {
+        const authz = withPerms(['customers.create']);
+        await request(url())
+          .post('/v1/customers/import')
+          .set('Authorization', authz)
+          .field('dryRun', 'true')
+          .attach('file', Buffer.from('name\nA'), 'c.csv')
+          .expect(200);
+        expect(
+          (
+            dataManagementService.importCustomersFromFile.mock.calls as any[][]
+          )[0].slice(2),
+        ).toEqual(['name\nA', true]);
+        await request(url())
+          .post('/v1/customers/import')
+          .set('Authorization', authz)
+          .attach('file', Buffer.from('x'), 'c.xlsx')
+          .expect(422);
+        await request(url())
+          .post('/v1/customers/import')
+          .set('Authorization', authz)
+          .field('dryRun', 'false')
+          .expect(422);
+      });
+    });
+
+    it('validates DTO constraints (422)', async () => {
+      await request(url())
+        .post('/v1/customers')
+        .set('Authorization', withPerms(['customers.create']))
+        .send({ name: '' })
         .expect(422);
-
-    it('rejects a bad list query', async () => {
-      await bad('get', '/api/v1/customers?limit=101');
-      await bad('get', '/api/v1/customers?sort=password');
-      await bad('get', '/api/v1/customers?order=sideways');
-      await bad('get', '/api/v1/customers?tagId=nope');
-      await bad('get', '/api/v1/customers/summary?month=2026-13');
-      expect(customers.list).not.toHaveBeenCalled();
     });
 
-    it('rejects a bad customer body', async () => {
-      await bad('post', '/api/v1/customers', { phone: '0901234528' });
-      await bad('post', '/api/v1/customers', { name: 'x', phone: 'abc' });
-      await bad('post', '/api/v1/customers', {
-        name: 'x',
-        phone: '0901234528',
-        gender: 'robot',
-      });
-      await bad('post', '/api/v1/customers', {
-        name: 'x',
-        phone: '0901234528',
-        dob: '12/04/1995',
-      });
-      await bad('post', '/api/v1/customers', {
-        name: 'x',
-        phone: '0901234528',
-        email: 'nope',
-      });
-      await bad('post', '/api/v1/customers', {
-        name: 'x',
-        phone: '0901234528',
-        source: 'tv',
-      });
-      await bad('post', '/api/v1/customers', {
-        name: 'x',
-        phone: '0901234528',
-        tagIds: ['no'],
-      });
-      await bad('post', '/api/v1/customers', {
-        name: 'x',
-        phone: '0901234528',
-        addresses: [{ ...validAddress, ward: undefined }],
-      });
-      await bad('patch', `/api/v1/customers/${ID}`, { status: 'gone' });
-      expect(customers.create).not.toHaveBeenCalled();
-      expect(customers.update).not.toHaveBeenCalled();
+    it('rejects fractional or string money with 422', async () => {
+      for (const debtLimit of [5000000.5, '5000000', -1]) {
+        await request(url())
+          .post('/v1/customers')
+          .set('Authorization', withPerms(['customers.create']))
+          .send({ name: 'A', debtLimit })
+          .expect(422);
+      }
+      for (const redeemValuePerPoint of [1000.5, '1000']) {
+        await request(url())
+          .put('/v1/loyalty/settings')
+          .set('Authorization', withPerms(['customers.update']))
+          .send({ redeemValuePerPoint })
+          .expect(422);
+      }
     });
 
-    it('normalises the phone before it reaches the service', async () => {
-      await call('post', '/api/v1/customers', ['owner'])
-        .send({ name: ' Ha ', phone: '090 123-4528' })
-        .expect(201);
-      expect(customers.create).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'Ha', phone: '0901234528' }),
-        true,
-      );
-    });
+    describe('internal routes: service token (x-internal-token)', () => {
+      const eligibility = `/internal/v1/customers/${CUSTOMER_ID}/eligibility`;
 
-    it('rejects a bad adjustment, setting, group, tag and malformed ids', async () => {
-      await bad('post', `/api/v1/customers/${ID}/loyalty-adjustments`, {
-        points: 0,
-        reason: 'x',
+      afterEach(() => {
+        delete process.env.INTERNAL_S2S_TOKEN;
       });
-      await bad('post', `/api/v1/customers/${ID}/loyalty-adjustments`, {
-        points: 1.5,
-        reason: 'x',
+
+      it('fails closed outside tests when INTERNAL_S2S_TOKEN is unset', () => {
+        expect(isValidInternalToken('x', undefined, 'production')).toBe(false);
+        expect(isValidInternalToken(undefined, undefined, 'development')).toBe(
+          false,
+        );
       });
-      await bad('post', `/api/v1/customers/${ID}/loyalty-adjustments`, {
-        points: 5,
+
+      it('rejects a missing, wrong or different-length token with 403', async () => {
+        process.env.INTERNAL_S2S_TOKEN = 'secret-token';
+        for (const bad of [
+          undefined,
+          'nope',
+          'secret-tokeX',
+          'secret-token-2',
+        ]) {
+          const req = request(url())
+            .get(eligibility)
+            .set('x-internal-call', 'sales-service')
+            .set('x-tenant-id', TENANT);
+          if (bad) req.set('x-internal-token', bad);
+          await req.expect(403);
+        }
+        expect(profilesService.getCustomerEligibility).not.toHaveBeenCalled();
       });
-      await bad('patch', '/api/v1/loyalty-settings', { earnAmountPerPoint: 0 });
-      await bad('post', '/api/v1/customer-groups', { name: '' });
-      await bad('post', '/api/v1/customer-tags', {});
-      await call('get', '/api/v1/customers/not-a-uuid', ['owner']).expect(400);
-      await call('delete', `/api/v1/customers/${ID}/addresses/not-a-uuid`, [
-        'owner',
-      ]).expect(400);
-      expect(loyalty.adjust).not.toHaveBeenCalled();
+
+      it('takes the tenant header only after the token is valid', async () => {
+        process.env.INTERNAL_S2S_TOKEN = 'secret-token';
+        await request(url())
+          .get(eligibility)
+          .set('x-internal-token', 'secret-token')
+          .set('x-internal-call', 'sales-service')
+          .expect(403);
+        await request(url())
+          .get(eligibility)
+          .set('x-internal-token', 'secret-token')
+          .set('x-internal-call', 'sales-service')
+          .set('x-tenant-id', TENANT)
+          .expect(200);
+        expect(profilesService.getCustomerEligibility).toHaveBeenCalledWith(
+          TENANT,
+          CUSTOMER_ID,
+        );
+      });
+
+      it('loyalty holds need the token and still a verified bearer (tenant from the token)', async () => {
+        process.env.INTERNAL_S2S_TOKEN = 'secret-token';
+        await request(url())
+          .get('/internal/v1/loyalty/holds/' + CUSTOMER_ID)
+          .set('Authorization', withPerms([]))
+          .expect(403);
+        await request(url())
+          .get('/internal/v1/loyalty/holds/' + CUSTOMER_ID)
+          .set('x-internal-token', 'secret-token')
+          .expect(401);
+        await request(url())
+          .get('/internal/v1/loyalty/holds/' + CUSTOMER_ID)
+          .set('Authorization', withPerms([]))
+          .set('x-internal-token', 'secret-token')
+          .expect(200);
+      });
     });
   });
 });
