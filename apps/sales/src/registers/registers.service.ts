@@ -11,6 +11,7 @@ import {
 import { randomUUID } from 'crypto';
 import { In } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
+import { assertBranchInScope, BranchScope } from '../common/branch-scope';
 import { SalesErrorCode } from '../common/errors';
 import { ShiftEntity } from '../shifts/shift.entity';
 import {
@@ -42,7 +43,11 @@ export class RegistersService {
     private readonly branches: TenantScopedRepository<BranchProjectionEntity>,
   ) {}
 
-  async list(branchId: string): Promise<{ data: RegisterRes[] }> {
+  async list(
+    branchId: string,
+    scope: BranchScope = null,
+  ): Promise<{ data: RegisterRes[] }> {
+    assertBranchInScope(scope, branchId);
     const rows = await this.registers.find({
       where: { branchId },
       order: { code: 'ASC' },
@@ -56,7 +61,11 @@ export class RegistersService {
     return { data: rows.map((r) => toRes(r, openBy.get(r.id) ?? null)) };
   }
 
-  async create(dto: CreateRegisterReqDto): Promise<RegisterRes> {
+  async create(
+    dto: CreateRegisterReqDto,
+    scope: BranchScope = null,
+  ): Promise<RegisterRes> {
+    assertBranchInScope(scope, dto.branchId);
     const branch = await this.branches.findOne({
       where: { branchId: dto.branchId },
     });
@@ -80,9 +89,14 @@ export class RegistersService {
     }
   }
 
-  async update(id: string, dto: UpdateRegisterReqDto): Promise<RegisterRes> {
+  async update(
+    id: string,
+    dto: UpdateRegisterReqDto,
+    scope: BranchScope = null,
+  ): Promise<RegisterRes> {
     const row = await this.registers.findOne({ where: { id } });
     if (!row) throw new NotFoundException();
+    assertBranchInScope(scope, row.branchId);
     if (dto.code !== undefined) row.code = dto.code;
     if (dto.name !== undefined) row.name = dto.name;
     if (dto.status !== undefined) row.status = dto.status;

@@ -3,7 +3,15 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { TenantContext } from '@pbl/common';
 import { qualifiedTable } from '@pbl/events';
 import { DataSource } from 'typeorm';
-import { Page, Where, iso, num, pageOf } from '../common/sql';
+import {
+  Page,
+  Scope,
+  Where,
+  assertBranchInScope,
+  iso,
+  num,
+  pageOf,
+} from '../common/sql';
 import { ListLedgerReqDto } from './dto/ledger.dto';
 
 export interface LedgerEntryRes {
@@ -25,9 +33,17 @@ export interface LedgerEntryRes {
 export class LedgerService {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
-  async list(query: ListLedgerReqDto): Promise<Page<LedgerEntryRes>> {
+  async list(
+    query: ListLedgerReqDto,
+    scope: Scope,
+  ): Promise<Page<LedgerEntryRes>> {
     const where = new Where().add('"tenant_id" = ?', TenantContext.require());
-    if (query.branchId) where.add('"branch_id" = ?', query.branchId);
+    if (query.branchId) {
+      assertBranchInScope(scope, query.branchId);
+      where.add('"branch_id" = ?', query.branchId);
+    } else {
+      where.branchScope(scope, '"branch_id"');
+    }
     if (query.sku) where.add('"sku" = ?', query.sku);
     if (query.refType) where.add('"ref_type" = ?', query.refType);
     where.dateRange('"created_at"', query.from, query.to);

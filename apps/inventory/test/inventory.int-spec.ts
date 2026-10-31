@@ -78,7 +78,9 @@ describe('inventory (Postgres)', () => {
     tenantId: string,
     items: { sku: string; quantity: number }[],
   ) =>
-    as(tenantId, () => stock.receive({ branchId: branchOf(tenantId), items }));
+    as(tenantId, () =>
+      stock.receive({ branchId: branchOf(tenantId), items }, null),
+    );
   const reserve = (
     tenantId: string,
     lines: { sku: string; quantity: number }[],
@@ -200,7 +202,10 @@ describe('inventory (Postgres)', () => {
 
     it('refuses a branch the store does not have (I001)', async () => {
       const error = await as(TENANT_B, () =>
-        stock.receive({ branchId: BRANCH, items: [{ sku: 'X', quantity: 1 }] }),
+        stock.receive(
+          { branchId: BRANCH, items: [{ sku: 'X', quantity: 1 }] },
+          null,
+        ),
       ).catch((e) => e);
 
       expect(error.getResponse()).toMatchObject({ errorCode: 'I001' });
@@ -215,8 +220,12 @@ describe('inventory (Postgres)', () => {
       await receive(TENANT_B, [{ sku: 'AO-01', quantity: 99 }]);
       await reserve(TENANT_A, [{ sku: 'AO-01', quantity: 4 }]);
 
-      const a = await as(TENANT_A, () => stock.list({ page: 1, limit: 10 }));
-      const b = await as(TENANT_B, () => stock.list({ page: 1, limit: 10 }));
+      const a = await as(TENANT_A, () =>
+        stock.list({ page: 1, limit: 10 }, null),
+      );
+      const b = await as(TENANT_B, () =>
+        stock.list({ page: 1, limit: 10 }, null),
+      );
 
       expect(a.data).toEqual([
         {

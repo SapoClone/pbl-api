@@ -131,51 +131,175 @@ describe('Inventory first-wave HTTP shell', () => {
     });
   });
 
-  describe('permissions (owner, manager, cashier)', () => {
-    const routes: [string, string, number, boolean][] = [
-      // method, path, ok status, may a cashier call it
-      ['get', '/api/v1/stock/summary', 200, true],
-      ['get', '/api/v1/ledger-entries', 200, true],
-      ['get', '/api/v1/stock-thresholds', 200, true],
-      ['post', '/api/v1/stock-thresholds', 200, false],
-      ['get', '/api/v1/suppliers', 200, true],
-      ['post', '/api/v1/suppliers', 201, false],
-      [`delete`, `/api/v1/suppliers/${ID}`, 204, false],
-      ['get', '/api/v1/purchase-orders', 200, true],
-      ['post', `/api/v1/purchase-orders/${ID}/approve`, 200, false],
-      ['post', `/api/v1/purchase-orders/${ID}/payments`, 201, false],
-      ['get', '/api/v1/stock-transfers', 200, true],
-      ['post', `/api/v1/stock-transfers/${ID}/ship`, 200, false],
-      ['get', '/api/v1/stock-takes', 200, true],
-      ['patch', `/api/v1/stock-takes/${ID}/items`, 200, false],
-      ['get', '/api/v1/stock-issues', 200, true],
-      ['post', `/api/v1/stock-issues/${ID}/approve`, 200, false],
-    ];
+  describe('permission matrix (ADR-0020)', () => {
+    const OTHER = 'products.view';
+    const ITEMS = [{ sku: 'A', quantity: 1 }];
     const bodies: Record<string, object> = {
-      '/api/v1/stock-thresholds': {
+      'post /api/v1/stock-receipts': { branchId: BRANCH, items: ITEMS },
+      'post /api/v1/stock-thresholds': {
         branchId: BRANCH,
         sku: 'A',
         minQuantity: 1,
       },
-      '/api/v1/suppliers': { name: 'X' },
-      [`/api/v1/purchase-orders/${ID}/payments`]: { amount: 5, method: 'cash' },
-      [`/api/v1/stock-takes/${ID}/items`]: {
+      'post /api/v1/suppliers': { name: 'X' },
+      'patch /api/v1/suppliers/:id': { name: 'Y' },
+      'post /api/v1/purchase-orders': {
+        supplierId: ID,
+        branchId: BRANCH,
+        items: [{ sku: 'A', name: 'A', quantityOrdered: 1, unitCost: 1 }],
+      },
+      'patch /api/v1/purchase-orders/:id': { note: 'x' },
+      'post /api/v1/purchase-orders/:id/payments': {
+        amount: 5,
+        method: 'cash',
+      },
+      'post /api/v1/stock-transfers': {
+        fromBranchId: BRANCH,
+        toBranchId: ID,
+        items: ITEMS,
+      },
+      'post /api/v1/stock-takes': { branchId: BRANCH },
+      'patch /api/v1/stock-takes/:id/items': {
         items: [{ sku: 'A', countedQuantity: 1 }],
       },
+      'post /api/v1/stock-issues': {
+        branchId: BRANCH,
+        reason: 'other',
+        items: ITEMS,
+      },
     };
+    // method, path, status when allowed, permission codes (any-of)
+    const routes: [string, string, number, string[]][] = [
+      ['get', '/api/v1/stock', 200, ['inventory.view']],
+      ['get', '/api/v1/stock/summary', 200, ['inventory.view']],
+      ['get', '/api/v1/stock/export', 200, ['inventory.view']],
+      [
+        'get',
+        `/api/v1/stock/lookup?branchId=${BRANCH}&code=A`,
+        200,
+        ['inventory.view', 'pos.create', 'orders.create'],
+      ],
+      ['post', '/api/v1/stock-receipts', 201, ['inventory.create']],
+      ['get', '/api/v1/ledger-entries', 200, ['inventory.view']],
+      ['get', '/api/v1/stock-thresholds', 200, ['inventory.view']],
+      ['post', '/api/v1/stock-thresholds', 200, ['inventory.update']],
+      ['get', '/api/v1/suppliers', 200, ['purchasing.view']],
+      ['get', '/api/v1/suppliers/:id', 200, ['purchasing.view']],
+      ['post', '/api/v1/suppliers', 201, ['purchasing.create']],
+      ['patch', '/api/v1/suppliers/:id', 200, ['purchasing.update']],
+      ['delete', '/api/v1/suppliers/:id', 204, ['purchasing.delete']],
+      ['get', '/api/v1/purchase-orders', 200, ['purchasing.view']],
+      ['get', '/api/v1/purchase-orders/summary', 200, ['purchasing.view']],
+      ['get', '/api/v1/purchase-orders/export', 200, ['purchasing.view']],
+      ['get', '/api/v1/purchase-orders/:id', 200, ['purchasing.view']],
+      ['post', '/api/v1/purchase-orders', 201, ['purchasing.create']],
+      ['patch', '/api/v1/purchase-orders/:id', 200, ['purchasing.update']],
+      [
+        'post',
+        '/api/v1/purchase-orders/:id/submit',
+        200,
+        ['purchasing.update'],
+      ],
+      [
+        'post',
+        '/api/v1/purchase-orders/:id/approve',
+        200,
+        ['purchasing.approve'],
+      ],
+      [
+        'post',
+        '/api/v1/purchase-orders/:id/cancel',
+        200,
+        ['purchasing.update'],
+      ],
+      [
+        'post',
+        '/api/v1/purchase-orders/:id/payments',
+        201,
+        ['purchasing.update'],
+      ],
+      ['get', '/api/v1/stock-transfers', 200, ['inventory.view']],
+      ['get', '/api/v1/stock-transfers/:id', 200, ['inventory.view']],
+      ['post', '/api/v1/stock-transfers', 201, ['inventory.create']],
+      ['post', '/api/v1/stock-transfers/:id/ship', 200, ['inventory.update']],
+      [
+        'post',
+        '/api/v1/stock-transfers/:id/receive',
+        200,
+        ['inventory.update'],
+      ],
+      ['post', '/api/v1/stock-transfers/:id/cancel', 200, ['inventory.update']],
+      ['get', '/api/v1/stock-takes', 200, ['inventory.view']],
+      ['get', '/api/v1/stock-takes/:id', 200, ['inventory.view']],
+      ['post', '/api/v1/stock-takes', 201, ['inventory.create']],
+      ['patch', '/api/v1/stock-takes/:id/items', 200, ['inventory.update']],
+      ['post', '/api/v1/stock-takes/:id/complete', 200, ['inventory.approve']],
+      ['post', '/api/v1/stock-takes/:id/cancel', 200, ['inventory.update']],
+      ['get', '/api/v1/stock-issues', 200, ['inventory.view']],
+      ['get', '/api/v1/stock-issues/:id', 200, ['inventory.view']],
+      ['post', '/api/v1/stock-issues', 201, ['inventory.create']],
+      ['post', '/api/v1/stock-issues/:id/approve', 200, ['inventory.approve']],
+      ['post', '/api/v1/stock-issues/:id/cancel', 200, ['inventory.update']],
+    ];
+    const withPerms = (perms: string[]) =>
+      auth.bearerWithPermissions('custom_role', perms, TENANT);
 
-    it.each(routes)('%s %s', async (method, path, ok, cashier) => {
+    it.each(routes)('%s %s', async (method, template, ok, codes) => {
+      const path = template.replace(':id', ID);
+      const body = bodies[`${method} ${template}`];
+      const send = (authorization?: string) => {
+        const req = (request(url()) as any)[method](path);
+        if (authorization) req.set('Authorization', authorization);
+        return req.send(body);
+      };
+      await send().expect(401);
+      await send(auth.bearer(['owner'], TENANT)).expect(ok);
+      for (const code of codes) await send(withPerms([code])).expect(ok);
+      await send(withPerms([OTHER])).expect(403);
+      await send(withPerms([])).expect(403);
+      // legacy role names carry no permission by themselves
+      await send(auth.bearer(['manager'], TENANT)).expect(403);
+    });
+
+    it('covers every route of the five controllers', () => {
+      expect(routes).toHaveLength(40);
+    });
+  });
+
+  describe('branch scope reaches the services', () => {
+    const restricted = auth.bearerWithPermissions(
+      'branch_manager',
+      ['*'],
+      TENANT,
+      [BRANCH],
+    );
+
+    it('passes the allowed branches (null for every branch)', async () => {
       await (request(url()) as any)
-        [method](path)
-        .send(bodies[path])
-        .expect(401);
-      for (const role of ['owner', 'manager']) {
-        await call(method, path, role, bodies[path]).expect(ok);
-      }
-      await call(method, path, 'cashier', bodies[path]).expect(
-        cashier ? ok : 403,
+        .get('/api/v1/stock')
+        .set('Authorization', restricted)
+        .expect(200);
+      expect(services.stock.list).toHaveBeenCalledWith(expect.anything(), [
+        BRANCH,
+      ]);
+      await call('get', '/api/v1/stock').expect(200);
+      expect(services.stock.list).toHaveBeenLastCalledWith(
+        expect.anything(),
+        null,
       );
-      await call(method, path, 'viewer', bodies[path]).expect(403);
+    });
+
+    it('passes the scope to document actions', async () => {
+      await (request(url()) as any)
+        .post(`/api/v1/stock-transfers/${ID}/receive`)
+        .set('Authorization', restricted)
+        .send({})
+        .expect(200);
+      expect(services.transfers.receive).toHaveBeenCalledWith(
+        ID,
+        expect.anything(),
+        [BRANCH],
+      );
     });
   });
 
@@ -279,14 +403,13 @@ describe('Inventory first-wave HTTP shell', () => {
           },
         ],
       };
-      await call('post', '/api/v1/purchase-orders', 'manager', body).expect(
-        201,
-      );
+      await call('post', '/api/v1/purchase-orders', 'owner', body).expect(201);
       expect(services.orders.create).toHaveBeenCalledWith(
         expect.objectContaining({
           supplierId: ID,
           items: [expect.objectContaining({ vatRate: 8 })],
         }),
+        null,
       );
     });
   });

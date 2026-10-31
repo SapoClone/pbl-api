@@ -24,6 +24,24 @@ export const conflict = (
 export const notFound = (what: string) =>
   new NotFoundException(`${what} not found`);
 
+/** Branches the caller may act in (`allowedBranches`); null = every branch (ADR-0020 §8) */
+export type Scope = string[] | null;
+
+export const inScope = (scope: Scope, branchId: string): boolean =>
+  scope === null || scope.includes(branchId);
+
+/** A branch outside the caller's scope answers 404, never 403, so existence is not leaked */
+export function assertBranchInScope(scope: Scope, branchId: string): void {
+  if (!inScope(scope, branchId)) throw notFound('Branch');
+}
+
+/** Same for a document that belongs to branches; visible when any of them is in scope */
+export function assertVisible(scope: Scope, what: string, ...ids: string[]) {
+  if (scope !== null && !ids.some((id) => scope.includes(id))) {
+    throw notFound(what);
+  }
+}
+
 /** pg returns bigint as a string: money and counts leave the service as JSON numbers */
 export const num = (value: unknown): number =>
   value === null || value === undefined ? 0 : Number(value);
@@ -72,6 +90,18 @@ export class Where {
         to,
       );
     }
+    return this;
+  }
+
+  /**
+   * Restricts `column` (a uuid) to the allowed branches; no-op for every branch. With
+   * several columns a row passes when any of them is allowed.
+   */
+  branchScope(scope: Scope, ...columns: string[]): this {
+    if (scope === null) return this;
+    const p = this.param(scope);
+    const any = columns.map((c) => `${c} = ANY(${p}::uuid[])`).join(' OR ');
+    this.add(columns.length > 1 ? `(${any})` : any);
     return this;
   }
 

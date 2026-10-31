@@ -56,7 +56,7 @@ connects like the service does (red on the old code, green on the fix), and a no
 Fixed before the work started, so every service follows them. Confirm or overturn these first: changing one later
 touches all six services.
 
-1. **No RBAC refactor.** Endpoints keep `@RequireRoles(owner, manager, cashier)`. The contract's permission codes are
+1. **No RBAC refactor** *(superseded: built in [the RBAC branch](../2026-10-31-rbac/README.md))*. Endpoints keep `@RequireRoles(owner, manager, cashier)`. The contract's permission codes are
    mapped to roles in a comment on each controller.
 2. **Store users stay `Account` + `AccountTenant`.** No separate `Staff` identity.
 3. **Existing endpoints change only additively.** `POST /orders` and `POST /stock-receipts` behave as before unless the new
@@ -74,7 +74,7 @@ touches all six services.
 | 3 | **Order codes switched to `DH10001+`** per tenant; old orders keep their code. **Decided 2026-10-31: keep.** | sales | Visible to users and to anything that parses codes. |
 | 4 | **`version` is optional** on order actions and PATCH (the contract says required). A stale client that omits it is not detected. **Decided 2026-10-31: keep.** | sales | Weakens the concurrency guard the contract asked for. |
 | 5 | **Phone masking:** customer phones are hidden from cashiers (also in the export); supplier lists mask the phone for every role, as the contract says. Staff reads (summary, detail, schedules) are owner and manager only. | customer, inventory, platform | The contract ties customer phone visibility to a permission the wave's role mapping cannot express (cashiers have `customers.update`). |
-| 6 | **Dashboard, KPI, report and attention-item reads are owner + manager only.** The Figma dashboard may be meant for all roles. **Decided 2026-10-31: keep.** | insight | Cashiers get no dashboard until RBAC exists. |
+| 6 | **Dashboard, KPI, report and attention-item reads are owner + manager only.** The Figma dashboard may be meant for all roles. **Decided 2026-10-31: keep.** **Superseded:** with RBAC, `dashboard.view` is a default permission of every seeded role and `reports.view` of owner, branch manager and accountant. | insight | Cashiers get no dashboard until RBAC exists. |
 | 7 | **Inventory uses raw SQL with an explicit `tenant_id` filter** for all new tables, not `TenantScopedRepository` as `CLAUDE.md` requires for tenant-owned entities. | inventory | A convention exception: the safety net is a code review, not the wrapper. Cross-tenant tests cover each resource. |
 | 8 | **KPI "same time yesterday" is approximated by whole hours**; gross profit is `null` until costs are tracked; orders completed before the migration are not in the hourly tables. | insight | Numbers differ slightly from the Figma example. |
 | 9 | **Supplier debt = unpaid amount of approved POs;** cancelling an approved PO reduces it. Receiving against a PO is deferred, so `partially_received` / `received` are unreachable. | inventory | Purchasing is not end-to-end until the receipt flow exists. |
@@ -90,7 +90,7 @@ touches all six services.
 | Item | Why it was deferred |
 |---|---|
 | Staff invitations; forgot / reset / verify email | Need the mail flow (invitation and reset templates in `pbl-mail-service`) |
-| RBAC (`perms` claim, roles and permissions endpoints, branch assignment) | Cross-cutting refactor of auth and every service; needs the Account-vs-Staff ADR |
+| ~~RBAC (`perms` claim, roles and permissions endpoints, branch assignment)~~ | **Done** in [the RBAC branch](../2026-10-31-rbac/README.md) (ADR-0019, ADR-0020) |
 | Draft and approve stock receipts; receiving against a PO | Changes the existing receipt endpoint that the demos and tests depend on |
 | Events for the new transitions (order confirmed, cancelled, shipped, payment, shift; stock below minimum; PO and transfer) | Event names live in the shared `libs/contracts`; they are also what feeds the attention items and push notifications |
 | Returns and refunds | Touches stock, payments and customer stats together |

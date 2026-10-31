@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { BranchScope } from '../common/branch-scope';
 import { InsightQueryService } from '../insight-query.service';
 import { ExportReqDto } from '../insight.dto';
 import { addDays, ReportsService } from './reports.service';
@@ -30,6 +31,7 @@ export class ReportExportService {
 
   async export(
     query: ExportReqDto,
+    scope: BranchScope = null,
   ): Promise<{ filename: string; csv: string }> {
     const to = query.to ?? this.reports.clock().toISOString().slice(0, 10);
     const from = query.from ?? addDays(to, -6);
@@ -37,7 +39,7 @@ export class ReportExportService {
     const filename = `${query.report}-${from}-${to}.csv`;
 
     if (query.report === 'daily') {
-      const { data } = await this.queries.dailySales(range);
+      const { data } = await this.queries.dailySales(range, scope);
       return {
         filename,
         csv: toCsv(
@@ -63,7 +65,7 @@ export class ReportExportService {
       };
     }
     if (query.report === 'by_channel') {
-      const { data } = await this.reports.byChannel(range);
+      const { data } = await this.reports.byChannel(range, scope);
       return {
         filename,
         csv: toCsv(
@@ -74,10 +76,10 @@ export class ReportExportService {
         ),
       };
     }
-    const { data } = await this.reports.topProducts({
-      ...range,
-      limit: EXPORT_ROW_LIMIT,
-    });
+    const { data } = await this.reports.topProducts(
+      { ...range, limit: EXPORT_ROW_LIMIT },
+      scope,
+    );
     return {
       filename,
       csv: toCsv(

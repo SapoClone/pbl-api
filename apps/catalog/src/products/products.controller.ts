@@ -13,8 +13,7 @@ import {
   Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import type { Response } from 'express';
 import { Page } from '../common/page';
 import {
@@ -35,9 +34,8 @@ import {
 } from './products.service';
 
 /**
- * Permission codes of the contract, as roles (no RBAC yet): `products.view` is every
- * role; `products.create|update|delete` are owner and manager. `summary` and `export`
- * are declared before `:id` so that they are not read as an id.
+ * ADR-0020: `products.view` reads, `products.create|update|delete` write. `summary`
+ * and `export` are declared before `:id` so that they are not read as an id.
  */
 @ApiTags('products')
 @ApiBearerAuth()
@@ -46,19 +44,19 @@ export class ProductsController {
   constructor(private readonly products: ProductsService) {}
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   list(@Query() query: ListProductsReqDto): Promise<Page<ProductRowRes>> {
     return this.products.list(query);
   }
 
   @Get('summary')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   summary() {
     return this.products.summary();
   }
 
   @Get('export')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   async export(
     @Query() query: ExportProductsReqDto,
     @Res({ passthrough: true }) res: Response,
@@ -71,19 +69,19 @@ export class ProductsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   create(@Body() dto: CreateProductReqDto): Promise<ProductRes> {
     return this.products.create(dto);
   }
 
   @Get(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   get(@Param('id', ParseUUIDPipe) id: string): Promise<ProductRes> {
     return this.products.get(id);
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProductReqDto,
@@ -93,14 +91,14 @@ export class ProductsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.delete')
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.products.remove(id);
   }
 
   @Post(':id/variants')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   addVariant(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: VariantReqDto,
@@ -115,15 +113,20 @@ export class ProductsController {
 export class VariantsController {
   constructor(private readonly products: ProductsService) {}
 
-  /** Pickers of POS, manual orders and receipts: every role of the store */
+  /** Pickers of POS, manual orders and receipts: any of the modules that sell or count stock */
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission(
+    'products.view',
+    'pos.create',
+    'orders.create',
+    'inventory.view',
+  )
   lookup(@Query() query: ListVariantsReqDto): Promise<Page<VariantLookupRes>> {
     return this.products.lookupVariants(query);
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateVariantReqDto,
@@ -133,7 +136,7 @@ export class VariantsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.delete')
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.products.removeVariant(id);
   }

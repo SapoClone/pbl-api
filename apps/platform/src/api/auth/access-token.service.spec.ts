@@ -103,6 +103,48 @@ describe('AccessTokenService', () => {
       });
     });
 
+    it('should sign perms and branches for a store', async () => {
+      const claims = jwtService.decode(
+        await service.sign({
+          userId: 'user-1',
+          sessionId: 'session-1',
+          tenantId: 'tenant-1',
+          roles: ['sales_staff'],
+          permissions: ['orders.view', 'pos.create'],
+          branches: ['b1', 'b2'],
+        }),
+      );
+
+      expect(claims).toMatchObject({
+        roles: ['sales_staff'],
+        perms: ['orders.view', 'pos.create'],
+        branches: ['b1', 'b2'],
+      });
+    });
+
+    it('should sign the owner wildcard and default branches to all', async () => {
+      const claims = jwtService.decode(
+        await service.sign({
+          userId: 'user-1',
+          sessionId: 'session-1',
+          tenantId: 'tenant-1',
+          roles: ['owner'],
+          permissions: ['*'],
+        }),
+      );
+
+      expect(claims).toMatchObject({ perms: ['*'], branches: ['*'] });
+    });
+
+    it('should carry no perms or branches without a store', async () => {
+      const claims = jwtService.decode(
+        await service.sign({ userId: 'user-1', sessionId: 'session-1' }),
+      );
+
+      expect(claims).not.toHaveProperty('perms');
+      expect(claims).not.toHaveProperty('branches');
+    });
+
     it('should omit tid and send empty roles without a store', async () => {
       const claims = jwtService.decode(
         await service.sign({ userId: 'user-1', sessionId: 'session-1' }),
@@ -144,6 +186,8 @@ describe('AccessTokenService', () => {
         sessionId: 'session-1',
         subjectType: 'account',
         roles: [],
+        permissions: [],
+        branches: ['*'],
         exp: expect.any(Number),
       });
     });

@@ -8,6 +8,7 @@ import {
   MoreThanOrEqual,
   Not,
 } from 'typeorm';
+import { BranchScope, branchCondition } from '../common/branch-scope';
 import { OrderFiltersReqDto } from './dto/list-orders.req.dto';
 import { OrderEntity } from './entities/order.entity';
 
@@ -66,9 +67,11 @@ const escapeLike = (text: string) => text.replace(/[\\%_]/g, '\\$&');
  */
 export function buildOrderWhere(
   query: OrderFiltersReqDto,
+  scope: BranchScope = null,
 ): FindOptionsWhere<OrderEntity>[] {
   const base: FindOptionsWhere<OrderEntity> = {};
-  if (query.branchId) base.branchId = query.branchId;
+  const branch = branchCondition(scope, query.branchId);
+  if (branch) base.branchId = branch;
   if (query.customerId) base.customerId = query.customerId;
   if (query.registerId) base.registerId = query.registerId;
   if (query.channel?.length) base.channel = In(query.channel);

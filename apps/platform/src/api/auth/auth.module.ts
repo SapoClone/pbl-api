@@ -40,7 +40,7 @@ import { SessionService } from './session.service';
         audience: config.getOrThrow('auth.audience', { infer: true }),
         keyResolver: accessTokenService,
         // Register, create store and switch run before a store is chosen;
-        // tenant routes use @CurrentTenant()/@RequireRoles() (ADR-0008).
+        // tenant routes use @CurrentTenant()/@RequirePermission() (ADR-0008, ADR-0020).
         tenant: 'optional',
         isSessionRevoked: async (user: AuthUser) =>
           Boolean(

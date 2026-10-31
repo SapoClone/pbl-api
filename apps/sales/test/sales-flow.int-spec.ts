@@ -1042,4 +1042,155 @@ describe('sales order flow (Postgres)', () => {
       expect(csv).toContain('0901234528');
     });
   });
+  describe('branch scope (ADR-0020 §8)', () => {
+    const BRANCH_A2 = '4a4a4a4a-4a4a-4a4a-8a4a-4a4a4a4a4a4a';
+    const only = (branch: string) => [branch];
+    let inFirst: Awaited<ReturnType<typeof create>>;
+    let inSecond: Awaited<ReturnType<typeof create>>;
+
+    beforeEach(async () => {
+      await learnBranch(A, BRANCH_A2);
+      inFirst = await create({ orderStatus: 'draft' });
+      inSecond = await create({ orderStatus: 'draft', branchId: BRANCH_A2 });
+    });
+
+    it('filters lists, summary and export in SQL to the allowed branches', async () => {
+      const ids = async (scope: string[] | null, branchId?: string) =>
+        (
+          await inA(() =>
+            orders.list(
+              {
+                page: 1,
+                limit: 50,
+                orderStatus: ['draft'],
+                ...(branchId ? { branchId } : {}),
+              } as never,
+              scope,
+            ),
+          )
+        ).data.map((o) => o.id);
+      expect(await ids(null)).toHaveLength(2);
+      expect(await ids(only(BRANCH_A))).toEqual([inFirst.id]);
+      expect(await ids(only(BRANCH_A2))).toEqual([inSecond.id]);
+      expect(await ids([BRANCH_A, BRANCH_A2])).toHaveLength(2);
+      expect(await ids([])).toEqual([]);
+      expect(await ids(only(BRANCH_A), BRANCH_A)).toEqual([inFirst.id]);
+      await expect(ids(only(BRANCH_A), BRANCH_A2)).rejects.toThrow('Not Found');
+      await expect(ids(only(BRANCH_A), BRANCH_B)).rejects.toThrow('Not Found');
+
+      await create({ branchId: BRANCH_A2 }); // completed, in the second branch
+      await create(); // completed, in the first
+      const summary = (scope: string[] | null) =>
+        inA(() => queries.summary({}, scope));
+      expect((await summary(null)).tabCounts.all).toBe(2);
+      expect((await summary(only(BRANCH_A))).tabCounts.all).toBe(1);
+      expect((await summary(only(BRANCH_A))).today.total).toBe(1);
+      expect((await summary([])).tabCounts.all).toBe(0);
+      await expect(
+        inA(() => queries.summary({ branchId: BRANCH_A2 }, only(BRANCH_A))),
+      ).rejects.toThrow('Not Found');
+
+      const rows = async (scope: string[] | null) =>
+        (await inA(() => queries.exportCsv({}, scope))).trim().split('\r\n')
+          .length - 1;
+      expect(await rows(null)).toBe(2);
+      expect(await rows(only(BRANCH_A))).toBe(1);
+      await expect(
+        inA(() => queries.exportCsv({ branchId: BRANCH_A2 }, only(BRANCH_A))),
+      ).rejects.toThrow('Not Found');
+    });
+
+    it('answers 404 on a foreign branch order for every read and action', async () => {
+      const scope = only(BRANCH_A);
+      for (const call of [
+        () => orders.get(inSecond.id, scope),
+        () => orders.update(ME, inSecond.id, { note: 'x' }, scope),
+        () => actions.confirm(ME, inSecond.id, undefined, scope),
+        () => actions.pack(ME, inSecond.id, undefined, scope),
+        () => actions.complete(ME, inSecond.id, undefined, scope),
+        () => actions.cancel(ME, inSecond.id, { reason: 'x' }, scope),
+        () =>
+          actions.addPayment(
+            ME,
+            inSecond.id,
+            { method: 'cash', amount: 1 },
+            scope,
+          ),
+        () => actions.getHistory(inSecond.id, scope),
+        () => actions.print(inSecond.id, 'receipt', '80mm', scope),
+      ]) {
+        await expect(inA(call as () => Promise<unknown>)).rejects.toThrow(
+          'Not Found',
+        );
+      }
+      // nothing changed, and the own branch still works
+      expect((await inA(() => orders.get(inSecond.id))).status).toBe('draft');
+      await expect(
+        inA(() => actions.confirm(ME, inFirst.id, undefined, scope)),
+      ).resolves.toMatchObject({ status: 'confirmed' });
+    });
+
+    it('refuses to create an order in a foreign branch (404) and stores nothing', async () => {
+      await expect(
+        inA(() =>
+          orders.create(
+            ME,
+            randomUUID(),
+            dto({ branchId: BRANCH_A2 }),
+            only(BRANCH_A),
+          ),
+        ),
+      ).rejects.toThrow('Not Found');
+      expect(inventory.reserve).not.toHaveBeenCalled();
+      const created = await inA(() =>
+        orders.create(ME, randomUUID(), dto(), only(BRANCH_A)),
+      );
+      expect(created.order.branchId).toBe(BRANCH_A);
+    });
+
+    it('scopes registers and shifts', async () => {
+      const scope = only(BRANCH_A);
+      await expect(
+        inA(() =>
+          registers.create(
+            { branchId: BRANCH_A2, code: 'Q2', name: 'Q2' },
+            scope,
+          ),
+        ),
+      ).rejects.toThrow('Not Found');
+      const reg = await inA(() =>
+        registers.create({ branchId: BRANCH_A2, code: 'Q2', name: 'Q2' }),
+      );
+      await expect(inA(() => registers.list(BRANCH_A2, scope))).rejects.toThrow(
+        'Not Found',
+      );
+      await expect(
+        inA(() => registers.update(reg.id, { name: 'x' }, scope)),
+      ).rejects.toThrow('Not Found');
+      await expect(
+        inA(() =>
+          shifts.open(ME, { registerId: reg.id, openingCash: 0 }, scope),
+        ),
+      ).rejects.toThrow('Not Found');
+
+      const shift = await inA(() =>
+        shifts.open(ME, { registerId: reg.id, openingCash: 0 }),
+      );
+      await expect(inA(() => shifts.current(reg.id, scope))).rejects.toThrow(
+        'Not Found',
+      );
+      await expect(
+        inA(() => shifts.close(ME, shift.id, { closingCashActual: 0 }, scope)),
+      ).rejects.toThrow('Not Found');
+      // allowed branches work
+      await expect(
+        inA(() => shifts.current(reg.id, only(BRANCH_A2))),
+      ).resolves.toMatchObject({ id: shift.id });
+      await expect(
+        inA(() =>
+          shifts.close(ME, shift.id, { closingCashActual: 0 }, only(BRANCH_A2)),
+        ),
+      ).resolves.toMatchObject({ status: 'closed' });
+    });
+  });
 });

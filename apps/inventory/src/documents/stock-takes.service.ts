@@ -6,8 +6,11 @@ import { DataSource } from 'typeorm';
 import { BranchGuard } from '../common/branch-guard';
 import {
   Page,
+  Scope,
   Where,
   actorId,
+  assertBranchInScope,
+  assertVisible,
   badRequest,
   iso,
   likePattern,
@@ -80,8 +83,9 @@ export class StockTakesService extends DocumentBase {
     };
   }
 
-  async create(dto: CreateStockTakeReqDto): Promise<TakeRes> {
+  async create(dto: CreateStockTakeReqDto, scope: Scope): Promise<TakeRes> {
     const tenantId = TenantContext.require();
+    assertBranchInScope(scope, dto.branchId);
     await this.branches.assertActive(dto.branchId);
     const id = randomUUID();
     await this.dataSource.transaction(async (em) => {
@@ -114,16 +118,17 @@ export class StockTakesService extends DocumentBase {
           : [tenantId, id, dto.branchId],
       );
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
-  async get(id: string): Promise<TakeRes> {
+  async get(id: string, scope: Scope): Promise<TakeRes> {
     const tenantId = TenantContext.require();
     const rows = await this.dataSource.query(
       `${this.select()} WHERE x."tenant_id" = $1 AND x."id" = $2`,
       [tenantId, id],
     );
     if (!rows.length) throw notFound('Stock take');
+    assertVisible(scope, 'Stock take', rows[0].branch_id);
     const lines = await this.dataSource.query(
       `SELECT * FROM ${this.t('stock_take_line')} WHERE "tenant_id" = $1 AND "stock_take_id" = $2 ORDER BY "sku" COLLATE "C"`,
       [tenantId, id],
@@ -145,9 +150,14 @@ export class StockTakesService extends DocumentBase {
     };
   }
 
-  async list(query: ListTakesReqDto): Promise<Page<TakeRowRes>> {
+  async list(query: ListTakesReqDto, scope: Scope): Promise<Page<TakeRowRes>> {
     const where = new Where().add('x."tenant_id" = ?', TenantContext.require());
-    if (query.branchId) where.add('x."branch_id" = ?', query.branchId);
+    if (query.branchId) {
+      assertBranchInScope(scope, query.branchId);
+      where.add('x."branch_id" = ?', query.branchId);
+    } else {
+      where.branchScope(scope, 'x."branch_id"');
+    }
     if (query.status) where.add('x."status" = ?', query.status);
     if (query.q) where.add('x."code" ILIKE ?', likePattern(query.q));
     where.dateRange('x."created_at"', query.from, query.to);
@@ -179,7 +189,11 @@ export class StockTakesService extends DocumentBase {
    * Counted quantities as upserts per SKU (`replace` is idempotent, `increment` adds);
    * a SKU not in the take is added with its current system quantity.
    */
-  async updateItems(id: string, dto: UpdateTakeItemsReqDto): Promise<TakeRes> {
+  async updateItems(
+    id: string,
+    dto: UpdateTakeItemsReqDto,
+    scope: Scope,
+  ): Promise<TakeRes> {
     const tenantId = TenantContext.require();
     await this.dataSource.transaction(async (em) => {
       const row = await this.lockHeader(
@@ -189,6 +203,7 @@ export class StockTakesService extends DocumentBase {
         id,
         'Stock take',
         dto.version,
+        (row) => assertVisible(scope, 'Stock take', row.branch_id),
       );
       if (row.status !== 'in_progress') throw this.notOpen(row.status);
       for (const item of dto.items) {
@@ -217,11 +232,15 @@ export class StockTakesService extends DocumentBase {
       }
       await this.bump(em, 'stock_take', tenantId, id, '');
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
   /** on hand := counted for every counted line; each real change writes a `stock_take` ledger row */
-  async complete(id: string, dto: DocumentActionReqDto): Promise<TakeRes> {
+  async complete(
+    id: string,
+    dto: DocumentActionReqDto,
+    scope: Scope,
+  ): Promise<TakeRes> {
     const tenantId = TenantContext.require();
     await this.dataSource.transaction(async (em) => {
       const row = await this.lockHeader(
@@ -231,6 +250,7 @@ export class StockTakesService extends DocumentBase {
         id,
         'Stock take',
         dto.version,
+        (row) => assertVisible(scope, 'Stock take', row.branch_id),
       );
       if (row.status !== 'in_progress') throw this.notOpen(row.status);
       const lines = (await em.query(
@@ -258,10 +278,14 @@ export class StockTakesService extends DocumentBase {
         `"status" = 'completed', "completed_at" = now()`,
       );
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
-  async cancel(id: string, dto: DocumentActionReqDto): Promise<TakeRes> {
+  async cancel(
+    id: string,
+    dto: DocumentActionReqDto,
+    scope: Scope,
+  ): Promise<TakeRes> {
     const tenantId = TenantContext.require();
     await this.dataSource.transaction(async (em) => {
       const row = await this.lockHeader(
@@ -271,10 +295,11 @@ export class StockTakesService extends DocumentBase {
         id,
         'Stock take',
         dto.version,
+        (row) => assertVisible(scope, 'Stock take', row.branch_id),
       );
       if (row.status !== 'in_progress') throw this.notOpen(row.status);
       await this.bump(em, 'stock_take', tenantId, id, `"status" = 'cancelled'`);
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 }

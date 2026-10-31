@@ -14,6 +14,7 @@ import { EventOutbox } from '@pbl/events';
 import { createHash, randomUUID } from 'crypto';
 import { EntityManager, QueryFailedError } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
+import { assertBranchInScope, BranchScope } from '../common/branch-scope';
 import {
   CodeSequenceService,
   ORDER_CODE_START,
@@ -160,7 +161,9 @@ export class OrdersService {
     accountId: string,
     idempotencyKey: string,
     dto: CreateOrderReqDto,
+    scope: BranchScope = null,
   ): Promise<CreateOrderResult> {
+    assertBranchInScope(scope, dto.branchId);
     const requestHash = hashRequest(dto);
     const earlier = await this.findByKey(idempotencyKey);
     if (earlier) return this.replay(earlier, requestHash);
@@ -261,12 +264,14 @@ export class OrdersService {
     accountId: string,
     id: string,
     dto: UpdateOrderReqDto,
+    scope: BranchScope = null,
   ): Promise<OrderRes> {
     const order = await this.orders.findOne({
       where: { id },
       relations: { items: true, payments: true },
     });
     if (!order) throw new NotFoundException();
+    assertBranchInScope(scope, order.branchId);
     if (order.status !== 'draft') {
       throw new BadRequestException({
         errorCode: SalesErrorCode.NOT_A_DRAFT,
@@ -378,9 +383,12 @@ export class OrdersService {
     return this.get(id);
   }
 
-  async list(query: ListOrdersReqDto): Promise<Page<OrderRes>> {
+  async list(
+    query: ListOrdersReqDto,
+    scope: BranchScope = null,
+  ): Promise<Page<OrderRes>> {
     const [rows, total] = await this.orders.findAndCount({
-      where: buildOrderWhere(query),
+      where: buildOrderWhere(query, scope),
       order: { [query.sort ?? 'createdAt']: query.order ?? 'DESC' },
       take: query.limit,
       skip: (query.page - 1) * query.limit,
@@ -398,7 +406,7 @@ export class OrdersService {
     };
   }
 
-  async get(id: string): Promise<OrderRes> {
+  async get(id: string, scope: BranchScope = null): Promise<OrderRes> {
     const order = await this.orders.findOne({
       where: { id },
       relations: { items: true, payments: true },
@@ -407,6 +415,7 @@ export class OrdersService {
       // also another store's order: never revealed (api-conventions §6)
       throw new NotFoundException();
     }
+    assertBranchInScope(scope, order.branchId);
     return toOrderRes(order);
   }
 

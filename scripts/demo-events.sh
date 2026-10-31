@@ -96,7 +96,7 @@ expect_status 404 "adding an unregistered email" "$(http POST "$platform/tenants
 step "4. Login: the cashier signs in to the store (event platform.account.logged_in)"
 cashier_token=$(login "$cashier" "$tenant_id" | json_field accessToken)
 [[ -n "$cashier_token" ]] || fail "cashier could not sign in to the store"
-ok "cashier is signed in with the cashier role"
+ok "cashier is signed in with the sales_staff role (the legacy name cashier is accepted on input)"
 
 step "4b. Stock: the owner receives goods; selling will hold and then deduct them"
 receipt="{\"branchId\":\"$branch_id\",\"items\":[{\"sku\":\"AO-01\",\"quantity\":5},{\"sku\":\"QUAN-02\",\"quantity\":2}]}"
@@ -147,8 +147,8 @@ expect_status 403 "read the revenue report (owner or manager)" "$(http GET "$ins
 
 step "7. Insight built its read models from the events"
 audit_has() { http GET "$insight/audit-logs?type=$1&limit=100" "$store_token" | body_of | grep -q "$2"; }
-wait_for "audit log has the login of the cashier" audit_has platform.account.logged_in "signed in as cashier"
-wait_for "audit log has the role grant" audit_has platform.membership.granted "$cashier was given the cashier role"
+wait_for "audit log has the login of the cashier" audit_has platform.account.logged_in "signed in as sales_staff"
+wait_for "audit log has the role grant" audit_has platform.membership.granted "$cashier was given the sales_staff role"
 wait_for "audit log has the sale" audit_has sales.order.completed "completed for 590000 VND"
 daily_is_one_sale() { http GET "$insight/sales-summary/daily" "$store_token" | body_of | grep -q '"totals":{"orderCount":1,"revenue":590000}'; }
 wait_for "daily revenue shows 1 order and 590000 VND" daily_is_one_sale
@@ -156,7 +156,7 @@ wait_for "daily revenue shows 1 order and 590000 VND" daily_is_one_sale
 step "8. Permissions again: the owner promotes the cashier (event platform.membership.role_changed)"
 cashier_id=$(printf '%s' "$granted" | body_of | json_field accountId)
 expect_status 200 "change the role to manager (owner)" "$(http PATCH "$platform/tenants/current/members/$cashier_id" "$store_token" '{"role":"manager"}')"
-wait_for "audit log has the role change" audit_has platform.membership.role_changed "changed from cashier to manager"
+wait_for "audit log has the role change" audit_has platform.membership.role_changed "changed from sales_staff to branch_manager"
 manager_token=$(login "$cashier" "$tenant_id" | json_field accessToken)
 expect_status 200 "after signing in again the manager can read the audit log" "$(http GET "$insight/audit-logs" "$manager_token")"
 expect_status 403 "but still cannot create a branch" "$(http POST "$platform/branches" "$manager_token" '{"name":"Quay 3","code":"Q3"}')"

@@ -12,6 +12,7 @@ import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { EntityManager } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
+import { assertBranchInScope, BranchScope } from '../common/branch-scope';
 import { SalesErrorCode } from '../common/errors';
 import { InventoryClient } from '../inventory/inventory.client';
 import {
@@ -99,8 +100,9 @@ export class OrderActionsService {
     accountId: string,
     id: string,
     version?: number,
+    scope: BranchScope = null,
   ): Promise<OrderRes> {
-    const order = await this.load(id, version);
+    const order = await this.load(id, version, scope);
     this.requireStatus(order, 'confirm', ['draft', 'new']);
     if (!order.stockReserved) {
       const shortages = await this.inventory.reserve(
@@ -127,8 +129,9 @@ export class OrderActionsService {
     accountId: string,
     id: string,
     version?: number,
+    scope: BranchScope = null,
   ): Promise<OrderRes> {
-    const order = await this.load(id, version);
+    const order = await this.load(id, version, scope);
     this.requireStatus(order, 'pack', ['confirmed']);
     this.requireFulfillment(order, 'pack', ['unfulfilled']);
     await this.persist(order, accountId, {
@@ -149,8 +152,9 @@ export class OrderActionsService {
     accountId: string,
     id: string,
     dto: ShipReqDto,
+    scope: BranchScope = null,
   ): Promise<OrderRes> {
-    const order = await this.load(id, dto.version);
+    const order = await this.load(id, dto.version, scope);
     this.requireStatus(order, 'ship', ['confirmed']);
     this.requireFulfillment(order, 'ship', ['packing']);
     await this.persist(order, accountId, {
@@ -177,8 +181,9 @@ export class OrderActionsService {
     accountId: string,
     id: string,
     version?: number,
+    scope: BranchScope = null,
   ): Promise<OrderRes> {
-    const order = await this.load(id, version);
+    const order = await this.load(id, version, scope);
     this.requireStatus(order, 'complete', ['confirmed']);
     const history: HistoryInput[] = [
       { statusType: 'order', from: order.status, to: 'completed' },
@@ -216,8 +221,9 @@ export class OrderActionsService {
     accountId: string,
     id: string,
     dto: CancelReqDto,
+    scope: BranchScope = null,
   ): Promise<OrderRes> {
-    const order = await this.load(id, dto.version);
+    const order = await this.load(id, dto.version, scope);
     if (
       order.status === 'confirmed' &&
       ['shipping', 'delivered'].includes(order.fulfillmentStatus)
@@ -253,8 +259,9 @@ export class OrderActionsService {
     accountId: string,
     id: string,
     dto: AddPaymentReqDto,
+    scope: BranchScope = null,
   ): Promise<AddPaymentRes> {
-    const order = await this.load(id, dto.version);
+    const order = await this.load(id, dto.version, scope);
     if (dto.amount === 0) {
       throw new BadRequestException({
         errorCode: SalesErrorCode.PAYMENT_EXCEEDS_DUE,
@@ -320,12 +327,16 @@ export class OrderActionsService {
   }
 
   /** Status changes, newest first, at most 200 */
-  async getHistory(id: string): Promise<{ data: HistoryRes[] }> {
+  async getHistory(
+    id: string,
+    scope: BranchScope = null,
+  ): Promise<{ data: HistoryRes[] }> {
     const order = await this.orders.findOne({
       where: { id },
-      select: { id: true },
+      select: { id: true, branchId: true },
     });
     if (!order) throw new NotFoundException();
+    assertBranchInScope(scope, order.branchId);
     const rows = await this.history.find({
       where: { orderId: id },
       order: { createdAt: 'DESC' },
@@ -346,12 +357,18 @@ export class OrderActionsService {
   }
 
   /** Data for the client to render a receipt or a packing slip (no server-side PDF) */
-  async print(id: string, type = 'receipt', paper = '80mm'): Promise<PrintRes> {
+  async print(
+    id: string,
+    type = 'receipt',
+    paper = '80mm',
+    scope: BranchScope = null,
+  ): Promise<PrintRes> {
     const order = await this.orders.findOne({
       where: { id },
       relations: { items: true, payments: true },
     });
     if (!order) throw new NotFoundException();
+    assertBranchInScope(scope, order.branchId);
     const res = toOrderRes(order);
     const branch = await this.branches.findOne({
       where: { branchId: order.branchId },
@@ -381,12 +398,17 @@ export class OrderActionsService {
     };
   }
 
-  private async load(id: string, version?: number): Promise<OrderEntity> {
+  private async load(
+    id: string,
+    version?: number,
+    scope: BranchScope = null,
+  ): Promise<OrderEntity> {
     const order = await this.orders.findOne({
       where: { id },
       relations: { items: true },
     });
     if (!order) throw new NotFoundException();
+    assertBranchInScope(scope, order.branchId);
     if (version !== undefined && version !== order.version) {
       throw versionConflict();
     }

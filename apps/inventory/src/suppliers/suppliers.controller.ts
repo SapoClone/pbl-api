@@ -12,8 +12,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import { Page } from '../common/sql';
 import {
   CreateSupplierReqDto,
@@ -22,10 +21,7 @@ import {
 } from './supplier.dto';
 import { SupplierRes, SuppliersService } from './suppliers.service';
 
-/**
- * Contract permissions: `purchasing.view` = owner, manager, cashier;
- * `purchasing.create/update/delete` = owner, manager.
- */
+/** Permissions: `purchasing.view/create/update/delete`. Suppliers belong to the store, not a branch */
 @ApiTags('suppliers')
 @ApiBearerAuth()
 @Controller('api/v1/suppliers')
@@ -33,26 +29,26 @@ export class SuppliersController {
   constructor(private readonly suppliers: SuppliersService) {}
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('purchasing.view')
   list(@Query() query: ListSuppliersReqDto): Promise<Page<SupplierRes>> {
     return this.suppliers.list(query);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.create')
   create(@Body() dto: CreateSupplierReqDto): Promise<SupplierRes> {
     return this.suppliers.create(dto);
   }
 
   @Get(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('purchasing.view')
   get(@Param('id', ParseUUIDPipe) id: string): Promise<SupplierRes> {
     return this.suppliers.get(id);
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.update')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSupplierReqDto,
@@ -62,7 +58,7 @@ export class SuppliersController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.delete')
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.suppliers.remove(id);
   }

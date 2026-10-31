@@ -26,10 +26,10 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 | Area | Today | Target (build toward this) |
 |---|---|---|
 | Services | `platform`, `catalog`, `customer`, `inventory`, `sales` and `insight` have business logic (first wave of the screen APIs, 2026-10-29: [docs/specs/2026-10-29-first-wave/](docs/specs/2026-10-29-first-wave/README.md) lists what exists and what is deferred); `finance` and `integration` only expose `GET /health` (built from `templates/service/` on `@pbl/common`) | 8 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md), [ADR-0010](docs/decisions/0010-eight-services.md)) |
-| Tenancy | Implemented (P0): stores, branches, `tid` + `roles` in tokens, `@CurrentTenant()`/`@RequireRoles()` ([ADR-0008](docs/decisions/0008-tenancy.md)) | Staff logins, RBAC `perms`, plans/subscriptions |
+| Tenancy | Implemented (P0): stores, branches, `tid` in tokens, `@CurrentTenant()` ([ADR-0008](docs/decisions/0008-tenancy.md)). Roles and permissions (RBAC) are built: see Auth | Plans/subscriptions |
 | Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every client-facing endpoint of every service + each service's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
-| Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles` | Step 5: `perms` claim + `@RequirePermission` (with Staff/RBAC); short access-token TTL (the deny-list stays: every service uses it) ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
+| Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles`/`perms`/`branches`; routes use `@RequirePermission` and branch scope ([ADR-0020](docs/decisions/0020-permissions-and-branch-scope.md), [guide](docs/guides/permissions.md)) | Short access-token TTL (the deny-list stays: every service uses it) ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
 | Events | Built locally (P1): outbox → relay → ElasticMQ queue → consumer with an inbox, retry, DLQ and redrive, in `@pbl/events`; first events: platform branch/login/role events and `sales.order.completed`, consumed by sales, inventory, customer (spend and loyalty points) and insight ([guide](docs/guides/events.md)). The email queue stays separate ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | Production transport: outbox → SNS → SQS ([ADR-0007](docs/decisions/0007-event-bus.md)); the SNS adapter is written and unit-tested, never run against AWS |
 | AWS | All AWS resources were deleted to save credits; pbl-infra keeps the Terraform | Re-apply pbl-infra when deploying |
 
@@ -53,7 +53,10 @@ krakend/krakend.json   gateway routes (every client-facing route must be declare
 krakend/Dockerfile     gateway image: KrakenD 2.6.3 + the pbl-error-body plugin (krakend/plugins/error-body)
 docker/                postgres-init-schemas.sql (creates the 8 schemas), elasticmq.conf (local SQS)
 docker-compose.yml     full local stack: 8 apps + postgres + redis + elasticmq + krakend
-scripts/verify-local-stack.sh   end-to-end check (health of all 6 + register/login via gateway)
+scripts/verify-local-stack.sh   end-to-end check (health of all services + register/login via gateway)
+scripts/demo-events.sh          login, permissions and selling travelling as events
+scripts/demo-first-wave.sh      the first-wave screen APIs through the gateway
+scripts/demo-rbac.sh            roles, permissions and branch scope through the gateway
 docs/decisions/        ADRs — add one for every new architectural decision
 ```
 
@@ -162,11 +165,21 @@ Rules:
 - Tenant/user identity comes **from the token**, never from body, query, path or headers.
 - Refresh tokens are opaque and handled only by `RefreshTokenService`
   (hashed, rotated, reuse ⇒ family revoked). Never put them in a JWT or log them.
-- Store roles are `owner`, `manager` and `cashier` (`ROLES` in `@pbl/contracts`, `TenantRole` in
-  platform). The owner gives them out (`POST /tenants/current/members`) and changes them
-  (`PATCH …/members/:accountId`); both write an event. Protect a route with
-  `@RequireRoles(ROLES.OWNER, …)`; a role not listed gets 403. The role is read from the token, so a
-  change applies at the next sign-in or refresh.
+- Authorization is by **permission**, not role name ([ADR-0020](docs/decisions/0020-permissions-and-branch-scope.md),
+  [docs/guides/permissions.md](docs/guides/permissions.md)). A permission is `<module>.<action>`
+  (`PERMISSION_CATALOG` in `@pbl/contracts`). Each store has five seeded roles (`owner`, `branch_manager`,
+  `sales_staff`, `warehouse_staff`, `accountant`, defaults in `DEFAULT_ROLE_PERMISSIONS`) and custom roles the owner
+  edits (`/roles`, `/permissions`). Platform signs `roles` (the role code), `perms` (`["*"]` for the owner) and
+  `branches` (ids or `["*"]`). Protect a route with `@RequirePermission('orders.create', …)` (any one of the codes);
+  a route every store member may use carries no decorator. Never check a role name in a service; `@RequireRoles` and
+  `ROLES.MANAGER`/`ROLES.CASHIER` are deprecated (the legacy names are still accepted as input and map to
+  `branch_manager` and `sales_staff`).
+- **Branch scope:** a request naming a branch outside the member's `branches` answers **404**, never 403; a list
+  without a branch filter returns only the allowed branches (`canAccessBranch`, `allowedBranches`,
+  `@AllowedBranches()` from `@pbl/auth`). No assignment rows means every branch. A role, permission or branch change
+  reaches a member at their next sign-in or refresh.
+- Store users are accounts with a membership ([ADR-0019](docs/decisions/0019-store-users-are-accounts.md)); there is
+  no separate staff identity.
 
 ## API conventions
 
@@ -355,6 +368,9 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
   (`api/tenant/member-code.ts`); other services: `qualifiedTable(...)` from `@pbl/events`. Integration tests must
   connect the way the service does (schema option, no `search_path`).
 
+- A local database that predates a schema change can fail on start: compose uses `synchronize`, which cannot add a
+  `NOT NULL` column to a table that already has rows (`column "role_id" … contains null values`). Reset the volume
+  with `docker compose down -v`. Production runs the hand-written migrations, which backfill first.
 - `database "pbl" does not exist` → the Postgres volume predates the init
   script (init only runs on an empty volume). `docker compose down -v`.
 - `.env` is in `.dockerignore` on purpose: `Dockerfile.dev` does `COPY . .`
@@ -372,7 +388,7 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
 ## Known open work (don't rediscover, don't depend on)
 
 - First wave of the screen APIs (2026-10-29) is built but **deferred on purpose**: staff invitations, forgot/reset/verify
-  email, RBAC (`perms` claims, roles and permissions endpoints), the platform-admin identity and `/admin` routes,
+  email, the platform-admin identity and `/admin` routes,
   marketplace integration, returns, the draft/approve stock-receipt flow and receiving against a PO, S3 uploads,
   async imports, and events for the new order/stock/shift transitions. Per-service lists and the decisions awaiting
   review are in [docs/specs/2026-10-29-first-wave/](docs/specs/2026-10-29-first-wave/README.md).

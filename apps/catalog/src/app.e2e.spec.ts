@@ -121,30 +121,39 @@ describe('catalog service bootstrap', () => {
   });
 
   describe('permissions', () => {
-    // method, path, status for an allowed role, roles allowed (owner, manager, cashier)
-    const routes: [string, string, number, number[]][] = [
-      ['get', '/api/v1/products', 200, [0, 1, 2]],
-      ['get', '/api/v1/products/summary', 200, [0, 1, 2]],
-      ['get', '/api/v1/products/export', 200, [0, 1, 2]],
-      ['get', `/api/v1/products/${ID}`, 200, [0, 1, 2]],
-      ['post', '/api/v1/products', 201, [0, 1]],
-      ['patch', `/api/v1/products/${ID}`, 200, [0, 1]],
-      ['delete', `/api/v1/products/${ID}`, 204, [0, 1]],
-      ['post', `/api/v1/products/${ID}/variants`, 201, [0, 1]],
-      ['get', '/api/v1/variants', 200, [0, 1, 2]],
-      ['patch', `/api/v1/variants/${ID}`, 200, [0, 1]],
-      ['delete', `/api/v1/variants/${ID}`, 204, [0, 1]],
-      ['get', '/api/v1/categories', 200, [0, 1, 2]],
-      ['post', '/api/v1/categories', 201, [0, 1]],
-      ['patch', `/api/v1/categories/${ID}`, 200, [0, 1]],
-      ['delete', `/api/v1/categories/${ID}`, 204, [0, 1]],
-      ['get', '/api/v1/brands', 200, [0, 1, 2]],
-      ['post', '/api/v1/brands', 201, [0, 1]],
-      ['get', '/api/v1/attributes', 200, [0, 1, 2]],
-      ['post', '/api/v1/attributes', 201, [0, 1]],
-      ['post', `/api/v1/attributes/${ID}/values`, 201, [0, 1]],
+    // method, path, status when allowed, permissions of which any one is enough
+    const VIEW = ['products.view'];
+    const CREATE = ['products.create'];
+    const UPDATE = ['products.update'];
+    const DELETE = ['products.delete'];
+    const LOOKUP = [
+      'products.view',
+      'pos.create',
+      'orders.create',
+      'inventory.view',
     ];
-    const roles = ['owner', 'manager', 'cashier'];
+    const routes: [string, string, number, string[]][] = [
+      ['get', '/api/v1/products', 200, VIEW],
+      ['get', '/api/v1/products/summary', 200, VIEW],
+      ['get', '/api/v1/products/export', 200, VIEW],
+      ['get', `/api/v1/products/${ID}`, 200, VIEW],
+      ['post', '/api/v1/products', 201, CREATE],
+      ['patch', `/api/v1/products/${ID}`, 200, UPDATE],
+      ['delete', `/api/v1/products/${ID}`, 204, DELETE],
+      ['post', `/api/v1/products/${ID}/variants`, 201, CREATE],
+      ['get', '/api/v1/variants', 200, LOOKUP],
+      ['patch', `/api/v1/variants/${ID}`, 200, UPDATE],
+      ['delete', `/api/v1/variants/${ID}`, 204, DELETE],
+      ['get', '/api/v1/categories', 200, VIEW],
+      ['post', '/api/v1/categories', 201, CREATE],
+      ['patch', `/api/v1/categories/${ID}`, 200, UPDATE],
+      ['delete', `/api/v1/categories/${ID}`, 204, DELETE],
+      ['get', '/api/v1/brands', 200, VIEW],
+      ['post', '/api/v1/brands', 201, CREATE],
+      ['get', '/api/v1/attributes', 200, VIEW],
+      ['post', '/api/v1/attributes', 201, CREATE],
+      ['post', `/api/v1/attributes/${ID}/values`, 201, CREATE],
+    ];
     const bodyOf = (method: string, path: string) => {
       if (method === 'get' || method === 'delete') return undefined;
       if (path.endsWith('/variants')) return { skuCode: 'A-1' };
@@ -175,20 +184,32 @@ describe('catalog service bootstrap', () => {
     );
 
     it.each(routes)(
-      '%s %s allows exactly the documented roles',
-      async (method, path, ok, allowed) => {
-        for (const [index, role] of roles.entries()) {
-          const res = await (request(url()) as any)
+      '%s %s passes with any listed permission, 403 without',
+      async (method, path, ok, perms) => {
+        const send = (authorization: string) =>
+          (request(url()) as any)
             [method](path)
-            .set('Authorization', as([role]))
+            .set('Authorization', authorization)
             .send(bodyOf(method, path));
-          expect(res.status).toBe(allowed.includes(index) ? ok : 403);
+        for (const perm of perms) {
+          const res = await send(
+            auth.bearerWithPermissions('sales_staff', [perm], TENANT),
+          );
+          expect(res.status).toBe(ok);
         }
-        await (request(url()) as any)
-          [method](path)
-          .set('Authorization', as(['viewer']))
-          .send(bodyOf(method, path))
-          .expect(403);
+        // an unrelated permission, no permission, and the legacy role names
+        for (const header of [
+          auth.bearerWithPermissions('sales_staff', ['staff.view'], TENANT),
+          auth.bearerWithPermissions('sales_staff', [], TENANT),
+          auth.bearerWithPermissions('manager', [], TENANT),
+          auth.bearerWithPermissions('cashier', [], TENANT),
+          auth.bearer(['manager'], TENANT),
+          auth.bearer(['viewer'], TENANT),
+        ]) {
+          expect((await send(header)).status).toBe(403);
+        }
+        // the owner holds every permission
+        expect((await send(owner())).status).toBe(ok);
       },
     );
   });

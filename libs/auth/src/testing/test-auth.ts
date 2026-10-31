@@ -7,6 +7,10 @@ export interface TestTokenClaims {
   /** The store; omit for a token without one */
   tid?: string;
   roles?: string[];
+  /** Permission codes; default `['*']` when roles contain 'owner', else none */
+  permissions?: string[];
+  /** Branch ids; default `['*']` (every branch) */
+  branches?: string[];
 }
 
 /**
@@ -45,14 +49,26 @@ export function createTestAuth() {
     bearer(roles: string[], tid?: string): string {
       return `Bearer ${this.token({ roles, tid })}`;
     },
+    /** `Bearer <token>` for a role holding exactly these permissions (and branches) */
+    bearerWithPermissions(
+      role: string,
+      permissions: string[],
+      tid?: string,
+      branches?: string[],
+    ): string {
+      return `Bearer ${this.token({ roles: [role], permissions, tid, branches })}`;
+    },
     token(claims: TestTokenClaims = {}): string {
+      const roles = claims.roles ?? [];
       return jwt.sign(
         {
           sub: claims.sub ?? 'account-1',
           sid: 'session-1',
           sub_type: 'account',
           ...(claims.tid ? { tid: claims.tid } : {}),
-          roles: claims.roles ?? [],
+          roles,
+          perms: claims.permissions ?? (roles.includes('owner') ? ['*'] : []),
+          branches: claims.branches ?? ['*'],
         },
         {
           privateKey: privatePem,

@@ -41,6 +41,18 @@ export type I18nTranslations = {
             "branch_not_found": string;
         };
     };
+    "role": {
+        "error": {
+            "name_exists": string;
+            "owner_immutable": string;
+            "unknown_permission": string;
+            "seeded_not_deletable": string;
+            "in_use": string;
+            "not_found": string;
+            "unknown_for_member": string;
+            "owner_not_assignable": string;
+        };
+    };
     "branch": {
         "error": {
             "code_exists": string;

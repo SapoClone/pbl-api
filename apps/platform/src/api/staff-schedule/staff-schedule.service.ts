@@ -41,10 +41,21 @@ export class StaffScheduleService {
     @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
-  async list(query: ListStaffScheduleReqDto): Promise<StaffScheduleResDto[]> {
+  /** `allowed`: the branch ids the caller may see, null for every branch */
+  async list(
+    query: ListStaffScheduleReqDto,
+    allowed: string[] | null = null,
+  ): Promise<StaffScheduleResDto[]> {
+    if (allowed && query.branchId && !allowed.includes(query.branchId)) {
+      throw new NotFoundException();
+    }
     const rows = await this.schedules.find({
       where: {
-        ...(query.branchId ? { branchId: query.branchId } : {}),
+        ...(query.branchId
+          ? { branchId: query.branchId }
+          : allowed
+            ? { branchId: In(allowed) as never }
+            : {}),
         ...(query.accountId ? { accountId: query.accountId } : {}),
         ...(query.weekday ? { weekday: query.weekday } : {}),
       },
@@ -99,8 +110,9 @@ export class StaffScheduleService {
     actorId: string,
     id: string,
     dto: UpdateStaffScheduleReqDto,
+    allowed: string[] | null = null,
   ): Promise<StaffScheduleResDto> {
-    const row = await this.find(id);
+    const row = await this.find(id, allowed);
     const startTime = dto.startTime ?? toHm(row.startTime);
     const endTime = dto.endTime ?? toHm(row.endTime);
     this.assertOrdered(startTime, endTime);
@@ -119,8 +131,8 @@ export class StaffScheduleService {
     return saved;
   }
 
-  async remove(id: string): Promise<void> {
-    const row = await this.find(id);
+  async remove(id: string, allowed: string[] | null = null): Promise<void> {
+    const row = await this.find(id, allowed);
     await this.schedules.delete({ id: row.id });
   }
 
@@ -154,11 +166,15 @@ export class StaffScheduleService {
     return this.list({ accountId });
   }
 
-  private async find(id: string): Promise<StaffScheduleEntity> {
+  /** A shift in a branch outside `allowed` is a 404, like an unknown one */
+  private async find(
+    id: string,
+    allowed: string[] | null = null,
+  ): Promise<StaffScheduleEntity> {
     const row = await this.schedules.findOne({
       where: { id: id as StaffScheduleEntity['id'] },
     });
-    if (!row) {
+    if (!row || (allowed && !allowed.includes(row.branchId))) {
       throw new NotFoundException();
     }
     return row;

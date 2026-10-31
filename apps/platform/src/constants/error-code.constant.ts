@@ -21,6 +21,16 @@ export enum ErrorCode {
   T005 = 'tenant.error.owner_protected',
   T023 = 'tenant.error.branch_not_found',
 
+  // Role
+  R001 = 'role.error.name_exists',
+  R002 = 'role.error.owner_immutable',
+  R003 = 'role.error.unknown_permission',
+  R004 = 'role.error.seeded_not_deletable',
+  R005 = 'role.error.in_use',
+  R006 = 'role.error.not_found',
+  R007 = 'role.error.unknown_for_member',
+  R008 = 'role.error.owner_not_assignable',
+
   // Branch
   B001 = 'branch.error.code_exists',
   B002 = 'branch.error.last_branch',

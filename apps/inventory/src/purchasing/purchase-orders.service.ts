@@ -8,9 +8,12 @@ import { BranchGuard } from '../common/branch-guard';
 import {
   EXPORT_ROW_CAP,
   Page,
+  Scope,
   TIME_ZONE,
   Where,
   actorId,
+  assertBranchInScope,
+  assertVisible,
   badRequest,
   conflict,
   iso,
@@ -128,11 +131,17 @@ export class PurchaseOrdersService {
   private filters(
     tenantId: string,
     query: Omit<ExportPurchaseOrdersReqDto, 'sort' | 'order'>,
+    scope: Scope,
   ): Where {
     const where = new Where().add('p."tenant_id" = ?', tenantId);
     if (query.status) where.add('p."status" = ?', query.status);
     if (query.supplierId) where.add('p."supplier_id" = ?', query.supplierId);
-    if (query.branchId) where.add('p."branch_id" = ?', query.branchId);
+    if (query.branchId) {
+      assertBranchInScope(scope, query.branchId);
+      where.add('p."branch_id" = ?', query.branchId);
+    } else {
+      where.branchScope(scope, 'p."branch_id"');
+    }
     if (query.q) {
       const like = where.param(likePattern(query.q));
       where.add(`(p."code" ILIKE ${like} OR s."name" ILIKE ${like})`);
@@ -142,8 +151,9 @@ export class PurchaseOrdersService {
 
   async list(
     query: PurchaseOrderFilterDto,
+    scope: Scope,
   ): Promise<Page<PurchaseOrderRowRes>> {
-    const where = this.filters(TenantContext.require(), query);
+    const where = this.filters(TenantContext.require(), query, scope);
     const join = `${this.t('purchase_order')} p JOIN ${this.t('supplier')} s ON s."id" = p."supplier_id"`;
     const [{ count }] = await this.dataSource.query(
       `SELECT count(*) AS count FROM ${join} ${where.sql}`,
@@ -163,8 +173,11 @@ export class PurchaseOrdersService {
     );
   }
 
-  async exportCsv(query: ExportPurchaseOrdersReqDto): Promise<string> {
-    const where = this.filters(TenantContext.require(), query);
+  async exportCsv(
+    query: ExportPurchaseOrdersReqDto,
+    scope: Scope,
+  ): Promise<string> {
+    const where = this.filters(TenantContext.require(), query, scope);
     const rows = await this.dataSource.query(
       `${this.rowSelect()} ${where.sql}
        ORDER BY ${SORTS[query.sort ?? 'createdAt']} ${query.order ?? 'DESC'}, p."id" LIMIT ${EXPORT_ROW_CAP}`,
@@ -204,8 +217,8 @@ export class PurchaseOrdersService {
     );
   }
 
-  async summary(query: PurchaseOrderSummaryReqDto) {
-    const where = this.filters(TenantContext.require(), query);
+  async summary(query: PurchaseOrderSummaryReqDto, scope: Scope) {
+    const where = this.filters(TenantContext.require(), query, scope);
     const open =
       "p.\"status\" IN ('draft','pending_approval','approved','partially_received')";
     const today = `(now() AT TIME ZONE '${TIME_ZONE}')::date`;
@@ -228,20 +241,27 @@ export class PurchaseOrdersService {
     };
   }
 
-  async get(id: string): Promise<PurchaseOrderRes> {
-    return this.load(this.dataSource.manager, TenantContext.require(), id);
+  async get(id: string, scope: Scope): Promise<PurchaseOrderRes> {
+    return this.load(
+      this.dataSource.manager,
+      TenantContext.require(),
+      id,
+      scope,
+    );
   }
 
   private async load(
     em: EntityManager,
     tenantId: string,
     id: string,
+    scope: Scope,
   ): Promise<PurchaseOrderRes> {
     const rows = await em.query(
       `${this.rowSelect()} WHERE p."tenant_id" = $1 AND p."id" = $2`,
       [tenantId, id],
     );
     if (!rows.length) throw notFound('Purchase order');
+    assertVisible(scope, 'Purchase order', rows[0].branch_id);
     const lines = await em.query(
       `SELECT * FROM ${this.t('purchase_order_line')} WHERE "tenant_id" = $1 AND "purchase_order_id" = $2 ORDER BY "line_no"`,
       [tenantId, id],
@@ -331,8 +351,12 @@ export class PurchaseOrdersService {
     return priced;
   }
 
-  async create(dto: CreatePurchaseOrderReqDto): Promise<PurchaseOrderRes> {
+  async create(
+    dto: CreatePurchaseOrderReqDto,
+    scope: Scope,
+  ): Promise<PurchaseOrderRes> {
     const tenantId = TenantContext.require();
+    assertBranchInScope(scope, dto.branchId);
     await this.branches.assertActive(dto.branchId);
     const id = randomUUID();
     await this.dataSource.transaction(async (em) => {
@@ -366,7 +390,7 @@ export class PurchaseOrdersService {
       const totals = await this.writeLines(em, tenantId, id, dto.items);
       await this.setTotals(em, tenantId, id, totals);
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
   private setTotals(
@@ -387,6 +411,7 @@ export class PurchaseOrdersService {
     em: EntityManager,
     tenantId: string,
     id: string,
+    scope: Scope,
     version?: number,
   ) {
     const [row] = await em.query(
@@ -394,6 +419,7 @@ export class PurchaseOrdersService {
       [tenantId, id],
     );
     if (!row) throw notFound('Purchase order');
+    assertVisible(scope, 'Purchase order', row.branch_id);
     if (version !== undefined && version !== row.version) {
       throw conflict(
         InventoryErrorCode.VERSION_CONFLICT,
@@ -407,11 +433,15 @@ export class PurchaseOrdersService {
   async update(
     id: string,
     dto: UpdatePurchaseOrderReqDto,
+    scope: Scope,
   ): Promise<PurchaseOrderRes> {
     const tenantId = TenantContext.require();
-    if (dto.branchId) await this.branches.assertActive(dto.branchId);
+    if (dto.branchId) {
+      assertBranchInScope(scope, dto.branchId);
+      await this.branches.assertActive(dto.branchId);
+    }
     await this.dataSource.transaction(async (em) => {
-      const row = await this.lock(em, tenantId, id, dto.version);
+      const row = await this.lock(em, tenantId, id, scope, dto.version);
       if (row.status !== 'draft') {
         throw badRequest(
           InventoryErrorCode.PURCHASE_ORDER_NOT_EDITABLE,
@@ -449,7 +479,7 @@ export class PurchaseOrdersService {
         );
       }
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
   /**
@@ -460,10 +490,11 @@ export class PurchaseOrdersService {
     id: string,
     action: PurchaseOrderAction,
     dto: PurchaseOrderActionReqDto,
+    scope: Scope,
   ): Promise<PurchaseOrderRes> {
     const tenantId = TenantContext.require();
     await this.dataSource.transaction(async (em) => {
-      const row = await this.lock(em, tenantId, id, dto.version);
+      const row = await this.lock(em, tenantId, id, scope, dto.version);
       const status = row.status as PurchaseOrderStatus;
       const to = nextStatus(action, status);
       if (!to) {
@@ -489,7 +520,7 @@ export class PurchaseOrdersService {
         await this.moveDebt(em, tenantId, row.supplier_id as string, -owed);
       }
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
   private moveDebt(
@@ -506,11 +537,11 @@ export class PurchaseOrdersService {
   }
 
   /** Records a payment: paid amount up, supplier debt down; never more than what remains (I013) */
-  async pay(id: string, dto: CreatePaymentReqDto) {
+  async pay(id: string, dto: CreatePaymentReqDto, scope: Scope) {
     const tenantId = TenantContext.require();
     const paymentId = randomUUID();
     return this.dataSource.transaction(async (em) => {
-      const row = await this.lock(em, tenantId, id);
+      const row = await this.lock(em, tenantId, id, scope);
       if (!PAYABLE_STATUSES.includes(row.status as PurchaseOrderStatus)) {
         throw badRequest(
           InventoryErrorCode.INVALID_TRANSITION,

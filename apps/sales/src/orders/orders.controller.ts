@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Headers,
   HttpCode,
@@ -14,8 +15,13 @@ import {
   Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
-import { CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import {
+  AllowedBranches,
+  AuthUser,
+  CurrentUser,
+  hasPermission,
+  RequirePermission,
+} from '@pbl/auth';
 import { IsIn, IsOptional } from 'class-validator';
 import type { Response } from 'express';
 import { SalesErrorCode } from '../common/errors';
@@ -54,14 +60,14 @@ class PrintReqDto {
 }
 
 /**
- * Every role of a store can sell and look at orders (contract `orders.view`,
- * `orders.create`, `pos.create`). The stepper actions and payments are
- * `orders.update` (owner, manager); cancelling is `orders.delete` (owner,
- * manager). Fixed paths (`summary`, `export`) come before `:id`.
+ * Permissions (ADR-0020): reads `orders.view`; creating `orders.create` or, for
+ * a POS sale (`source: pos`), `pos.create`; the stepper actions and payments
+ * `orders.update`; cancelling `orders.delete`. A restricted caller only sees the
+ * orders of its branches (404 for any other). Fixed paths (`summary`, `export`)
+ * come before `:id`.
  */
 @ApiTags('orders')
 @ApiBearerAuth()
-@RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
 @Controller('api/v1/orders')
 export class OrdersController {
   constructor(
@@ -76,16 +82,23 @@ export class OrdersController {
    * body is 409.
    */
   @Post()
+  @RequirePermission('orders.create', 'pos.create')
   @ApiHeader({
     name: 'Idempotency-Key',
     description: 'A UUID per sale attempt',
   })
   async create(
-    @CurrentUser('id') accountId: string,
+    @CurrentUser() user: AuthUser,
+    @AllowedBranches() branches: string[] | null,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() dto: CreateOrderReqDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<OrderRes> {
+    // the decorator admits either code; the sale's source decides which one counts
+    const needed = dto.source === 'pos' ? 'pos.create' : 'orders.create';
+    if (!hasPermission(user, needed)) {
+      throw new ForbiddenException(`Missing permission ${needed}`);
+    }
     if (!idempotencyKey || !UUID.test(idempotencyKey)) {
       throw new BadRequestException({
         errorCode: SalesErrorCode.IDEMPOTENCY_KEY_REQUIRED,
@@ -93,9 +106,10 @@ export class OrdersController {
       });
     }
     const { order, replayed } = await this.orders.create(
-      accountId,
+      user.id,
       idempotencyKey.toLowerCase(),
       dto,
+      branches,
     );
     res.status(replayed ? HttpStatus.OK : HttpStatus.CREATED);
     if (replayed) res.setHeader('Idempotency-Replayed', 'true');
@@ -103,119 +117,145 @@ export class OrdersController {
   }
 
   @Get()
-  list(@Query() query: ListOrdersReqDto): Promise<Page<OrderRes>> {
-    return this.orders.list(query);
+  @RequirePermission('orders.view')
+  list(
+    @Query() query: ListOrdersReqDto,
+    @AllowedBranches() branches: string[] | null,
+  ): Promise<Page<OrderRes>> {
+    return this.orders.list(query, branches);
   }
 
   @Get('summary')
-  summary(@Query() query: OrderSummaryReqDto): Promise<OrderSummaryRes> {
-    return this.queries.summary(query);
+  @RequirePermission('orders.view')
+  summary(
+    @Query() query: OrderSummaryReqDto,
+    @AllowedBranches() branches: string[] | null,
+  ): Promise<OrderSummaryRes> {
+    return this.queries.summary(query, branches);
   }
 
   @Get('export')
+  @RequirePermission('orders.view')
   async export(
     @Query() query: OrderSummaryReqDto,
+    @AllowedBranches() branches: string[] | null,
     @Res({ passthrough: true }) res: Response,
   ): Promise<string> {
-    const csv = await this.queries.exportCsv(query);
+    const csv = await this.queries.exportCsv(query, branches);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="orders.csv"');
     return csv;
   }
 
   @Get(':id')
-  get(@Param('id', ParseUUIDPipe) id: string): Promise<OrderRes> {
-    return this.orders.get(id);
+  @RequirePermission('orders.view')
+  get(
+    @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() branches: string[] | null,
+  ): Promise<OrderRes> {
+    return this.orders.get(id, branches);
   }
 
-  /** Edits a draft only (`orders.update` or `pos.create`) */
+  /** Edits a draft only */
   @Patch(':id')
+  @RequirePermission('orders.create')
   update(
     @CurrentUser('id') accountId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateOrderReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<OrderRes> {
-    return this.orders.update(accountId, id, dto);
+    return this.orders.update(accountId, id, dto, branches);
   }
 
   @Post(':id/confirm')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('orders.update')
   confirm(
     @CurrentUser('id') accountId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ActionReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<OrderRes> {
-    return this.actions.confirm(accountId, id, dto.version);
+    return this.actions.confirm(accountId, id, dto.version, branches);
   }
 
   @Post(':id/pack')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('orders.update')
   pack(
     @CurrentUser('id') accountId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ActionReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<OrderRes> {
-    return this.actions.pack(accountId, id, dto.version);
+    return this.actions.pack(accountId, id, dto.version, branches);
   }
 
   @Post(':id/ship')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('orders.update')
   ship(
     @CurrentUser('id') accountId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ShipReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<OrderRes> {
-    return this.actions.ship(accountId, id, dto);
+    return this.actions.ship(accountId, id, dto, branches);
   }
 
   @Post(':id/complete')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('orders.update')
   complete(
     @CurrentUser('id') accountId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ActionReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<OrderRes> {
-    return this.actions.complete(accountId, id, dto.version);
+    return this.actions.complete(accountId, id, dto.version, branches);
   }
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('orders.delete')
   cancel(
     @CurrentUser('id') accountId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CancelReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<OrderRes> {
-    return this.actions.cancel(accountId, id, dto);
+    return this.actions.cancel(accountId, id, dto, branches);
   }
 
   @Post(':id/payments')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('orders.update')
   addPayment(
     @CurrentUser('id') accountId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AddPaymentReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<AddPaymentRes> {
-    return this.actions.addPayment(accountId, id, dto);
+    return this.actions.addPayment(accountId, id, dto, branches);
   }
 
   @Get(':id/history')
+  @RequirePermission('orders.view')
   history(
     @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<{ data: HistoryRes[] }> {
-    return this.actions.getHistory(id);
+    return this.actions.getHistory(id, branches);
   }
 
   @Get(':id/print')
+  @RequirePermission('orders.view')
   print(
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: PrintReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<PrintRes> {
-    return this.actions.print(id, query.type, query.paper);
+    return this.actions.print(id, query.type, query.paper, branches);
   }
 }

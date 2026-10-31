@@ -7,10 +7,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { PLATFORM_BRANCH_CREATED } from '@pbl/contracts';
+import {
+  ALL_PERMISSIONS,
+  PLATFORM_BRANCH_CREATED,
+  ROLE_CODES,
+  WILDCARD_PERMISSION,
+} from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
 import { plainToInstance } from 'class-transformer';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import {
   AccountEntity,
   AccountStatus,
@@ -20,6 +25,7 @@ import {
   BranchStatus,
   DEFAULT_BRANCH,
 } from '../branch/entities/branch.entity';
+import { seedRoles } from '../role/role-seeding';
 import { STORE_TIMEZONE } from '../staff-schedule/staff-time.util';
 import { CreateTenantReqDto } from './dto/create-tenant.req.dto';
 import { MembershipResDto } from './dto/membership.res.dto';
@@ -29,12 +35,10 @@ import { UpdateTenantReqDto } from './dto/update-tenant.req.dto';
 import {
   AccountTenantEntity,
   MemberStatus,
-  TenantRole,
 } from './entities/account-tenant.entity';
 import { TenantEntity, TenantStatus } from './entities/tenant.entity';
 import { formatMemberCode } from './member-code';
 import { MembershipService } from './membership.service';
-import { ROLE_LABELS } from './role-labels';
 
 @Injectable()
 export class TenantService {
@@ -54,6 +58,8 @@ export class TenantService {
       name: m.name,
       subdomain: m.subdomain,
       role: m.role,
+      roleId: m.roleId,
+      roleName: m.roleName,
     }));
   }
 
@@ -91,11 +97,15 @@ export class TenantService {
             updatedBy: accountId,
           }),
         );
+        // the five seeded roles of the store; its creator is the owner
+        const roles = await seedRoles(em, tenant.id);
+        const ownerRole = roles.get(ROLE_CODES.OWNER)!;
         await em.save(
           new AccountTenantEntity({
             accountId,
             tenantId: tenant.id,
-            role: TenantRole.OWNER,
+            role: ownerRole.code,
+            roleId: ownerRole.id,
             status: MemberStatus.ACTIVE,
             code: formatMemberCode(1),
           }),
@@ -169,12 +179,17 @@ export class TenantService {
 
   /**
    * The global chrome in one call. The plan is a `free` placeholder until
-   * subscriptions exist. Every active branch is listed for every member: there
-   * is no branch assignment yet (D2 needs the `branches` claim).
+   * subscriptions exist. `scope` is the caller's token: `permissions` (the
+   * owner's `*` is listed as every code) and the branches they may act in
+   * (null = every branch), which limit the branch list and its count.
    */
   async getContext(
     tenantId: string,
     accountId: string,
+    scope: { permissions: string[]; branches: string[] | null } = {
+      permissions: [],
+      branches: null,
+    },
   ): Promise<TenantContextResDto> {
     const [tenant, membership, branches] = await Promise.all([
       this.tenantRepository.findOneByOrFail({
@@ -182,10 +197,14 @@ export class TenantService {
       }),
       this.dataSource.getRepository(AccountTenantEntity).findOne({
         where: { accountId, tenantId },
-        relations: { account: true },
+        relations: { account: true, memberRole: true },
       }),
       this.dataSource.getRepository(BranchEntity).find({
-        where: { tenantId, status: BranchStatus.ACTIVE },
+        where: {
+          tenantId,
+          status: BranchStatus.ACTIVE,
+          ...(scope.branches ? { id: In(scope.branches) as never } : {}),
+        },
         order: { createdAt: 'ASC', id: 'ASC' },
       }),
     ]);
@@ -214,9 +233,9 @@ export class TenantService {
         initials: initialsOf(account.name || account.email),
         email: account.email,
         role: membership.role,
-        roleId: null,
-        roleName: ROLE_LABELS[membership.role],
-        isOwner: membership.role === TenantRole.OWNER,
+        roleId: membership.roleId,
+        roleName: membership.memberRole.name,
+        isOwner: membership.role === ROLE_CODES.OWNER,
       },
       branches: branches.map((b) => ({
         id: b.id,
@@ -225,7 +244,9 @@ export class TenantService {
         address: b.address,
         isWarehouse: b.isWarehouse,
       })),
-      permissions: [],
+      permissions: scope.permissions.includes(WILDCARD_PERMISSION)
+        ? [...ALL_PERMISSIONS]
+        : [...scope.permissions],
       timezone: STORE_TIMEZONE,
     });
   }

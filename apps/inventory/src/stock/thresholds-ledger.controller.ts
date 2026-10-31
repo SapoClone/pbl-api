@@ -8,8 +8,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, RequirePermission } from '@pbl/auth';
 import { Page } from '../common/sql';
 import { ListLedgerReqDto } from './dto/ledger.dto';
 import {
@@ -22,10 +21,7 @@ import {
   ThresholdRes,
 } from './stock-thresholds.service';
 
-/**
- * Contract permissions: `inventory.view` = owner, manager, cashier; `inventory.update`
- * (thresholds) = owner, manager.
- */
+/** Permissions: `inventory.view` for reads, `inventory.update` for thresholds; branch scope applies */
 @ApiTags('stock')
 @ApiBearerAuth()
 @Controller('api/v1')
@@ -37,20 +33,29 @@ export class ThresholdsLedgerController {
 
   @Post('stock-thresholds')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
-  upsert(@Body() dto: UpsertThresholdReqDto): Promise<ThresholdRes> {
-    return this.thresholds.upsert(dto);
+  @RequirePermission('inventory.update')
+  upsert(
+    @Body() dto: UpsertThresholdReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<ThresholdRes> {
+    return this.thresholds.upsert(dto, scope);
   }
 
   @Get('stock-thresholds')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
-  list(@Query() query: ListThresholdsReqDto): Promise<Page<ThresholdRes>> {
-    return this.thresholds.list(query);
+  @RequirePermission('inventory.view')
+  list(
+    @Query() query: ListThresholdsReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<Page<ThresholdRes>> {
+    return this.thresholds.list(query, scope);
   }
 
   @Get('ledger-entries')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
-  entries(@Query() query: ListLedgerReqDto): Promise<Page<LedgerEntryRes>> {
-    return this.ledger.list(query);
+  @RequirePermission('inventory.view')
+  entries(
+    @Query() query: ListLedgerReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<Page<LedgerEntryRes>> {
+    return this.ledger.list(query, scope);
   }
 }

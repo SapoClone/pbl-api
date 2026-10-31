@@ -82,6 +82,8 @@ describe('Inventory service bootstrap', () => {
     `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   const as = (roles: string[], tid: string | null = TENANT) =>
     auth.bearer(roles, tid ?? undefined);
+  const withPerms = (perms: string[], tid: string | null = TENANT) =>
+    auth.bearerWithPermissions('custom_role', perms, tid ?? undefined);
 
   it('GET /health reports the service', async () => {
     const res = await request(url()).get('/health').expect(200);
@@ -99,14 +101,25 @@ describe('Inventory service bootstrap', () => {
   });
 
   describe('permissions', () => {
-    const routes: [string, string, number, number[]][] = [
-      // method, path, status for an allowed role, roles that are allowed
-      ['get', '/api/v1/stock', 200, [0, 1, 2]],
-      ['post', '/api/v1/stock-receipts', 201, [0, 1]],
-      ['post', '/internal/reservations', 201, [0, 1, 2]],
-      ['delete', `/internal/reservations/${ORDER}`, 204, [0, 1, 2]],
+    const routes: [string, string, number, string[]][] = [
+      // method, path, status when allowed, permissions that allow it (any-of)
+      ['get', '/api/v1/stock', 200, ['inventory.view']],
+      ['post', '/api/v1/stock-receipts', 201, ['inventory.create']],
+      // sales calls these with the user's token: create (pos/orders.create), confirm
+      // (orders.update) and cancel (orders.delete) must all get through
+      [
+        'post',
+        '/internal/reservations',
+        201,
+        ['pos.create', 'orders.create', 'orders.update'],
+      ],
+      [
+        'delete',
+        `/internal/reservations/${ORDER}`,
+        204,
+        ['pos.create', 'orders.create', 'orders.update', 'orders.delete'],
+      ],
     ];
-    const roles = ['owner', 'manager', 'cashier'];
     const bodyOf = (path: string) =>
       path.includes('stock-receipts')
         ? { branchId: BRANCH, items: [{ sku: 'AO-01', quantity: 5 }] }
@@ -136,20 +149,19 @@ describe('Inventory service bootstrap', () => {
     );
 
     it.each(routes)(
-      '%s %s allows exactly the documented roles',
-      async (method, path, ok, allowed) => {
-        for (const [index, role] of roles.entries()) {
-          const res = await (request(url()) as any)
+      '%s %s allows exactly the documented permissions',
+      async (method, path, ok, codes) => {
+        const send = (authorization: string) =>
+          (request(url()) as any)
             [method](path)
-            .set('Authorization', as([role]))
+            .set('Authorization', authorization)
             .send(bodyOf(path));
-          expect(res.status).toBe(allowed.includes(index) ? ok : 403);
-        }
-        await (request(url()) as any)
-          [method](path)
-          .set('Authorization', as(['viewer']))
-          .send(bodyOf(path))
-          .expect(403);
+        await send(as(['owner'])).expect(ok);
+        for (const code of codes) await send(withPerms([code])).expect(ok);
+        await send(withPerms(['products.view'])).expect(403);
+        // role names alone grant nothing
+        await send(as(['manager'])).expect(403);
+        await send(as(['viewer'])).expect(403);
       },
     );
   });
@@ -158,7 +170,7 @@ describe('Inventory service bootstrap', () => {
     const post = () =>
       request(url())
         .post('/internal/reservations')
-        .set('Authorization', as(['cashier']));
+        .set('Authorization', withPerms(['pos.create']));
 
     it('answers 201 when the stock is held and 200 for an order held before', async () => {
       await post().send(reserveBody).expect(201);

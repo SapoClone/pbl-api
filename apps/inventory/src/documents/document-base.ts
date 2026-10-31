@@ -16,7 +16,7 @@ export abstract class DocumentBase {
     return { item: this.t('stock_item'), ledger: this.t('inventory_ledger') };
   }
 
-  /** Locks the header row of the caller's tenant; 404 for another tenant's; 409 on a stale version */
+  /** Locks the header row of the caller's tenant; 404 for another tenant's or out of scope (`visible` throws); 409 on a stale version */
   protected async lockHeader(
     em: EntityManager,
     table: string,
@@ -24,12 +24,14 @@ export abstract class DocumentBase {
     id: string,
     what: string,
     version?: number,
+    visible?: (row: Record<string, any>) => void,
   ): Promise<Record<string, any>> {
     const [row] = await em.query(
       `SELECT * FROM ${this.t(table)} WHERE "tenant_id" = $1 AND "id" = $2 FOR UPDATE`,
       [tenantId, id],
     );
     if (!row) throw notFound(what);
+    visible?.(row); // 404 when the document's branch is outside the caller's scope
     if (version !== undefined && version !== row.version) {
       throw conflict(
         InventoryErrorCode.VERSION_CONFLICT,

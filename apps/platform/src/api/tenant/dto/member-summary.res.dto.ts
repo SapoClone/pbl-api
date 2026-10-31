@@ -23,7 +23,7 @@ export class MemberSummaryResDto {
   @ClassField(() => OnShiftBranchResDto, { each: true, isArray: true })
   @Expose()
   onShiftByBranch: OnShiftBranchResDto[];
-  /** The seeded roles: owner, manager, cashier */
+  /** The seeded roles every store starts with (5) */
   @NumberField({ int: true }) @Expose() defaultRoleCount: number;
   /** The store name: the data scope of the list */
   @StringField() @Expose() dataScope: string;

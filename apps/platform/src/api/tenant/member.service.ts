@@ -5,18 +5,22 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import {
   MembershipEventPayload,
+  normalizeRoleCode,
   PLATFORM_MEMBERSHIP_GRANTED,
   PLATFORM_MEMBERSHIP_ROLE_CHANGED,
+  ROLE_CODES,
+  SEEDED_ROLES,
 } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
 import { plainToInstance } from 'class-transformer';
-import { DataSource, In } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 import {
   AccountEntity,
   AccountStatus,
 } from '../account/entities/account.entity';
 import { SessionService } from '../auth/session.service';
 import { BranchEntity } from '../branch/entities/branch.entity';
+import { RoleEntity } from '../role/entities/role.entity';
 import { StaffScheduleEntity } from '../staff-schedule/entities/staff-schedule.entity';
 import {
   StaffScheduleService,
@@ -24,16 +28,16 @@ import {
 } from '../staff-schedule/staff-schedule.service';
 import { ListMemberReqDto } from './dto/list-member.req.dto';
 import { MemberDetailResDto } from './dto/member-detail.res.dto';
+import { MemberRoleInput } from './dto/member-role-input';
 import { MemberSummaryResDto } from './dto/member-summary.res.dto';
 import { MemberResDto } from './dto/member.res.dto';
+import { AccountTenantBranchEntity } from './entities/account-tenant-branch.entity';
 import {
   AccountTenantEntity,
   MemberStatus,
-  TenantRole,
 } from './entities/account-tenant.entity';
 import { TenantEntity } from './entities/tenant.entity';
 import { nextMemberCode } from './member-code';
-import { DEFAULT_ROLE_COUNT, ROLE_LABELS } from './role-labels';
 
 /** 090•••••45: the list hides the middle of a phone number */
 export const maskPhone = (phone: string | null): string | null => {
@@ -43,9 +47,9 @@ export const maskPhone = (phone: string | null): string | null => {
 };
 
 /**
- * Who works in a store and with which role (the "permissions" of the demo:
- * @RequireRoles on the routes of every service checks the role in the token).
- * Every change writes an event in the same transaction.
+ * Who works in a store, with which role and in which branches (ADR-0020). A
+ * member's role or branches reach their token at the next refresh or sign-in.
+ * A role change writes an event in the same transaction.
  */
 @Injectable()
 export class MemberService {
@@ -64,6 +68,7 @@ export class MemberService {
       .getRepository(AccountTenantEntity)
       .createQueryBuilder('member')
       .innerJoinAndSelect('member.account', 'account')
+      .innerJoinAndSelect('member.memberRole', 'memberRole')
       .where('member.tenantId = :tenantId', { tenantId })
       .orderBy('member.createdAt', 'ASC')
       .addOrderBy('member.code', 'ASC');
@@ -71,7 +76,12 @@ export class MemberService {
       builder.andWhere('member.status = :status', { status: query.status });
     }
     if (query.role) {
-      builder.andWhere('member.role = :role', { role: query.role });
+      builder.andWhere('memberRole.code = :role', {
+        role: normalizeRoleCode(query.role),
+      });
+    }
+    if (query.roleId) {
+      builder.andWhere('member.roleId = :roleId', { roleId: query.roleId });
     }
     if (query.q) {
       const pattern = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
@@ -80,21 +90,25 @@ export class MemberService {
         { q: pattern },
       );
     }
-    const [rows, today] = await Promise.all([
+    const [rows, today, branchIds] = await Promise.all([
       builder.getMany(),
       this.schedules.today(),
+      this.branchIdsByMember(tenantId),
     ]);
-    return rows.map((row) => this.present(row, today.get(row.accountId)));
+    return rows.map((row) =>
+      this.present(row, today.get(row.accountId), branchIds.get(row.accountId)),
+    );
   }
 
   async get(tenantId: string, accountId: string): Promise<MemberDetailResDto> {
     const row = await this.findMembership(tenantId, accountId);
-    const [today, schedules] = await Promise.all([
+    const [today, schedules, branchIds] = await Promise.all([
       this.schedules.today(),
       this.schedules.listFor(accountId),
+      this.branchIdsByMember(tenantId, accountId),
     ]);
     return plainToInstance(MemberDetailResDto, {
-      ...this.present(row, today.get(accountId)),
+      ...this.present(row, today.get(accountId), branchIds.get(accountId)),
       schedules,
     });
   }
@@ -141,7 +155,7 @@ export class MemberService {
           count,
         }))
         .sort((x, y) => x.branchName.localeCompare(y.branchName)),
-      defaultRoleCount: DEFAULT_ROLE_COUNT,
+      defaultRoleCount: Object.keys(SEEDED_ROLES).length,
       dataScope: tenant.name,
     });
   }
@@ -160,7 +174,11 @@ export class MemberService {
     );
     // after the commit: the member's logins in this store, and their access tokens
     await this.sessions.revokeAll(accountId, { tenantId });
-    return this.present(row);
+    return this.present(
+      row,
+      [],
+      (await this.branchIdsByMember(tenantId, accountId)).get(accountId),
+    );
   }
 
   async unlock(tenantId: string, accountId: string): Promise<MemberResDto> {
@@ -169,7 +187,11 @@ export class MemberService {
     await this.dataSource
       .getRepository(AccountTenantEntity)
       .update({ accountId, tenantId }, { status: MemberStatus.ACTIVE });
-    return this.present(row);
+    return this.present(
+      row,
+      [],
+      (await this.branchIdsByMember(tenantId, accountId)).get(accountId),
+    );
   }
 
   /** Removes the membership (the account stays). Not the owner, not yourself. */
@@ -192,11 +214,16 @@ export class MemberService {
     await this.sessions.revokeAll(accountId, { tenantId });
   }
 
+  /**
+   * Gives an existing account a role (by id, or by the legacy / seeded code)
+   * and, optionally, the branches it works in (none = every branch).
+   */
   async add(
     tenantId: string,
     actorId: string,
     email: string,
-    role: TenantRole,
+    roleInput: MemberRoleInput,
+    branchIds: string[] = [],
   ): Promise<MemberResDto> {
     const account = await this.dataSource
       .getRepository(AccountEntity)
@@ -212,25 +239,34 @@ export class MemberService {
         if (existing) {
           throw new ValidationException(ErrorCode.T002);
         }
+        const role = await this.resolveRole(em, tenantId, roleInput);
+        const branches = await this.assertBranches(em, tenantId, branchIds);
         const saved = await em.save(
           new AccountTenantEntity({
             accountId: account.id,
             tenantId,
-            role,
+            role: role.code,
+            roleId: role.id,
             status: MemberStatus.ACTIVE,
             code: await nextMemberCode(em, tenantId),
           }),
         );
+        await this.replaceBranches(em, tenantId, account.id, branches);
         await this.outbox.add(em, PLATFORM_MEMBERSHIP_GRANTED, {
           accountId: account.id,
           email: account.email,
-          role,
+          role: role.code,
           changedBy: actorId,
         } satisfies MembershipEventPayload);
-        return saved;
+        return Object.assign(saved, {
+          account,
+          memberRole: role,
+        }) as AccountTenantEntity;
       });
       return this.present(
-        Object.assign(membership, { account }) as AccountTenantEntity,
+        membership,
+        [],
+        (await this.branchIdsByMember(tenantId, account.id)).get(account.id),
       );
     } catch (error) {
       // Two adds raced past the check; the primary key decided
@@ -241,37 +277,139 @@ export class MemberService {
     }
   }
 
-  async changeRole(
+  /**
+   * Changes a member's role and/or branches. The owner's role and branches
+   * cannot change. The new values apply at the member's next refresh or sign-in.
+   */
+  async update(
     tenantId: string,
     actorId: string,
     accountId: string,
-    role: TenantRole,
+    roleInput: MemberRoleInput,
+    branchIds?: string[],
   ): Promise<MemberResDto> {
-    return this.dataSource.transaction(async (em) => {
+    const changesRole = Boolean(roleInput.roleId || roleInput.role);
+    const present = await this.dataSource.transaction(async (em) => {
       const membership = await em.findOne(AccountTenantEntity, {
         where: { accountId, tenantId },
-        relations: { account: true },
+        relations: { account: true, memberRole: true },
       });
       if (!membership) {
         throw new NotFoundException();
       }
-      if (membership.role === TenantRole.OWNER) {
+      if (
+        membership.role === ROLE_CODES.OWNER &&
+        (changesRole || branchIds !== undefined)
+      ) {
         throw new ValidationException(ErrorCode.T003);
       }
-      const previousRole = membership.role;
-      if (previousRole !== role) {
-        membership.role = role;
-        await em.update(AccountTenantEntity, { accountId, tenantId }, { role });
-        await this.outbox.add(em, PLATFORM_MEMBERSHIP_ROLE_CHANGED, {
-          accountId,
-          email: membership.account.email,
-          role,
-          previousRole,
-          changedBy: actorId,
-        } satisfies MembershipEventPayload);
+      if (changesRole) {
+        const role = await this.resolveRole(em, tenantId, roleInput);
+        if (role.id !== membership.roleId) {
+          const previousRole = membership.role;
+          await em.update(
+            AccountTenantEntity,
+            { accountId, tenantId },
+            { role: role.code, roleId: role.id },
+          );
+          membership.role = role.code;
+          membership.roleId = role.id;
+          membership.memberRole = role;
+          await this.outbox.add(em, PLATFORM_MEMBERSHIP_ROLE_CHANGED, {
+            accountId,
+            email: membership.account.email,
+            role: role.code,
+            previousRole,
+            changedBy: actorId,
+          } satisfies MembershipEventPayload);
+        }
       }
-      return this.present(membership);
+      if (branchIds !== undefined) {
+        await this.replaceBranches(
+          em,
+          tenantId,
+          accountId,
+          await this.assertBranches(em, tenantId, branchIds),
+        );
+      }
+      return membership;
     });
+    return this.present(
+      present,
+      [],
+      (await this.branchIdsByMember(tenantId, accountId)).get(accountId),
+    );
+  }
+
+  /** The role a request names; the owner role is never handed out. */
+  private async resolveRole(
+    em: EntityManager,
+    tenantId: string,
+    input: MemberRoleInput,
+  ): Promise<RoleEntity> {
+    const where = input.roleId
+      ? { tenantId, id: input.roleId }
+      : input.role
+        ? { tenantId, code: normalizeRoleCode(input.role) }
+        : null;
+    const role = where ? await em.findOne(RoleEntity, { where }) : null;
+    if (!role) {
+      throw new ValidationException(ErrorCode.R007);
+    }
+    if (role.isSeeded && role.code === ROLE_CODES.OWNER) {
+      throw new ValidationException(ErrorCode.R008);
+    }
+    return role;
+  }
+
+  /** Every id must be a live branch of the store (T023); returns them distinct. */
+  private async assertBranches(
+    em: EntityManager,
+    tenantId: string,
+    branchIds: string[],
+  ): Promise<string[]> {
+    const unique = [...new Set(branchIds)];
+    if (unique.length === 0) return unique;
+    const found = await em.count(BranchEntity, {
+      where: { tenantId, id: In(unique) as never },
+    });
+    if (found !== unique.length) {
+      throw new ValidationException(ErrorCode.T023);
+    }
+    return unique;
+  }
+
+  private async replaceBranches(
+    em: EntityManager,
+    tenantId: string,
+    accountId: string,
+    branchIds: string[],
+  ): Promise<void> {
+    await em.delete(AccountTenantBranchEntity, { accountId, tenantId });
+    if (branchIds.length > 0) {
+      await em.insert(
+        AccountTenantBranchEntity,
+        branchIds.map((branchId) => ({ accountId, tenantId, branchId })),
+      );
+    }
+  }
+
+  private async branchIdsByMember(
+    tenantId: string,
+    accountId?: string,
+  ): Promise<Map<string, string[]>> {
+    const rows = await this.dataSource
+      .getRepository(AccountTenantBranchEntity)
+      .find({ where: { tenantId, ...(accountId ? { accountId } : {}) } });
+    const byMember = new Map<string, string[]>();
+    for (const row of rows) {
+      byMember.set(row.accountId, [
+        ...(byMember.get(row.accountId) ?? []),
+        row.branchId,
+      ]);
+    }
+    for (const ids of byMember.values()) ids.sort();
+    return byMember;
   }
 
   private async findMembership(
@@ -282,7 +420,7 @@ export class MemberService {
       .getRepository(AccountTenantEntity)
       .findOne({
         where: { accountId, tenantId },
-        relations: { account: true },
+        relations: { account: true, memberRole: true },
       });
     if (!row) {
       throw new NotFoundException();
@@ -307,7 +445,7 @@ export class MemberService {
 
   /** The owner can be neither locked nor removed, and nobody does it to themselves. */
   private assertRemovable(row: AccountTenantEntity, actorId: string): void {
-    if (row.role === TenantRole.OWNER) {
+    if (row.role === ROLE_CODES.OWNER) {
       throw new ValidationException(ErrorCode.T005);
     }
     if (row.accountId === actorId) {
@@ -315,7 +453,11 @@ export class MemberService {
     }
   }
 
-  private present(row: AccountTenantEntity, shifts: TodayShift[] = []) {
+  private present(
+    row: AccountTenantEntity,
+    shifts: TodayShift[] = [],
+    branchIds: string[] = [],
+  ) {
     return plainToInstance(MemberResDto, {
       accountId: row.accountId,
       email: row.account?.email,
@@ -325,9 +467,11 @@ export class MemberService {
       code: row.code,
       status: row.status ?? MemberStatus.ACTIVE,
       phone: maskPhone(row.account?.phone ?? null),
-      roleId: null,
-      roleName: ROLE_LABELS[row.role],
-      isOwner: row.role === TenantRole.OWNER,
+      roleId: row.roleId,
+      roleName: row.memberRole?.name,
+      roleCode: row.role,
+      branchIds,
+      isOwner: row.role === ROLE_CODES.OWNER,
       lastLoginAt: row.account?.lastLoginAt ?? null,
       isOnShift: shifts.some((shift) => shift.isOnShift),
       scheduleLabel: shifts.length

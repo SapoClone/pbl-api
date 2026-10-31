@@ -2,6 +2,7 @@
  * Insight against a real Postgres: the read models are built per store from events
  * and never show one store's data to another. Run with `pnpm test:int`.
  */
+import { NotFoundException } from '@nestjs/common';
 import { RequestContext, TenantScopedRepository } from '@pbl/common';
 import {
   CONSUMER_ENTITIES,
@@ -709,6 +710,200 @@ describe('insight (Postgres)', () => {
           'device_token',
         ]),
       );
+    });
+  });
+
+  describe('branch scope (ADR-0020 §8)', () => {
+    const feed = async (...events: ReturnType<typeof sale>[]) => {
+      for (const e of events)
+        await handle(e, (m) => summary.onOrderCompleted(e, m));
+    };
+    const ME = randomUUID();
+    const only1 = [BRANCH_1];
+    const items = [{ sku: 'CF', name: 'Cà phê', quantity: 1, unitPrice: 1000 }];
+
+    beforeEach(async () => {
+      reports.clock = () => new Date('2026-10-18T05:00:00.000Z');
+      await feed(
+        sale(TENANT_A, BRANCH_1, 110000, '2026-10-18T02:10:00.000Z', {
+          items,
+          channel: 'pos',
+        }),
+        sale(TENANT_A, BRANCH_2, 40000, '2026-10-18T02:20:00.000Z', {
+          items,
+          channel: 'shopee',
+        }),
+      );
+    });
+
+    it('answers 404 for a branch outside the scope, on every read', async () => {
+      const range = {
+        from: '2026-10-18',
+        to: '2026-10-18',
+        branchId: BRANCH_2,
+      };
+      const reads: (() => Promise<unknown>)[] = [
+        () => reports.kpis({ branchId: BRANCH_2 }, only1),
+        () => reports.hourly({ branchId: BRANCH_2 }, only1),
+        () => reports.byChannel(range, only1),
+        () => reports.topProducts(range, only1),
+        () => queries.dailySales(range, only1),
+        () => queries.dailySales({ ...range, groupBy: 'day_channel' }, only1),
+        () => exporter.export({ ...range, report: 'daily' }, only1),
+        () =>
+          notifications.list(
+            ME,
+            { page: 1, limit: 5, branchId: BRANCH_2 },
+            only1,
+          ),
+        () =>
+          notifications.attentionItems(
+            ME,
+            { branchId: BRANCH_2, limit: 5 },
+            only1,
+          ),
+      ];
+      for (const read of reads)
+        await expect(as(TENANT_A, read)).rejects.toBeInstanceOf(
+          NotFoundException,
+        );
+      // the allowed branch and an unrestricted caller still work
+      expect(
+        (await as(TENANT_A, () => reports.kpis({ branchId: BRANCH_1 }, only1)))
+          .revenue.value,
+      ).toBe(110000);
+      expect(
+        (await as(TENANT_A, () => reports.kpis({ branchId: BRANCH_2 }, null)))
+          .revenue.value,
+      ).toBe(40000);
+    });
+
+    it('aggregates only the allowed branches when no branch is named', async () => {
+      const kpis = await as(TENANT_A, () => reports.kpis({}, only1));
+      expect(kpis.revenue.value).toBe(110000);
+      expect(kpis.completedOrders.value).toBe(1);
+      const both = await as(TENANT_A, () =>
+        reports.kpis({}, [BRANCH_1, BRANCH_2]),
+      );
+      expect(both.revenue.value).toBe(150000);
+      const day = { from: '2026-10-18', to: '2026-10-18' };
+      expect(
+        (
+          await as(TENANT_A, () =>
+            reports.hourly({ date: '2026-10-18' }, only1),
+          )
+        ).points.reduce((n, p) => n + p.revenue, 0),
+      ).toBe(110000);
+      expect(
+        (await as(TENANT_A, () => reports.byChannel(day, only1))).data.map(
+          (c) => c.type,
+        ),
+      ).toEqual(['pos']);
+      expect(
+        (await as(TENANT_A, () => reports.byChannel(day, null))).totalRevenue,
+      ).toBe(150000);
+      expect(
+        (await as(TENANT_A, () => reports.topProducts(day, only1))).data[0]
+          .revenue,
+      ).toBe(1000);
+      expect(
+        (await as(TENANT_A, () => reports.topProducts(day, null))).data[0]
+          .revenue,
+      ).toBe(2000);
+      expect(
+        (await as(TENANT_A, () => reports.byBranch(day, only1))).data.map(
+          (b) => b.branchId,
+        ),
+      ).toEqual([BRANCH_1]);
+      const daily = await as(TENANT_A, () => queries.dailySales(day, only1));
+      expect(daily.data.map((r) => r.branchId)).toEqual([BRANCH_1]);
+      expect(daily.totals.revenue).toBe(110000);
+      const perChannel = await as(TENANT_A, () =>
+        queries.dailySales({ ...day, groupBy: 'day_channel' }, only1),
+      );
+      expect(perChannel.data.map((r) => r.channel)).toEqual(['pos']);
+      const csv = await as(TENANT_A, () =>
+        exporter.export({ ...day, report: 'daily' }, only1),
+      );
+      expect(csv.csv).toContain(BRANCH_1);
+      expect(csv.csv).not.toContain(BRANCH_2);
+    });
+
+    it('an empty scope sees nothing', async () => {
+      expect(
+        (await as(TENANT_A, () => reports.kpis({}, []))).revenue.value,
+      ).toBe(0);
+      expect(
+        (
+          await as(TENANT_A, () =>
+            reports.byBranch({ from: '2026-10-18', to: '2026-10-18' }, []),
+          )
+        ).data,
+      ).toEqual([]);
+    });
+
+    it('filters notifications, unread count, read-all and attention items', async () => {
+      await as(TENANT_A, async () => {
+        await notifications.create({ type: 'x', title: 'tenant' });
+        await notifications.create({
+          type: 'x',
+          title: 'b1',
+          branchId: BRANCH_1,
+        });
+        await notifications.create({
+          type: 'x',
+          title: 'b2',
+          branchId: BRANCH_2,
+          severity: 'critical',
+        });
+      });
+      const titles = async (scope: string[] | null) =>
+        (
+          await as(TENANT_A, () =>
+            notifications.list(ME, { page: 1, limit: 10 }, scope),
+          )
+        ).data
+          .map((n) => n.title)
+          .sort();
+      expect(await titles(only1)).toEqual(['b1', 'tenant']);
+      expect(await titles(null)).toEqual(['b1', 'b2', 'tenant']);
+      expect(await titles([])).toEqual(['tenant']);
+      expect(
+        await as(TENANT_A, () => notifications.unreadCount(ME, only1)),
+      ).toEqual({ count: 2 });
+      expect(await as(TENANT_A, () => notifications.unreadCount(ME))).toEqual({
+        count: 3,
+      });
+      expect(
+        (
+          await as(TENANT_A, () =>
+            notifications.attentionItems(ME, { limit: 5 }, only1),
+          )
+        ).total,
+      ).toBe(0);
+      expect(
+        (
+          await as(TENANT_A, () =>
+            notifications.attentionItems(ME, { limit: 5 }, null),
+          )
+        ).total,
+      ).toBe(1);
+
+      const hidden = (
+        await as(TENANT_A, () => notifications.list(ME, { page: 1, limit: 10 }))
+      ).data.find((n) => n.title === 'b2')!;
+      await expect(
+        as(TENANT_A, () => notifications.markRead(ME, hidden.id, only1)),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      await as(TENANT_A, () => notifications.markAllRead(ME, only1));
+      expect(
+        await as(TENANT_A, () => notifications.unreadCount(ME, only1)),
+      ).toEqual({ count: 0 });
+      // the notification of the other branch stays unread
+      expect(await as(TENANT_A, () => notifications.unreadCount(ME))).toEqual({
+        count: 1,
+      });
     });
   });
 });

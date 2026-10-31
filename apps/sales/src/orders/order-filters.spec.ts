@@ -60,4 +60,33 @@ describe('order filters', () => {
     const like = (where[0].code as unknown as { value: string }).value;
     expect(like).toBe('%50\\%\\_x%');
   });
+
+  describe('branch scope', () => {
+    const [A, B] = ['branch-a', 'branch-b'];
+
+    it('adds no branch condition for an unrestricted caller', () => {
+      expect(buildOrderWhere({})[0]).not.toHaveProperty('branchId');
+      expect(buildOrderWhere({ branchId: A })[0]).toMatchObject({
+        branchId: A,
+      });
+    });
+
+    it('limits a restricted caller to its branches when no filter is given', () => {
+      const where = buildOrderWhere({}, [A, B]);
+      expect(where[0].branchId).toMatchObject({ type: 'in', value: [A, B] });
+      const searched = buildOrderWhere({ q: 'x' }, [A]);
+      expect(searched).toHaveLength(5);
+      for (const w of searched) {
+        expect(w.branchId).toMatchObject({ type: 'in', value: [A] });
+      }
+    });
+
+    it('keeps an allowed branch filter and answers 404 for another', () => {
+      expect(buildOrderWhere({ branchId: A }, [A])[0]).toMatchObject({
+        branchId: A,
+      });
+      expect(() => buildOrderWhere({ branchId: B }, [A])).toThrow('Not Found');
+      expect(() => buildOrderWhere({ branchId: B }, [])).toThrow('Not Found');
+    });
+  });
 });

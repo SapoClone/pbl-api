@@ -70,7 +70,7 @@ describe('inventory first wave (Postgres)', () => {
     branchId: string,
     items: { sku: string; quantity: number }[],
     tenant = A,
-  ) => as(tenant, () => stock.receive({ branchId, items }));
+  ) => as(tenant, () => stock.receive({ branchId, items }, null));
   const onHand = async (branchId: string, sku: string) =>
     (
       await query(
@@ -166,12 +166,15 @@ describe('inventory first wave (Postgres)', () => {
       await receive(Q7, [{ sku: 'AO-01', quantity: 10 }]);
       await receive(BRANCH_B, [{ sku: 'AO-01', quantity: 999 }], B);
       await a(() =>
-        thresholds.upsert({
-          branchId: Q3,
-          sku: 'AO-02',
-          minQuantity: 10,
-          maxQuantity: 40,
-        }),
+        thresholds.upsert(
+          {
+            branchId: Q3,
+            sku: 'AO-02',
+            minQuantity: 10,
+            maxQuantity: 40,
+          },
+          null,
+        ),
       );
       // AO-03 is fully held -> out of stock
       await as(A, () =>
@@ -185,7 +188,7 @@ describe('inventory first wave (Postgres)', () => {
 
     it('lists levels, thresholds and filters by q, level and branch', async () => {
       const all = await a(() =>
-        stock.list({ page: 1, limit: 10, branchId: Q3 }),
+        stock.list({ page: 1, limit: 10, branchId: Q3 }, null),
       );
       expect(all.data.map((r) => [r.sku, r.level])).toEqual([
         ['AO-01', 'ok'],
@@ -200,15 +203,15 @@ describe('inventory first wave (Postgres)', () => {
       });
 
       const below = await a(() =>
-        stock.list({ page: 1, limit: 10, level: 'below_min' }),
+        stock.list({ page: 1, limit: 10, level: 'below_min' }, null),
       );
       expect(below.data.map((r) => r.sku)).toEqual(['AO-02']);
       const out = await a(() =>
-        stock.list({ page: 1, limit: 10, level: 'out_of_stock' }),
+        stock.list({ page: 1, limit: 10, level: 'out_of_stock' }, null),
       );
       expect(out.data.map((r) => r.sku)).toEqual(['AO-03']);
       const ok = await a(() =>
-        stock.list({ page: 1, limit: 10, level: 'ok', q: 'ao-0' }),
+        stock.list({ page: 1, limit: 10, level: 'ok', q: 'ao-0' }, null),
       );
       expect(
         ok.data.map((r) => `${r.sku}@${r.branchId === Q3 ? 'q3' : 'q7'}`),
@@ -218,13 +221,16 @@ describe('inventory first wave (Postgres)', () => {
 
     it('sorts by available and pages', async () => {
       const sorted = await a(() =>
-        stock.list({
-          page: 1,
-          limit: 2,
-          branchId: Q3,
-          sort: 'available',
-          order: 'DESC',
-        }),
+        stock.list(
+          {
+            page: 1,
+            limit: 2,
+            branchId: Q3,
+            sort: 'available',
+            order: 'DESC',
+          },
+          null,
+        ),
       );
       expect(sorted.data.map((r) => r.sku)).toEqual(['AO-01', 'QUAN-01']);
       expect(sorted.pagination).toMatchObject({
@@ -235,7 +241,7 @@ describe('inventory first wave (Postgres)', () => {
     });
 
     it('summarises one branch and all branches, with the stock value still null', async () => {
-      const q3 = await a(() => stock.summary(Q3));
+      const q3 = await a(() => stock.summary(Q3, null));
       expect(q3).toMatchObject({
         branchId: Q3,
         skuCount: 4,
@@ -247,7 +253,7 @@ describe('inventory first wave (Postgres)', () => {
         stockValue: null,
         byBranch: [],
       });
-      const all = await a(() => stock.summary());
+      const all = await a(() => stock.summary(undefined, null));
       expect(all.onHand).toBe(87);
       expect(all.skuCount).toBe(4);
       expect(all.byBranch.map((b) => [b.branchId, b.available])).toEqual(
@@ -261,24 +267,28 @@ describe('inventory first wave (Postgres)', () => {
     });
 
     it('looks a SKU up by exact code in one branch, 404 otherwise', async () => {
-      const found = await a(() => stock.lookup(Q3, 'AO-01'));
+      const found = await a(() => stock.lookup(Q3, 'AO-01', null));
       expect(found).toMatchObject({
         sku: 'AO-01',
         onHand: 50,
         available: 50,
         name: null,
       });
-      await expect(a(() => stock.lookup(Q3, 'ao-01'))).rejects.toMatchObject({
+      await expect(
+        a(() => stock.lookup(Q3, 'ao-01', null)),
+      ).rejects.toMatchObject({
         status: 404,
       });
-      await expect(a(() => stock.lookup(Q7, 'AO-02'))).rejects.toMatchObject({
+      await expect(
+        a(() => stock.lookup(Q7, 'AO-02', null)),
+      ).rejects.toMatchObject({
         status: 404,
       });
     });
 
     it('exports the filtered list as CSV', async () => {
       const csv = await a(() =>
-        stock.exportCsv({ branchId: Q3, level: 'below_min' }),
+        stock.exportCsv({ branchId: Q3, level: 'below_min' }, null),
       );
       expect(csv.split('\r\n')).toEqual([
         'branchId,sku,onHand,reserved,available,minQuantity,maxQuantity,level',
@@ -288,52 +298,66 @@ describe('inventory first wave (Postgres)', () => {
     });
 
     it('keeps tenants apart (list, summary, lookup)', async () => {
-      const b = await as(B, () => stock.list({ page: 1, limit: 10 }));
+      const b = await as(B, () => stock.list({ page: 1, limit: 10 }, null));
       expect(b.data).toHaveLength(1);
-      expect((await as(B, () => stock.summary())).onHand).toBe(999);
+      expect((await as(B, () => stock.summary(undefined, null))).onHand).toBe(
+        999,
+      );
       await expect(
-        as(B, () => stock.lookup(BRANCH_B, 'AO-02')),
+        as(B, () => stock.lookup(BRANCH_B, 'AO-02', null)),
       ).rejects.toMatchObject({ status: 404 });
     });
 
     it('upserts thresholds per branch and sku, validates the branch and the range', async () => {
       await a(() =>
-        thresholds.upsert({ branchId: Q3, sku: 'AO-02', minQuantity: 2 }),
+        thresholds.upsert({ branchId: Q3, sku: 'AO-02', minQuantity: 2 }, null),
       );
-      const list = await a(() => thresholds.list({ page: 1, limit: 10 }));
+      const list = await a(() => thresholds.list({ page: 1, limit: 10 }, null));
       expect(list.data).toHaveLength(1);
       expect(list.data[0]).toMatchObject({ minQuantity: 2, maxQuantity: null });
       expect(
-        (await a(() => stock.list({ page: 1, limit: 10, level: 'below_min' })))
-          .data,
+        (
+          await a(() =>
+            stock.list({ page: 1, limit: 10, level: 'below_min' }, null),
+          )
+        ).data,
       ).toHaveLength(0);
 
       await expect(
         a(() =>
-          thresholds.upsert({ branchId: BRANCH_B, sku: 'X', minQuantity: 1 }),
+          thresholds.upsert(
+            { branchId: BRANCH_B, sku: 'X', minQuantity: 1 },
+            null,
+          ),
         ),
       ).rejects.toMatchObject({ response: { errorCode: 'I001' } });
       await expect(
         a(() =>
-          thresholds.upsert({
-            branchId: Q3,
-            sku: 'X',
-            minQuantity: 5,
-            maxQuantity: 1,
-          }),
+          thresholds.upsert(
+            {
+              branchId: Q3,
+              sku: 'X',
+              minQuantity: 5,
+              maxQuantity: 1,
+            },
+            null,
+          ),
         ),
       ).rejects.toMatchObject({ status: 422 });
       expect(
-        (await as(B, () => thresholds.list({ page: 1, limit: 10 }))).data,
+        (await as(B, () => thresholds.list({ page: 1, limit: 10 }, null))).data,
       ).toHaveLength(0);
     });
 
     it('lists ledger entries newest first with filters and tenant isolation', async () => {
       await a(() =>
-        stock.receive({ branchId: Q3, items: [{ sku: 'AO-01', quantity: 1 }] }),
+        stock.receive(
+          { branchId: Q3, items: [{ sku: 'AO-01', quantity: 1 }] },
+          null,
+        ),
       );
       const entries = await a(() =>
-        ledger.list({ page: 1, limit: 3, branchId: Q3, sku: 'AO-01' }),
+        ledger.list({ page: 1, limit: 3, branchId: Q3, sku: 'AO-01' }, null),
       );
       expect(
         entries.data.map((e) => [e.changeQty, e.balanceAfter, e.refType]),
@@ -342,20 +366,20 @@ describe('inventory first wave (Postgres)', () => {
         [50, 50, 'receipt'],
       ]);
       const none = await a(() =>
-        ledger.list({ page: 1, limit: 3, refType: 'issue' }),
+        ledger.list({ page: 1, limit: 3, refType: 'issue' }, null),
       );
       expect(none.data).toHaveLength(0);
       const today = new Date().toISOString().slice(0, 10);
       const dated = await a(() =>
-        ledger.list({ page: 1, limit: 100, from: today, to: today }),
+        ledger.list({ page: 1, limit: 100, from: today, to: today }, null),
       );
       expect(dated.pagination.totalRecords).toBeGreaterThanOrEqual(6);
       const past = await a(() =>
-        ledger.list({ page: 1, limit: 100, to: '2020-01-01' }),
+        ledger.list({ page: 1, limit: 100, to: '2020-01-01' }, null),
       );
       expect(past.data).toHaveLength(0);
       expect(
-        (await as(B, () => ledger.list({ page: 1, limit: 100 }))).data,
+        (await as(B, () => ledger.list({ page: 1, limit: 100 }, null))).data,
       ).toHaveLength(1);
     });
   });
@@ -417,24 +441,27 @@ describe('inventory first wave (Postgres)', () => {
     it('soft-deletes, frees the phone, and blocks while there are open orders (I011)', async () => {
       const s = await create('Del', '0911111111');
       const po = await a(() =>
-        orders.create({
-          supplierId: s.id,
-          branchId: Q3,
-          items: [
-            {
-              sku: 'A',
-              name: 'A',
-              quantityOrdered: 1,
-              unitCost: 1000,
-              vatRate: 0,
-            },
-          ],
-        }),
+        orders.create(
+          {
+            supplierId: s.id,
+            branchId: Q3,
+            items: [
+              {
+                sku: 'A',
+                name: 'A',
+                quantityOrdered: 1,
+                unitCost: 1000,
+                vatRate: 0,
+              },
+            ],
+          },
+          null,
+        ),
       );
       await expect(a(() => suppliers.remove(s.id))).rejects.toMatchObject({
         response: { errorCode: 'I011' },
       });
-      await a(() => orders.act(po.id, 'cancel', {}));
+      await a(() => orders.act(po.id, 'cancel', {}, null));
       await a(() => suppliers.remove(s.id));
       await expect(a(() => suppliers.get(s.id))).rejects.toMatchObject({
         status: 404,
@@ -451,23 +478,26 @@ describe('inventory first wave (Postgres)', () => {
     it('blocks delete while the supplier has debt', async () => {
       const s = await create('Debt');
       const po = await a(() =>
-        orders.create({
-          supplierId: s.id,
-          branchId: Q3,
-          items: [
-            {
-              sku: 'A',
-              name: 'A',
-              quantityOrdered: 1,
-              unitCost: 1000,
-              vatRate: 0,
-            },
-          ],
-        }),
+        orders.create(
+          {
+            supplierId: s.id,
+            branchId: Q3,
+            items: [
+              {
+                sku: 'A',
+                name: 'A',
+                quantityOrdered: 1,
+                unitCost: 1000,
+                vatRate: 0,
+              },
+            ],
+          },
+          null,
+        ),
       );
-      await a(() => orders.act(po.id, 'submit', {}));
-      await a(() => orders.act(po.id, 'approve', {}));
-      await a(() => orders.pay(po.id, { amount: 1000, method: 'cash' }));
+      await a(() => orders.act(po.id, 'submit', {}, null));
+      await a(() => orders.act(po.id, 'approve', {}, null));
+      await a(() => orders.pay(po.id, { amount: 1000, method: 'cash' }, null));
       await expect(a(() => suppliers.remove(s.id))).rejects.toMatchObject({
         response: { errorCode: 'I011' },
       });
@@ -502,13 +532,16 @@ describe('inventory first wave (Postgres)', () => {
     });
     const create = (extra: object = {}, tenant = A) =>
       as(tenant, () =>
-        orders.create({
-          supplierId,
-          branchId: tenant === A ? Q3 : BRANCH_B,
-          expectedDate: soon,
-          items: lines,
-          ...extra,
-        } as never),
+        orders.create(
+          {
+            supplierId,
+            branchId: tenant === A ? Q3 : BRANCH_B,
+            expectedDate: soon,
+            items: lines,
+            ...extra,
+          } as never,
+          null,
+        ),
       );
     const supplier = async () => await a(() => suppliers.get(supplierId));
 
@@ -545,22 +578,28 @@ describe('inventory first wave (Postgres)', () => {
     it('rejects an unknown supplier (I005) or branch (I001)', async () => {
       await expect(
         a(() =>
-          orders.create({
-            supplierId: randomUUID(),
-            branchId: Q3,
-            items: lines,
-          } as never),
+          orders.create(
+            {
+              supplierId: randomUUID(),
+              branchId: Q3,
+              items: lines,
+            } as never,
+            null,
+          ),
         ),
       ).rejects.toMatchObject({
         response: { errorCode: 'I005' },
       });
       await expect(
         a(() =>
-          orders.create({
-            supplierId,
-            branchId: BRANCH_B,
-            items: lines,
-          } as never),
+          orders.create(
+            {
+              supplierId,
+              branchId: BRANCH_B,
+              items: lines,
+            } as never,
+            null,
+          ),
         ),
       ).rejects.toMatchObject({
         response: { errorCode: 'I001' },
@@ -573,18 +612,22 @@ describe('inventory first wave (Postgres)', () => {
     it('edits only in draft and recomputes the totals', async () => {
       const po = await create();
       const edited = await a(() =>
-        orders.update(po.id, {
-          version: 1,
-          items: [
-            {
-              sku: 'X',
-              name: 'X',
-              quantityOrdered: 3,
-              unitCost: 1_001,
-              vatRate: 8,
-            },
-          ],
-        }),
+        orders.update(
+          po.id,
+          {
+            version: 1,
+            items: [
+              {
+                sku: 'X',
+                name: 'X',
+                quantityOrdered: 3,
+                unitCost: 1_001,
+                vatRate: 8,
+              },
+            ],
+          },
+          null,
+        ),
       );
       expect(edited).toMatchObject({
         subtotal: 3_003,
@@ -595,14 +638,18 @@ describe('inventory first wave (Postgres)', () => {
       expect(edited.items).toHaveLength(1);
       await expect(
         a(() =>
-          orders.update(po.id, { version: 1, expectedDate: '2026-12-01' }),
+          orders.update(
+            po.id,
+            { version: 1, expectedDate: '2026-12-01' },
+            null,
+          ),
         ),
       ).rejects.toMatchObject({
         status: 409,
       });
-      await a(() => orders.act(po.id, 'submit', {}));
+      await a(() => orders.act(po.id, 'submit', {}, null));
       await expect(
-        a(() => orders.update(po.id, { expectedDate: '2026-12-01' })),
+        a(() => orders.update(po.id, { expectedDate: '2026-12-01' }, null)),
       ).rejects.toMatchObject({
         response: { errorCode: 'I012' },
       });
@@ -611,41 +658,41 @@ describe('inventory first wave (Postgres)', () => {
     it('walks the state machine and refuses invalid transitions (I007)', async () => {
       const po = await create();
       await expect(
-        a(() => orders.act(po.id, 'approve', {})),
+        a(() => orders.act(po.id, 'approve', {}, null)),
       ).rejects.toMatchObject({ response: { errorCode: 'I007' } });
-      expect((await a(() => orders.act(po.id, 'submit', {}))).status).toBe(
-        'pending_approval',
-      );
+      expect(
+        (await a(() => orders.act(po.id, 'submit', {}, null))).status,
+      ).toBe('pending_approval');
       await expect(
-        a(() => orders.act(po.id, 'submit', {})),
+        a(() => orders.act(po.id, 'submit', {}, null)),
       ).rejects.toMatchObject({ response: { errorCode: 'I007' } });
-      expect((await a(() => orders.act(po.id, 'approve', {}))).status).toBe(
-        'approved',
-      );
+      expect(
+        (await a(() => orders.act(po.id, 'approve', {}, null))).status,
+      ).toBe('approved');
       const cancelled = await a(() =>
-        orders.act(po.id, 'cancel', { reason: 'changed mind' }),
+        orders.act(po.id, 'cancel', { reason: 'changed mind' }, null),
       );
       expect(cancelled).toMatchObject({
         status: 'cancelled',
         cancelReason: 'changed mind',
       });
       await expect(
-        a(() => orders.act(po.id, 'cancel', {})),
+        a(() => orders.act(po.id, 'cancel', {}, null)),
       ).rejects.toMatchObject({ response: { errorCode: 'I007' } });
       await expect(
-        a(() => orders.act(po.id, 'cancel', { version: 99 })),
+        a(() => orders.act(po.id, 'cancel', { version: 99 }, null)),
       ).rejects.toMatchObject({ response: { errorCode: 'I014' } });
     });
 
     it('moves supplier debt: approve adds the total, payments lower it, cancel returns the rest', async () => {
       const po = await create();
-      await a(() => orders.act(po.id, 'submit', {}));
+      await a(() => orders.act(po.id, 'submit', {}, null));
       expect((await supplier()).debtBalance).toBe(0);
-      await a(() => orders.act(po.id, 'approve', {}));
+      await a(() => orders.act(po.id, 'approve', {}, null));
       expect((await supplier()).debtBalance).toBe(15_336_000);
 
       const payment = await a(() =>
-        orders.pay(po.id, { amount: 5_000_000, method: 'transfer' }),
+        orders.pay(po.id, { amount: 5_000_000, method: 'transfer' }, null),
       );
       expect(payment.purchaseOrder).toEqual({
         paidAmount: 5_000_000,
@@ -657,16 +704,18 @@ describe('inventory first wave (Postgres)', () => {
       });
 
       await expect(
-        a(() => orders.pay(po.id, { amount: 10_336_001, method: 'cash' })),
+        a(() =>
+          orders.pay(po.id, { amount: 10_336_001, method: 'cash' }, null),
+        ),
       ).rejects.toMatchObject({
         response: { errorCode: 'I013' },
       });
       expect((await supplier()).debtBalance).toBe(10_336_000);
 
-      await a(() => orders.act(po.id, 'cancel', {}));
+      await a(() => orders.act(po.id, 'cancel', {}, null));
       expect((await supplier()).debtBalance).toBe(0);
       await expect(
-        a(() => orders.pay(po.id, { amount: 1, method: 'cash' })),
+        a(() => orders.pay(po.id, { amount: 1, method: 'cash' }, null)),
       ).rejects.toMatchObject({
         response: { errorCode: 'I007' },
       });
@@ -674,28 +723,32 @@ describe('inventory first wave (Postgres)', () => {
 
     it('never lets two payments at once exceed the total', async () => {
       const po = await create();
-      await a(() => orders.act(po.id, 'submit', {}));
-      await a(() => orders.act(po.id, 'approve', {}));
+      await a(() => orders.act(po.id, 'submit', {}, null));
+      await a(() => orders.act(po.id, 'approve', {}, null));
       const results = await Promise.allSettled(
         [0, 1, 2].map(() =>
-          a(() => orders.pay(po.id, { amount: 8_000_000, method: 'cash' })),
+          a(() =>
+            orders.pay(po.id, { amount: 8_000_000, method: 'cash' }, null),
+          ),
         ),
       );
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-      expect((await a(() => orders.get(po.id))).paidAmount).toBe(8_000_000);
+      expect((await a(() => orders.get(po.id, null))).paidAmount).toBe(
+        8_000_000,
+      );
     });
 
     it('lists with filters, summarises and exports; other tenants see nothing', async () => {
       const draft = await create();
       const approved = await create();
-      await a(() => orders.act(approved.id, 'submit', {}));
-      await a(() => orders.act(approved.id, 'approve', {}));
+      await a(() => orders.act(approved.id, 'submit', {}, null));
+      await a(() => orders.act(approved.id, 'approve', {}, null));
       await a(() =>
-        orders.pay(approved.id, { amount: 336_000, method: 'cash' }),
+        orders.pay(approved.id, { amount: 336_000, method: 'cash' }, null),
       );
 
       const approvedList = await a(() =>
-        orders.list({ page: 1, limit: 10, status: 'approved' }),
+        orders.list({ page: 1, limit: 10, status: 'approved' }, null),
       );
       expect(approvedList.data).toHaveLength(1);
       expect(approvedList.data[0]).toMatchObject({
@@ -710,42 +763,51 @@ describe('inventory first wave (Postgres)', () => {
         name: 'Xuong gom',
       });
       expect(
-        (await a(() => orders.list({ page: 1, limit: 10, q: 'xuong' })))
+        (await a(() => orders.list({ page: 1, limit: 10, q: 'xuong' }, null)))
           .pagination.totalRecords,
       ).toBe(2);
       expect(
-        (await a(() => orders.list({ page: 1, limit: 10, q: draft.code })))
-          .data,
+        (
+          await a(() =>
+            orders.list({ page: 1, limit: 10, q: draft.code }, null),
+          )
+        ).data,
       ).toHaveLength(1);
       expect(
         (
           await a(() =>
-            orders.list({
-              page: 1,
-              limit: 10,
-              sort: 'totalAmount',
-              order: 'ASC',
-              supplierId,
-            }),
+            orders.list(
+              {
+                page: 1,
+                limit: 10,
+                sort: 'totalAmount',
+                order: 'ASC',
+                supplierId,
+              },
+              null,
+            ),
           )
         ).data,
       ).toHaveLength(2);
       expect(
-        (await a(() => orders.list({ page: 1, limit: 10, to: '2020-01-01' })))
-          .data,
+        (
+          await a(() =>
+            orders.list({ page: 1, limit: 10, to: '2020-01-01' }, null),
+          )
+        ).data,
       ).toHaveLength(0);
       expect(
-        (await as(B, () => orders.list({ page: 1, limit: 10 }))).data,
+        (await as(B, () => orders.list({ page: 1, limit: 10 }, null))).data,
       ).toHaveLength(0);
 
-      expect(await a(() => orders.summary({}))).toEqual({
+      expect(await a(() => orders.summary({}, null))).toEqual({
         openCount: 2,
         partiallyReceivedCount: 0,
         awaitingDeliveryCount: 1,
         dueThisWeekCount: 1,
         payableAmount: 15_000_000,
       });
-      const csv = await a(() => orders.exportCsv({ status: 'approved' }));
+      const csv = await a(() => orders.exportCsv({ status: 'approved' }, null));
       const rows = csv.trim().split('\r\n');
       expect(rows).toHaveLength(2);
       expect(rows[1]).toContain(approved.code);
@@ -754,17 +816,17 @@ describe('inventory first wave (Postgres)', () => {
 
     it('hides other tenants: get, update, actions and payments answer 404', async () => {
       const po = await create();
-      await expect(as(B, () => orders.get(po.id))).rejects.toMatchObject({
+      await expect(as(B, () => orders.get(po.id, null))).rejects.toMatchObject({
         status: 404,
       });
       await expect(
-        as(B, () => orders.update(po.id, { expectedDate: '2027-01-01' })),
+        as(B, () => orders.update(po.id, { expectedDate: '2027-01-01' }, null)),
       ).rejects.toMatchObject({ status: 404 });
       await expect(
-        as(B, () => orders.act(po.id, 'submit', {})),
+        as(B, () => orders.act(po.id, 'submit', {}, null)),
       ).rejects.toMatchObject({ status: 404 });
       await expect(
-        as(B, () => orders.pay(po.id, { amount: 1, method: 'cash' })),
+        as(B, () => orders.pay(po.id, { amount: 1, method: 'cash' }, null)),
       ).rejects.toMatchObject({ status: 404 });
     });
   });
@@ -778,7 +840,7 @@ describe('inventory first wave (Postgres)', () => {
     );
     const draft = (items = [{ sku: 'AO-01', quantity: 6 }], tenant = A) =>
       as(tenant, () =>
-        transfers.create({ fromBranchId: Q3, toBranchId: Q7, items }),
+        transfers.create({ fromBranchId: Q3, toBranchId: Q7, items }, null),
       );
 
     it('ships (transfer_out) and receives (transfer_in), once each', async () => {
@@ -793,7 +855,7 @@ describe('inventory first wave (Postgres)', () => {
       });
       expect(t.fromBranch.name).toBeTruthy();
 
-      const shipped = await a(() => transfers.ship(t.id, { version: 1 }));
+      const shipped = await a(() => transfers.ship(t.id, { version: 1 }, null));
       expect(shipped.status).toBe('in_transit');
       expect(await onHand(Q3, 'AO-01')).toBe(4);
       expect(await onHand(Q7, 'AO-01')).toBeUndefined();
@@ -801,11 +863,13 @@ describe('inventory first wave (Postgres)', () => {
         { branch_id: Q3, sku: 'AO-01', change_qty: -6, balance_after: 4 },
         { branch_id: Q3, sku: 'AO-02', change_qty: -1, balance_after: 4 },
       ]);
-      await expect(a(() => transfers.ship(t.id, {}))).rejects.toMatchObject({
+      await expect(
+        a(() => transfers.ship(t.id, {}, null)),
+      ).rejects.toMatchObject({
         response: { errorCode: 'I007' },
       });
 
-      const received = await a(() => transfers.receive(t.id, {}));
+      const received = await a(() => transfers.receive(t.id, {}, null));
       expect(received.status).toBe('received');
       expect(await onHand(Q7, 'AO-01')).toBe(6);
       expect(
@@ -818,21 +882,29 @@ describe('inventory first wave (Postgres)', () => {
         [Q7, 'AO-01', 6],
         [Q7, 'AO-02', 1],
       ]);
-      await expect(a(() => transfers.receive(t.id, {}))).rejects.toMatchObject({
+      await expect(
+        a(() => transfers.receive(t.id, {}, null)),
+      ).rejects.toMatchObject({
         response: { errorCode: 'I007' },
       });
-      await expect(a(() => transfers.cancel(t.id, {}))).rejects.toMatchObject({
+      await expect(
+        a(() => transfers.cancel(t.id, {}, null)),
+      ).rejects.toMatchObject({
         response: { errorCode: 'I007' },
       });
     });
 
     it('records a shortfall on receive', async () => {
       const t = await draft([{ sku: 'AO-01', quantity: 6 }]);
-      await a(() => transfers.ship(t.id, {}));
+      await a(() => transfers.ship(t.id, {}, null));
       const received = await a(() =>
-        transfers.receive(t.id, {
-          items: [{ sku: 'AO-01', receivedQuantity: 4 }],
-        }),
+        transfers.receive(
+          t.id,
+          {
+            items: [{ sku: 'AO-01', receivedQuantity: 4 }],
+          },
+          null,
+        ),
       );
       expect(received.items[0]).toMatchObject({
         quantity: 6,
@@ -840,12 +912,16 @@ describe('inventory first wave (Postgres)', () => {
       });
       expect(await onHand(Q7, 'AO-01')).toBe(4);
       const t2 = await draft([{ sku: 'AO-02', quantity: 1 }]);
-      await a(() => transfers.ship(t2.id, {}));
+      await a(() => transfers.ship(t2.id, {}, null));
       await expect(
         a(() =>
-          transfers.receive(t2.id, {
-            items: [{ sku: 'AO-02', receivedQuantity: 2 }],
-          }),
+          transfers.receive(
+            t2.id,
+            {
+              items: [{ sku: 'AO-02', receivedQuantity: 2 }],
+            },
+            null,
+          ),
         ),
       ).rejects.toMatchObject({ status: 422 });
     });
@@ -862,14 +938,16 @@ describe('inventory first wave (Postgres)', () => {
         { sku: 'AO-02', quantity: 1 },
         { sku: 'AO-01', quantity: 3 },
       ]);
-      const error = await a(() => transfers.ship(t.id, {})).catch((e) => e);
+      const error = await a(() => transfers.ship(t.id, {}, null)).catch(
+        (e) => e,
+      );
       expect(error.status).toBe(409);
       expect(errorOf(error)).toMatchObject({
         errorCode: 'I002',
         details: [{ sku: 'AO-01', requested: 3, available: 2 }],
       });
       expect(await onHand(Q3, 'AO-02')).toBe(5);
-      expect((await a(() => transfers.get(t.id))).status).toBe('draft');
+      expect((await a(() => transfers.get(t.id, null))).status).toBe('draft');
       expect(await ledgerOf('transfer_out')).toHaveLength(0);
     });
 
@@ -877,8 +955,8 @@ describe('inventory first wave (Postgres)', () => {
       const one = await draft([{ sku: 'AO-01', quantity: 7 }]);
       const two = await draft([{ sku: 'AO-01', quantity: 7 }]);
       const results = await Promise.allSettled([
-        a(() => transfers.ship(one.id, {})),
-        a(() => transfers.ship(two.id, {})),
+        a(() => transfers.ship(one.id, {}, null)),
+        a(() => transfers.ship(two.id, {}, null)),
       ]);
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
       expect(await onHand(Q3, 'AO-01')).toBe(3);
@@ -886,36 +964,42 @@ describe('inventory first wave (Postgres)', () => {
 
     it('cancels from draft (no movement) and from in_transit (goods go back)', async () => {
       const d = await draft();
-      expect((await a(() => transfers.cancel(d.id, {}))).status).toBe(
+      expect((await a(() => transfers.cancel(d.id, {}, null))).status).toBe(
         'cancelled',
       );
       expect(await onHand(Q3, 'AO-01')).toBe(10);
       const s = await draft();
-      await a(() => transfers.ship(s.id, {}));
+      await a(() => transfers.ship(s.id, {}, null));
       expect(await onHand(Q3, 'AO-01')).toBe(4);
-      await a(() => transfers.cancel(s.id, {}));
+      await a(() => transfers.cancel(s.id, {}, null));
       expect(await onHand(Q3, 'AO-01')).toBe(10);
     });
 
     it('refuses the same branch (I008) and unknown branches (I001)', async () => {
       await expect(
         a(() =>
-          transfers.create({
-            fromBranchId: Q3,
-            toBranchId: Q3,
-            items: [{ sku: 'A', quantity: 1 }],
-          }),
+          transfers.create(
+            {
+              fromBranchId: Q3,
+              toBranchId: Q3,
+              items: [{ sku: 'A', quantity: 1 }],
+            },
+            null,
+          ),
         ),
       ).rejects.toMatchObject({
         response: { errorCode: 'I008' },
       });
       await expect(
         a(() =>
-          transfers.create({
-            fromBranchId: Q3,
-            toBranchId: BRANCH_B,
-            items: [{ sku: 'A', quantity: 1 }],
-          }),
+          transfers.create(
+            {
+              fromBranchId: Q3,
+              toBranchId: BRANCH_B,
+              items: [{ sku: 'A', quantity: 1 }],
+            },
+            null,
+          ),
         ),
       ).rejects.toMatchObject({
         response: { errorCode: 'I001' },
@@ -925,25 +1009,30 @@ describe('inventory first wave (Postgres)', () => {
     it('lists by either branch and status; other tenants cannot see or act', async () => {
       const t = await draft();
       expect(
-        (await a(() => transfers.list({ page: 1, limit: 10, branchId: Q7 })))
-          .data,
+        (
+          await a(() =>
+            transfers.list({ page: 1, limit: 10, branchId: Q7 }, null),
+          )
+        ).data,
       ).toHaveLength(1);
       expect(
         (
           await a(() =>
-            transfers.list({ page: 1, limit: 10, status: 'received' }),
+            transfers.list({ page: 1, limit: 10, status: 'received' }, null),
           )
         ).data,
       ).toHaveLength(0);
       expect(
-        (await as(B, () => transfers.list({ page: 1, limit: 10 }))).data,
+        (await as(B, () => transfers.list({ page: 1, limit: 10 }, null))).data,
       ).toHaveLength(0);
-      await expect(as(B, () => transfers.get(t.id))).rejects.toMatchObject({
+      await expect(
+        as(B, () => transfers.get(t.id, null)),
+      ).rejects.toMatchObject({
         status: 404,
       });
-      await expect(as(B, () => transfers.ship(t.id, {}))).rejects.toMatchObject(
-        { status: 404 },
-      );
+      await expect(
+        as(B, () => transfers.ship(t.id, {}, null)),
+      ).rejects.toMatchObject({ status: 404 });
     });
   });
 
@@ -956,7 +1045,7 @@ describe('inventory first wave (Postgres)', () => {
     );
 
     it('snapshots all SKUs, counts idempotently and completes with ledger adjustments', async () => {
-      const take = await a(() => takes.create({ branchId: Q3 }));
+      const take = await a(() => takes.create({ branchId: Q3 }, null));
       expect(take).toMatchObject({
         code: 'KK00001',
         status: 'in_progress',
@@ -972,8 +1061,8 @@ describe('inventory first wave (Postgres)', () => {
       const body = {
         items: [{ sku: 'AO-01', countedQuantity: 8, reason: 'vo 2' }],
       };
-      const first = await a(() => takes.updateItems(take.id, body));
-      const again = await a(() => takes.updateItems(take.id, body));
+      const first = await a(() => takes.updateItems(take.id, body, null));
+      const again = await a(() => takes.updateItems(take.id, body, null));
       expect(first.items[0]).toMatchObject({
         countedQuantity: 8,
         difference: -2,
@@ -986,13 +1075,17 @@ describe('inventory first wave (Postgres)', () => {
       expect(again.version).toBe(3);
 
       const scanned = await a(() =>
-        takes.updateItems(take.id, {
-          items: [
-            { sku: 'AO-02', countedQuantity: 1, mode: 'increment' },
-            { sku: 'AO-02', countedQuantity: 1, mode: 'increment' },
-            { sku: 'NEW-01', countedQuantity: 3 },
-          ],
-        }),
+        takes.updateItems(
+          take.id,
+          {
+            items: [
+              { sku: 'AO-02', countedQuantity: 1, mode: 'increment' },
+              { sku: 'AO-02', countedQuantity: 1, mode: 'increment' },
+              { sku: 'NEW-01', countedQuantity: 3 },
+            ],
+          },
+          null,
+        ),
       );
       expect(
         scanned.items.map((i) => [i.sku, i.systemQuantity, i.countedQuantity]),
@@ -1004,7 +1097,7 @@ describe('inventory first wave (Postgres)', () => {
       // nothing moves before completion
       expect(await onHand(Q3, 'AO-01')).toBe(10);
 
-      const done = await a(() => takes.complete(take.id, {}));
+      const done = await a(() => takes.complete(take.id, {}, null));
       expect(done.status).toBe('completed');
       expect(await onHand(Q3, 'AO-01')).toBe(8);
       expect(await onHand(Q3, 'AO-02')).toBe(2);
@@ -1014,31 +1107,35 @@ describe('inventory first wave (Postgres)', () => {
         { branch_id: Q3, sku: 'AO-02', change_qty: -3, balance_after: 2 },
         { branch_id: Q3, sku: 'NEW-01', change_qty: 3, balance_after: 3 },
       ]);
-      await expect(a(() => takes.complete(take.id, {}))).rejects.toMatchObject({
+      await expect(
+        a(() => takes.complete(take.id, {}, null)),
+      ).rejects.toMatchObject({
         response: { errorCode: 'I006' },
       });
       await expect(
-        a(() => takes.updateItems(take.id, body)),
+        a(() => takes.updateItems(take.id, body, null)),
       ).rejects.toMatchObject({ response: { errorCode: 'I006' } });
     });
 
     it('takes an explicit sku list, leaves uncounted lines alone and can be cancelled', async () => {
       const take = await a(() =>
-        takes.create({ branchId: Q3, skus: ['AO-01', 'GHOST'] }),
+        takes.create({ branchId: Q3, skus: ['AO-01', 'GHOST'] }, null),
       );
       expect(take.items.map((i) => [i.sku, i.systemQuantity])).toEqual([
         ['AO-01', 10],
         ['GHOST', 0],
       ]);
-      await a(() => takes.complete(take.id, {}));
+      await a(() => takes.complete(take.id, {}, null));
       expect(await onHand(Q3, 'AO-01')).toBe(10);
       expect(await ledgerOf('stock_take')).toHaveLength(0);
 
-      const other = await a(() => takes.create({ branchId: Q3 }));
-      expect((await a(() => takes.cancel(other.id, {}))).status).toBe(
+      const other = await a(() => takes.create({ branchId: Q3 }, null));
+      expect((await a(() => takes.cancel(other.id, {}, null))).status).toBe(
         'cancelled',
       );
-      await expect(a(() => takes.cancel(other.id, {}))).rejects.toMatchObject({
+      await expect(
+        a(() => takes.cancel(other.id, {}, null)),
+      ).rejects.toMatchObject({
         response: { errorCode: 'I006' },
       });
     });
@@ -1051,55 +1148,72 @@ describe('inventory first wave (Postgres)', () => {
           lines: [{ sku: 'AO-02', quantity: 4 }],
         }),
       );
-      const take = await a(() => takes.create({ branchId: Q3 }));
+      const take = await a(() => takes.create({ branchId: Q3 }, null));
       await a(() =>
-        takes.updateItems(take.id, {
-          items: [
-            { sku: 'AO-01', countedQuantity: 1 },
-            { sku: 'AO-02', countedQuantity: 3 },
-          ],
-        }),
+        takes.updateItems(
+          take.id,
+          {
+            items: [
+              { sku: 'AO-01', countedQuantity: 1 },
+              { sku: 'AO-02', countedQuantity: 3 },
+            ],
+          },
+          null,
+        ),
       );
-      await expect(a(() => takes.complete(take.id, {}))).rejects.toMatchObject({
+      await expect(
+        a(() => takes.complete(take.id, {}, null)),
+      ).rejects.toMatchObject({
         response: { errorCode: 'I015' },
       });
       expect(await onHand(Q3, 'AO-01')).toBe(10);
-      expect((await a(() => takes.get(take.id))).status).toBe('in_progress');
+      expect((await a(() => takes.get(take.id, null))).status).toBe(
+        'in_progress',
+      );
     });
 
     it('checks the version, lists with filters and hides other tenants', async () => {
-      const take = await a(() => takes.create({ branchId: Q3 }));
+      const take = await a(() => takes.create({ branchId: Q3 }, null));
       await expect(
         a(() =>
-          takes.updateItems(take.id, {
-            version: 7,
-            items: [{ sku: 'AO-01', countedQuantity: 1 }],
-          }),
+          takes.updateItems(
+            take.id,
+            {
+              version: 7,
+              items: [{ sku: 'AO-01', countedQuantity: 1 }],
+            },
+            null,
+          ),
         ),
       ).rejects.toMatchObject({ status: 409 });
       expect(
         (
           await a(() =>
-            takes.list({
-              page: 1,
-              limit: 10,
-              status: 'in_progress',
-              branchId: Q3,
-            }),
+            takes.list(
+              {
+                page: 1,
+                limit: 10,
+                status: 'in_progress',
+                branchId: Q3,
+              },
+              null,
+            ),
           )
         ).data,
       ).toHaveLength(1);
       expect(
-        (await as(B, () => takes.list({ page: 1, limit: 10 }))).data,
+        (await as(B, () => takes.list({ page: 1, limit: 10 }, null))).data,
       ).toHaveLength(0);
-      await expect(as(B, () => takes.get(take.id))).rejects.toMatchObject({
-        status: 404,
-      });
+      await expect(as(B, () => takes.get(take.id, null))).rejects.toMatchObject(
+        {
+          status: 404,
+        },
+      );
       await expect(
-        as(B, () => takes.complete(take.id, {})),
+        as(B, () => takes.complete(take.id, {}, null)),
       ).rejects.toMatchObject({ status: 404 });
       await expect(
-        as(B, () => takes.create({ branchId: Q3 })),
+        as(B, () => takes.create({ branchId: Q3 }, null)),
       ).rejects.toMatchObject({ response: { errorCode: 'I001' } });
     });
   });
@@ -1108,11 +1222,14 @@ describe('inventory first wave (Postgres)', () => {
     beforeEach(() => receive(Q3, [{ sku: 'AO-01', quantity: 10 }]));
     const draft = (quantity = 4, tenant = A) =>
       as(tenant, () =>
-        issues.create({
-          branchId: Q3,
-          reason: 'damaged',
-          items: [{ sku: 'AO-01', quantity }],
-        }),
+        issues.create(
+          {
+            branchId: Q3,
+            reason: 'damaged',
+            items: [{ sku: 'AO-01', quantity }],
+          },
+          null,
+        ),
       );
 
     it('stays a draft until approved, then deducts with an issue ledger row, once', async () => {
@@ -1123,64 +1240,336 @@ describe('inventory first wave (Postgres)', () => {
         totalQuantity: 4,
       });
       expect(await onHand(Q3, 'AO-01')).toBe(10);
-      expect((await a(() => issues.approve(issue.id, {}))).status).toBe(
+      expect((await a(() => issues.approve(issue.id, {}, null))).status).toBe(
         'approved',
       );
       expect(await onHand(Q3, 'AO-01')).toBe(6);
       expect(await ledgerOf('issue')).toEqual([
         { branch_id: Q3, sku: 'AO-01', change_qty: -4, balance_after: 6 },
       ]);
-      await expect(a(() => issues.approve(issue.id, {}))).rejects.toMatchObject(
-        { response: { errorCode: 'I007' } },
-      );
-      await expect(a(() => issues.cancel(issue.id, {}))).rejects.toMatchObject({
+      await expect(
+        a(() => issues.approve(issue.id, {}, null)),
+      ).rejects.toMatchObject({ response: { errorCode: 'I007' } });
+      await expect(
+        a(() => issues.cancel(issue.id, {}, null)),
+      ).rejects.toMatchObject({
         response: { errorCode: 'I007' },
       });
     });
 
     it('answers 409 I002 when stock is short and keeps the draft', async () => {
       const issue = await draft(11);
-      const error = await a(() => issues.approve(issue.id, {})).catch((e) => e);
+      const error = await a(() => issues.approve(issue.id, {}, null)).catch(
+        (e) => e,
+      );
       expect(error.status).toBe(409);
       expect(errorOf(error)).toMatchObject({
         errorCode: 'I002',
         details: [{ sku: 'AO-01', requested: 11, available: 10 }],
       });
-      expect((await a(() => issues.get(issue.id))).status).toBe('draft');
+      expect((await a(() => issues.get(issue.id, null))).status).toBe('draft');
       expect(await onHand(Q3, 'AO-01')).toBe(10);
     });
 
     it('cancels a draft, validates the supplier and hides other tenants', async () => {
       const issue = await draft();
-      expect((await a(() => issues.cancel(issue.id, {}))).status).toBe(
+      expect((await a(() => issues.cancel(issue.id, {}, null))).status).toBe(
         'cancelled',
       );
       await expect(
         a(() =>
-          issues.create({
-            branchId: Q3,
-            reason: 'return_to_supplier',
-            supplierId: randomUUID(),
-            items: [{ sku: 'AO-01', quantity: 1 }],
-          }),
+          issues.create(
+            {
+              branchId: Q3,
+              reason: 'return_to_supplier',
+              supplierId: randomUUID(),
+              items: [{ sku: 'AO-01', quantity: 1 }],
+            },
+            null,
+          ),
         ),
       ).rejects.toMatchObject({ response: { errorCode: 'I005' } });
       expect(
         (
           await a(() =>
-            issues.list({ page: 1, limit: 10, status: 'cancelled' }),
+            issues.list({ page: 1, limit: 10, status: 'cancelled' }, null),
           )
         ).data,
       ).toHaveLength(1);
       expect(
-        (await as(B, () => issues.list({ page: 1, limit: 10 }))).data,
+        (await as(B, () => issues.list({ page: 1, limit: 10 }, null))).data,
       ).toHaveLength(0);
-      await expect(as(B, () => issues.get(issue.id))).rejects.toMatchObject({
+      await expect(
+        as(B, () => issues.get(issue.id, null)),
+      ).rejects.toMatchObject({
         status: 404,
       });
       await expect(
-        as(B, () => issues.approve(issue.id, {})),
+        as(B, () => issues.approve(issue.id, {}, null)),
       ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('branch scope (ADR-0020 §8)', () => {
+    const only3 = [Q3];
+    const only7 = [Q7];
+    const notFoundErr = { status: 404 };
+    const supplier = async () =>
+      (await a(() => suppliers.create({ name: 'NCC scope' }))).id;
+    const poIn = async (branchId: string) =>
+      a(async () =>
+        orders.create(
+          {
+            supplierId: await supplier(),
+            branchId,
+            items: [
+              {
+                sku: 'AO-01',
+                name: 'Ao',
+                quantityOrdered: 1,
+                unitCost: 1000,
+                vatRate: 0,
+              },
+            ],
+          },
+          null,
+        ),
+      );
+
+    beforeEach(async () => {
+      await receive(Q3, [{ sku: 'AO-01', quantity: 10 }]);
+      await receive(Q7, [{ sku: 'AO-01', quantity: 20 }]);
+      await a(() =>
+        thresholds.upsert({ branchId: Q7, sku: 'AO-01', minQuantity: 5 }, null),
+      );
+    });
+
+    it('stock: lists, summary and export keep to the allowed branches; a foreign branch is 404', async () => {
+      const list = await a(() => stock.list({ page: 1, limit: 10 }, only3));
+      expect(list.data.map((r) => r.branchId)).toEqual([Q3]);
+      const summary = await a(() => stock.summary(undefined, only3));
+      expect(summary).toMatchObject({ onHand: 10 });
+      expect(summary.byBranch.map((b) => b.branchId)).toEqual([Q3]);
+      const csv = await a(() => stock.exportCsv({}, only3));
+      expect(csv).toContain(Q3);
+      expect(csv).not.toContain(Q7);
+      // null sees everything, an empty scope sees nothing
+      expect(
+        (await a(() => stock.list({ page: 1, limit: 10 }, null))).data,
+      ).toHaveLength(2);
+      expect(
+        (await a(() => stock.list({ page: 1, limit: 10 }, []))).data,
+      ).toHaveLength(0);
+
+      await expect(
+        a(() => stock.list({ page: 1, limit: 10, branchId: Q7 }, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+      await expect(a(() => stock.summary(Q7, only3))).rejects.toMatchObject(
+        notFoundErr,
+      );
+      await expect(
+        a(() => stock.lookup(Q7, 'AO-01', only3)),
+      ).rejects.toMatchObject(notFoundErr);
+      await expect(
+        a(() =>
+          stock.receive(
+            { branchId: Q7, items: [{ sku: 'AO-01', quantity: 1 }] },
+            only3,
+          ),
+        ),
+      ).rejects.toMatchObject(notFoundErr);
+      expect(await onHand(Q7, 'AO-01')).toBe(20);
+    });
+
+    it('thresholds and ledger: filtered lists, 404 for a foreign branch', async () => {
+      expect(
+        (await a(() => thresholds.list({ page: 1, limit: 10 }, only3))).data,
+      ).toHaveLength(0);
+      expect(
+        (await a(() => thresholds.list({ page: 1, limit: 10 }, only7))).data,
+      ).toHaveLength(1);
+      await expect(
+        a(() =>
+          thresholds.upsert(
+            { branchId: Q7, sku: 'AO-01', minQuantity: 9 },
+            only3,
+          ),
+        ),
+      ).rejects.toMatchObject(notFoundErr);
+      await expect(
+        a(() => thresholds.list({ page: 1, limit: 10, branchId: Q7 }, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+
+      const entries = await a(() => ledger.list({ page: 1, limit: 10 }, only3));
+      expect(entries.data.map((e) => e.branchId)).toEqual([Q3]);
+      await expect(
+        a(() => ledger.list({ page: 1, limit: 10, branchId: Q7 }, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+    });
+
+    it('purchase orders: create, read, act and lists follow the scope', async () => {
+      const po7 = await poIn(Q7);
+      const po3 = await poIn(Q3);
+      await expect(a(() => orders.get(po7.id, only3))).rejects.toMatchObject(
+        notFoundErr,
+      );
+      expect((await a(() => orders.get(po7.id, only7))).id).toBe(po7.id);
+      await expect(
+        a(() => orders.act(po7.id, 'submit', {}, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+      await expect(
+        a(() => orders.update(po7.id, { note: 'x' } as any, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+      await expect(
+        a(() => orders.pay(po7.id, { amount: 1, method: 'cash' }, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+      // moving a draft into a foreign branch is refused as well
+      await expect(
+        a(() => orders.update(po3.id, { branchId: Q7 }, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+      await expect(
+        a(async () =>
+          orders.create(
+            {
+              supplierId: await supplier(),
+              branchId: Q7,
+              items: [
+                {
+                  sku: 'A',
+                  name: 'A',
+                  quantityOrdered: 1,
+                  unitCost: 1,
+                  vatRate: 0,
+                },
+              ],
+            },
+            only3,
+          ),
+        ),
+      ).rejects.toMatchObject(notFoundErr);
+
+      const list = await a(() => orders.list({ page: 1, limit: 10 }, only3));
+      expect(list.data.map((r) => r.id)).toEqual([po3.id]);
+      expect((await a(() => orders.summary({}, only3))).openCount).toBe(1);
+      const csv = await a(() => orders.exportCsv({}, only3));
+      expect(csv).toContain(Q3);
+      expect(csv).not.toContain(Q7);
+      await expect(
+        a(() => orders.list({ page: 1, limit: 10, branchId: Q7 }, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+      expect(
+        (await a(() => orders.list({ page: 1, limit: 10 }, null))).data,
+      ).toHaveLength(2);
+    });
+
+    it('stock takes and issues: 404 on a foreign branch, filtered lists', async () => {
+      const take7 = await a(() => takes.create({ branchId: Q7 }, only7));
+      const issue7 = await a(() =>
+        issues.create(
+          {
+            branchId: Q7,
+            reason: 'other',
+            items: [{ sku: 'AO-01', quantity: 1 }],
+          },
+          only7,
+        ),
+      );
+      await expect(
+        a(() => takes.create({ branchId: Q7 }, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+      await expect(
+        a(() =>
+          issues.create(
+            {
+              branchId: Q7,
+              reason: 'other',
+              items: [{ sku: 'AO-01', quantity: 1 }],
+            },
+            only3,
+          ),
+        ),
+      ).rejects.toMatchObject(notFoundErr);
+      for (const work of <(() => Promise<unknown>)[]>[
+        () => takes.get(take7.id, only3),
+        () => takes.complete(take7.id, {}, only3),
+        () => takes.cancel(take7.id, {}, only3),
+        () =>
+          takes.updateItems(
+            take7.id,
+            { items: [{ sku: 'AO-01', countedQuantity: 1 }] },
+            only3,
+          ),
+        () => issues.get(issue7.id, only3),
+        () => issues.approve(issue7.id, {}, only3),
+        () => issues.cancel(issue7.id, {}, only3),
+      ]) {
+        await expect(a(work)).rejects.toMatchObject(notFoundErr);
+      }
+      expect(await onHand(Q7, 'AO-01')).toBe(20);
+      expect(
+        (await a(() => takes.list({ page: 1, limit: 10 }, only3))).data,
+      ).toHaveLength(0);
+      expect(
+        (await a(() => issues.list({ page: 1, limit: 10 }, only3))).data,
+      ).toHaveLength(0);
+      expect(
+        (await a(() => issues.list({ page: 1, limit: 10 }, only7))).data,
+      ).toHaveLength(1);
+      await expect(
+        a(() => takes.list({ page: 1, limit: 10, branchId: Q7 }, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+      expect((await a(() => issues.approve(issue7.id, {}, only7))).status).toBe(
+        'approved',
+      );
+    });
+
+    it('transfers: source for create/ship/cancel, destination for receive, either side to read and list', async () => {
+      const items = [{ sku: 'AO-01', quantity: 4 }];
+      // the source must be in scope; a foreign source is 404
+      await expect(
+        a(() =>
+          transfers.create({ fromBranchId: Q7, toBranchId: Q3, items }, only3),
+        ),
+      ).rejects.toMatchObject(notFoundErr);
+      const t = await a(() =>
+        transfers.create({ fromBranchId: Q3, toBranchId: Q7, items }, only3),
+      );
+
+      // visible from both ends, hidden from a third branch
+      expect((await a(() => transfers.get(t.id, only3))).id).toBe(t.id);
+      expect((await a(() => transfers.get(t.id, only7))).id).toBe(t.id);
+      await expect(
+        a(() => transfers.get(t.id, [BRANCH_B])),
+      ).rejects.toMatchObject(notFoundErr);
+      for (const scope of [only3, only7]) {
+        expect(
+          (await a(() => transfers.list({ page: 1, limit: 10 }, scope))).data,
+        ).toHaveLength(1);
+      }
+      expect(
+        (await a(() => transfers.list({ page: 1, limit: 10 }, [BRANCH_B])))
+          .data,
+      ).toHaveLength(0);
+
+      // shipping needs the source
+      await expect(
+        a(() => transfers.ship(t.id, {}, only7)),
+      ).rejects.toMatchObject(notFoundErr);
+      expect(await onHand(Q3, 'AO-01')).toBe(10);
+      await a(() => transfers.ship(t.id, {}, only3));
+      expect(await onHand(Q3, 'AO-01')).toBe(6);
+
+      // receiving needs the destination
+      await expect(
+        a(() => transfers.receive(t.id, {}, only3)),
+      ).rejects.toMatchObject(notFoundErr);
+      expect(await onHand(Q7, 'AO-01')).toBe(20);
+      const received = await a(() => transfers.receive(t.id, {}, only7));
+      expect(received.status).toBe('received');
+      expect(await onHand(Q7, 'AO-01')).toBe(24);
+      await expect(
+        a(() => transfers.cancel(t.id, {}, only7)),
+      ).rejects.toMatchObject(notFoundErr);
     });
   });
 

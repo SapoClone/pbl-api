@@ -109,6 +109,8 @@ describe('Customer service bootstrap', () => {
     `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   const as = (roles: string[], tid: string | null = TENANT) =>
     auth.bearer(roles, tid ?? undefined);
+  const withPerms = (permissions: string[]) =>
+    auth.bearerWithPermissions('sales_staff', permissions, TENANT);
   const call = (method: string, path: string, roles: string[] | null) => {
     const req = (request(url()) as any)[method](path);
     return roles ? req.set('Authorization', as(roles)) : req;
@@ -142,8 +144,6 @@ describe('Customer service bootstrap', () => {
   });
 
   describe('permissions', () => {
-    const all = [0, 1, 2];
-    const staff = [0, 1];
     const base = '/api/v1';
     const body: Record<string, unknown> = {
       create: { name: 'Ha', phone: '0901234528' },
@@ -152,36 +152,64 @@ describe('Customer service bootstrap', () => {
       name: { name: 'x' },
       empty: {},
     };
-    // method, path, success status, indexes of [owner, manager, cashier] that may call, body
-    const routes: [string, string, number, number[], string][] = [
-      ['get', `${base}/customers`, 200, all, ''],
-      ['get', `${base}/customers/summary`, 200, all, ''],
-      ['get', `${base}/customers/export`, 200, all, ''],
-      ['post', `${base}/customers`, 201, all, 'create'],
-      ['get', `${base}/customers/${ID}`, 200, all, ''],
-      ['patch', `${base}/customers/${ID}`, 200, all, 'name'],
-      ['delete', `${base}/customers/${ID}`, 204, staff, ''],
-      ['post', `${base}/customers/${ID}/addresses`, 201, all, 'address'],
-      ['patch', `${base}/customers/${ID}/addresses/${ADDR}`, 200, all, 'empty'],
-      ['delete', `${base}/customers/${ID}/addresses/${ADDR}`, 204, all, ''],
-      ['get', `${base}/customers/${ID}/loyalty-transactions`, 200, all, ''],
+    // method, path, success status, required permission, body
+    const routes: [string, string, number, string, string][] = [
+      ['get', `${base}/customers`, 200, 'customers.view', ''],
+      ['get', `${base}/customers/summary`, 200, 'customers.view', ''],
+      ['get', `${base}/customers/export`, 200, 'customers.view', ''],
+      ['post', `${base}/customers`, 201, 'customers.create', 'create'],
+      ['get', `${base}/customers/${ID}`, 200, 'customers.view', ''],
+      ['patch', `${base}/customers/${ID}`, 200, 'customers.update', 'name'],
+      ['delete', `${base}/customers/${ID}`, 204, 'customers.delete', ''],
+      [
+        'post',
+        `${base}/customers/${ID}/addresses`,
+        201,
+        'customers.create',
+        'address',
+      ],
+      [
+        'patch',
+        `${base}/customers/${ID}/addresses/${ADDR}`,
+        200,
+        'customers.update',
+        'empty',
+      ],
+      [
+        'delete',
+        `${base}/customers/${ID}/addresses/${ADDR}`,
+        204,
+        'customers.delete',
+        '',
+      ],
+      [
+        'get',
+        `${base}/customers/${ID}/loyalty-transactions`,
+        200,
+        'customers.view',
+        '',
+      ],
       [
         'post',
         `${base}/customers/${ID}/loyalty-adjustments`,
         201,
-        staff,
+        'customers.update',
         'adjust',
       ],
-      ['get', `${base}/customer-groups`, 200, all, ''],
-      ['post', `${base}/customer-groups`, 201, staff, 'name'],
-      ['patch', `${base}/customer-groups/${ID}`, 200, staff, 'name'],
-      ['get', `${base}/customer-tags`, 200, all, ''],
-      ['post', `${base}/customer-tags`, 201, staff, 'name'],
-      ['get', `${base}/loyalty-settings`, 200, all, ''],
-      ['patch', `${base}/loyalty-settings`, 200, staff, 'empty'],
+      ['get', `${base}/customer-groups`, 200, 'customers.view', ''],
+      ['post', `${base}/customer-groups`, 201, 'customers.create', 'name'],
+      [
+        'patch',
+        `${base}/customer-groups/${ID}`,
+        200,
+        'customers.update',
+        'name',
+      ],
+      ['get', `${base}/customer-tags`, 200, 'customers.view', ''],
+      ['post', `${base}/customer-tags`, 201, 'customers.create', 'name'],
+      ['get', `${base}/loyalty-settings`, 200, 'customers.view', ''],
+      ['patch', `${base}/loyalty-settings`, 200, 'customers.update', 'empty'],
     ];
-    const roles = ['owner', 'manager', 'cashier'];
-
     it.each(routes)(
       '%s %s refuses a request without a token (401)',
       async (method, path, _ok, _a, b) => {
@@ -203,20 +231,28 @@ describe('Customer service bootstrap', () => {
     );
 
     it.each(routes)(
-      '%s %s allows exactly the documented roles',
-      async (method, path, ok, allowed, b) => {
-        for (const [index, role] of roles.entries()) {
-          const res = await call(method, path, [role]).send(
-            b ? body[b] : undefined,
-          );
-          expect({ role, status: res.status }).toEqual({
-            role,
-            status: allowed.includes(index) ? ok : 403,
-          });
+      '%s %s needs its permission (and no other)',
+      async (method, path, ok, code, b) => {
+        const send = (header: string) =>
+          (request(url()) as any)
+            [method](path)
+            .set('Authorization', header)
+            .send(b ? body[b] : undefined);
+        const others = [
+          'customers.view',
+          'customers.create',
+          'customers.update',
+          'customers.delete',
+        ].filter((c) => c !== code);
+        expect((await send(withPerms([code]))).status).toBe(ok);
+        expect((await send(withPerms(others))).status).toBe(403);
+        expect((await send(withPerms([]))).status).toBe(403);
+        expect((await send(withPerms(['orders.view']))).status).toBe(403);
+        expect((await send(as(['owner']))).status).toBe(ok);
+        // legacy role names carry no permissions
+        for (const role of ['manager', 'cashier', 'viewer']) {
+          expect((await send(as([role]))).status).toBe(403);
         }
-        await call(method, path, ['viewer'])
-          .send(b ? body[b] : undefined)
-          .expect(403);
       },
     );
   });
@@ -230,10 +266,18 @@ describe('Customer service bootstrap', () => {
       expect(customers.get).not.toHaveBeenCalled();
     });
 
-    it('lets owners and managers see phones, not cashiers', async () => {
+    it('shows whole phones only with customers.update', async () => {
       const seen: boolean[] = [];
-      for (const role of ['owner', 'manager', 'cashier']) {
-        await call('get', '/api/v1/customers', [role]).expect(200);
+      const tokens = [
+        as(['owner']),
+        withPerms(['customers.update', 'customers.view']),
+        withPerms(['customers.view', 'customers.create', 'customers.delete']),
+      ];
+      for (const token of tokens) {
+        await request(url())
+          .get('/api/v1/customers')
+          .set('Authorization', token)
+          .expect(200);
         seen.push(
           (
             customers.list.mock.calls.at(-1) as unknown as unknown[]
@@ -247,7 +291,7 @@ describe('Customer service bootstrap', () => {
       const res = await call(
         'get',
         '/api/v1/customers/export?q=ha&sort=totalSpent',
-        ['cashier'],
+        ['owner'],
       ).expect(200);
       expect(res.headers['content-type']).toMatch(/^text\/csv/);
       expect(res.headers['content-disposition']).toContain('attachment');

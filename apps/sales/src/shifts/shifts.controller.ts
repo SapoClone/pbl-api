@@ -10,8 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, CurrentUser, RequirePermission } from '@pbl/auth';
 import {
   CloseShiftReqDto,
   CurrentShiftReqDto,
@@ -19,35 +18,42 @@ import {
 } from './dto/shift.req.dto';
 import { ShiftRes, ShiftsService } from './shifts.service';
 
-/** Contract permissions `pos.view` and `pos.create`: every role of a store */
+/** `pos.view` reads the current shift; `pos.create` opens and closes one */
 @ApiTags('shifts')
 @ApiBearerAuth()
-@RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
 @Controller('api/v1/shifts')
 export class ShiftsController {
   constructor(private readonly shifts: ShiftsService) {}
 
   @Get('current')
-  current(@Query() query: CurrentShiftReqDto): Promise<ShiftRes> {
-    return this.shifts.current(query.registerId);
+  @RequirePermission('pos.view')
+  current(
+    @Query() query: CurrentShiftReqDto,
+    @AllowedBranches() branches: string[] | null,
+  ): Promise<ShiftRes> {
+    return this.shifts.current(query.registerId, branches);
   }
 
   @Post()
+  @RequirePermission('pos.create')
   @HttpCode(HttpStatus.CREATED)
   open(
     @CurrentUser('id') accountId: string,
     @Body() dto: OpenShiftReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<ShiftRes> {
-    return this.shifts.open(accountId, dto);
+    return this.shifts.open(accountId, dto, branches);
   }
 
   @Post(':id/close')
+  @RequirePermission('pos.create')
   @HttpCode(HttpStatus.OK)
   close(
     @CurrentUser('id') accountId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CloseShiftReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<ShiftRes> {
-    return this.shifts.close(accountId, id, dto);
+    return this.shifts.close(accountId, id, dto, branches);
   }
 }

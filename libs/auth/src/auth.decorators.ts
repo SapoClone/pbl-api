@@ -8,8 +8,10 @@ import {
   IS_AUTH_OPTIONAL,
   IS_PUBLIC,
   IS_TENANT_OPTIONAL,
+  REQUIRED_PERMISSIONS,
   REQUIRED_ROLES,
 } from './auth.constants';
+import { allowedBranches } from './auth.helpers';
 import { AuthUser } from './auth.types';
 
 /** Skip authentication for this route/controller. */
@@ -24,6 +26,14 @@ export const TenantOptional = () => SetMetadata(IS_TENANT_OPTIONAL, true);
 /** Caller must have one of these roles in the selected store (403 otherwise). */
 export const RequireRoles = (...roles: string[]) =>
   SetMetadata(REQUIRED_ROLES, roles);
+
+/**
+ * Caller needs AT LEAST ONE of these permission codes in the selected store
+ * (`'*'` in the token passes any); 403 otherwise, also without a store. Combined
+ * with @RequireRoles the caller must satisfy both.
+ */
+export const RequirePermission = (...codes: string[]) =>
+  SetMetadata(REQUIRED_PERMISSIONS, codes);
 
 /** The verified caller (AuthUser), or one of its fields: @CurrentUser('id'). */
 export const CurrentUser = createParamDecorator(
@@ -41,5 +51,14 @@ export const CurrentTenant = createParamDecorator(
       throw new ForbiddenException('A store must be selected');
     }
     return user.tenantId;
+  },
+);
+
+/** Branch ids the caller may act in, or null for every branch (see allowedBranches). */
+export const AllowedBranches = createParamDecorator(
+  (_: unknown, ctx: ExecutionContext): string[] | null => {
+    const user: AuthUser | undefined = ctx.switchToHttp().getRequest()['user'];
+    if (!user) throw new ForbiddenException('A store must be selected');
+    return allowedBranches(user);
   },
 );

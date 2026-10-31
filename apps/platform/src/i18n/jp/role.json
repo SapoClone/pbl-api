@@ -1,0 +1,12 @@
+{
+  "error": {
+    "name_exists": "この名前のロールは既にこの店舗に存在します",
+    "owner_immutable": "オーナーのロールは変更できません",
+    "unknown_permission": "不明な権限コードです",
+    "seeded_not_deletable": "既定のロールは削除できません",
+    "in_use": "このロールにはまだメンバーがいます。先に別のロールへ移してください",
+    "not_found": "ロールが見つかりません",
+    "unknown_for_member": "メンバーにはこの店舗の既存のロールを選択してください",
+    "owner_not_assignable": "オーナーのロールは他のメンバーに付与できません"
+  }
+}
