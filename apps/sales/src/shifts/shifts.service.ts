@@ -9,6 +9,7 @@ import {
   TenantScopedRepository,
 } from '@pbl/common';
 import { randomUUID } from 'crypto';
+import { assertBranchInScope, BranchScope } from '../common/branch-scope';
 import {
   CodeSequenceService,
   shiftCode,
@@ -63,19 +64,28 @@ export class ShiftsService {
     private readonly codes: CodeSequenceService,
   ) {}
 
-  async current(registerId: string): Promise<ShiftRes> {
+  async current(
+    registerId: string,
+    scope: BranchScope = null,
+  ): Promise<ShiftRes> {
     const shift = await this.shifts.findOne({
       where: { registerId, status: 'open' },
     });
     // the client then shows "open shift"
     if (!shift) throw new NotFoundException();
+    assertBranchInScope(scope, shift.branchId);
     return this.toRes(shift);
   }
 
-  async open(accountId: string, dto: OpenShiftReqDto): Promise<ShiftRes> {
+  async open(
+    accountId: string,
+    dto: OpenShiftReqDto,
+    scope: BranchScope = null,
+  ): Promise<ShiftRes> {
     const register = await this.registers.findOne({
       where: { id: dto.registerId },
     });
+    if (register) assertBranchInScope(scope, register.branchId);
     if (!register || register.status !== 'active') {
       throw new BadRequestException({
         errorCode: SalesErrorCode.UNKNOWN_REGISTER,
@@ -123,9 +133,11 @@ export class ShiftsService {
     accountId: string,
     id: string,
     dto: CloseShiftReqDto,
+    scope: BranchScope = null,
   ): Promise<ShiftRes> {
     const shift = await this.shifts.findOne({ where: { id } });
     if (!shift) throw new NotFoundException();
+    assertBranchInScope(scope, shift.branchId);
     if (shift.status !== 'open') {
       throw new BadRequestException({
         errorCode: SalesErrorCode.SHIFT_CLOSED,

@@ -103,7 +103,7 @@ describe('Sales routes (HTTP shell over stub services)', () => {
     ])('GET %s is not read as an order id', async (path, fn) => {
       await request(url())
         .get(path)
-        .set('Authorization', as('cashier'))
+        .set('Authorization', as('owner'))
         .expect(200);
       expect(orders.get).not.toHaveBeenCalled();
       expect(queries[fn as 'summary']).toHaveBeenCalled();
@@ -121,11 +121,11 @@ describe('Sales routes (HTTP shell over stub services)', () => {
     it('GET /shifts/current needs a registerId (422)', async () => {
       await request(url())
         .get('/api/v1/shifts/current')
-        .set('Authorization', as('cashier'))
+        .set('Authorization', as('owner'))
         .expect(422);
       await request(url())
         .get(`/api/v1/shifts/current?registerId=${ID}`)
-        .set('Authorization', as('cashier'))
+        .set('Authorization', as('owner'))
         .expect(200);
     });
   });
@@ -165,71 +165,226 @@ describe('Sales routes (HTTP shell over stub services)', () => {
           page: 1,
           limit: 10,
         }),
+        null,
       );
     });
   });
 
-  describe('roles', () => {
-    it.each([
-      ['post', `/api/v1/orders/${ID}/confirm`, {}],
-      ['post', `/api/v1/orders/${ID}/pack`, {}],
-      ['post', `/api/v1/orders/${ID}/ship`, {}],
-      ['post', `/api/v1/orders/${ID}/complete`, {}],
-      ['post', `/api/v1/orders/${ID}/cancel`, { reason: 'x' }],
-      ['post', `/api/v1/orders/${ID}/payments`, { method: 'cash', amount: 1 }],
+  describe('permission matrix', () => {
+    const KEY = ID;
+    const orderBody = {
+      branchId: BRANCH,
+      items: [{ sku: 'A', name: 'a', quantity: 1, unitPrice: 100 }],
+    };
+    type Row = [
+      method: 'get' | 'post' | 'patch',
+      path: string,
+      body: object,
+      anyOf: string[],
+    ];
+    const rows: Row[] = [
+      ['get', '/api/v1/orders', {}, ['orders.view']],
+      ['get', '/api/v1/orders/summary', {}, ['orders.view']],
+      ['get', '/api/v1/orders/export', {}, ['orders.view']],
+      ['get', `/api/v1/orders/${ID}`, {}, ['orders.view']],
+      ['get', `/api/v1/orders/${ID}/history`, {}, ['orders.view']],
+      ['get', `/api/v1/orders/${ID}/print`, {}, ['orders.view']],
+      ['patch', `/api/v1/orders/${ID}`, { note: 'x' }, ['orders.create']],
+      ['post', `/api/v1/orders/${ID}/confirm`, {}, ['orders.update']],
+      ['post', `/api/v1/orders/${ID}/pack`, {}, ['orders.update']],
+      ['post', `/api/v1/orders/${ID}/ship`, {}, ['orders.update']],
+      ['post', `/api/v1/orders/${ID}/complete`, {}, ['orders.update']],
+      [
+        'post',
+        `/api/v1/orders/${ID}/cancel`,
+        { reason: 'x' },
+        ['orders.delete'],
+      ],
+      [
+        'post',
+        `/api/v1/orders/${ID}/payments`,
+        { method: 'cash', amount: 1 },
+        ['orders.update'],
+      ],
+      ['get', '/api/v1/sales-channels', {}, ['orders.view', 'pos.view']],
+      ['get', '/api/v1/shipping-providers', {}, ['orders.view', 'pos.view']],
+      [
+        'get',
+        `/api/v1/registers?branchId=${BRANCH}`,
+        {},
+        ['orders.view', 'pos.view'],
+      ],
       [
         'post',
         '/api/v1/registers',
         { branchId: BRANCH, code: 'Q1', name: 'Q1' },
+        ['pos.update'],
       ],
-      ['patch', `/api/v1/registers/${ID}`, { name: 'x' }],
-    ] as const)(
-      '%s %s is for owner and manager, not cashier (403)',
-      async (method, path, body) => {
-        await request(url())
-          [method](path)
-          .set('Authorization', as('cashier'))
-          .send(body)
-          .expect(403);
-        await request(url())
-          [method](path)
-          .set('Authorization', as('manager'))
-          .send(body)
-          .expect((r) => {
-            if (r.status >= 400) throw new Error(`manager got ${r.status}`);
-          });
-      },
-    );
-
-    it.each([
-      ['get', '/api/v1/sales-channels'],
-      ['get', '/api/v1/shipping-providers'],
-      ['get', `/api/v1/registers?branchId=${BRANCH}`],
-      ['get', `/api/v1/orders/${ID}/history`],
-      ['get', `/api/v1/orders/${ID}/print?type=packing_slip&paper=58mm`],
-    ] as const)('%s %s works for a cashier', async (method, path) => {
-      await request(url())
+      ['patch', `/api/v1/registers/${ID}`, { name: 'x' }, ['pos.update']],
+      ['get', `/api/v1/shifts/current?registerId=${ID}`, {}, ['pos.view']],
+      [
+        'post',
+        '/api/v1/shifts',
+        { registerId: ID, openingCash: 1 },
+        ['pos.create'],
+      ],
+      [
+        'post',
+        `/api/v1/shifts/${ID}/close`,
+        { closingCashActual: 1 },
+        ['pos.create'],
+      ],
+    ];
+    const call = (row: Row, token: string) => {
+      const [method, path, body] = row;
+      return request(url())
         [method](path)
-        .set('Authorization', as('cashier'))
-        .expect(200);
+        .set('Authorization', token)
+        .send(body);
+    };
+    const withPerms = (permissions: string[]) =>
+      auth.bearerWithPermissions('custom_role', permissions, TENANT);
+
+    it.each(rows)('%s %s needs one of the permissions', async (...row) => {
+      const anyOf = row[3];
+      for (const code of anyOf) {
+        const res = await call(row, withPerms([code]));
+        expect(res.status).toBeLessThan(400);
+      }
+      await call(row, withPerms(['dashboard.view'])).expect(403);
+      await call(row, withPerms([])).expect(403);
+      // the owner passes every route
+      const owner = await call(row, auth.bearer(['owner'], TENANT));
+      expect(owner.status).toBeLessThan(400);
+      // the old role names carry no permission
+      await call(row, auth.bearer(['manager'], TENANT)).expect(403);
+      await call(row, auth.bearer(['cashier'], TENANT)).expect(403);
     });
 
-    it('lets a cashier open and close shifts, and edit drafts', async () => {
+    describe('POST /orders', () => {
+      const post = (token: string, extra: object = {}) =>
+        request(url())
+          .post('/api/v1/orders')
+          .set('Authorization', token)
+          .set('Idempotency-Key', KEY)
+          .send({ ...orderBody, ...extra });
+      beforeEach(() =>
+        orders.create.mockResolvedValue({ order: { id: ID }, replayed: false }),
+      );
+
+      it('orders.create sells a non-POS order, pos.create a POS sale', async () => {
+        await post(withPerms(['orders.create'])).expect(201);
+        await post(withPerms(['orders.create']), { source: 'manual' }).expect(
+          201,
+        );
+        await post(withPerms(['pos.create']), { source: 'pos' }).expect(201);
+      });
+
+      it('refuses the other code for the source (403) without creating', async () => {
+        await post(withPerms(['pos.create'])).expect(403);
+        await post(withPerms(['pos.create']), { source: 'manual' }).expect(403);
+        await post(withPerms(['orders.create']), { source: 'pos' }).expect(403);
+        await post(withPerms(['orders.view', 'pos.view'])).expect(403);
+        expect(orders.create).not.toHaveBeenCalled();
+      });
+
+      it('lets the owner sell through every source', async () => {
+        const owner = auth.bearer(['owner'], TENANT);
+        await post(owner, { source: 'pos' }).expect(201);
+        await post(owner, { source: 'manual' }).expect(201);
+      });
+    });
+  });
+
+  describe('branch scope', () => {
+    const OTHER = '44444444-4444-4444-8444-444444444444';
+    const restricted = auth.bearerWithPermissions(
+      'sales_staff',
+      [
+        'orders.view',
+        'orders.create',
+        'orders.update',
+        'pos.view',
+        'pos.create',
+      ],
+      TENANT,
+      [BRANCH],
+    );
+    const everywhere = auth.bearerWithPermissions(
+      'sales_staff',
+      ['orders.view'],
+      TENANT,
+    );
+
+    it('hands the allowed branches to every service call', async () => {
       await request(url())
-        .post('/api/v1/shifts')
-        .set('Authorization', as('cashier'))
-        .send({ registerId: ID, openingCash: 100 })
-        .expect(201);
-      await request(url())
-        .post(`/api/v1/shifts/${ID}/close`)
-        .set('Authorization', as('cashier'))
-        .send({ closingCashActual: 100 })
+        .get('/api/v1/orders?page=1')
+        .set('Authorization', restricted)
         .expect(200);
+      expect(orders.list).toHaveBeenCalledWith(expect.anything(), [BRANCH]);
       await request(url())
-        .patch(`/api/v1/orders/${ID}`)
-        .set('Authorization', as('cashier'))
-        .send({ note: 'x', orderStatus: 'confirmed' })
+        .get('/api/v1/orders/summary')
+        .set('Authorization', restricted)
         .expect(200);
+      expect(queries.summary).toHaveBeenCalledWith(expect.anything(), [BRANCH]);
+      await request(url())
+        .get('/api/v1/orders/export')
+        .set('Authorization', restricted)
+        .expect(200);
+      expect(queries.exportCsv).toHaveBeenCalledWith(expect.anything(), [
+        BRANCH,
+      ]);
+      await request(url())
+        .get(`/api/v1/orders/${ID}`)
+        .set('Authorization', restricted)
+        .expect(200);
+      expect(orders.get).toHaveBeenCalledWith(ID, [BRANCH]);
+      await request(url())
+        .post(`/api/v1/orders/${ID}/confirm`)
+        .set('Authorization', restricted)
+        .send({})
+        .expect(200);
+      expect(actions.confirm).toHaveBeenCalledWith('account-1', ID, undefined, [
+        BRANCH,
+      ]);
+      await request(url())
+        .get(`/api/v1/registers?branchId=${BRANCH}`)
+        .set('Authorization', restricted)
+        .expect(200);
+      expect(registers.list).toHaveBeenCalledWith(BRANCH, [BRANCH]);
+    });
+
+    it('passes null (every branch) for an unrestricted caller', async () => {
+      await request(url())
+        .get('/api/v1/orders')
+        .set('Authorization', everywhere)
+        .expect(200);
+      expect(orders.list).toHaveBeenCalledWith(expect.anything(), null);
+      await request(url())
+        .get(`/api/v1/orders/${ID}/history`)
+        .set('Authorization', everywhere)
+        .expect(200);
+      expect(actions.getHistory).toHaveBeenCalledWith(ID, null);
+    });
+
+    it('answers 404 when the service says the branch is out of scope', async () => {
+      const { NotFoundException } = jest.requireActual('@nestjs/common');
+      orders.create.mockRejectedValueOnce(new NotFoundException());
+      await request(url())
+        .post('/api/v1/orders')
+        .set('Authorization', restricted)
+        .set('Idempotency-Key', ID)
+        .send({
+          branchId: OTHER,
+          items: [{ sku: 'A', name: 'a', quantity: 1, unitPrice: 100 }],
+        })
+        .expect(404);
+      expect(orders.create).toHaveBeenCalledWith(
+        'account-1',
+        ID,
+        expect.objectContaining({ branchId: OTHER }),
+        [BRANCH],
+      );
     });
   });
 
@@ -266,9 +421,10 @@ describe('Sales routes (HTTP shell over stub services)', () => {
         'account-1',
         ID,
         expect.objectContaining({ version: 4 }),
+        null,
       );
       await post(`/api/v1/orders/${ID}/confirm`, { version: 7 }).expect(200);
-      expect(actions.confirm).toHaveBeenCalledWith('account-1', ID, 7);
+      expect(actions.confirm).toHaveBeenCalledWith('account-1', ID, 7, null);
     });
 
     it('accepts the new order fields and rejects bad ones (422)', async () => {
@@ -301,6 +457,7 @@ describe('Sales routes (HTTP shell over stub services)', () => {
         'account-1',
         ID,
         expect.not.objectContaining({ totalAmount: 1 }),
+        null,
       );
     });
   });

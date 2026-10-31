@@ -4,6 +4,7 @@ import {
   TenantScopedRepository,
 } from '@pbl/common';
 import { IsNull, Not } from 'typeorm';
+import { BranchScope, branchCondition } from '../common/branch-scope';
 import { SalesErrorCode } from '../common/errors';
 import { OrderSummaryReqDto } from './dto/list-orders.req.dto';
 import { OrderEntity } from './entities/order.entity';
@@ -82,9 +83,13 @@ export class OrderQueryService {
    * every other figure is a live count, limited to `branchId` and, only when sent,
    * to the dates. Drafts never count.
    */
-  async summary(query: OrderSummaryReqDto): Promise<OrderSummaryRes> {
+  async summary(
+    query: OrderSummaryReqDto,
+    scope: BranchScope = null,
+  ): Promise<OrderSummaryRes> {
+    const branch = branchCondition(scope, query.branchId);
     const live = (extra: object = {}) => ({
-      ...(query.branchId ? { branchId: query.branchId } : {}),
+      ...(branch ? { branchId: branch } : {}),
       ...(query.from || query.to
         ? { createdAt: dateRange(query.from, query.to) }
         : {}),
@@ -101,7 +106,7 @@ export class OrderQueryService {
     const inRange = (extra: object = {}) =>
       this.orders.count({
         where: {
-          ...(query.branchId ? { branchId: query.branchId } : {}),
+          ...(branch ? { branchId: branch } : {}),
           createdAt: todayRange,
           ...notDraft,
           ...extra,
@@ -168,8 +173,11 @@ export class OrderQueryService {
   }
 
   /** CSV of the filtered orders (UTF-8 with BOM), at most 10,000 rows (else 422 S020) */
-  async exportCsv(query: OrderSummaryReqDto): Promise<string> {
-    const where = buildOrderWhere(query);
+  async exportCsv(
+    query: OrderSummaryReqDto,
+    scope: BranchScope = null,
+  ): Promise<string> {
+    const where = buildOrderWhere(query, scope);
     const total = await this.orders.count({ where });
     if (total > EXPORT_LIMIT) {
       throw new UnprocessableEntityException({

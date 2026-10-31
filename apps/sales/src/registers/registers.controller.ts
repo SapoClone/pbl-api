@@ -11,8 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, RequirePermission } from '@pbl/auth';
 import {
   CreateRegisterReqDto,
   ListRegistersReqDto,
@@ -21,34 +20,41 @@ import {
 import { RegisterRes, RegistersService } from './registers.service';
 
 /**
- * Contract permissions: `pos.view` (list, every role), `pos.update`
- * (create, update: owner and manager).
+ * Permissions: list `orders.view` or `pos.view`; create and update `pos.update`.
+ * A restricted caller reaches only the registers of its branches (404 otherwise).
  */
 @ApiTags('registers')
 @ApiBearerAuth()
-@RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
 @Controller('api/v1/registers')
 export class RegistersController {
   constructor(private readonly registers: RegistersService) {}
 
   @Get()
-  list(@Query() query: ListRegistersReqDto): Promise<{ data: RegisterRes[] }> {
-    return this.registers.list(query.branchId);
+  @RequirePermission('orders.view', 'pos.view')
+  list(
+    @Query() query: ListRegistersReqDto,
+    @AllowedBranches() branches: string[] | null,
+  ): Promise<{ data: RegisterRes[] }> {
+    return this.registers.list(query.branchId, branches);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
-  create(@Body() dto: CreateRegisterReqDto): Promise<RegisterRes> {
-    return this.registers.create(dto);
+  @RequirePermission('pos.update')
+  create(
+    @Body() dto: CreateRegisterReqDto,
+    @AllowedBranches() branches: string[] | null,
+  ): Promise<RegisterRes> {
+    return this.registers.create(dto, branches);
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('pos.update')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateRegisterReqDto,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<RegisterRes> {
-    return this.registers.update(id, dto);
+    return this.registers.update(id, dto, branches);
   }
 }

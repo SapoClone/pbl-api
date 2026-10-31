@@ -1,13 +1,12 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import { ReferenceRes, ReferenceService } from './reference.service';
 
-/** Contract permission `orders.view`: every role of a store */
+/** `orders.view` or `pos.view` (the POS lists the channels too) */
 @ApiTags('reference')
 @ApiBearerAuth()
-@RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+@RequirePermission('orders.view', 'pos.view')
 @Controller('api/v1')
 export class ReferenceController {
   constructor(private readonly reference: ReferenceService) {}
