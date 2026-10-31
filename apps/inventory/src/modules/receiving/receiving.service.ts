@@ -12,6 +12,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   computeWeightedAverageCostOnReceipt,
   convertToBaseQtyMilli,
+  evaluateStockReceiptPostTransition,
   formatFactorFromTenThousandths,
   formatMilliToQty,
   InventoryDomainError,
@@ -216,27 +217,15 @@ export class ReceivingService {
     }
     const header = headerRows[0];
 
-    if (header.status === 'POSTED') {
-      if (
-        idempotencyKey &&
-        header.idempotency_key &&
-        header.idempotency_key === idempotencyKey.trim()
-      ) {
-        return this.loadReceiptResponse(em, prefix, tenantId, receiptId);
-      }
-      throw new InventoryDomainError(
-        InventoryDomainErrorCode.STOCK_RECEIPT_ALREADY_POSTED,
-        `Stock receipt ${header.code} (${receiptId}) has already been posted`,
-        409,
-      );
-    }
-
-    if (header.status !== 'DRAFT' && header.status !== 'PENDING_APPROVAL') {
-      throw new InventoryDomainError(
-        InventoryDomainErrorCode.STOCK_RECEIPT_INVALID_STATE,
-        `Cannot post stock receipt in state ${header.status}`,
-        409,
-      );
+    const postDecision = evaluateStockReceiptPostTransition({
+      receiptId,
+      code: header.code,
+      currentStatus: header.status,
+      storedIdempotencyKey: header.idempotency_key,
+      incomingIdempotencyKey: idempotencyKey,
+    });
+    if (postDecision === 'IDEMPOTENT_REPLAY') {
+      return this.loadReceiptResponse(em, prefix, tenantId, receiptId);
     }
 
     await assertActiveWarehouse(em, prefix, tenantId, header.warehouse_id);

@@ -1,7 +1,11 @@
 import { discountTierFor } from '../presentation/access';
 import {
   AuthoritativeCatalogVariant,
+  DiscountPercentage,
+  OrderAggregate,
   SalesDomainErrorCode,
+  StockQuantity,
+  VndMoney,
   assertCanCancelOrder,
   assertDiscountAuthority,
   calculateOrderQuote,
@@ -318,7 +322,7 @@ describe('Sales M3 Pure Domain Layer', () => {
     });
   });
 
-  describe('3D Order State Machine', () => {
+  describe('3D Order State Machine & OrderAggregate', () => {
     it('rejects invalid state combinations and forbids cancelling completed orders', () => {
       expect(() =>
         validateOrderStateCombination({
@@ -338,6 +342,41 @@ describe('Sales M3 Pure Domain Layer', () => {
           fulfillmentStatus: 'FULFILLED',
         }),
       ).toThrow(
+        expect.objectContaining({
+          code: SalesDomainErrorCode.ORDER_ALREADY_COMPLETED,
+        }),
+      );
+    });
+
+    it('enforces OrderAggregate lifecycle transitions and VndMoney/StockQuantity/DiscountPercentage Value Objects', () => {
+      const money = VndMoney.of(150000).add(VndMoney.of(50000));
+      expect(money.toString()).toBe('200000');
+      const qty = StockQuantity.of('2.500');
+      expect(qty.toString()).toBe('2.500');
+      const pct = DiscountPercentage.of(15);
+      expect(pct.basisPoints).toBe(1500n);
+
+      const agg = new OrderAggregate(
+        'ord-1',
+        'ten-1',
+        'SO-001',
+        'DRAFT',
+        'PAID',
+        'UNFULFILLED',
+        1,
+      );
+
+      expect(() => agg.assertEditable()).not.toThrow();
+      agg.confirmWithReservation('wh-1', 'res-100');
+      expect(agg.orderStatus).toBe('CONFIRMED');
+      expect(agg.fulfillmentStatus).toBe('RESERVED');
+      expect(agg.reservationId).toBe('res-100');
+      expect(() => agg.assertEditable()).toThrow();
+
+      agg.markFulfilled('FUL-001');
+      expect(agg.orderStatus).toBe('COMPLETED');
+      expect(agg.fulfillmentStatus).toBe('FULFILLED');
+      expect(() => agg.cancel('Too late')).toThrow(
         expect.objectContaining({
           code: SalesDomainErrorCode.ORDER_ALREADY_COMPLETED,
         }),

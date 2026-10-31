@@ -11,6 +11,8 @@ import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import {
+  assertCanDispatchStockTransfer,
+  assertValidStockTransferWarehouses,
   computeValuationAfterDeduction,
   computeWeightedAverageCostOnReceipt,
   formatMilliToQty,
@@ -40,13 +42,7 @@ export class TransfersService {
   ) {}
 
   async createTransfer(dto: CreateStockTransferDto) {
-    if (dto.fromWarehouseId === dto.toWarehouseId) {
-      throw new InventoryDomainError(
-        InventoryDomainErrorCode.TRANSFER_SAME_WAREHOUSE,
-        'Source and destination warehouses must be different',
-        400,
-      );
-    }
+    assertValidStockTransferWarehouses(dto.fromWarehouseId, dto.toWarehouseId);
 
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
@@ -122,13 +118,7 @@ export class TransfersService {
         );
       }
       const header = headerRows[0];
-      if (header.status !== 'DRAFT') {
-        throw new InventoryDomainError(
-          InventoryDomainErrorCode.TRANSFER_INVALID_STATE,
-          `Cannot dispatch stock transfer in state ${header.status}`,
-          409,
-        );
-      }
+      assertCanDispatchStockTransfer(header.status);
 
       await assertActiveWarehouse(
         em,
