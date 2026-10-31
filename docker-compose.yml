@@ -42,9 +42,17 @@ services:
       DATABASE_PASSWORD: postgres
       DATABASE_NAME: pbl
       DATABASE_SCHEMA: catalog
+      # events: ElasticMQ locally, the consumer runs inside the service
+      EVENTS_TRANSPORT: sqs-direct
+      AWS_REGION: ap-southeast-1
+      AWS_ENDPOINT_URL_SQS: http://elasticmq:9324
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
     depends_on:
       postgres:
         condition: service_healthy
+      elasticmq:
+        condition: service_started
     networks:
       - pbl-network
 

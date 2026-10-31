@@ -1,4 +1,5 @@
 import { ServiceUnavailableException } from '@nestjs/common';
+import { TenantContext } from '@pbl/common';
 import { InventoryClient } from './inventory.client';
 
 const lines = [{ sku: 'AO-01', quantity: 2 }];
@@ -110,7 +111,11 @@ describe('InventoryClient', () => {
       ttlSeconds: 900,
       lines: [],
     } as never;
-    const headersOf = (mock: jest.Mock) => mock.mock.calls[0].at(-1).headers;
+    const configOf = (call: unknown[]) =>
+      call.find((a) => a && typeof a === 'object' && 'headers' in a) as {
+        headers: Record<string, string>;
+      };
+    const headersOf = (mock: jest.Mock) => configOf(mock.mock.calls[0]).headers;
 
     afterEach(() => {
       process.env = { ...saved };
@@ -137,15 +142,38 @@ describe('InventoryClient', () => {
       ];
       expect(calls).toHaveLength(7);
       for (const call of calls) {
-        const headers = call.at(-1).headers;
+        const headers = configOf(call).headers;
         expect(headers['x-internal-token']).toBe('s3cret');
         expect(Object.keys(headers).map((h) => h.toLowerCase())).not.toContain(
           'x-tenant-id',
         );
       }
-      expect(http.post.mock.calls[1][2].headers).toMatchObject({
+      expect(configOf(http.post.mock.calls[1]).headers).toMatchObject({
         'Idempotency-Key': 'k1',
       });
+    });
+
+    it('names the tenant on the warehouse routes: they are @Public, so the callee cannot read it from a token', async () => {
+      process.env.INTERNAL_S2S_TOKEN = 's3cret';
+      http.post.mockResolvedValue({ status: 200, data: {} });
+      http.get.mockResolvedValue({ status: 200, data: {} });
+
+      await TenantContext.run('t-1', async () => {
+        await client.reserveWarehouseStock('k1', warehouseReq);
+        await client.getWarehouseReservation('r1');
+        await client.commitWarehouseReservation('r1');
+        await client.getWarehouseReservationByKey('k1');
+        await client.releaseWarehouseReservation('r1');
+      });
+
+      const calls = [...http.post.mock.calls, ...http.get.mock.calls];
+      expect(calls).toHaveLength(5);
+      for (const call of calls) {
+        expect(call[call.length - 1]).toEqual({
+          asService: true,
+          tenantId: 't-1',
+        });
+      }
     });
 
     it('fails closed without the token (503 S005, no call), except under NODE_ENV=test', async () => {

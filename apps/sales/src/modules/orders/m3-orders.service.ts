@@ -29,6 +29,7 @@ import {
   OrderTenderEntity,
 } from '../../infrastructure/persistence/sales.entities';
 import { InventoryClient } from '../../inventory/inventory.client';
+import { inventoryStockKey } from '../../inventory/stock-key';
 import { OrderItemEntity } from '../../orders/entities/order-item.entity';
 import { OrderEntity } from '../../orders/entities/order.entity';
 import {
@@ -593,11 +594,12 @@ export class M3OrdersService {
     // Reserve stock in Inventory outside DB transaction
     const qtyBySku = new Map<string, bigint>();
     for (const item of items) {
-      const prev = qtyBySku.get(item.sku) ?? 0n;
+      const skuKey = inventoryStockKey(item.variantId, item.sku);
+      const prev = qtyBySku.get(skuKey) ?? 0n;
       const itemMillis = parseQtyMillis(
         item.baseQty ?? item.qty ?? item.quantity,
       );
-      qtyBySku.set(item.sku, prev + itemMillis);
+      qtyBySku.set(skuKey, prev + itemMillis);
     }
 
     const rsvKey = deterministicUuid(`ord-confirm-rsv:${tenantId}:${orderId}`);

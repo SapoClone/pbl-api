@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# NOTE: targets the old API shapes of catalog/inventory/sales/customer (pre M1-M6 adoption); to be rewritten in a later phase.
 # End-to-end test of role-based access control (ADR-0019, ADR-0020), through the gateway only
 # (needs the local stack running: docker compose up -d --build). One store, two branches:
 #   1. catalog and seeded roles   owner creates the store, GET /permissions, GET /roles, immutability
 #   2. custom roles               create, unknown permission, duplicate name, patch, delete
 #   3. a member with a custom role and one branch, token claims
-#   4. permission enforcement     an allowed and a denied call in every service
+#   4. permission enforcement     an allowed and a denied call in every service (finance included)
 #   5. branch scope               lists filtered, other branch is 404
 #   6. role change                the old token keeps its claims, a new sign-in gets the new ones
 #   7. seeded roles               sales_staff, accountant, warehouse_staff behave as documented
@@ -22,6 +21,7 @@ customer="$gateway/customer/api/v1"
 inventory="$gateway/inventory/api/v1"
 sales="$gateway/sales/api/v1"
 insight="$gateway/insight/api/v1"
+finance="$gateway/finance/api/v1/finance"
 run="$(date +%s)"
 password="Passw0rd!"
 new_password="N3wPassw0rd!"
@@ -137,11 +137,15 @@ expect_status 201 "create the second branch" "$br"
 q2=$(jv "$br" .id)
 wait_for "sales learned both branches" count_is "select count(*) from sales.branch_projection where tenant_id='$tenant_id'" 2
 wait_for "inventory learned both branches" count_is "select count(*) from inventory.branch_projection where tenant_id='$tenant_id'" 2
+wh_main=$(jv "$(http POST "$inventory/warehouses" "$store_token" "{\"code\":\"WH-MAIN\",\"name\":\"Kho chinh\",\"branchId\":\"$main_branch\",\"isDefault\":true}")" .id)
+wh_q2=$(jv "$(http POST "$inventory/warehouses" "$store_token" "{\"code\":\"WH-Q2\",\"name\":\"Kho Quay 2\",\"branchId\":\"$q2\",\"isDefault\":true}")" .id)
+[[ "$wh_main" != null && "$wh_q2" != null ]] || fail "warehouses were not created"
+ok "a warehouse for each branch"
 
 perms=$(http GET "$platform/permissions" "$store_token")
 expect_status 200 "the permission catalog" "$perms"
-expect_true "$perms" '(.permissions | map(select(.isApplicable)) | length) == 38' "38 applicable permissions in the catalog"
-expect_true "$perms" '(.modules | map(.code) | sort) == ["channels","customers","dashboard","inventory","orders","pos","products","purchasing","reports","settings","staff"]' "the catalog has the eleven modules"
+expect_true "$perms" '(.permissions | map(select(.isApplicable)) | length) == 42' "42 applicable permissions in the catalog"
+expect_true "$perms" '(.modules | map(.code) | sort) == ["channels","customers","dashboard","finance","inventory","orders","pos","products","purchasing","reports","settings","staff"]' "the catalog has the twelve modules"
 expect_true "$perms" '.defaults | length == 5' "defaults for the five seeded roles"
 
 roles_list=$(http GET "$platform/roles" "$store_token")
@@ -154,7 +158,7 @@ expect_eq "$roles_list" '(.data[] | select(.code=="owner") | .isOwner)' true "th
 owner_role=$(role_id owner); manager_role=$(role_id branch_manager); sales_role=$(role_id sales_staff)
 wh_role=$(role_id warehouse_staff); acc_role=$(role_id accountant)
 owner_detail=$(http GET "$platform/roles/$owner_role" "$store_token")
-expect_true "$owner_detail" '.permissions | length == 38' "the owner role lists every permission"
+expect_true "$owner_detail" '.permissions | length == 42' "the owner role lists every permission"
 own_edit=$(http PATCH "$platform/roles/$owner_role" "$store_token" '{"permissions":["orders.view"]}')
 expect_status 400 "the owner role cannot be edited" "$own_edit"
 expect_eq "$own_edit" .errorCode R002 "the owner role is locked (R002)"
@@ -212,18 +216,19 @@ claims_eq "$clerk_token" '.branches' "[\"$main_branch\"]" "the token has exactly
 old_clerk_token="$clerk_token"
 
 # Data for the checks that follow: a product, stock and an order in each branch (owner)
-ctg=$(http POST "$catalog/categories" "$store_token" '{"name":"Ao"}')
-expect_status 201 "the owner creates a category" "$ctg"
-prod=$(http POST "$catalog/products" "$store_token" "{\"name\":\"Ao thun\",\"categoryId\":\"$(jv "$ctg" .id)\",\"baseUnit\":\"cai\",\"channels\":[\"pos\"],\"variants\":[{\"skuCode\":\"RB-1\",\"price\":100000,\"costPrice\":60000}]}")
-expect_status 201 "the owner creates a product" "$prod"
-for b in "$main_branch" "$q2"; do
-  expect_status 201 "the owner receives 10 RB-1 at $b" "$(http POST "$inventory/stock-receipts" "$store_token" "{\"branchId\":\"$b\",\"items\":[{\"sku\":\"RB-1\",\"quantity\":10}]}")"
+prod=$(http POST "$catalog/products" "$store_token" '{"name":"Ao thun","baseUnit":"cai","createDefaultVariant":true,"defaultSkuCode":"RB-1","defaultBasePrice":100000}')
+expect_status 201 "the owner creates a product with one variant at 100000 VND" "$prod"
+variant_id=$(jv "$prod" '.variants[0].id')
+for w in "$wh_main" "$wh_q2"; do
+  r=$(http POST "$inventory/stock-receipts" "$store_token" "{\"warehouseId\":\"$w\",\"items\":[{\"skuId\":\"$variant_id\",\"qty\":\"10\",\"unitCost\":60000}],\"autoPost\":true}")
+  expect_status 201 "the owner receives 10 RB-1 in a warehouse (autoPost)" "$r"
 done
-mk_order() { # token branch -> response
-  http POST "$sales/orders" "$1" "{\"branchId\":\"$2\",\"orderStatus\":\"draft\",\"items\":[{\"sku\":\"RB-1\",\"name\":\"Ao thun\",\"quantity\":1,\"unitPrice\":100000}]}" "Idempotency-Key: $(new_uuid)"
+wait_for "sales knows the variant (catalog event)" count_is "select count(*) from sales.catalog_variant_projection where tenant_id='$tenant_id'" 1
+mk_order() { # token branch warehouse [extra json] -> a draft order
+  http POST "$sales/orders/omnichannel" "$1" "{\"branchId\":\"$2\",\"warehouseId\":\"$3\",\"channelType\":\"MANUAL\",\"initialStatus\":\"DRAFT\",\"lines\":[{\"variantId\":\"$variant_id\",\"qty\":1}]${4:+,$4}}"
 }
-o_main=$(mk_order "$store_token" "$main_branch"); expect_status 201 "an order in the first branch" "$o_main"
-o_q2=$(mk_order "$store_token" "$q2"); expect_status 201 "an order in the second branch" "$o_q2"
+o_main=$(mk_order "$store_token" "$main_branch" "$wh_main"); expect_status 201 "a draft order in the first branch" "$o_main"
+o_q2=$(mk_order "$store_token" "$q2" "$wh_q2"); expect_status 201 "a draft order in the second branch" "$o_q2"
 o_main_id=$(jv "$o_main" .id); o_q2_id=$(jv "$o_q2" .id)
 phone="09$(printf '%08d' $((run % 100000000)))"
 cust=$(http POST "$customer/customers" "$store_token" "{\"name\":\"Nguyen Van A\",\"phone\":\"$phone\"}")
@@ -235,37 +240,46 @@ step "4. Permission enforcement as the clerk: one allowed and one denied call pe
 expect_status 200 "platform: GET /branches (open to every member)" "$(http GET "$platform/branches" "$clerk_token")"
 expect_status 403 "platform: GET /roles needs staff.view" "$(http GET "$platform/roles" "$clerk_token")"
 expect_status 403 "platform: POST /tenants/current/members needs staff.create" "$(http POST "$platform/tenants/current/members" "$clerk_token" '{"email":"x@example.com","role":"cashier"}')"
-expect_status 200 "catalog: GET /products (products.view)" "$(http GET "$catalog/products" "$clerk_token")"
+expect_status 200 "catalog: GET /variants (products.view)" "$(http GET "$catalog/variants" "$clerk_token")"
 expect_status 403 "catalog: POST /categories needs products.create" "$(http POST "$catalog/categories" "$clerk_token" '{"name":"Nope"}')"
 expect_status 200 "customer: GET /customers (customers.view)" "$(http GET "$customer/customers" "$clerk_token")"
 expect_status 403 "customer: POST /customers needs customers.create" "$(http POST "$customer/customers" "$clerk_token" '{"name":"Nope","phone":"0900000001"}')"
-expect_status 200 "inventory: GET /stock (inventory.view)" "$(http GET "$inventory/stock?branchId=$main_branch" "$clerk_token")"
-expect_status 403 "inventory: POST /stock-receipts needs inventory.create" "$(http POST "$inventory/stock-receipts" "$clerk_token" "{\"branchId\":\"$main_branch\",\"items\":[{\"sku\":\"RB-1\",\"quantity\":1}]}")"
+expect_status 200 "inventory: GET /stock-levels (inventory.view)" "$(http GET "$inventory/stock-levels?branchId=$main_branch" "$clerk_token")"
+expect_status 403 "inventory: POST /stock-receipts needs inventory.create" "$(http POST "$inventory/stock-receipts" "$clerk_token" "{\"warehouseId\":\"$wh_main\",\"items\":[{\"skuId\":\"$variant_id\",\"qty\":\"1\"}]}")"
+expect_status 403 "inventory: POST /stock-thresholds needs inventory.update" "$(http POST "$inventory/stock-thresholds" "$clerk_token" "{\"branchId\":\"$main_branch\",\"variantId\":\"$variant_id\",\"minQuantity\":1}")"
 expect_status 200 "sales: GET /orders (orders.view)" "$(http GET "$sales/orders" "$clerk_token")"
 expect_status 403 "sales: confirm needs orders.update" "$(http POST "$sales/orders/$o_main_id/confirm" "$clerk_token" '{}')"
-expect_status 201 "sales: create a draft order in the clerk's branch (orders.create)" "$(mk_order "$clerk_token" "$main_branch")"
+expect_status 403 "sales: shifts need pos.view" "$(http GET "$sales/registers?branchId=$main_branch" "$clerk_token")"
+expect_status 201 "sales: create a draft order in the clerk's branch (orders.create)" "$(mk_order "$clerk_token" "$main_branch" "$wh_main")"
+expect_status 403 "sales: auto-confirming a new order also needs orders.update" "$(mk_order "$clerk_token" "$main_branch" "$wh_main" '"autoConfirm":true')"
 expect_status 200 "insight: GET /dashboard/kpis (dashboard.view)" "$(http GET "$insight/dashboard/kpis" "$clerk_token")"
 expect_status 403 "insight: GET /sales-summary/daily needs reports.view" "$(http GET "$insight/sales-summary/daily" "$clerk_token")"
+expect_status 403 "finance: GET /summary needs finance.view" "$(http GET "$finance/summary" "$clerk_token")"
 expect_status 401 "no token at all" "$(curl -s -w '\n%{http_code}' "$sales/orders")"
+expect_status 404 "the internal order route is not routed by the gateway" "$(curl -s -w '\n%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$gateway/sales/internal/v1/orders/omnichannel")"
+expect_status 404 "the internal reservation route is not routed by the gateway" "$(curl -s -w '\n%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$gateway/inventory/internal/v1/reservations")"
 
 # ---------------------------------------------------------------------------------------------
 step "5. Branch scope as the clerk: the second branch does not exist for them"
 bl=$(http GET "$platform/branches" "$clerk_token")
 expect_eq "$bl" '.data | map(.id) | join(",")' "$main_branch" "GET /branches lists only their branch"
 expect_status 404 "GET /branches/{second}" "$(http GET "$platform/branches/$q2" "$clerk_token")"
-expect_status 404 "stock of the second branch" "$(http GET "$inventory/stock?branchId=$q2" "$clerk_token")"
+expect_status 404 "stock levels of the second branch" "$(http GET "$inventory/stock-levels?branchId=$q2" "$clerk_token")"
+expect_status 404 "stock summary of the second branch" "$(http GET "$inventory/stock/summary?branchId=$q2" "$clerk_token")"
 expect_status 404 "stock lookup in the second branch" "$(http GET "$inventory/stock/lookup?branchId=$q2&code=RB-1" "$clerk_token")"
-expect_eq "$(http GET "$inventory/stock" "$clerk_token")" '(.data // .items) | map(.branchId) | unique | join(",")' "$main_branch" "stock without a filter only shows their branch"
+expect_eq "$(http GET "$inventory/stock-levels" "$clerk_token")" '.data | map(.branchId) | unique | join(",")' "$main_branch" "stock without a filter only shows their branch"
+expect_eq "$(http GET "$inventory/stock/summary" "$clerk_token")" .onHand 10 "the summary without a filter counts only their branch (10, not 20)"
 expect_status 404 "KPIs of the second branch" "$(http GET "$insight/dashboard/kpis?branchId=$q2" "$clerk_token")"
 expect_status 200 "KPIs of their own branch" "$(http GET "$insight/dashboard/kpis?branchId=$main_branch" "$clerk_token")"
 expect_status 404 "an order of the second branch" "$(http GET "$sales/orders/$o_q2_id" "$clerk_token")"
 expect_status 200 "an order of their branch" "$(http GET "$sales/orders/$o_main_id" "$clerk_token")"
-expect_status 404 "creating an order in the second branch" "$(mk_order "$clerk_token" "$q2")"
-expect_status 404 "orders filtered by the second branch" "$(http GET "$sales/orders?branchId=$q2&orderStatus=draft" "$clerk_token")"
+expect_status 404 "creating an order in the second branch" "$(mk_order "$clerk_token" "$q2" "$wh_q2")"
+expect_status 404 "orders filtered by the second branch" "$(http GET "$sales/orders?branchId=$q2" "$clerk_token")"
 ol=$(http GET "$sales/orders?orderStatus=draft" "$clerk_token")
 expect_true "$ol" '(.data // .items) | length >= 1 and all(.branchId == "'"$main_branch"'")' "the order list only shows their branch"
 ol_owner=$(http GET "$sales/orders?orderStatus=draft" "$store_token")
 expect_true "$ol_owner" '(.data // .items) | map(.branchId) | unique | length == 2' "the owner sees both branches"
+expect_eq "$(http GET "$inventory/warehouses" "$clerk_token")" 'map(.branchId) | unique | join(",")' "$main_branch" "the warehouse list only shows their branch"
 
 # ---------------------------------------------------------------------------------------------
 step "6. Change the member's role: the old token keeps its claims, a new sign-in gets the new ones"
@@ -274,13 +288,13 @@ expect_status 200 "the owner makes the clerk a branch manager on every branch" "
 expect_eq "$chg" .roleCode branch_manager "the member now has the new role"
 claims_eq "$old_clerk_token" '.roles' '["floor_clerk"]' "the old token still names the old role"
 expect_status 403 "the old token still cannot list roles" "$(http GET "$platform/roles" "$old_clerk_token")"
-expect_status 404 "the old token still cannot see the second branch" "$(http GET "$inventory/stock?branchId=$q2" "$old_clerk_token")"
+expect_status 404 "the old token still cannot see the second branch" "$(http GET "$inventory/stock-levels?branchId=$q2" "$old_clerk_token")"
 new_clerk_token=$(sign_in "$clerk")
 claims_eq "$new_clerk_token" '.roles' '["branch_manager"]' "a new sign-in carries the new role"
 claims_eq "$new_clerk_token" '.branches' '["*"]' "a new sign-in carries every branch"
 claims_eq "$new_clerk_token" '.perms | index("staff.view") != null and index("staff.update") == null' 'true' "the new permissions: staff.view yes, staff.update no"
 expect_status 200 "the new token can list roles" "$(http GET "$platform/roles" "$new_clerk_token")"
-expect_status 200 "the new token sees the second branch" "$(http GET "$inventory/stock?branchId=$q2" "$new_clerk_token")"
+expect_status 200 "the new token sees the second branch" "$(http GET "$inventory/stock-levels?branchId=$q2" "$new_clerk_token")"
 refresh=$(login "$clerk" "$tenant_id")
 ref_tok=$(printf '%s' "$refresh" | jq -r '.refreshToken // empty')
 if [[ -n "$ref_tok" ]]; then
@@ -290,7 +304,7 @@ if [[ -n "$ref_tok" ]]; then
 fi
 
 # ---------------------------------------------------------------------------------------------
-step "7. Seeded role behaviour"
+step "7. Seeded role behaviour: sales_staff, accountant, warehouse_staff and branch_manager"
 sales_u="sales-$run@example.com"; acc_u="acc-$run@example.com"; wh_u="wh-$run@example.com"
 for u in "$sales_u" "$acc_u" "$wh_u"; do register "$u"; done
 expect_status 201 "add a sales_staff member" "$(http POST "$platform/tenants/current/members" "$store_token" "{\"email\":\"$sales_u\",\"roleId\":\"$sales_role\"}")"
@@ -301,27 +315,69 @@ claims_eq "$sales_tok" '.roles' '["sales_staff"]' "sales_staff token role"
 claims_eq "$acc_tok" '.roles' '["accountant"]' "accountant token role"
 claims_eq "$wh_tok" '.roles' '["warehouse_staff"]' "warehouse_staff token role"
 claims_eq "$sales_tok" '.branches' '["*"]' "no branchIds means every branch"
+claims_eq "$sales_tok" '.perms | length' 14 "sales_staff holds 14 permissions"
+claims_eq "$acc_tok" '.perms | length' 11 "accountant holds 11 permissions"
+claims_eq "$wh_tok" '.perms | length' 8 "warehouse_staff holds 8 permissions"
+
+# sales_staff
 expect_status 200 "sales_staff reads the dashboard KPIs" "$(http GET "$insight/dashboard/kpis" "$sales_tok")"
 expect_status 403 "sales_staff cannot read sales-summary/daily (reports)" "$(http GET "$insight/sales-summary/daily" "$sales_tok")"
-expect_status 200 "the accountant reads sales-summary/daily" "$(http GET "$insight/sales-summary/daily" "$acc_tok")"
 sc=$(http GET "$customer/customers/$customer_id" "$sales_tok")
-expect_eq "$sc" .phone "$phone" "sales_staff sees the full phone"
-ac=$(http GET "$customer/customers/$customer_id" "$acc_tok")
-expect_status 200 "the accountant reads the customer" "$ac"
-expect_eq "$ac" .phone null "the accountant does not get the phone"
-expect_true "$ac" '.phoneMasked | test("•")' "the accountant gets a masked phone"
-expect_true "$(http GET "$customer/customers" "$acc_tok")" '(.data // .items) | all(.phone == null)' "the accountant's customer list is masked"
-expect_status 403 "the accountant cannot create a customer" "$(http POST "$customer/customers" "$acc_tok" '{"name":"No","phone":"0900000002"}')"
-expect_status 200 "sales_staff can confirm an order (orders.update)" "$(http POST "$sales/orders/$o_main_id/confirm" "$sales_tok" '{}')"
+expect_eq "$sc" .phone "$phone" "sales_staff (customers.update) sees the full phone"
+expect_status 200 "sales_staff confirms an order (orders.update)" "$(http POST "$sales/orders/$o_main_id/confirm" "$sales_tok" '{}')"
 expect_status 403 "sales_staff cannot cancel an order (orders.delete)" "$(http POST "$sales/orders/$o_main_id/cancel" "$sales_tok" '{"reason":"x"}')"
 expect_status 403 "sales_staff cannot create a product" "$(http POST "$catalog/categories" "$sales_tok" '{"name":"No"}')"
-expect_status 201 "warehouse_staff creates a stock receipt" "$(http POST "$inventory/stock-receipts" "$wh_tok" "{\"branchId\":\"$main_branch\",\"items\":[{\"sku\":\"RB-1\",\"quantity\":5}]}")"
-expect_status 200 "warehouse_staff reads purchase orders (purchasing.view)" "$(http GET "$inventory/purchase-orders" "$wh_tok")"
+expect_status 200 "sales_staff lists registers (pos.view)" "$(http GET "$sales/registers?branchId=$main_branch" "$sales_tok")"
+expect_status 200 "sales_staff reads the finance summary (finance.view)" "$(http GET "$finance/summary" "$sales_tok")"
+expect_status 403 "sales_staff cannot approve finance (finance.approve)" "$(http PUT "$finance/customers/$customer_id/credit-limit" "$sales_tok" '{"creditLimit":1000000}')"
+expect_status 403 "sales_staff cannot create a cash account (finance.create is for vouchers: accounts need an admin route)" "$(http PATCH "$finance/cash-accounts/$(new_uuid)" "$sales_tok" '{"name":"x"}')"
+
+# accountant
+expect_status 200 "the accountant reads sales-summary/daily" "$(http GET "$insight/sales-summary/daily" "$acc_tok")"
+ac=$(http GET "$customer/customers/$customer_id" "$acc_tok")
+expect_status 200 "the accountant reads the customer" "$ac"
+expect_true "$ac" '.phone | test("[*]{3}")' "the accountant gets a masked phone string, not the number"
+[[ "$(printf '%s' "$ac" | body_of)" != *"$phone"* ]] || fail "the real phone leaks in the accountant's customer detail"
+ok "the real phone appears nowhere in the accountant's response"
+expect_true "$ac" '.phoneMasked | test("•")' "the accountant gets a masked phone"
+al=$(http GET "$customer/customers" "$acc_tok")
+expect_true "$al" '.data | all(.phone == null)' "the accountant's contract rows have phone null (phoneMasked only)"
+[[ "$(printf '%s' "$al" | body_of)" != *"$phone"* ]] || fail "the real phone leaks in the accountant's customer list"
+ok "the real phone appears nowhere in the accountant's list"
+acc_export=$(http GET "$customer/customers/export" "$acc_tok")
+expect_status 200 "the accountant exports customers (customers.view)" "$acc_export"
+[[ "$(printf '%s' "$acc_export" | body_of)" != *"$phone"* ]] || fail "the real phone leaks in the accountant's export"
+ok "the export masks the phone as well"
+expect_status 403 "the accountant cannot create a customer" "$(http POST "$customer/customers" "$acc_tok" '{"name":"No","phone":"0900000002"}')"
+expect_status 200 "the accountant reads orders (orders.view)" "$(http GET "$sales/orders" "$acc_tok")"
+expect_status 403 "the accountant cannot create an order (orders.create)" "$(mk_order "$acc_tok" "$main_branch" "$wh_main")"
+expect_status 403 "the accountant cannot receive stock (inventory.create)" "$(http POST "$inventory/stock-receipts" "$acc_tok" "{\"warehouseId\":\"$wh_main\",\"items\":[{\"skuId\":\"$variant_id\",\"qty\":\"1\"}]}")"
+expect_status 200 "the accountant reads the finance summary" "$(http GET "$finance/summary" "$acc_tok")"
+expect_status 200 "the accountant approves a credit limit (finance.approve)" "$(http PUT "$finance/customers/$customer_id/credit-limit" "$acc_tok" '{"creditLimit":3000000}')"
+
+# warehouse_staff
+wrc=$(http POST "$inventory/stock-receipts" "$wh_tok" "{\"warehouseId\":\"$wh_main\",\"items\":[{\"skuId\":\"$variant_id\",\"qty\":\"5\",\"unitCost\":60000}]}")
+expect_status 201 "warehouse_staff creates a stock receipt (inventory.create)" "$wrc"
+wrc_id=$(jv "$wrc" .id)
+expect_status 200 "warehouse_staff submits it (inventory.create)" "$(http POST "$inventory/stock-receipts/$wrc_id/submit" "$wh_tok" '{}')"
+expect_status 403 "warehouse_staff cannot approve it (inventory.approve)" "$(http POST "$inventory/stock-receipts/$wrc_id/approve" "$wh_tok" '{}')"
+expect_status 200 "warehouse_staff cancels a receipt (inventory.update)" "$(http POST "$inventory/stock-receipts/$wrc_id/cancel" "$wh_tok" '{}')"
+expect_status 200 "warehouse_staff reads purchase orders (purchasing.view)" "$(http GET "$inventory/purchase-orders/directory" "$wh_tok")"
 expect_status 403 "warehouse_staff cannot approve a purchase order (purchasing.approve)" "$(http POST "$inventory/purchase-orders/$(new_uuid)/approve" "$wh_tok" '{}')"
 expect_status 403 "warehouse_staff cannot read customers" "$(http GET "$customer/customers" "$wh_tok")"
 expect_status 403 "warehouse_staff cannot read reports" "$(http GET "$insight/sales-summary/daily" "$wh_tok")"
-expect_status 403 "warehouse_staff cannot create orders" "$(mk_order "$wh_tok" "$main_branch")"
-expect_status 403 "the accountant cannot receive stock" "$(http POST "$inventory/stock-receipts" "$acc_tok" "{\"branchId\":\"$main_branch\",\"items\":[{\"sku\":\"RB-1\",\"quantity\":1}]}")"
+expect_status 403 "warehouse_staff cannot create orders" "$(mk_order "$wh_tok" "$main_branch" "$wh_main")"
+expect_status 403 "warehouse_staff cannot read finance" "$(http GET "$finance/summary" "$wh_tok")"
+expect_status 403 "warehouse_staff cannot open a shift (pos.create)" "$(http POST "$sales/shifts" "$wh_tok" "{\"registerId\":\"$(new_uuid)\",\"openingCash\":1}")"
+
+# branch_manager (the promoted clerk, signed in again) and the owner
+wrc2=$(http POST "$inventory/stock-receipts" "$new_clerk_token" "{\"warehouseId\":\"$wh_q2\",\"items\":[{\"skuId\":\"$variant_id\",\"qty\":\"2\",\"unitCost\":60000}]}")
+expect_status 201 "branch_manager creates a receipt in any branch" "$wrc2"
+expect_status 200 "branch_manager submits it" "$(http POST "$inventory/stock-receipts/$(jv "$wrc2" .id)/submit" "$new_clerk_token" '{}')"
+expect_eq "$(http POST "$inventory/stock-receipts/$(jv "$wrc2" .id)/approve" "$new_clerk_token" '{}')" .status POSTED "branch_manager approves it (inventory.approve)"
+expect_status 403 "branch_manager cannot change the store settings (settings.update)" "$(http PATCH "$platform/tenants/current" "$new_clerk_token" '{"name":"Hacked"}')"
+expect_eq "$(http GET "$inventory/stock/summary" "$store_token")" .onHand 22 "the owner sees every branch: 10 + 10 + 2"
+expect_status 200 "the owner reads the finance summary" "$(http GET "$finance/summary" "$store_token")"
 expect_status 403 "sales_staff cannot read roles" "$(http GET "$platform/roles" "$sales_tok")"
 expect_status 403 "sales_staff cannot update the store" "$(http PATCH "$platform/tenants/current" "$sales_tok" '{"name":"Hacked"}')"
 

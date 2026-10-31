@@ -4,7 +4,11 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { InternalHttpClient } from '@pbl/common';
+import {
+  InternalHttpClient,
+  InternalHttpOptions,
+  TenantContext,
+} from '@pbl/common';
 import {
   CreateWarehouseReservationRequest,
   StockLine,
@@ -126,11 +130,16 @@ export class InventoryClient {
           errorCode?: string;
           details?: WarehouseStockShortage[];
         }
-      >('/internal/v1/reservations', req, {
-        timeout: TIMEOUT_MS,
-        headers: this.internalHeaders({ 'Idempotency-Key': idempotencyKey }),
-        validateStatus: (status) => status < 500,
-      });
+      >(
+        '/internal/v1/reservations',
+        req,
+        {
+          timeout: TIMEOUT_MS,
+          headers: this.internalHeaders({ 'Idempotency-Key': idempotencyKey }),
+          validateStatus: (status) => status < 500,
+        },
+        this.asTenant(),
+      );
     } catch (error) {
       throw this.failed(error);
     }
@@ -162,7 +171,9 @@ export class InventoryClient {
     }
 
     throw this.failed(
-      new Error(`inventory reservation answered ${response.status}`),
+      new Error(
+        `inventory reservation answered ${response.status}: ${JSON.stringify(response.data ?? null).slice(0, 300)}`,
+      ),
       false,
     );
   }
@@ -177,6 +188,7 @@ export class InventoryClient {
         headers: this.internalHeaders(),
         validateStatus: (status) => status < 500,
       },
+      this.asTenant(),
     );
     if (response.status === 200) {
       return response.data;
@@ -201,6 +213,7 @@ export class InventoryClient {
         headers: this.internalHeaders(),
         validateStatus: (status) => status < 500,
       },
+      this.asTenant(),
     );
     if (response.status === 200) {
       return response.data;
@@ -226,6 +239,7 @@ export class InventoryClient {
           params: { callerService },
           validateStatus: (status) => status < 500,
         },
+        this.asTenant(),
       );
     } catch (error) {
       throw this.failed(error);
@@ -300,6 +314,7 @@ export class InventoryClient {
           headers: this.internalHeaders(),
           validateStatus: (status) => status < 500,
         },
+        this.asTenant(),
       );
       return response.status === 200 ? response.data : null;
     } catch (error) {
@@ -325,6 +340,18 @@ export class InventoryClient {
       throw this.failed(new Error('INTERNAL_S2S_TOKEN is not set'), false);
     }
     return { ...extra, 'x-internal-token': token };
+  }
+
+  /**
+   * Options of a call to `/internal/v1/*`: those routes are `@Public()` behind the
+   * service token, so the forwarded bearer token is not read there and the callee
+   * takes the tenant from `X-Tenant-Id` (honoured only after the token is valid).
+   */
+  private asTenant(): InternalHttpOptions {
+    return {
+      asService: true,
+      tenantId: TenantContext.current() ?? undefined,
+    };
   }
 
   private assertClosed(): void {

@@ -33,6 +33,7 @@ import {
   SalesReturnItemEntity,
 } from '../../infrastructure/persistence/sales.entities';
 import { InventoryClient } from '../../inventory/inventory.client';
+import { inventoryStockKey } from '../../inventory/stock-key';
 import { OrderItemEntity } from '../../orders/entities/order-item.entity';
 import { OrderEntity } from '../../orders/entities/order.entity';
 import { BranchScope, branchAllowed } from '../../presentation/access';
@@ -385,8 +386,9 @@ export class ReturnsService {
     if (restockLines.length > 0 && warehouseId && !inventoryReceiptId) {
       const qtyBySku = new Map<string, bigint>();
       for (const rl of restockLines) {
-        const prev = qtyBySku.get(rl.skuCode) ?? 0n;
-        qtyBySku.set(rl.skuCode, prev + parseQtyMillis(rl.returnQty));
+        const skuKey = inventoryStockKey(rl.variantId, rl.skuCode);
+        const prev = qtyBySku.get(skuKey) ?? 0n;
+        qtyBySku.set(skuKey, prev + parseQtyMillis(rl.returnQty));
       }
 
       const receiptRes = await this.inventoryClient.receiveReturnedStock({

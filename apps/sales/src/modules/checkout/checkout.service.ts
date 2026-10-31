@@ -33,6 +33,7 @@ import {
   OrderTenderEntity,
 } from '../../infrastructure/persistence/sales.entities';
 import { InventoryClient } from '../../inventory/inventory.client';
+import { inventoryStockKey } from '../../inventory/stock-key';
 import { OrderItemEntity } from '../../orders/entities/order-item.entity';
 import {
   CheckoutWorkflowEntity,
@@ -771,11 +772,15 @@ export class CheckoutService {
     quote: CalculatedOrderQuote & { couponCode: string | null },
     orderId: string,
   ): Promise<string> {
-    // Coalesce baseQty by skuCode so multi-line carts with same SKU reserve atomically
+    // Coalesce baseQty by variant (inventory's sku_id is the catalog variant id) so multi-line carts with same SKU reserve atomically
     const qtyBySku = new Map<string, bigint>();
     for (const line of quote.lines) {
-      const prev = qtyBySku.get(line.skuCode) ?? 0n;
-      qtyBySku.set(line.skuCode, prev + parseQtyMillis(line.baseQty));
+      const prev =
+        qtyBySku.get(inventoryStockKey(line.variantId, line.skuCode)) ?? 0n;
+      qtyBySku.set(
+        inventoryStockKey(line.variantId, line.skuCode),
+        prev + parseQtyMillis(line.baseQty),
+      );
     }
 
     const rsvLines = Array.from(qtyBySku.entries()).map(([skuId, millis]) => ({
