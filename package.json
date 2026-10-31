@@ -59,6 +59,7 @@
     "pack:libs": "pnpm build:libs && pnpm --dir libs/common pack --pack-destination ../../dist/packs && pnpm --dir libs/auth pack --pack-destination ../../dist/packs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "test:libs": "jest libs",
+    "test:arch": "jest libs/common/src/bootstrap/ddd-architecture-fitness.spec.ts apps/platform/src/platform-architecture.spec.ts apps/catalog/src/catalog-architecture.spec.ts apps/inventory/src/inventory-architecture.spec.ts apps/sales/src/sales-architecture.spec.ts apps/customer/src/customer-architecture.spec.ts apps/finance/src/finance-architecture.spec.ts apps/integration/src/integration-architecture.spec.ts apps/insight/src/insight-architecture.spec.ts",
     "test:int": "jest --config libs/events/test/jest-int.json",
     "redrive:dlq": "node scripts/redrive-dlq.js"
   },
