@@ -1,0 +1,12 @@
+{
+  "error": {
+    "name_exists": "Cửa hàng đã có vai trò với tên này",
+    "owner_immutable": "Không thể thay đổi vai trò chủ cửa hàng",
+    "unknown_permission": "Mã quyền không tồn tại",
+    "seeded_not_deletable": "Không thể xóa vai trò mặc định",
+    "in_use": "Vai trò này vẫn còn nhân viên, hãy chuyển họ sang vai trò khác trước",
+    "not_found": "Không tìm thấy vai trò",
+    "unknown_for_member": "Hãy chọn một vai trò có sẵn của cửa hàng cho nhân viên",
+    "owner_not_assignable": "Không thể gán vai trò chủ cửa hàng cho nhân viên khác"
+  }
+}

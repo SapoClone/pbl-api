@@ -17,6 +17,7 @@ import { AuthService } from './auth.service';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { JwksController } from './jwks.controller';
 import { RefreshTokenService } from './refresh-token.service';
+import { SessionService } from './session.service';
 
 @Module({
   imports: [
@@ -39,7 +40,7 @@ import { RefreshTokenService } from './refresh-token.service';
         audience: config.getOrThrow('auth.audience', { infer: true }),
         keyResolver: accessTokenService,
         // Register, create store and switch run before a store is chosen;
-        // tenant routes use @CurrentTenant()/@RequireRoles() (ADR-0008).
+        // tenant routes use @CurrentTenant()/@RequirePermission() (ADR-0008, ADR-0020).
         tenant: 'optional',
         isSessionRevoked: async (user: AuthUser) =>
           Boolean(
@@ -51,7 +52,7 @@ import { RefreshTokenService } from './refresh-token.service';
     }),
   ],
   controllers: [AuthController, JwksController],
-  providers: [AuthService, RefreshTokenService],
-  exports: [AuthService],
+  providers: [AuthService, RefreshTokenService, SessionService],
+  exports: [AuthService, SessionService],
 })
 export class AuthModule {}

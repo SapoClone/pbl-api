@@ -36,15 +36,28 @@ export class BranchService {
     private readonly outbox: EventOutbox,
   ) {}
 
+  /** `allowed`: the branch ids the caller may see, null for every branch */
   async list(
     query: ListBranchReqDto,
+    allowed: string[] | null = null,
   ): Promise<OffsetPaginatedDto<BranchResDto>> {
     const builder = this.branches
       .createQueryBuilder('branch')
       .orderBy('branch.createdAt', query.order)
       .addOrderBy('branch.id', query.order);
+    if (allowed) {
+      builder.andWhere(
+        allowed.length > 0 ? 'branch.id IN (:...allowed)' : '1 = 0',
+        { allowed },
+      );
+    }
     if (query.status) {
       builder.andWhere('branch.status = :status', { status: query.status });
+    }
+    if (query.isWarehouse !== undefined) {
+      builder.andWhere('branch.isWarehouse = :isWarehouse', {
+        isWarehouse: query.isWarehouse,
+      });
     }
     if (query.q) {
       const pattern = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;

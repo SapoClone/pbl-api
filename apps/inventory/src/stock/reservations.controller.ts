@@ -11,8 +11,8 @@ import {
   Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES, StockReservation } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
+import { StockReservation } from '@pbl/contracts';
 import type { Response } from 'express';
 import { ReserveStockReqDto } from './dto/stock.dto';
 import {
@@ -29,13 +29,17 @@ import { InventoryErrorCode } from './stock.service';
  */
 @ApiTags('internal')
 @ApiBearerAuth()
-@RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
 @Controller('internal/reservations')
 export class ReservationsController {
   constructor(private readonly reservations: ReservationsService) {}
 
-  /** 201 when the stock is held, 200 for an order that was already held, 409 with the shortages otherwise */
+  /**
+   * 201 when the stock is held, 200 for an order that was already held, 409 with the shortages otherwise.
+   * Sales calls this with the user's own token when an order is created (`pos.create`, `orders.create`)
+   * and when a draft is confirmed (`orders.update`), so all three open it.
+   */
   @Post()
+  @RequirePermission('pos.create', 'orders.create', 'orders.update')
   async reserve(
     @Body() dto: ReserveStockReqDto,
     @Res({ passthrough: true }) res: Response,
@@ -62,8 +66,14 @@ export class ReservationsController {
     }
   }
 
-  /** Gives the stock of an order back; idempotent */
+  /** Gives the stock of an order back; idempotent. Also called on cancel (`orders.delete`). */
   @Delete(':orderId')
+  @RequirePermission(
+    'pos.create',
+    'orders.create',
+    'orders.update',
+    'orders.delete',
+  )
   @HttpCode(HttpStatus.NO_CONTENT)
   release(@Param('orderId', ParseUUIDPipe) orderId: string): Promise<void> {
     return this.reservations.release(orderId);

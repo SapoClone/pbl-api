@@ -25,6 +25,8 @@ export const loggingRedactPaths = [
   'req.body.email',
   'req.body.password',
   'req.body.oldPassword',
+  'req.body.currentPassword',
+  'req.body.newPassword',
 ];
 
 export const DEFAULT_PAGE_LIMIT = 10;

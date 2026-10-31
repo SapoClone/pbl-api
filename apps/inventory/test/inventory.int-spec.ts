@@ -17,6 +17,7 @@ import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
 import { BranchProjectionEntity } from '../src/branches/branch-projection.entity';
 import { BranchProjectionHandler } from '../src/branches/branch-projection.handler';
 import { CreateInventoryTables1791900000000 } from '../src/migrations/1791900000000-create-inventory-tables';
+import { AddPurchasingAndDocuments1792100000000 } from '../src/migrations/1792100000000-add-purchasing-and-documents';
 import {
   InventoryLedgerEntity,
   StockItemEntity,
@@ -77,7 +78,9 @@ describe('inventory (Postgres)', () => {
     tenantId: string,
     items: { sku: string; quantity: number }[],
   ) =>
-    as(tenantId, () => stock.receive({ branchId: branchOf(tenantId), items }));
+    as(tenantId, () =>
+      stock.receive({ branchId: branchOf(tenantId), items }, null),
+    );
   const reserve = (
     tenantId: string,
     lines: { sku: string; quantity: number }[],
@@ -126,6 +129,7 @@ describe('inventory (Postgres)', () => {
         migrations: [
           ...CONSUMER_MIGRATIONS,
           CreateInventoryTables1791900000000,
+          AddPurchasingAndDocuments1792100000000,
         ],
       }),
     );
@@ -198,7 +202,10 @@ describe('inventory (Postgres)', () => {
 
     it('refuses a branch the store does not have (I001)', async () => {
       const error = await as(TENANT_B, () =>
-        stock.receive({ branchId: BRANCH, items: [{ sku: 'X', quantity: 1 }] }),
+        stock.receive(
+          { branchId: BRANCH, items: [{ sku: 'X', quantity: 1 }] },
+          null,
+        ),
       ).catch((e) => e);
 
       expect(error.getResponse()).toMatchObject({ errorCode: 'I001' });
@@ -213,8 +220,12 @@ describe('inventory (Postgres)', () => {
       await receive(TENANT_B, [{ sku: 'AO-01', quantity: 99 }]);
       await reserve(TENANT_A, [{ sku: 'AO-01', quantity: 4 }]);
 
-      const a = await as(TENANT_A, () => stock.list({ page: 1, limit: 10 }));
-      const b = await as(TENANT_B, () => stock.list({ page: 1, limit: 10 }));
+      const a = await as(TENANT_A, () =>
+        stock.list({ page: 1, limit: 10 }, null),
+      );
+      const b = await as(TENANT_B, () =>
+        stock.list({ page: 1, limit: 10 }, null),
+      );
 
       expect(a.data).toEqual([
         {
@@ -223,6 +234,9 @@ describe('inventory (Postgres)', () => {
           onHand: 10,
           reserved: 4,
           available: 6,
+          minQuantity: null,
+          maxQuantity: null,
+          level: 'ok',
         },
       ]);
       expect(b.data[0]).toMatchObject({ onHand: 99, available: 99 });

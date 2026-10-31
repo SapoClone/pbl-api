@@ -8,6 +8,7 @@ import { AccessTokenVerifier } from './access-token.verifier';
 import {
   AuthOptional,
   Public,
+  RequirePermission,
   RequireRoles,
   TenantOptional,
 } from './auth.decorators';
@@ -21,6 +22,9 @@ class Handlers {
   @TenantOptional() noTenant() {}
   @RequireRoles('owner') ownerOnly() {}
   @RequireRoles('owner', 'admin') ownerOrAdmin() {}
+  @RequirePermission('orders.create') createOrder() {}
+  @RequirePermission('orders.create', 'pos.create') anyOf() {}
+  @RequireRoles('owner') @RequirePermission('orders.create') both() {}
 }
 
 const user = (overrides: Partial<AuthUser> = {}): AuthUser => ({
@@ -28,6 +32,8 @@ const user = (overrides: Partial<AuthUser> = {}): AuthUser => ({
   sessionId: 's1',
   subjectType: 'account',
   roles: [],
+  permissions: [],
+  branches: ['*'],
   exp: 0,
   ...overrides,
 });
@@ -159,5 +165,68 @@ describe('AuthGuard', () => {
     await expect(
       guardFor('optional').canActivate(context('ownerOnly', 'Bearer abc').ctx),
     ).resolves.toBe(true);
+  });
+
+  describe('@RequirePermission()', () => {
+    const run = (handler: keyof Handlers, u: Partial<AuthUser>) => {
+      verifier.verify.mockResolvedValue(u.tenantId === null ? user() : user(u));
+      return guardFor('optional').canActivate(
+        context(handler, 'Bearer abc').ctx,
+      );
+    };
+
+    it('accepts a caller with the permission', async () => {
+      await expect(
+        run('createOrder', { tenantId: 't1', permissions: ['orders.create'] }),
+      ).resolves.toBe(true);
+    });
+
+    it('rejects a caller without it (403)', async () => {
+      await expect(
+        run('createOrder', { tenantId: 't1', permissions: ['orders.view'] }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('lets the wildcard pass', async () => {
+      await expect(
+        run('createOrder', { tenantId: 't1', permissions: ['*'] }),
+      ).resolves.toBe(true);
+    });
+
+    it('rejects a token without a store (403)', async () => {
+      await expect(
+        run('createOrder', { permissions: ['orders.create'] }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('needs only one of several codes', async () => {
+      await expect(
+        run('anyOf', { tenantId: 't1', permissions: ['pos.create'] }),
+      ).resolves.toBe(true);
+      await expect(
+        run('anyOf', { tenantId: 't1', permissions: ['pos.view'] }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('with @RequireRoles needs both', async () => {
+      const base = { tenantId: 't1' };
+      await expect(
+        run('both', {
+          ...base,
+          roles: ['owner'],
+          permissions: ['orders.create'],
+        }),
+      ).resolves.toBe(true);
+      await expect(
+        run('both', {
+          ...base,
+          roles: ['staff'],
+          permissions: ['orders.create'],
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        run('both', { ...base, roles: ['owner'], permissions: [] }),
+      ).rejects.toThrow(ForbiddenException);
+    });
   });
 });

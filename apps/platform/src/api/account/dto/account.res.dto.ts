@@ -14,5 +14,8 @@ export class AccountResDto {
   @StringField() @Expose() name: string;
   @StringFieldOptional({ nullable: true }) @Expose() phone: string | null;
   @EnumField(() => AccountStatus) @Expose() status: AccountStatus;
+  @ClassField(() => Date, { nullable: true })
+  @Expose()
+  lastLoginAt: Date | null;
   @ClassField(() => Date) @Expose() createdAt: Date;
 }

@@ -11,6 +11,8 @@
     "email_exists": "Account with this email already exists",
     "not_found": "User not found",
     "invalid_password": "Invalid password",
-    "invalid_token": "Invalid token"
+    "invalid_token": "Invalid token",
+    "account_locked": "Too many failed sign-in attempts. The account is locked for 15 minutes",
+    "current_password_wrong": "The current password is incorrect"
   }
 }

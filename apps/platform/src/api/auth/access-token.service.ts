@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AccessTokenSubjectType, KeyResolver } from '@pbl/auth';
+import { WILDCARD_PERMISSION } from '@pbl/contracts';
 import { createPrivateKey, createPublicKey, JsonWebKey } from 'crypto';
 
 const ALGORITHM = 'RS256';
@@ -76,6 +77,10 @@ export class AccessTokenService implements KeyResolver {
     sessionId: string;
     tenantId?: string;
     roles?: string[];
+    /** Permission codes of the member's role; `['*']` for the owner (ADR-0020) */
+    permissions?: string[];
+    /** Branch ids the member may act in; `['*']` = every branch */
+    branches?: string[];
   }): Promise<string> {
     const subjectType: AccessTokenSubjectType = 'account';
     return this.jwtService.signAsync(
@@ -85,6 +90,13 @@ export class AccessTokenService implements KeyResolver {
         sub_type: subjectType,
         ...(data.tenantId ? { tid: data.tenantId } : {}),
         roles: data.roles ?? [],
+        // a token without a store carries neither: @pbl/auth reads them as none / all
+        ...(data.tenantId
+          ? {
+              perms: data.permissions ?? [],
+              branches: data.branches ?? [WILDCARD_PERMISSION],
+            }
+          : {}),
       },
       {
         privateKey: this.privateKeyPem,

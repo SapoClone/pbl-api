@@ -9,6 +9,7 @@ describe('topology', () => {
     ]);
     expect(subscribersOf(SALES_ORDER_COMPLETED.type)).toEqual([
       'inventory',
+      'customer',
       'insight',
     ]);
     expect(subscribersOf('nobody.listens')).toEqual([]);

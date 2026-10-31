@@ -3,6 +3,7 @@ import { AllConfigType } from '@/config/config.type';
 import { SYSTEM_USER_ID } from '@/constants/app.constant';
 import { CacheKey } from '@/constants/cache.constant';
 import { ErrorCode } from '@/constants/error-code.constant';
+import { ClientInfo } from '@/decorators/client-info.decorator';
 import { ValidationException } from '@/exceptions/validation.exception';
 import { QueueService } from '@/queue/queue.service';
 import { createCacheKey } from '@/utils/cache.util';
@@ -41,9 +42,14 @@ import { RefreshResDto } from './dto/refresh.res.dto';
 import { RegisterReqDto } from './dto/register.req.dto';
 import { RegisterResDto } from './dto/register.res.dto';
 import {
+  LOGIN_LOCK_DURATION_MS,
+  MAX_FAILED_LOGINS,
+} from './login-lockout.constant';
+import {
   RefreshTokenReuseError,
   RefreshTokenService,
 } from './refresh-token.service';
+import { SessionService } from './session.service';
 
 // Argon2id hash of a random string, verified when no usable account exists
 const DUMMY_PASSWORD_HASH =
@@ -75,6 +81,7 @@ export class AuthService {
     private readonly cacheManager: Cache,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly outbox: EventOutbox,
+    private readonly sessions: SessionService,
   ) {}
 
   /**
@@ -82,10 +89,20 @@ export class AuthService {
    * @param dto LoginReqDto
    * @returns LoginResDto
    */
-  async signIn(dto: LoginReqDto): Promise<LoginResDto> {
+  async signIn(
+    dto: LoginReqDto,
+    client?: Partial<ClientInfo>,
+  ): Promise<LoginResDto> {
     const account = await this.accountRepository.findOne({
       where: { email: dto.email },
-      select: ['id', 'email', 'password', 'status'],
+      select: [
+        'id',
+        'email',
+        'password',
+        'status',
+        'failedLoginCount',
+        'lockedUntil',
+      ],
     });
     // Always run one argon2 verification, so the response time does not
     // reveal whether the email exists or the account is disabled
@@ -93,13 +110,22 @@ export class AuthService {
       dto.password,
       account?.password ?? DUMMY_PASSWORD_HASH,
     );
-    if (
-      !account ||
-      account.status !== AccountStatus.ACTIVE ||
-      !isPasswordValid
-    ) {
+    if (!account || account.status !== AccountStatus.ACTIVE) {
       throw new UnauthorizedException();
     }
+    // A locked account is refused even with the right password, and the
+    // attempt does not extend the lock
+    if (account.lockedUntil && account.lockedUntil.getTime() > Date.now()) {
+      throw new ValidationException(ErrorCode.E010);
+    }
+    if (!isPasswordValid) {
+      await this.registerFailedLogin(account.id);
+      throw new UnauthorizedException();
+    }
+    await this.accountRepository.update(
+      { id: account.id },
+      { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() },
+    );
 
     const memberships = await this.membershipService.findActiveMemberships(
       account.id,
@@ -111,14 +137,24 @@ export class AuthService {
     } else if (memberships.length === 1) {
       selected = memberships[0];
     }
-    return this.startSession(account.id, selected, memberships, 'password');
+    return this.startSession(
+      account.id,
+      selected,
+      memberships,
+      'password',
+      client,
+    );
   }
 
   /**
    * Select another store: end the current session (its access tokens stop
    * working immediately) and start one bound to the store (P0 spec, flow 4).
    */
-  async switchTenant(user: AuthUser, tenantId: string): Promise<LoginResDto> {
+  async switchTenant(
+    user: AuthUser,
+    tenantId: string,
+    client?: Partial<ClientInfo>,
+  ): Promise<LoginResDto> {
     const account = await this.accountRepository.findOne({
       where: { id: user.id as AccountEntity['id'] },
       select: ['id', 'status'],
@@ -136,7 +172,36 @@ export class AuthService {
       throw new NotFoundException();
     }
     await this.revokeSession(user.sessionId, user.exp * 1000 - Date.now());
-    return this.startSession(user.id, selected, memberships, 'switch_tenant');
+    return this.startSession(
+      user.id,
+      selected,
+      memberships,
+      'switch_tenant',
+      client,
+    );
+  }
+
+  /**
+   * One atomic statement, so parallel guesses cannot slip past the counter:
+   * the failure that reaches the limit starts the lock and resets the count.
+   */
+  private async registerFailedLogin(accountId: string): Promise<void> {
+    const reachesLimit = '"failed_login_count" + 1 >= :max';
+    await this.accountRepository
+      .createQueryBuilder()
+      .update(AccountEntity)
+      .set({
+        failedLoginCount: () =>
+          `CASE WHEN ${reachesLimit} THEN 0 ELSE "failed_login_count" + 1 END`,
+        lockedUntil: () =>
+          `CASE WHEN ${reachesLimit} THEN :lockedUntil ELSE "locked_until" END`,
+      })
+      .where('id = :id', { id: accountId })
+      .setParameters({
+        max: MAX_FAILED_LOGINS,
+        lockedUntil: new Date(Date.now() + LOGIN_LOCK_DURATION_MS),
+      })
+      .execute();
   }
 
   private async startSession(
@@ -144,13 +209,13 @@ export class AuthService {
     selected: Membership | null,
     memberships: Membership[],
     method: AccountLoggedInPayload['method'],
+    client?: Partial<ClientInfo>,
   ): Promise<LoginResDto> {
     // One refresh-token family per login; its id is the access token's sid
-    const { token: refreshToken, familyId } =
-      await this.refreshTokenService.issue(
-        accountId,
-        selected?.tenantId ?? null,
-      );
+    const tenantId = selected?.tenantId ?? null;
+    const { token: refreshToken, familyId } = client
+      ? await this.refreshTokenService.issue(accountId, tenantId, client)
+      : await this.refreshTokenService.issue(accountId, tenantId);
     const token = await this.createToken({
       id: accountId,
       sessionId: familyId,
@@ -169,6 +234,8 @@ export class AuthService {
         name: m.name,
         subdomain: m.subdomain,
         role: m.role,
+        roleId: m.roleId,
+        roleName: m.roleName,
       })),
     });
   }
@@ -251,6 +318,11 @@ export class AuthService {
       userToken.sessionId,
       userToken.exp * 1000 - Date.now(),
     );
+  }
+
+  /** Ends every session of the caller, this one included. */
+  async logoutAll(userToken: AuthUser): Promise<void> {
+    await this.sessions.revokeAll(userToken.id);
   }
 
   async refreshToken(dto: RefreshReqDto): Promise<RefreshResDto> {
@@ -354,6 +426,8 @@ export class AuthService {
       sessionId: data.sessionId,
       tenantId: data.membership?.tenantId,
       roles: data.membership ? [data.membership.role] : [],
+      permissions: data.membership?.permissions,
+      branches: data.membership?.branches,
     });
     return {
       accessToken,

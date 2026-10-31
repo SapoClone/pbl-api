@@ -14,8 +14,10 @@ import {
   IS_PUBLIC,
   IS_TENANT_OPTIONAL,
   PBL_AUTH_OPTIONS,
+  REQUIRED_PERMISSIONS,
   REQUIRED_ROLES,
 } from './auth.constants';
+import { hasPermission } from './auth.helpers';
 import { PblAuthOptions } from './auth.types';
 
 /**
@@ -54,16 +56,32 @@ export class AuthGuard implements CanActivate {
 
     const requiredRoles =
       this.reflector.getAllAndOverride<string[]>(REQUIRED_ROLES, targets) ?? [];
+    const requiredPermissions =
+      this.reflector.getAllAndOverride<string[]>(
+        REQUIRED_PERMISSIONS,
+        targets,
+      ) ?? [];
     const tenantRequired =
       (this.options.tenant ?? 'required') === 'required' &&
       !this.reflector.getAllAndOverride<boolean>(IS_TENANT_OPTIONAL, targets);
 
-    if ((tenantRequired || requiredRoles.length > 0) && !user.tenantId) {
+    if (
+      (tenantRequired ||
+        requiredRoles.length > 0 ||
+        requiredPermissions.length > 0) &&
+      !user.tenantId
+    ) {
       throw new ForbiddenException('A store must be selected');
     }
     if (
       requiredRoles.length > 0 &&
       !requiredRoles.some((role) => user.roles.includes(role))
+    ) {
+      throw new ForbiddenException();
+    }
+    if (
+      requiredPermissions.length > 0 &&
+      !hasPermission(user, ...requiredPermissions)
     ) {
       throw new ForbiddenException();
     }

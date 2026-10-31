@@ -12,7 +12,9 @@ export interface EventDefinition {
 /** Store roles carried in the access token (`roles`) and in `account_tenant.role`. */
 export const ROLES = {
   OWNER: 'owner',
+  /** @deprecated use ROLE_CODES.BRANCH_MANAGER (`branch_manager`) */
   MANAGER: 'manager',
+  /** @deprecated use ROLE_CODES.SALES_STAFF (`sales_staff`) */
   CASHIER: 'cashier',
 } as const;
 export type Role = (typeof ROLES)[keyof typeof ROLES];
@@ -87,6 +89,12 @@ export interface OrderCompletedPayload {
   createdBy: string;
   completedAt: string;
   items: { sku: string; name: string; quantity: number; unitPrice: number }[];
+  /** Where the order was sold (`pos`, `manual`, `website`, `shopee`, ...); absent on older events */
+  channel?: string;
+  /** Buyer, when the order has one */
+  customerId?: string | null;
+  /** Integer VND, what the goods cost; absent until costs are tracked */
+  costAmount?: number | null;
 }
 
 // ---- inventory (internal command, not an event: sales holds stock before it sells)

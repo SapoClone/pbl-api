@@ -20,12 +20,21 @@ import { DataSource } from 'typeorm';
 import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
 import { BranchProjectionEntity } from '../src/branches/branch-projection.entity';
 import { BranchProjectionHandler } from '../src/branches/branch-projection.handler';
+import { CodeSequenceService } from '../src/common/code-sequence.service';
 import { CreateSalesTables1791800000000 } from '../src/migrations/1791800000000-create-sales-tables';
 import { AddOrderIdempotency1791800000200 } from '../src/migrations/1791800000200-add-order-idempotency';
+import { CreateReferenceAndShiftTables1792000000000 } from '../src/migrations/1792000000000-create-reference-and-shift-tables';
+import { ExtendOrders1792000000100 } from '../src/migrations/1792000000100-extend-orders';
 import { CreateOrderReqDto } from '../src/orders/dto/create-order.req.dto';
 import { OrderItemEntity } from '../src/orders/entities/order-item.entity';
+import { OrderPaymentEntity } from '../src/orders/entities/order-payment.entity';
+import { OrderStatusHistoryEntity } from '../src/orders/entities/order-status-history.entity';
 import { OrderEntity } from '../src/orders/entities/order.entity';
 import { OrdersService, SalesErrorCode } from '../src/orders/orders.service';
+import { SalesChannelEntity } from '../src/reference/sales-channel.entity';
+import { ShippingProviderEntity } from '../src/reference/shipping-provider.entity';
+import { RegisterEntity } from '../src/registers/register.entity';
+import { ShiftEntity } from '../src/shifts/shift.entity';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -92,7 +101,13 @@ describe('sales (Postgres)', () => {
         entities: [
           OrderEntity,
           OrderItemEntity,
+          OrderPaymentEntity,
+          OrderStatusHistoryEntity,
           BranchProjectionEntity,
+          SalesChannelEntity,
+          ShippingProviderEntity,
+          RegisterEntity,
+          ShiftEntity,
           ...PRODUCER_ENTITIES,
           ...CONSUMER_ENTITIES,
         ],
@@ -101,6 +116,8 @@ describe('sales (Postgres)', () => {
           ...CONSUMER_MIGRATIONS,
           CreateSalesTables1791800000000,
           AddOrderIdempotency1791800000200,
+          CreateReferenceAndShiftTables1792000000000,
+          ExtendOrders1792000000100,
         ],
       }),
     });
@@ -110,6 +127,9 @@ describe('sales (Postgres)', () => {
       new EventOutbox(),
       // the real client talks HTTP to inventory; its contract is tested in the unit specs
       inventory as never,
+      new CodeSequenceService(),
+      TenantScopedRepository.forEntity(dataSource, RegisterEntity),
+      TenantScopedRepository.forEntity(dataSource, ShiftEntity),
     );
   });
 
@@ -122,6 +142,8 @@ describe('sales (Postgres)', () => {
     jest.clearAllMocks();
     inventory.reserve.mockResolvedValue(null);
     for (const table of [
+      'order_status_history',
+      'order_payment',
       'order_items',
       'orders',
       'branch_projection',

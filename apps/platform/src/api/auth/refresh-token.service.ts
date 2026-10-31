@@ -1,11 +1,12 @@
 import { Uuid } from '@/common/types/common.type';
 import { AllConfigType } from '@/config/config.type';
+import { ClientInfo } from '@/decorators/client-info.decorator';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import ms from 'ms';
-import { IsNull, Repository } from 'typeorm';
+import { In, IsNull, MoreThan, Repository } from 'typeorm';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 
 /** A refresh token was presented after it had already been used/revoked. */
@@ -36,6 +37,7 @@ export class RefreshTokenService {
   async issue(
     subjectId: Uuid | string,
     tenantId: string | null = null,
+    client?: Partial<ClientInfo>,
   ): Promise<{ token: string; familyId: Uuid }> {
     const familyId = randomUUID() as Uuid;
     const token = await this.store(
@@ -43,6 +45,7 @@ export class RefreshTokenService {
       familyId,
       subjectId,
       tenantId,
+      client,
     );
     return { token, familyId };
   }
@@ -82,6 +85,7 @@ export class RefreshTokenService {
         current.familyId,
         current.subjectId,
         current.tenantId,
+        { userAgent: current.userAgent, ip: current.ip },
       );
     });
 
@@ -104,6 +108,48 @@ export class RefreshTokenService {
     );
   }
 
+  /** The live logins of an account: one unrevoked, unexpired token per family. */
+  listActive(subjectId: string): Promise<RefreshTokenEntity[]> {
+    return this.repository.find({
+      where: {
+        subjectType: 'account',
+        subjectId: subjectId as Uuid,
+        revokedAt: IsNull(),
+        expiresAt: MoreThan(new Date()),
+      },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Revokes the live families of an account, optionally only those bound to
+   * one store, and returns their ids (they are the access tokens' sid).
+   */
+  async revokeActiveFamilies(
+    subjectId: string,
+    options: { tenantId?: string; exceptFamilyId?: string } = {},
+  ): Promise<string[]> {
+    const rows = await this.repository.find({
+      where: {
+        subjectType: 'account',
+        subjectId: subjectId as Uuid,
+        revokedAt: IsNull(),
+        ...(options.tenantId ? { tenantId: options.tenantId as Uuid } : {}),
+      },
+      select: ['familyId'],
+    });
+    const familyIds = [...new Set(rows.map((row) => row.familyId))].filter(
+      (id) => id !== options.exceptFamilyId,
+    );
+    if (familyIds.length > 0) {
+      await this.repository.update(
+        { familyId: In(familyIds), revokedAt: IsNull() },
+        { revokedAt: new Date() },
+      );
+    }
+    return familyIds;
+  }
+
   private async handleReuse(row: RefreshTokenEntity): Promise<never> {
     this.logger.warn(
       `Refresh token reuse detected (family ${row.familyId}); revoking the family`,
@@ -117,6 +163,7 @@ export class RefreshTokenService {
     familyId: Uuid,
     subjectId: Uuid | string,
     tenantId: string | null,
+    client?: Partial<ClientInfo>,
   ): Promise<string> {
     const token = randomBytes(32).toString('base64url');
     const lifetime = this.configService.getOrThrow('auth.refreshExpires', {
@@ -132,6 +179,8 @@ export class RefreshTokenService {
         tokenHash: hashToken(token),
         expiresAt: new Date(Date.now() + ms(lifetime)),
         revokedAt: null,
+        userAgent: client?.userAgent ?? null,
+        ip: client?.ip ?? null,
         createdBy: subjectId,
         updatedBy: subjectId,
       }),

@@ -39,6 +39,13 @@ export class RefreshTokenEntity extends AbstractEntity {
   @Column({ name: 'token_hash', type: 'varchar', length: 64 })
   tokenHash!: string;
 
+  /** The client that started this login, for the session list */
+  @Column({ name: 'user_agent', type: 'varchar', length: 255, nullable: true })
+  userAgent!: string | null;
+
+  @Column({ type: 'varchar', length: 45, nullable: true })
+  ip!: string | null;
+
   @Column({ name: 'expires_at', type: 'timestamptz' })
   expiresAt!: Date;
 

@@ -36,6 +36,15 @@ services:
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: pbl
+      DATABASE_SCHEMA: catalog
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - pbl-network
 
@@ -176,6 +185,23 @@ services:
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: pbl
+      DATABASE_SCHEMA: customer
+      # events: the customer service consumes sales.order.completed (spend, loyalty points)
+      EVENTS_TRANSPORT: sqs-direct
+      AWS_REGION: ap-southeast-1
+      AWS_ENDPOINT_URL_SQS: http://elasticmq:9324
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started
     networks:
       - pbl-network
 

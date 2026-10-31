@@ -1,0 +1,12 @@
+{
+  "error": {
+    "name_exists": "A role with this name already exists in this store",
+    "owner_immutable": "The owner role cannot be changed",
+    "unknown_permission": "Unknown permission code",
+    "seeded_not_deletable": "Default roles cannot be deleted",
+    "in_use": "This role still has members; move them to another role first",
+    "not_found": "Role not found",
+    "unknown_for_member": "Choose an existing role of this store for the member",
+    "owner_not_assignable": "The owner role cannot be given to another member"
+  }
+}
