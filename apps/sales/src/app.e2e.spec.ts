@@ -8,6 +8,8 @@ import {
 } from '@pbl/common';
 import { AddressInfo } from 'net';
 import request from 'supertest';
+import { OrderActionsService } from './orders/order-actions.service';
+import { OrderQueryService } from './orders/order-query.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
 
@@ -39,7 +41,11 @@ const ordersService = {
     PblHealthModule.forRoot({ service: 'sales', redisFromEnv: true }),
   ],
   controllers: [OrdersController],
-  providers: [{ provide: OrdersService, useValue: ordersService }],
+  providers: [
+    { provide: OrdersService, useValue: ordersService },
+    { provide: OrderActionsService, useValue: {} },
+    { provide: OrderQueryService, useValue: {} },
+  ],
 })
 class TestAppModule {}
 

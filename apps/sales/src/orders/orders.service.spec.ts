@@ -27,17 +27,23 @@ const dto = (
 });
 
 describe('OrdersService', () => {
-  let order: { save: jest.Mock };
+  let order: { save: jest.Mock; findOne: jest.Mock };
   let items: { save: jest.Mock };
   let orders: Record<string, jest.Mock>;
   let branches: { findOne: jest.Mock };
   let outbox: { add: jest.Mock };
   let inventory: { reserve: jest.Mock; release: jest.Mock };
   let em: unknown;
+  let codes: { next: jest.Mock };
+  let registers: { findOne: jest.Mock };
+  let shifts: { findOne: jest.Mock };
   let service: OrdersService;
 
   beforeEach(() => {
-    order = { save: jest.fn(async (o: OrderEntity) => o) };
+    order = {
+      save: jest.fn(async (o: OrderEntity) => o),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
     items = { save: jest.fn(async (rows: unknown[]) => rows) };
     em = { getRepository: jest.fn(() => items), connection: {} };
     orders = {
@@ -57,11 +63,17 @@ describe('OrdersService', () => {
       reserve: jest.fn().mockResolvedValue(null), // stock held
       release: jest.fn().mockResolvedValue(undefined),
     };
+    codes = { next: jest.fn().mockResolvedValue(10001) };
+    registers = { findOne: jest.fn().mockResolvedValue(null) };
+    shifts = { findOne: jest.fn().mockResolvedValue(null) };
     service = new OrdersService(
       orders as never,
       branches as never,
       outbox as never,
       inventory as never,
+      codes as never,
+      registers as never,
+      shifts as never,
     );
     // every request runs inside a tenant (the hold is keyed by tenant and key)
     const create = service.create.bind(service);
@@ -85,7 +97,7 @@ describe('OrdersService', () => {
     expect(res.totalAmount).toBe(2 * 120000 + 350000);
     expect(res.itemCount).toBe(3);
     expect(res.status).toBe('completed');
-    expect(res.code).toMatch(/^DH-/);
+    expect(res.code).toBe('DH10001');
     expect(res.items).toHaveLength(2);
   });
 
@@ -326,6 +338,113 @@ describe('OrdersService', () => {
       await expect(service.create('acc-1', KEY, dto())).rejects.toThrow(
         'connection lost',
       );
+    });
+  });
+
+  describe('new optional fields', () => {
+    it('adds channel, customerId and costAmount: null to the event at creation', async () => {
+      await service.create(
+        'acc-1',
+        KEY,
+        dto({ channel: 'website', customerId: 'c1' }),
+      );
+
+      expect(outbox.add).toHaveBeenCalledWith(
+        em,
+        SALES_ORDER_COMPLETED,
+        expect.objectContaining({
+          channel: 'website',
+          customerId: 'c1',
+          costAmount: null,
+        }),
+      );
+    });
+
+    it('defaults the channel to pos and the customer to null', async () => {
+      await service.create('acc-1', KEY, dto());
+
+      expect(outbox.add).toHaveBeenCalledWith(
+        em,
+        SALES_ORDER_COMPLETED,
+        expect.objectContaining({ channel: 'pos', customerId: null }),
+      );
+    });
+
+    it('a draft reserves nothing, writes no event and gets a code', async () => {
+      const { order: res } = await service.create(
+        'acc-1',
+        KEY,
+        dto({ orderStatus: 'draft' }),
+      );
+
+      expect(res).toMatchObject({
+        status: 'draft',
+        code: 'DH10001',
+        paymentStatus: 'unpaid',
+        fulfillmentStatus: 'unfulfilled',
+      });
+      expect(inventory.reserve).not.toHaveBeenCalled();
+      expect(outbox.add).not.toHaveBeenCalled();
+      expect(codes.next).toHaveBeenCalledWith(em, 'order', 10001);
+    });
+
+    it('confirmed reserves stock but writes no completed event', async () => {
+      await service.create('acc-1', KEY, dto({ orderStatus: 'confirmed' }));
+
+      expect(inventory.reserve).toHaveBeenCalledTimes(1);
+      expect(outbox.add).not.toHaveBeenCalled();
+    });
+
+    it('does not release stock for a draft that fails to save (none was held)', async () => {
+      orders.transaction.mockRejectedValue(new Error('connection lost'));
+
+      await expect(
+        service.create('acc-1', KEY, dto({ orderStatus: 'draft' })),
+      ).rejects.toThrow('connection lost');
+      expect(inventory.release).not.toHaveBeenCalled();
+    });
+
+    it('treats a legacy body and the same body with a new field as different requests', () => {
+      expect(hashRequest(dto({ channel: 'zalo' }))).not.toBe(
+        hashRequest(dto()),
+      );
+      expect(hashRequest(dto({ note: undefined }))).toBe(hashRequest(dto()));
+    });
+
+    it('stores the variant id of a line unvalidated', async () => {
+      await service.create(
+        'acc-1',
+        KEY,
+        dto({
+          items: [
+            {
+              sku: 'A',
+              name: 'a',
+              quantity: 1,
+              unitPrice: 1000,
+              variantId: 'v1',
+            },
+          ],
+        }),
+      );
+
+      expect(items.save).toHaveBeenCalledWith([
+        expect.objectContaining({ variantId: 'v1' }),
+      ]);
+    });
+
+    it('rejects a PATCH of an order that is not a draft with S014', async () => {
+      orders.findOne.mockResolvedValue(
+        Object.assign(new OrderEntity(), { status: 'confirmed', version: 1 }),
+      );
+
+      await expect(
+        TenantContext.run('t1', () =>
+          service.update('acc-1', 'o1', { note: 'x' }),
+        ),
+      ).rejects.toMatchObject({
+        response: { errorCode: SalesErrorCode.NOT_A_DRAFT },
+      });
     });
   });
 

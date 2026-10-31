@@ -1,0 +1,23 @@
+/** Error codes of this service (a domain letter plus 3 digits, api-conventions §6) */
+export const SalesErrorCode = {
+  UNKNOWN_BRANCH: 'S001',
+  IDEMPOTENCY_KEY_REQUIRED: 'S002',
+  IDEMPOTENCY_KEY_REUSED: 'S003',
+  OUT_OF_STOCK: 'S004',
+  // S005: inventory unavailable (inventory.client.ts)
+  DUPLICATE_REGISTER_CODE: 'S006',
+  UNKNOWN_REGISTER: 'S007',
+  VERSION_CONFLICT: 'S008',
+  SHIFT_CLOSED: 'S009',
+  SHIFT_NOT_OPEN: 'S010',
+  PAYMENT_BELOW_TOTAL: 'S011',
+  CUSTOMER_REQUIRED_FOR_COD: 'S013',
+  NOT_A_DRAFT: 'S014',
+  TRANSITION_NOT_ALLOWED: 'S015',
+  CANCEL_NOT_ALLOWED: 'S016',
+  PAYMENT_EXCEEDS_DUE: 'S017',
+  EXPORT_TOO_LARGE: 'S020',
+  SHIFT_ALREADY_OPEN: 'S021',
+  DRAFTS_OPEN: 'S022',
+  DISCOUNT_EXCEEDS_SUBTOTAL: 'S023',
+} as const;
