@@ -3,8 +3,12 @@ import { TenantContext } from '@pbl/common';
 import { SALES_FULFILLMENT_COMPLETED } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'node:crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import {
+  CommercialOrderStatus,
+  OrderAggregate,
+  OrderFulfillmentStatus,
+  OrderPaymentStatus,
   SalesDomainError,
   SalesDomainErrorCode,
   formatQtyMillis,
@@ -52,13 +56,17 @@ export class FulfillmentService {
           404,
         );
       }
-      if (order.orderStatus === 'CANCELLED' || order.orderStatus === 'DRAFT') {
-        throw new SalesDomainError(
-          SalesDomainErrorCode.FULFILLMENT_INVALID_STATE,
-          `Cannot create fulfillment for order in status ${order.orderStatus}`,
-          409,
-        );
-      }
+
+      const orderAgg = new OrderAggregate(
+        order.id,
+        tenantId,
+        order.code,
+        (order.orderStatus ?? 'DRAFT') as CommercialOrderStatus,
+        (order.paymentStatus ?? 'UNPAID') as OrderPaymentStatus,
+        (order.fulfillmentStatus ?? 'UNFULFILLED') as OrderFulfillmentStatus,
+        Number(order.version ?? 1),
+      );
+      orderAgg.assertCanCreateFulfillment();
 
       const orderItems = await em.getRepository(OrderItemEntity).find({
         where: { orderId, tenantId },
@@ -134,14 +142,23 @@ export class FulfillmentService {
         where: { tenantId, orderId },
         order: { createdAt: 'ASC' },
       });
-      const result = [];
-      for (const f of fulfillments) {
-        const items = await em.getRepository(FulfillmentItemEntity).find({
-          where: { tenantId, fulfillmentId: f.id },
-        });
-        result.push({ ...f, items });
+      if (fulfillments.length === 0) {
+        return [];
       }
-      return result;
+      const fulfillmentIds = fulfillments.map((f) => f.id);
+      const allItems = await em.getRepository(FulfillmentItemEntity).find({
+        where: { tenantId, fulfillmentId: In(fulfillmentIds) },
+      });
+      const itemsByFulfillment = new Map<string, FulfillmentItemEntity[]>();
+      for (const item of allItems) {
+        const list = itemsByFulfillment.get(item.fulfillmentId) ?? [];
+        list.push(item);
+        itemsByFulfillment.set(item.fulfillmentId, list);
+      }
+      return fulfillments.map((f) => ({
+        ...f,
+        items: itemsByFulfillment.get(f.id) ?? [],
+      }));
     });
   }
 
@@ -228,16 +245,26 @@ export class FulfillmentService {
         lock: { mode: 'pessimistic_write' },
       });
       if (lockedOrder) {
-        const prevOrderStatus = lockedOrder.orderStatus ?? 'CONFIRMED';
-        const prevFulfillmentStatus =
-          lockedOrder.fulfillmentStatus ?? 'RESERVED';
-        lockedOrder.fulfillmentStatus = 'FULFILLED';
-        if (lockedOrder.paymentStatus === 'PAID') {
-          lockedOrder.orderStatus = 'COMPLETED';
-          lockedOrder.status = 'completed';
-          lockedOrder.completedAt = now;
-        }
-        lockedOrder.version = Number(lockedOrder.version ?? 1) + 1;
+        const aggregate = new OrderAggregate(
+          lockedOrder.id,
+          tenantId,
+          lockedOrder.code,
+          (lockedOrder.orderStatus ?? 'CONFIRMED') as CommercialOrderStatus,
+          (lockedOrder.paymentStatus ?? 'UNPAID') as OrderPaymentStatus,
+          (lockedOrder.fulfillmentStatus ??
+            'RESERVED') as OrderFulfillmentStatus,
+          Number(lockedOrder.version ?? 1),
+          lockedOrder.warehouseId ?? null,
+          lockedOrder.reservationId ?? null,
+          lockedOrder.completedAt ?? null,
+        );
+        const transition = aggregate.markFulfilled(lockedF.code, now);
+
+        lockedOrder.fulfillmentStatus = aggregate.fulfillmentStatus;
+        lockedOrder.orderStatus = aggregate.orderStatus;
+        lockedOrder.status = aggregate.legacyStatus;
+        lockedOrder.completedAt = aggregate.completedAt;
+        lockedOrder.version = aggregate.version;
         lockedOrder.updatedAt = now;
         await em.save(OrderEntity, lockedOrder);
 
@@ -245,13 +272,13 @@ export class FulfillmentService {
           id: randomUUID(),
           tenantId,
           orderId: lockedOrder.id,
-          fromOrderStatus: prevOrderStatus,
-          toOrderStatus: lockedOrder.orderStatus ?? prevOrderStatus,
-          fromPaymentStatus: lockedOrder.paymentStatus ?? 'UNPAID',
-          toPaymentStatus: lockedOrder.paymentStatus ?? 'UNPAID',
-          fromFulfillmentStatus: prevFulfillmentStatus,
-          toFulfillmentStatus: 'FULFILLED',
-          reason: `FULFILLMENT_CONFIRMED:${lockedF.code}`,
+          fromOrderStatus: transition.fromOrderStatus,
+          toOrderStatus: transition.toOrderStatus,
+          fromPaymentStatus: transition.fromPaymentStatus,
+          toPaymentStatus: transition.toPaymentStatus,
+          fromFulfillmentStatus: transition.fromFulfillmentStatus,
+          toFulfillmentStatus: transition.toFulfillmentStatus,
+          reason: transition.reason,
           actorId,
           createdAt: now,
         });

@@ -11,6 +11,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DataSource, QueryFailedError } from 'typeorm';
 import {
   CommercialOrderStatus,
+  OrderAggregate,
   OrderFulfillmentStatus,
   OrderPaymentStatus,
   SalesDomainError,
@@ -364,24 +365,18 @@ export class M3OrdersService {
         );
       }
 
-      if (
-        dto.expectedVersion !== undefined &&
-        Number(order.version ?? 1) !== dto.expectedVersion
-      ) {
-        throw new SalesDomainError(
-          SalesDomainErrorCode.RESOURCE_VERSION_CONFLICT,
-          `Order ${order.code} version mismatch (expected ${dto.expectedVersion}, actual ${order.version})`,
-          409,
-        );
-      }
-
-      if (order.orderStatus !== 'DRAFT' && order.orderStatus !== 'PENDING') {
-        throw new SalesDomainError(
-          SalesDomainErrorCode.ORDER_INVALID_STATE,
-          `Order ${order.code} in status ${order.orderStatus} cannot be edited`,
-          409,
-        );
-      }
+      const lockedAgg = new OrderAggregate(
+        order.id,
+        tenantId,
+        order.code,
+        (order.orderStatus ?? 'DRAFT') as CommercialOrderStatus,
+        (order.paymentStatus ?? 'UNPAID') as OrderPaymentStatus,
+        (order.fulfillmentStatus ?? 'UNFULFILLED') as OrderFulfillmentStatus,
+        Number(order.version ?? 1),
+        order.warehouseId ?? null,
+        order.reservationId ?? null,
+      );
+      lockedAgg.assertEditable(dto.expectedVersion);
 
       if (dto.customerName !== undefined) order.customerName = dto.customerName;
       if (dto.note !== undefined) order.note = dto.note;
@@ -436,7 +431,7 @@ export class M3OrdersService {
         );
       }
 
-      order.version = Number(order.version ?? 1) + 1;
+      order.version = lockedAgg.bumpVersion();
       order.updatedAt = new Date();
       await em.save(OrderEntity, order);
     });
@@ -471,13 +466,16 @@ export class M3OrdersService {
       return this.getOrderDetails(orderId);
     }
 
-    if (order.orderStatus !== 'DRAFT' && order.orderStatus !== 'PENDING') {
-      throw new SalesDomainError(
-        SalesDomainErrorCode.ORDER_INVALID_STATE,
-        `Cannot confirm order in status ${order.orderStatus}`,
-        409,
-      );
-    }
+    const preConfirmAgg = new OrderAggregate(
+      order.id,
+      tenantId,
+      order.code,
+      (order.orderStatus ?? 'PENDING') as CommercialOrderStatus,
+      (order.paymentStatus ?? 'UNPAID') as OrderPaymentStatus,
+      (order.fulfillmentStatus ?? 'UNFULFILLED') as OrderFulfillmentStatus,
+      Number(order.version ?? 1),
+    );
+    preConfirmAgg.assertCanConfirm();
 
     const warehouseId = dto.warehouseId ?? order.warehouseId;
     if (!warehouseId) {
@@ -544,14 +542,28 @@ export class M3OrdersService {
         return;
       }
 
-      const prevOrderStatus = locked.orderStatus ?? 'PENDING';
-      const prevFulfillmentStatus = locked.fulfillmentStatus ?? 'UNFULFILLED';
-      locked.warehouseId = warehouseId;
-      locked.status = 'confirmed';
-      locked.orderStatus = 'CONFIRMED';
-      locked.fulfillmentStatus = 'RESERVED';
-      locked.reservationId = reservationId;
-      locked.version = Number(locked.version ?? 1) + 1;
+      const aggregate = new OrderAggregate(
+        locked.id,
+        tenantId,
+        locked.code,
+        (locked.orderStatus ?? 'PENDING') as CommercialOrderStatus,
+        (locked.paymentStatus ?? 'UNPAID') as OrderPaymentStatus,
+        (locked.fulfillmentStatus ?? 'UNFULFILLED') as OrderFulfillmentStatus,
+        Number(locked.version ?? 1),
+        locked.warehouseId ?? null,
+        locked.reservationId ?? null,
+      );
+      const transition = aggregate.confirmWithReservation(
+        warehouseId,
+        reservationId,
+      );
+
+      locked.warehouseId = aggregate.warehouseId;
+      locked.status = aggregate.legacyStatus;
+      locked.orderStatus = aggregate.orderStatus;
+      locked.fulfillmentStatus = aggregate.fulfillmentStatus;
+      locked.reservationId = aggregate.reservationId;
+      locked.version = aggregate.version;
       locked.updatedAt = new Date();
       await em.save(OrderEntity, locked);
 
@@ -559,13 +571,13 @@ export class M3OrdersService {
         id: randomUUID(),
         tenantId,
         orderId,
-        fromOrderStatus: prevOrderStatus,
-        toOrderStatus: 'CONFIRMED',
-        fromPaymentStatus: locked.paymentStatus ?? 'UNPAID',
-        toPaymentStatus: locked.paymentStatus ?? 'UNPAID',
-        fromFulfillmentStatus: prevFulfillmentStatus,
-        toFulfillmentStatus: 'RESERVED',
-        reason: 'ORDER_CONFIRMED_AND_RESERVED',
+        fromOrderStatus: transition.fromOrderStatus,
+        toOrderStatus: transition.toOrderStatus,
+        fromPaymentStatus: transition.fromPaymentStatus,
+        toPaymentStatus: transition.toPaymentStatus,
+        fromFulfillmentStatus: transition.fromFulfillmentStatus,
+        toFulfillmentStatus: transition.toFulfillmentStatus,
+        reason: transition.reason,
         actorId,
         createdAt: new Date(),
       });
@@ -581,9 +593,9 @@ export class M3OrdersService {
         code: locked.code,
         branchId: locked.branchId,
         channelType: locked.channelType ?? 'MANUAL',
-        orderStatus: 'CONFIRMED',
-        paymentStatus: locked.paymentStatus ?? 'UNPAID',
-        fulfillmentStatus: 'RESERVED',
+        orderStatus: aggregate.orderStatus,
+        paymentStatus: aggregate.paymentStatus,
+        fulfillmentStatus: aggregate.fulfillmentStatus,
         subtotal: locked.subtotal ?? '0.00',
         discountTotal: totalDiscountVnd,
         taxTotal: locked.taxTotal ?? '0.00',
@@ -646,12 +658,19 @@ export class M3OrdersService {
         return;
       }
 
-      assertCanCancelOrder({
-        orderStatus: (locked.orderStatus ??
-          'COMPLETED') as CommercialOrderStatus,
-        fulfillmentStatus: (locked.fulfillmentStatus ??
-          'FULFILLED') as OrderFulfillmentStatus,
-      });
+      const now = new Date();
+      const aggregate = new OrderAggregate(
+        locked.id,
+        tenantId,
+        locked.code,
+        (locked.orderStatus ?? 'COMPLETED') as CommercialOrderStatus,
+        (locked.paymentStatus ?? 'UNPAID') as OrderPaymentStatus,
+        (locked.fulfillmentStatus ?? 'FULFILLED') as OrderFulfillmentStatus,
+        Number(locked.version ?? 1),
+        locked.warehouseId ?? null,
+        locked.reservationId ?? null,
+      );
+      const transition = aggregate.cancel(dto.reason, now);
 
       await this.promotionsService.releaseCouponClaimWithinTransaction(
         em,
@@ -659,16 +678,12 @@ export class M3OrdersService {
         orderId,
       );
 
-      const prevOrderStatus = locked.orderStatus ?? 'PENDING';
-      const prevFulfillmentStatus = locked.fulfillmentStatus ?? 'UNFULFILLED';
-      const now = new Date();
-
-      locked.status = 'cancelled';
-      locked.orderStatus = 'CANCELLED';
-      locked.fulfillmentStatus = 'UNFULFILLED';
-      locked.cancelReason = dto.reason ?? 'CANCELLED_BY_USER';
-      locked.cancelledAt = now;
-      locked.version = Number(locked.version ?? 1) + 1;
+      locked.status = aggregate.legacyStatus;
+      locked.orderStatus = aggregate.orderStatus;
+      locked.fulfillmentStatus = aggregate.fulfillmentStatus;
+      locked.cancelReason = aggregate.cancelReason;
+      locked.cancelledAt = aggregate.cancelledAt;
+      locked.version = aggregate.version;
       locked.updatedAt = now;
       await em.save(OrderEntity, locked);
 
@@ -676,13 +691,13 @@ export class M3OrdersService {
         id: randomUUID(),
         tenantId,
         orderId,
-        fromOrderStatus: prevOrderStatus,
-        toOrderStatus: 'CANCELLED',
-        fromPaymentStatus: locked.paymentStatus ?? 'UNPAID',
-        toPaymentStatus: locked.paymentStatus ?? 'UNPAID',
-        fromFulfillmentStatus: prevFulfillmentStatus,
-        toFulfillmentStatus: 'UNFULFILLED',
-        reason: dto.reason ?? 'ORDER_CANCELLED',
+        fromOrderStatus: transition.fromOrderStatus,
+        toOrderStatus: transition.toOrderStatus,
+        fromPaymentStatus: transition.fromPaymentStatus,
+        toPaymentStatus: transition.toPaymentStatus,
+        fromFulfillmentStatus: transition.fromFulfillmentStatus,
+        toFulfillmentStatus: transition.toFulfillmentStatus,
+        reason: transition.reason,
         actorId,
         createdAt: now,
       });

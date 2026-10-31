@@ -12,6 +12,11 @@ import { EventOutbox } from '@pbl/events';
 import { plainToInstance } from 'class-transformer';
 import { DataSource } from 'typeorm';
 import {
+  PlatformDomainError,
+  PlatformDomainErrorCode,
+  TenantMembershipAggregate,
+} from '../../domain/platform-domain';
+import {
   AccountEntity,
   AccountStatus,
 } from '../account/entities/account.entity';
@@ -111,18 +116,31 @@ export class MemberService {
       if (!membership) {
         throw new NotFoundException();
       }
-      if (membership.role === TenantRole.OWNER) {
-        throw new ValidationException(ErrorCode.T003);
+      const aggregate = new TenantMembershipAggregate(
+        accountId,
+        tenantId,
+        membership.role,
+      );
+      let transition: ReturnType<TenantMembershipAggregate['changeRole']>;
+      try {
+        transition = aggregate.changeRole(role);
+      } catch (err) {
+        if (
+          err instanceof PlatformDomainError &&
+          err.code === PlatformDomainErrorCode.OWNER_ROLE_LOCKED
+        ) {
+          throw new ValidationException(ErrorCode.T003);
+        }
+        throw err;
       }
-      const previousRole = membership.role;
-      if (previousRole !== role) {
+      if (transition.changed) {
         membership.role = role;
         await em.update(AccountTenantEntity, { accountId, tenantId }, { role });
         await this.outbox.add(em, PLATFORM_MEMBERSHIP_ROLE_CHANGED, {
           accountId,
           email: membership.account.email,
           role,
-          previousRole,
+          previousRole: transition.previousRole as TenantRole,
           changedBy: actorId,
         } satisfies MembershipEventPayload);
       }

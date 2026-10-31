@@ -211,10 +211,7 @@ const DEFAULT_DEV_MASTER_KEY =
   'sapoclone-m6-integration-default-master-key-32b!';
 
 function deriveAesKey(rawMasterKey?: string): Buffer {
-  const secret =
-    rawMasterKey ||
-    process.env.INTEGRATION_CREDENTIAL_MASTER_KEY ||
-    DEFAULT_DEV_MASTER_KEY;
+  const secret = rawMasterKey || DEFAULT_DEV_MASTER_KEY;
   return createHash('sha256').update(secret, 'utf8').digest();
 }
 
@@ -739,5 +736,227 @@ export function classifyIntegrationError(error: unknown): {
     category: 'PERMANENT_CONFIG',
     code: 'UNHANDLED_INTEGRATION_ERROR',
     retryable: false,
+  };
+}
+
+// ============================================================================
+// 7. CHANNEL CONNECTION AGGREGATE & ANTI-CORRUPTION LAYER (M7.5 DDD)
+// ============================================================================
+
+export class ChannelConnectionAggregate {
+  constructor(
+    public readonly id: string,
+    public readonly tenantId: string,
+    public readonly provider: MarketplaceProvider,
+    private _status: ConnectionStatus,
+    private _safetyStockBuffer: number,
+    private _stockAllocationPercent: number,
+  ) {
+    this.assertValidAllocationPolicy(
+      _safetyStockBuffer,
+      _stockAllocationPercent,
+    );
+  }
+
+  get status(): ConnectionStatus {
+    return this._status;
+  }
+
+  get safetyStockBuffer(): number {
+    return this._safetyStockBuffer;
+  }
+
+  get stockAllocationPercent(): number {
+    return this._stockAllocationPercent;
+  }
+
+  transitionTo(next: ConnectionStatus): void {
+    assertValidConnectionTransition(this._status, next);
+    this._status = next;
+  }
+
+  updateAllocationPolicy(safetyBuffer: number, allocationPct: number): void {
+    this.assertValidAllocationPolicy(safetyBuffer, allocationPct);
+    this._safetyStockBuffer = Math.floor(safetyBuffer);
+    this._stockAllocationPercent = Math.floor(allocationPct);
+  }
+
+  computePublishableStock(onHandQty: number, reservedQty: number): number {
+    return calculateChannelPublishableQuantity({
+      onHandQty,
+      reservedQty,
+      safetyBuffer: this._safetyStockBuffer,
+      allocationPercent: this._stockAllocationPercent,
+    }).publishableQty;
+  }
+
+  private assertValidAllocationPolicy(
+    safetyBuffer: number,
+    allocationPct: number,
+  ): void {
+    if (!Number.isFinite(safetyBuffer) || safetyBuffer < 0) {
+      throw new IntegrationDomainError(
+        IntegrationDomainErrorCode.VALIDATION_ERROR,
+        `safetyStockBuffer must be a non-negative integer, got ${safetyBuffer}`,
+        422,
+      );
+    }
+    if (
+      !Number.isFinite(allocationPct) ||
+      allocationPct < 0 ||
+      allocationPct > 100
+    ) {
+      throw new IntegrationDomainError(
+        IntegrationDomainErrorCode.VALIDATION_ERROR,
+        `stockAllocationPercent must be between 0 and 100, got ${allocationPct}`,
+        422,
+      );
+    }
+  }
+}
+
+export interface ExternalMarketplaceOrderInput {
+  provider: MarketplaceProvider;
+  connectionId: string;
+  branchId: string;
+  warehouseId: string | null;
+  externalOrderId: string;
+  rawStatus: string;
+  buyerName?: string | null;
+  shippingFee?: string | number | null;
+  lines: ReadonlyArray<{
+    externalSkuId: string;
+    qty: number;
+    unitPrice?: string | number;
+  }>;
+}
+
+export interface ResolvedInternalSkuMapping {
+  externalSkuId: string;
+  internalVariantId: string;
+  internalSkuCode: string;
+  mappingStatus: SkuMappingStatus;
+  isSellable: boolean;
+}
+
+export interface CanonicalSalesOrderImportCommand {
+  sourceConnectionId: string;
+  externalOrderId: string;
+  channelType: 'MARKETPLACE';
+  channelId: MarketplaceProvider;
+  branchId: string;
+  warehouseId: string | null;
+  customerName: string;
+  normalizedExternalStatus: NormalizedExternalOrderStatus;
+  initialOrderStatus: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+  autoConfirm: boolean;
+  shippingFee: string;
+  lines: Array<{
+    variantId: string;
+    skuCode: string;
+    qty: string;
+  }>;
+}
+
+/**
+ * Anti-Corruption Layer (ACL) translating external Shopee/Lazada order payloads
+ * and SKU mappings into canonical internal Sales import commands without leaking
+ * provider DTOs or raw status strings into Sales.
+ */
+export function translateExternalOrderToCanonicalSalesImport(
+  externalOrder: ExternalMarketplaceOrderInput,
+  skuMappingByExternalSku: ReadonlyMap<string, ResolvedInternalSkuMapping>,
+): CanonicalSalesOrderImportCommand {
+  if (!externalOrder.externalOrderId?.trim()) {
+    throw new IntegrationDomainError(
+      IntegrationDomainErrorCode.VALIDATION_ERROR,
+      'External order ID is required for canonical import translation',
+      422,
+    );
+  }
+  if (!externalOrder.lines || externalOrder.lines.length === 0) {
+    throw new IntegrationDomainError(
+      IntegrationDomainErrorCode.VALIDATION_ERROR,
+      `External order ${externalOrder.externalOrderId} contains no line items`,
+      422,
+    );
+  }
+
+  const normalizedStatus = normalizeProviderOrderStatus(
+    externalOrder.provider,
+    externalOrder.rawStatus,
+  );
+
+  const canonicalLines: Array<{
+    variantId: string;
+    skuCode: string;
+    qty: string;
+  }> = [];
+
+  for (const line of externalOrder.lines) {
+    if (!Number.isFinite(line.qty) || line.qty <= 0) {
+      throw new IntegrationDomainError(
+        IntegrationDomainErrorCode.VALIDATION_ERROR,
+        `Invalid external line quantity ${line.qty} on SKU ${line.externalSkuId}`,
+        422,
+      );
+    }
+    const mapping = skuMappingByExternalSku.get(line.externalSkuId.trim());
+    if (!mapping || mapping.mappingStatus !== 'ACTIVE') {
+      throw new IntegrationDomainError(
+        IntegrationDomainErrorCode.EXTERNAL_ORDER_MAPPING_REQUIRED,
+        `External SKU ${line.externalSkuId} is not mapped to an active internal variant`,
+        409,
+        { externalSkuId: line.externalSkuId },
+      );
+    }
+    if (!mapping.isSellable) {
+      throw new IntegrationDomainError(
+        IntegrationDomainErrorCode.INTERNAL_VARIANT_INACTIVE,
+        `Mapped internal variant ${mapping.internalSkuCode} is not sellable`,
+        409,
+        {
+          externalSkuId: line.externalSkuId,
+          internalVariantId: mapping.internalVariantId,
+        },
+      );
+    }
+    canonicalLines.push({
+      variantId: mapping.internalVariantId,
+      skuCode: mapping.internalSkuCode,
+      qty: Number(line.qty).toFixed(3),
+    });
+  }
+
+  const initialOrderStatus: 'PENDING' | 'CONFIRMED' | 'CANCELLED' =
+    normalizedStatus === 'CANCELLED'
+      ? 'CANCELLED'
+      : normalizedStatus === 'UNPAID'
+        ? 'PENDING'
+        : 'CONFIRMED';
+
+  const autoConfirm =
+    initialOrderStatus === 'CONFIRMED' && Boolean(externalOrder.warehouseId);
+
+  const shippingFeeNum = Number(externalOrder.shippingFee ?? 0);
+  const shippingFee =
+    Number.isFinite(shippingFeeNum) && shippingFeeNum >= 0
+      ? shippingFeeNum.toFixed(2)
+      : '0.00';
+
+  return {
+    sourceConnectionId: externalOrder.connectionId,
+    externalOrderId: externalOrder.externalOrderId.trim(),
+    channelType: 'MARKETPLACE',
+    channelId: externalOrder.provider,
+    branchId: externalOrder.branchId,
+    warehouseId: externalOrder.warehouseId,
+    customerName:
+      externalOrder.buyerName?.trim() || `${externalOrder.provider} Customer`,
+    normalizedExternalStatus: normalizedStatus,
+    initialOrderStatus,
+    autoConfirm,
+    shippingFee,
+    lines: canonicalLines,
   };
 }
