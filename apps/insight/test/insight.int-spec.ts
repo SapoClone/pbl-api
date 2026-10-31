@@ -31,11 +31,6 @@ import { InsightRebuildService } from '../src/modules/rebuild/insight-rebuild.se
 import { InsightReconciliationService } from '../src/modules/reconciliation/insight-reconciliation.service';
 import { InsightReportingService } from '../src/modules/reporting/insight-reporting.service';
 import { DailySalesEntity } from '../src/sales-summary/daily-sales.entity';
-import {
-  CustomerSalesDailyEntity,
-  HourlySalesEntity,
-  ProductSalesDailyEntity,
-} from '../src/sales-summary/read-model.entities';
 import { SalesSummaryHandler } from '../src/sales-summary/sales-summary.handler';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';

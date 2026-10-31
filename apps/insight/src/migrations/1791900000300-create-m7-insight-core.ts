@@ -25,9 +25,8 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     const reconIssues = t('reconciliation_issues');
     const exportJobs = t('report_export_jobs');
 
-    // Also enable tenant RLS on M0 tables if not yet enabled
+    // Tenant RLS on the audit log (created by the earlier migration)
     await enableTenantRlsPolicy(queryRunner, t('audit_log'));
-    await enableTenantRlsPolicy(queryRunner, t('daily_sales'));
 
     // 1. Insight Dimension Cache (Catalog, Customer, Branch metadata)
     await queryRunner.query(`
