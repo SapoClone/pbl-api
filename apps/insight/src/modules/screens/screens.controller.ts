@@ -18,8 +18,8 @@ import { ScreenExportService } from './screen-export.service';
 import { ScreenReportsService } from './screen-reports.service';
 
 /**
- * The screen-contract routes (docs/specs/2026-10-28-api-contracts), served beside the M7 routes
- * under `api/v1/insight`. Dashboard routes need `dashboard.view`, report routes `reports.view`
+ * The screen-contract routes (docs/specs/2026-10-28-api-contracts), served at `api/v1/...` beside
+ * the M7 routes of `api/v1/insight`. Dashboard routes need `dashboard.view`, report routes `reports.view`
  * (ADR-0020). `@AllowedBranches()` hands the caller's branch scope to the reads: a foreign
  * `branchId` is 404, no `branchId` aggregates the allowed branches only. Audit logs have no
  * branch, so they stay tenant-wide.
