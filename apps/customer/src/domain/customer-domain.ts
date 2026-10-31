@@ -163,6 +163,27 @@ export function maskPhoneNumber(
   return `${phone.slice(0, 3)}***${phone.slice(-4)}`;
 }
 
+/**
+ * Copy of an address-like record with its phones masked unless `fullPhone`
+ * (the caller holds customers.update). Null stays null.
+ */
+export function maskAddressPhones<
+  T extends { phone: string | null; phoneNormalized: string | null },
+>(address: T, fullPhone: boolean): T;
+export function maskAddressPhones<
+  T extends { phone: string | null; phoneNormalized: string | null },
+>(address: T | null, fullPhone: boolean): T | null;
+export function maskAddressPhones<
+  T extends { phone: string | null; phoneNormalized: string | null },
+>(address: T | null, fullPhone: boolean): T | null {
+  if (!address || fullPhone) return address;
+  return {
+    ...address,
+    phone: maskPhoneNumber(address.phone),
+    phoneNormalized: maskPhoneNumber(address.phoneNormalized),
+  };
+}
+
 export function maskEmailAddress(
   email: string | null | undefined,
 ): string | null {

@@ -26,6 +26,7 @@ import {
   CashbookCategoryEntity,
   CashbookEntryEntity,
 } from '../../infrastructure/persistence/finance.entities';
+import { applyBranchScope, BranchScope } from '../../presentation/branch-scope';
 import { FinancialJournalService } from '../financial-journal/financial-journal.service';
 import {
   CreateCashbookCategoryDto,
@@ -141,6 +142,7 @@ export class CashbookService {
     idempotencyKeyHeader: string | undefined,
     dto: CreateCashbookVoucherDto,
     tenantId = TenantContext.require(),
+    scope: BranchScope = null,
   ) {
     return this.createVoucher(
       tenantId,
@@ -148,6 +150,7 @@ export class CashbookService {
       'RECEIPT',
       idempotencyKeyHeader,
       dto,
+      scope,
     );
   }
 
@@ -156,6 +159,7 @@ export class CashbookService {
     idempotencyKeyHeader: string | undefined,
     dto: CreateCashbookVoucherDto,
     tenantId = TenantContext.require(),
+    scope: BranchScope = null,
   ) {
     return this.createVoucher(
       tenantId,
@@ -163,6 +167,7 @@ export class CashbookService {
       'EXPENSE',
       idempotencyKeyHeader,
       dto,
+      scope,
     );
   }
 
@@ -172,6 +177,7 @@ export class CashbookService {
     direction: 'RECEIPT' | 'EXPENSE',
     idempotencyKeyHeader: string | undefined,
     dto: CreateCashbookVoucherDto,
+    scope: BranchScope = null,
   ) {
     const amountCents = parseMoneyCents(dto.amount, {
       allowZero: false,
@@ -194,6 +200,22 @@ export class CashbookService {
     });
 
     return this.runInTenantTx(tenantId, async (em) => {
+      if (scope) {
+        // A restricted member may only book into a cash account of their branches.
+        const account = await em
+          .getRepository(CashAccountEntity)
+          .findOne({ where: { id: dto.cashAccountId, tenantId } });
+        if (
+          account &&
+          (!account.branchId || !scope.includes(account.branchId))
+        ) {
+          throw new FinanceDomainError(
+            FinanceDomainErrorCode.CASH_ACCOUNT_NOT_FOUND,
+            `Cash account ${dto.cashAccountId} not found`,
+            404,
+          );
+        }
+      }
       return this.createAndOptionallyPostVoucherInTx(em, tenantId, {
         actorId,
         direction,
@@ -814,6 +836,7 @@ export class CashbookService {
   async listEntries(
     query: ListCashbookEntriesQueryDto,
     tenantId = TenantContext.require(),
+    scope: BranchScope = null,
   ) {
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 20)));
     const offset = Math.max(0, Number(query.offset ?? 0));
@@ -823,6 +846,7 @@ export class CashbookService {
       if (query.branchId) {
         where.branchId = query.branchId;
       }
+      applyBranchScope(where, scope);
       if (query.cashAccountId) {
         where.cashAccountId = query.cashAccountId;
       }
@@ -865,10 +889,12 @@ export class CashbookService {
   async exportEntriesCsv(
     query: ListCashbookEntriesQueryDto,
     tenantId = TenantContext.require(),
+    scope: BranchScope = null,
   ): Promise<{ filename: string; rowCount: number; csvContent: string }> {
     const res = await this.listEntries(
       { ...query, limit: '100', offset: '0' },
       tenantId,
+      scope,
     );
     const header =
       'code,direction,voucherType,amount,currency,status,cashAccountId,categoryId,sourceType,sourceId,postedAt,createdAt';

@@ -27,6 +27,7 @@ import {
   CustomerDebtLedgerEntity,
   CustomerReceivableEntity,
 } from '../../infrastructure/persistence/finance.entities';
+import { applyBranchScope, BranchScope } from '../../presentation/branch-scope';
 import { CashAccountsService } from '../cash-accounts/cash-accounts.service';
 import { CashbookService } from '../cashbook/cashbook.service';
 import { CreditAuthorizationService } from '../credit-authorization/credit-authorization.service';
@@ -611,6 +612,7 @@ export class ReceivablesService {
   async listReceivables(
     query: ListReceivablesQueryDto,
     tenantId = TenantContext.require(),
+    scope: BranchScope = null,
   ) {
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 20)));
     const offset = Math.max(0, Number(query.offset ?? 0));
@@ -626,6 +628,7 @@ export class ReceivablesService {
       if (query.status) {
         where.status = query.status;
       }
+      applyBranchScope(where, scope);
 
       const [items, total] = await em
         .getRepository(CustomerReceivableEntity)

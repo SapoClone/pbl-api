@@ -13,6 +13,8 @@ import {
   WarehouseStockShortage,
 } from '@pbl/contracts';
 
+import { isTestEnvironment, readInternalToken } from '../config/sales.config';
+
 export const InventoryClientErrorCode = {
   UNAVAILABLE: 'S005',
   TIMEOUT_RECOVERY_PENDING: 'S006',
@@ -37,9 +39,10 @@ const BREAKER_OPEN_MS = 10_000;
 
 /**
  * Asks `inventory` to hold stock before an order is created (ADR-0010, ADR-0012):
- * the one synchronous call between services. It forwards the caller's token and
- * tenant header (`X-Tenant-Id`), so inventory verifies the tenant and enforces
- * idempotency. When inventory cannot be reached the sale is refused or placed in
+ * the one synchronous call between services. It forwards the caller's token (the
+ * tenant comes from it, never from a header) and sends the shared service token
+ * `x-internal-token` (`INTERNAL_S2S_TOKEN`) on every internal route, so inventory
+ * verifies the caller and enforces idempotency. When inventory cannot be reached the sale is refused or placed in
  * `RECOVERY_PENDING` (fail closed), and after a run of failures the breaker stops
  * calling for a few seconds so requests fail fast instead of queueing.
  */
@@ -66,7 +69,11 @@ export class InventoryClient {
       response = await this.http.post(
         '/internal/reservations',
         { orderId, branchId, lines },
-        { timeout: TIMEOUT_MS, validateStatus: (status) => status < 500 },
+        {
+          timeout: TIMEOUT_MS,
+          headers: this.internalHeaders(),
+          validateStatus: (status) => status < 500,
+        },
       );
     } catch (error) {
       throw this.failed(error);
@@ -93,6 +100,7 @@ export class InventoryClient {
     try {
       await this.http.delete(`/internal/reservations/${orderId}`, {
         timeout: TIMEOUT_MS,
+        headers: this.internalHeaders(),
       });
     } catch (error) {
       this.logger.warn(
@@ -120,7 +128,7 @@ export class InventoryClient {
         }
       >('/internal/v1/reservations', req, {
         timeout: TIMEOUT_MS,
-        headers: { 'Idempotency-Key': idempotencyKey },
+        headers: this.internalHeaders({ 'Idempotency-Key': idempotencyKey }),
         validateStatus: (status) => status < 500,
       });
     } catch (error) {
@@ -166,6 +174,7 @@ export class InventoryClient {
       `/internal/v1/reservations/${reservationId}`,
       {
         timeout: TIMEOUT_MS,
+        headers: this.internalHeaders(),
         validateStatus: (status) => status < 500,
       },
     );
@@ -189,6 +198,7 @@ export class InventoryClient {
       {},
       {
         timeout: TIMEOUT_MS,
+        headers: this.internalHeaders(),
         validateStatus: (status) => status < 500,
       },
     );
@@ -212,6 +222,7 @@ export class InventoryClient {
         `/internal/v1/reservations/by-key/${encodeURIComponent(idempotencyKey)}`,
         {
           timeout: TIMEOUT_MS,
+          headers: this.internalHeaders(),
           params: { callerService },
           validateStatus: (status) => status < 500,
         },
@@ -286,6 +297,7 @@ export class InventoryClient {
         reason ? { reason } : {},
         {
           timeout: TIMEOUT_MS,
+          headers: this.internalHeaders(),
           validateStatus: (status) => status < 500,
         },
       );
@@ -296,6 +308,23 @@ export class InventoryClient {
       );
       return null;
     }
+  }
+
+  /**
+   * Headers of a call to an internal route: the shared service token. Without
+   * `INTERNAL_S2S_TOKEN` the call is refused here (fail closed), except under
+   * `NODE_ENV=test`. The tenant never travels in a header: the callee takes it
+   * from the forwarded bearer token.
+   */
+  private internalHeaders(
+    extra: Record<string, string> = {},
+  ): Record<string, string> {
+    const token = readInternalToken();
+    if (!token) {
+      if (isTestEnvironment()) return extra;
+      throw this.failed(new Error('INTERNAL_S2S_TOKEN is not set'), false);
+    }
+    return { ...extra, 'x-internal-token': token };
   }
 
   private assertClosed(): void {

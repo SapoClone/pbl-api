@@ -41,6 +41,7 @@ import { IntroduceTenancy1791563000000 } from '../src/database/migrations/179156
 import { AddMemberStatusLoginLockoutSessions1792000000000 } from '../src/database/migrations/1792000000000-add-member-status-login-lockout-sessions';
 import { CreateBranchSettingAndStaffSchedule1792000000001 } from '../src/database/migrations/1792000000001-create-branch-setting-and-staff-schedule';
 import { CreateRolePermissionAndMemberBranch1792300000000 } from '../src/database/migrations/1792300000000-create-role-permission-and-member-branch';
+import { AddFinancePermissions1792400000000 } from '../src/database/migrations/1792400000000-add-finance-permissions';
 
 describe('platform (Postgres)', () => {
   const schema = uniqueSchema('platform_it');
@@ -526,6 +527,49 @@ describe('platform RBAC (Postgres)', () => {
       expect(codes).toContain('settings.view');
       expect(codes).not.toContain('staff.update');
       expect(codes).not.toContain('settings.update');
+    });
+
+    it('adds the finance permissions to existing stores and removes exactly them again', async () => {
+      const codesOf = async (tenant: string, role: string) =>
+        (
+          await mig<{ permission_code: string }[]>(
+            `SELECT rp."permission_code" FROM "role_permission" rp JOIN "role" r ON r."id" = rp."role_id" WHERE r."tenant_id" = $1 AND r."code" = $2 ORDER BY 1`,
+            [tenant, role],
+          )
+        ).map((r) => r.permission_code);
+      const finance = (codes: string[]) =>
+        codes.filter((c) => c.startsWith('finance.'));
+      const before = {
+        manager: await codesOf(T1, 'branch_manager'),
+        sales: await codesOf(T1, 'sales_staff'),
+      };
+      expect(finance(before.manager)).toEqual([]);
+
+      const runner = migrator.createQueryRunner();
+      await new AddFinancePermissions1792400000000().up(runner);
+      // idempotent
+      await new AddFinancePermissions1792400000000().up(runner);
+      for (const tenant of [T1, T2, T_DELETED]) {
+        expect(finance(await codesOf(tenant, 'branch_manager'))).toHaveLength(
+          4,
+        );
+        expect(finance(await codesOf(tenant, 'accountant'))).toHaveLength(4);
+        expect(finance(await codesOf(tenant, 'sales_staff'))).toEqual([
+          'finance.create',
+          'finance.view',
+        ]);
+        expect(finance(await codesOf(tenant, 'warehouse_staff'))).toEqual([]);
+        expect(await codesOf(tenant, 'owner')).toEqual([]);
+      }
+      expect(await codesOf(T1, 'branch_manager')).toHaveLength(38);
+      expect(await codesOf(T1, 'sales_staff')).toHaveLength(14);
+      expect(await codesOf(T1, 'accountant')).toHaveLength(11);
+
+      await new AddFinancePermissions1792400000000().down(runner);
+      await runner.release();
+      expect(await codesOf(T1, 'branch_manager')).toEqual(before.manager);
+      expect(await codesOf(T1, 'sales_staff')).toEqual(before.sales);
+      expect(await codesOf(T1, 'accountant')).toHaveLength(7);
     });
 
     it('points every member at the role of its own store that replaces the legacy one, and rewrites the text', async () => {

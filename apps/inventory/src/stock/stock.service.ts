@@ -9,8 +9,9 @@ import {
 import { INVENTORY_STOCK_CHANGED, StockChangedPayload } from '@pbl/contracts';
 import { EventOutbox, qualifiedTable } from '@pbl/events';
 import { randomUUID } from 'crypto';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
+import { applyWarehouseScope, WarehouseScope } from '../scope/warehouse-scope';
 import {
   CreateWarehouseDto,
   ListStockReqDto,
@@ -122,9 +123,16 @@ export class StockService {
     });
   }
 
-  async list(query: ListStockReqDto): Promise<Page<StockRes>> {
+  async list(
+    query: ListStockReqDto,
+    branches?: string[] | null,
+  ): Promise<Page<StockRes>> {
     const [rows, total] = await this.stock.findAndCount({
-      where: query.branchId ? { branchId: query.branchId } : {},
+      where: query.branchId
+        ? { branchId: query.branchId }
+        : branches
+          ? { branchId: In(branches) }
+          : {},
       order: { sku: 'ASC', branchId: 'ASC' },
       take: query.limit,
       skip: (query.page - 1) * query.limit,
@@ -294,12 +302,16 @@ export class StockService {
     });
   }
 
-  async listStockBalances(warehouseId?: string) {
+  async listStockBalances(warehouseId?: string, scope?: WarehouseScope) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = this.schemaPrefix(em);
       const params: unknown[] = [tenantId];
-      const filter = warehouseId ? `AND warehouse_id = $2` : '';
-      if (warehouseId) params.push(warehouseId);
+      const filters: string[] = [];
+      if (warehouseId) {
+        params.push(warehouseId);
+        filters.push(`AND warehouse_id = $${params.length}`);
+      }
+      applyWarehouseScope(params, filters, 'warehouse_id', scope);
       const rows = await em.query(
         `
         SELECT
@@ -312,7 +324,7 @@ export class StockService {
           (on_hand_qty - reserved_qty) AS "availableQty",
           version
         FROM ${prefix}"stock_balance"
-        WHERE tenant_id = $1 ${filter}
+        WHERE tenant_id = $1 ${filters.join(' ')}
         ORDER BY warehouse_id ASC, sku_id ASC
         `,
         params,

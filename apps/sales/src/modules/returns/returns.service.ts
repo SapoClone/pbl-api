@@ -10,7 +10,7 @@ import {
 } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'node:crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import {
   OriginalOrderLineSnapshot,
   SalesDomainError,
@@ -34,6 +34,7 @@ import {
 import { InventoryClient } from '../../inventory/inventory.client';
 import { OrderItemEntity } from '../../orders/entities/order-item.entity';
 import { OrderEntity } from '../../orders/entities/order.entity';
+import { BranchScope, branchAllowed } from '../../presentation/access';
 import {
   CreateRefundRequestDto,
   CreateReturnDto,
@@ -48,7 +49,11 @@ export class ReturnsService {
     private readonly outbox: EventOutbox,
   ) {}
 
-  async createReturn(actorId: string, dto: CreateReturnDto) {
+  async createReturn(
+    actorId: string,
+    scope: BranchScope,
+    dto: CreateReturnDto,
+  ) {
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
 
@@ -62,7 +67,7 @@ export class ReturnsService {
         where: { id: dto.orderId, tenantId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!order) {
+      if (!order || !branchAllowed(scope, order.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.ORDER_NOT_FOUND,
           `Order ${dto.orderId} not found`,
@@ -211,15 +216,15 @@ export class ReturnsService {
     });
 
     if (dto.autoReceive) {
-      return this.receiveReturn(createdReturnId, actorId, {
+      return this.receiveReturn(createdReturnId, actorId, scope, {
         warehouseId: dto.warehouseId,
       });
     }
 
-    return this.getReturnById(createdReturnId);
+    return this.getReturnById(createdReturnId, scope);
   }
 
-  async approveReturn(returnId: string, actorId: string) {
+  async approveReturn(returnId: string, actorId: string, scope: BranchScope) {
     const tenantId = TenantContext.require();
 
     await this.dataSource.transaction(async (em) => {
@@ -230,7 +235,7 @@ export class ReturnsService {
         where: { id: returnId, tenantId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!ret) {
+      if (!ret || !branchAllowed(scope, ret.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.RETURN_NOT_FOUND,
           `Return ${returnId} not found`,
@@ -264,10 +269,15 @@ export class ReturnsService {
       } satisfies SalesReturnEventPayload);
     });
 
-    return this.getReturnById(returnId);
+    return this.getReturnById(returnId, scope);
   }
 
-  async rejectReturn(returnId: string, actorId: string, reason?: string) {
+  async rejectReturn(
+    returnId: string,
+    actorId: string,
+    scope: BranchScope,
+    reason?: string,
+  ) {
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
 
@@ -279,7 +289,7 @@ export class ReturnsService {
         where: { id: returnId, tenantId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!ret) {
+      if (!ret || !branchAllowed(scope, ret.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.RETURN_NOT_FOUND,
           `Return ${returnId} not found`,
@@ -320,12 +330,13 @@ export class ReturnsService {
       await em.save(SalesReturnEntity, ret);
     });
 
-    return this.getReturnById(returnId);
+    return this.getReturnById(returnId, scope);
   }
 
   async receiveReturn(
     returnId: string,
     actorId: string,
+    scope: BranchScope,
     dto: ReceiveReturnDto,
   ) {
     const tenantId = TenantContext.require();
@@ -339,7 +350,7 @@ export class ReturnsService {
         const r = await em.getRepository(SalesReturnEntity).findOne({
           where: { id: returnId, tenantId },
         });
-        if (!r) {
+        if (!r || !branchAllowed(scope, r.branchId)) {
           throw new SalesDomainError(
             SalesDomainErrorCode.RETURN_NOT_FOUND,
             `Return ${returnId} not found`,
@@ -357,7 +368,7 @@ export class ReturnsService {
     );
 
     if (ret.status === 'COMPLETED' || ret.status === 'RECEIVED') {
-      return this.getReturnById(returnId);
+      return this.getReturnById(returnId, scope);
     }
     if (ret.status === 'REJECTED') {
       throw new SalesDomainError(
@@ -457,12 +468,13 @@ export class ReturnsService {
       } satisfies SalesReturnEventPayload);
     });
 
-    return this.getReturnById(returnId);
+    return this.getReturnById(returnId, scope);
   }
 
   async createRefundRequest(
     returnId: string,
     actorId: string,
+    scope: BranchScope,
     headerIdempotencyKey: string | undefined,
     dto: CreateRefundRequestDto,
   ): Promise<RefundRequestEntity> {
@@ -486,6 +498,16 @@ export class ReturnsService {
         where: { tenantId, idempotencyKey },
       });
       if (existing) {
+        const owner = await em.getRepository(SalesReturnEntity).findOne({
+          where: { id: existing.returnId, tenantId },
+        });
+        if (!owner || !branchAllowed(scope, owner.branchId)) {
+          throw new SalesDomainError(
+            SalesDomainErrorCode.RETURN_NOT_FOUND,
+            `Return ${returnId} not found`,
+            404,
+          );
+        }
         return existing;
       }
 
@@ -493,7 +515,7 @@ export class ReturnsService {
         where: { id: returnId, tenantId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!ret) {
+      if (!ret || !branchAllowed(scope, ret.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.RETURN_NOT_FOUND,
           `Return ${returnId} not found`,
@@ -642,7 +664,7 @@ export class ReturnsService {
     });
   }
 
-  async getReturnById(returnId: string) {
+  async getReturnById(returnId: string, scope: BranchScope) {
     const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
@@ -651,7 +673,7 @@ export class ReturnsService {
       const ret = await em.getRepository(SalesReturnEntity).findOne({
         where: { id: returnId, tenantId },
       });
-      if (!ret) {
+      if (!ret || !branchAllowed(scope, ret.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.RETURN_NOT_FOUND,
           `Return ${returnId} not found`,
@@ -673,7 +695,8 @@ export class ReturnsService {
     });
   }
 
-  async listReturns(orderId?: string) {
+  async listReturns(scope: BranchScope, orderId?: string) {
+    if (scope !== null && scope.length === 0) return [];
     const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
@@ -682,6 +705,9 @@ export class ReturnsService {
       const where: Record<string, unknown> = { tenantId };
       if (orderId) {
         where.orderId = orderId;
+      }
+      if (scope !== null) {
+        where.branchId = In([...scope]);
       }
       return em.getRepository(SalesReturnEntity).find({
         where,

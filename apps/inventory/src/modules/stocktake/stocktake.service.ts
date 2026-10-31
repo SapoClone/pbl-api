@@ -19,6 +19,10 @@ import {
   parseQtyToMilli,
 } from '../../domain/inventory-domain';
 import {
+  applyWarehouseScope,
+  WarehouseScope,
+} from '../../scope/warehouse-scope';
+import {
   assertActiveWarehouse,
   schemaPrefix,
 } from '../warehouses/warehouses.service';
@@ -532,18 +536,22 @@ export class StocktakeService {
     });
   }
 
-  async list(warehouseId?: string) {
+  async list(warehouseId?: string, scope?: WarehouseScope) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
       const params: unknown[] = [tenantId];
-      const filter = warehouseId ? `AND warehouse_id = $2` : '';
-      if (warehouseId) params.push(warehouseId);
+      const filters: string[] = [];
+      if (warehouseId) {
+        params.push(warehouseId);
+        filters.push(`AND warehouse_id = $${params.length}`);
+      }
+      applyWarehouseScope(params, filters, 'warehouse_id', scope);
 
       const headers = await em.query(
         `
         SELECT id
         FROM ${prefix}"stock_take"
-        WHERE tenant_id = $1 ${filter}
+        WHERE tenant_id = $1 ${filters.join(' ')}
         ORDER BY created_at DESC
         LIMIT 100
         `,

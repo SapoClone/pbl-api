@@ -10,11 +10,12 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, RequirePermission } from '@pbl/auth';
 import { rethrowCustomerHttpError } from '../../presentation/customer-http-error';
+import { InternalTokenGuard } from '../../presentation/internal-token.guard';
 import {
   CommitLoyaltyHoldDto,
   CreateLoyaltyHoldDto,
@@ -31,7 +32,7 @@ export class LoyaltyController {
   constructor(private readonly loyaltyService: LoyaltyService) {}
 
   @Get('v1/loyalty/settings')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({ summary: 'Get tenant loyalty program configuration' })
   async getSettings() {
     try {
@@ -42,7 +43,7 @@ export class LoyaltyController {
   }
 
   @Put('v1/loyalty/settings')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.update')
   @ApiOperation({ summary: 'Update tenant loyalty program configuration' })
   async updateSettings(
     @CurrentUser() user: AuthUser,
@@ -56,7 +57,7 @@ export class LoyaltyController {
   }
 
   @Get('v1/customers/:id/loyalty')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary:
       'Get customer loyalty account balance (posted, held, available, qualifying)',
@@ -70,7 +71,7 @@ export class LoyaltyController {
   }
 
   @Get('v1/customers/:id/loyalty/transactions')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary: 'List immutable loyalty ledger transactions for a customer',
   })
@@ -91,7 +92,7 @@ export class LoyaltyController {
 
   @Post('v1/customers/:id/loyalty/adjustments')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.update')
   @ApiOperation({
     summary:
       'Privileged manual loyalty point adjustment with mandatory reason and idempotency',
@@ -116,7 +117,7 @@ export class LoyaltyController {
 
   @Post('v1/loyalty/reconcile')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.update')
   @ApiOperation({
     summary:
       'Run loyalty wallet vs. ledger & hold reconciliation and expire overdue holds',
@@ -132,7 +133,7 @@ export class LoyaltyController {
   // ---- Internal S2S Contracts for Sales & POS (Section 13) ----
 
   @Get('internal/v1/loyalty/accounts/:customerId')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @UseGuards(InternalTokenGuard)
   @ApiOperation({
     summary: 'Internal S2S: Get customer loyalty account balance for checkout',
   })
@@ -147,7 +148,7 @@ export class LoyaltyController {
   }
 
   @Post('internal/v1/loyalty/holds')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @UseGuards(InternalTokenGuard)
   @ApiOperation({
     summary: 'Internal S2S: Atomically hold loyalty points for POS checkout',
   })
@@ -163,7 +164,7 @@ export class LoyaltyController {
   }
 
   @Get('internal/v1/loyalty/holds/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @UseGuards(InternalTokenGuard)
   @ApiOperation({ summary: 'Internal S2S: Inspect a loyalty point hold' })
   async getInternalHold(@Param('id', new ParseUUIDPipe()) id: string) {
     try {
@@ -175,7 +176,7 @@ export class LoyaltyController {
 
   @Post('internal/v1/loyalty/holds/:id/commit')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @UseGuards(InternalTokenGuard)
   @ApiOperation({
     summary:
       'Internal S2S: Commit HELD loyalty points into an immutable REDEEM ledger entry',
@@ -193,7 +194,7 @@ export class LoyaltyController {
 
   @Post('internal/v1/loyalty/holds/:id/release')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @UseGuards(InternalTokenGuard)
   @ApiOperation({
     summary:
       'Internal S2S: Release HELD loyalty points on checkout cancellation',

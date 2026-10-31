@@ -8,8 +8,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import { rethrowCustomerHttpError } from '../../presentation/customer-http-error';
 import {
   CreateMembershipTierDto,
@@ -24,7 +23,7 @@ export class MembershipsController {
   constructor(private readonly membershipsService: MembershipsService) {}
 
   @Post('membership-tiers')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.create')
   @ApiOperation({
     summary: 'Create a membership tier (Member, Silver, Gold, Platinum)',
   })
@@ -37,7 +36,7 @@ export class MembershipsController {
   }
 
   @Get('membership-tiers')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({ summary: 'List membership tiers for current tenant' })
   async listTiers() {
     try {
@@ -48,7 +47,7 @@ export class MembershipsController {
   }
 
   @Patch('membership-tiers/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.update')
   @ApiOperation({ summary: 'Update a membership tier configuration' })
   async updateTier(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -62,7 +61,7 @@ export class MembershipsController {
   }
 
   @Get('customers/:id/membership')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary: 'Get customer membership tier and qualification progress',
   })

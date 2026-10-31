@@ -35,10 +35,6 @@ export const RequireRoles = (...roles: string[]) =>
 export const RequirePermission = (...codes: string[]) =>
   SetMetadata(REQUIRED_PERMISSIONS, codes);
 
-/** Caller must have one of these fine-grained permissions or a role granting them (403 otherwise). */
-export const Permissions = (...permissions: string[]) =>
-  SetMetadata(REQUIRED_ROLES, permissions);
-
 /** The verified caller (AuthUser), or one of its fields: @CurrentUser('id'). */
 export const CurrentUser = createParamDecorator(
   (data: keyof AuthUser | undefined, ctx: ExecutionContext) => {

@@ -20,9 +20,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, RequirePermission } from '@pbl/auth';
 import { rethrowInventoryHttpError } from '../../presentation/inventory-http-error';
+import { WarehouseScopeService } from '../../scope/warehouse-scope';
 import {
   CreatePurchaseOrderDto,
   CreateSupplierDto,
@@ -35,11 +35,14 @@ import { ProcurementService } from './procurement.service';
 @ApiBearerAuth()
 @Controller('api/v1')
 export class ProcurementController {
-  constructor(private readonly procurement: ProcurementService) {}
+  constructor(
+    private readonly procurement: ProcurementService,
+    private readonly scope: WarehouseScopeService,
+  ) {}
 
   @Post('suppliers')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.create')
   @ApiOperation({ summary: 'Create a supplier' })
   @ApiResponse({ status: HttpStatus.CREATED, description: 'Created supplier' })
   async createSupplier(@Body() dto: CreateSupplierDto) {
@@ -51,7 +54,7 @@ export class ProcurementController {
   }
 
   @Get('suppliers')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('purchasing.view')
   @ApiOperation({ summary: 'List or search suppliers' })
   @ApiQuery({ name: 'q', required: false })
   @ApiQuery({ name: 'status', required: false, enum: ['ACTIVE', 'INACTIVE'] })
@@ -68,7 +71,7 @@ export class ProcurementController {
   }
 
   @Patch('suppliers/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.update')
   @ApiOperation({ summary: 'Update or deactivate a supplier' })
   @ApiParam({ name: 'id', description: 'Supplier UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Updated supplier' })
@@ -85,14 +88,18 @@ export class ProcurementController {
 
   @Post('purchase-orders')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.create')
   @ApiOperation({ summary: 'Create a purchase order (DRAFT)' })
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: 'Created purchase order',
   })
-  async createPurchaseOrder(@Body() dto: CreatePurchaseOrderDto) {
+  async createPurchaseOrder(
+    @Body() dto: CreatePurchaseOrderDto,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
+      await this.scope.assertWarehouse(branches, dto.warehouseId);
       return await this.procurement.createPurchaseOrder(dto);
     } catch (error) {
       rethrowInventoryHttpError(error);
@@ -100,7 +107,7 @@ export class ProcurementController {
   }
 
   @Get('purchase-orders')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('purchasing.view')
   @ApiOperation({ summary: 'List purchase orders' })
   @ApiQuery({ name: 'supplierId', required: false })
   @ApiQuery({ name: 'status', required: false })
@@ -109,26 +116,35 @@ export class ProcurementController {
     description: 'List of purchase orders',
   })
   async listPurchaseOrders(
+    @AllowedBranches() branches: string[] | null,
     @Query('supplierId') supplierId?: string,
     @Query('status') status?: string,
   ) {
     try {
-      return await this.procurement.listPurchaseOrders(supplierId, status);
+      return await this.procurement.listPurchaseOrders(
+        supplierId,
+        status,
+        await this.scope.warehouseIds(branches),
+      );
     } catch (error) {
       rethrowInventoryHttpError(error);
     }
   }
 
   @Get('purchase-orders/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('purchasing.view')
   @ApiOperation({ summary: 'Get purchase order details by ID' })
   @ApiParam({ name: 'id', description: 'Purchase order UUID' })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'Purchase order details',
   })
-  async getPurchaseOrderById(@Param('id', new ParseUUIDPipe()) id: string) {
+  async getPurchaseOrderById(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
+      await this.scope.assertDocument(branches, 'purchase_order', id);
       return await this.procurement.getPurchaseOrderById(id);
     } catch (error) {
       rethrowInventoryHttpError(error);
@@ -137,7 +153,7 @@ export class ProcurementController {
 
   @Post('purchase-orders/:id/approve')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.approve')
   @ApiOperation({
     summary:
       'Approve a DRAFT purchase order and emit inventory.purchase_order.approved',
@@ -147,8 +163,12 @@ export class ProcurementController {
     status: HttpStatus.OK,
     description: 'Approved purchase order',
   })
-  async approvePurchaseOrder(@Param('id', new ParseUUIDPipe()) id: string) {
+  async approvePurchaseOrder(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
+      await this.scope.assertDocument(branches, 'purchase_order', id);
       return await this.procurement.approvePurchaseOrder(id);
     } catch (error) {
       rethrowInventoryHttpError(error);
@@ -157,7 +177,7 @@ export class ProcurementController {
 
   @Post('purchase-orders/:id/receive')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('inventory.create')
   @ApiOperation({
     summary:
       'Receive goods against an APPROVED or PARTIALLY_RECEIVED purchase order',
@@ -172,10 +192,12 @@ export class ProcurementController {
   })
   async receivePurchaseOrder(
     @Param('id', new ParseUUIDPipe()) id: string,
+    @AllowedBranches() branches: string[] | null,
     @Body() dto?: ReceivePurchaseOrderDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     try {
+      await this.scope.assertDocument(branches, 'purchase_order', id);
       return await this.procurement.receivePurchaseOrder(
         id,
         dto,

@@ -9,8 +9,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, RequirePermission } from '@pbl/auth';
+import {
+  assertBranchNamed,
+  assertRowBranch,
+  branchScopeOf,
+} from '../../presentation/branch-scope';
 import { rethrowFinanceHttpError } from '../../presentation/finance-http-error';
 import {
   ConfirmSettlementDto,
@@ -26,13 +30,7 @@ export class SettlementsController {
   constructor(private readonly settlementsService: SettlementsService) {}
 
   @Post('confirm')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.settlement.reconcile',
-  )
+  @RequirePermission('finance.update')
   @ApiOperation({ summary: 'Confirm and record an order payment settlement' })
   async confirm(
     @CurrentUser() user: AuthUser,
@@ -40,6 +38,7 @@ export class SettlementsController {
     @Body() dto: ConfirmSettlementDto,
   ) {
     try {
+      assertBranchNamed(user, dto.branchId);
       return await this.settlementsService.confirmSettlement(
         user.id ?? 'system',
         idempotencyKey,
@@ -52,13 +51,7 @@ export class SettlementsController {
   }
 
   @Post('webhooks/provider-callback')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.settlement.reconcile',
-  )
+  @RequirePermission('finance.update')
   @ApiOperation({
     summary: 'Idempotently process an external payment provider callback',
   })
@@ -68,6 +61,7 @@ export class SettlementsController {
     @Body() dto: ProviderWebhookCallbackDto,
   ) {
     try {
+      assertBranchNamed(user, dto.branchId);
       return await this.settlementsService.processProviderCallback(
         user.id ?? 'system',
         idempotencyKey,
@@ -80,13 +74,7 @@ export class SettlementsController {
   }
 
   @Get()
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.report.read',
-  )
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List payment settlements' })
   async list(
     @CurrentUser() user: AuthUser,
@@ -96,6 +84,7 @@ export class SettlementsController {
       return await this.settlementsService.listSettlements(
         query,
         user.tenantId!,
+        branchScopeOf(user),
       );
     } catch (error) {
       rethrowFinanceHttpError(error);
@@ -103,23 +92,19 @@ export class SettlementsController {
   }
 
   @Get(':id')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.report.read',
-  )
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'Get payment settlement by id' })
   async getOne(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     try {
-      return await this.settlementsService.getSettlementById(
+      const settlement = await this.settlementsService.getSettlementById(
         id,
         user.tenantId!,
       );
+      assertRowBranch(user, settlement.branchId);
+      return settlement;
     } catch (error) {
       rethrowFinanceHttpError(error);
     }

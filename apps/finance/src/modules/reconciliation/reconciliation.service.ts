@@ -29,6 +29,7 @@ import {
   ShiftCashReconciliationEntity,
   SupplierPayableEntity,
 } from '../../infrastructure/persistence/finance.entities';
+import { applyBranchScope, BranchScope } from '../../presentation/branch-scope';
 import { CashAccountsService } from '../cash-accounts/cash-accounts.service';
 import { CashbookService } from '../cashbook/cashbook.service';
 import { FinancialJournalService } from '../financial-journal/financial-journal.service';
@@ -261,16 +262,19 @@ export class ReconciliationService {
   async listShiftReconciliations(
     branchId?: string,
     tenantId = TenantContext.require(),
+    scope: BranchScope = null,
   ): Promise<ShiftCashReconciliationEntity[]> {
-    return this.runInTenantTx(tenantId, async (em) =>
-      em.getRepository(ShiftCashReconciliationEntity).find({
-        where: {
-          tenantId,
-          ...(branchId ? { branchId } : {}),
-        },
+    return this.runInTenantTx(tenantId, async (em) => {
+      const where: Record<string, unknown> = {
+        tenantId,
+        ...(branchId ? { branchId } : {}),
+      };
+      applyBranchScope(where, scope);
+      return em.getRepository(ShiftCashReconciliationEntity).find({
+        where,
         order: { createdAt: 'DESC' },
-      }),
-    );
+      });
+    });
   }
 
   async createAdjustment(
@@ -697,11 +701,19 @@ export class ReconciliationService {
     });
   }
 
-  async getFinanceSummary(tenantId = TenantContext.require()) {
+  async getFinanceSummary(
+    tenantId = TenantContext.require(),
+    scope: BranchScope = null,
+  ) {
     return this.runInTenantTx(tenantId, async (em) => {
+      const scoped = (extra: Record<string, unknown> = {}) => {
+        const where: Record<string, unknown> = { tenantId, ...extra };
+        applyBranchScope(where, scope);
+        return where;
+      };
       const cashAccounts = await em
         .getRepository(CashAccountEntity)
-        .find({ where: { tenantId, status: 'ACTIVE' } });
+        .find({ where: scoped({ status: 'ACTIVE' }) });
       const totalCashCents = cashAccounts.reduce(
         (sum, acc) =>
           sum +
@@ -715,7 +727,7 @@ export class ReconciliationService {
 
       const cashbookEntries = await em
         .getRepository(CashbookEntryEntity)
-        .find({ where: { tenantId, status: 'POSTED' } });
+        .find({ where: scoped({ status: 'POSTED' }) });
       let totalReceiptsCents = 0n;
       let totalExpensesCents = 0n;
       for (const entry of cashbookEntries) {
@@ -732,7 +744,7 @@ export class ReconciliationService {
 
       const receivables = await em
         .getRepository(CustomerReceivableEntity)
-        .find({ where: { tenantId } });
+        .find({ where: scoped() });
       let openArCents = 0n;
       let openArCount = 0;
       for (const r of receivables) {
@@ -762,7 +774,7 @@ export class ReconciliationService {
 
       const cods = await em
         .getRepository(CodReceivableEntity)
-        .find({ where: { tenantId } });
+        .find({ where: scoped() });
       let pendingCodCents = 0n;
       let reconciledCodNetCents = 0n;
       let codDiscrepancyCount = 0;
@@ -788,7 +800,7 @@ export class ReconciliationService {
 
       const refunds = await em
         .getRepository(RefundOperationEntity)
-        .find({ where: { tenantId } });
+        .find({ where: scoped() });
       let completedRefundCents = 0n;
       let pendingReconRefundCount = 0;
       for (const rf of refunds) {

@@ -75,9 +75,7 @@ export class AuthGuard implements CanActivate {
     }
     if (
       requiredRoles.length > 0 &&
-      !requiredRoles.some((required) =>
-        this.hasRoleOrPermission(user.roles, required),
-      )
+      !requiredRoles.some((role) => user.roles.includes(role))
     ) {
       throw new ForbiddenException();
     }
@@ -88,53 +86,6 @@ export class AuthGuard implements CanActivate {
       throw new ForbiddenException();
     }
     return true;
-  }
-
-  private hasRoleOrPermission(userRoles: string[], required: string): boolean {
-    if (userRoles.includes(required)) {
-      return true;
-    }
-    const normalized = new Set(userRoles.map((r) => r.toLowerCase()));
-    if (required.startsWith('finance.')) {
-      if (
-        normalized.has('owner') ||
-        normalized.has('accountant') ||
-        normalized.has('manager')
-      ) {
-        return true;
-      }
-      if (normalized.has('cashier')) {
-        const cashierPermissions = new Set([
-          'finance.cashbook.read',
-          'finance.cashbook.create',
-          'finance.receivable.read',
-          'finance.receivable.collect',
-          'finance.credit.read',
-          'finance.refund.process',
-          'finance.shift.reconcile',
-        ]);
-        return cashierPermissions.has(required);
-      }
-      return false;
-    }
-    if (required.startsWith('integration.')) {
-      if (normalized.has('owner') || normalized.has('manager')) {
-        return true;
-      }
-      if (normalized.has('cashier')) {
-        const cashierIntegrationPermissions = new Set([
-          'integration.connection.read',
-          'integration.mapping.read',
-          'integration.order_sync.read',
-          'integration.conflict.read',
-          'integration.jobs.read',
-          'integration.reconciliation.read',
-        ]);
-        return cashierIntegrationPermissions.has(required);
-      }
-      return false;
-    }
-    return false;
   }
 
   private extractTokenFromHeader(request: Request): string | undefined {

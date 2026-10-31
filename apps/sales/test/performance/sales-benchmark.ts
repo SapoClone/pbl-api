@@ -325,6 +325,7 @@ async function main(): Promise<void> {
   const tenantA = '11111111-1111-4111-8111-111111111111';
   const branchA = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
   const warehouseA = '1b1b1b1b-1b1b-4b1b-8b1b-1b1b1b1b1b1b';
+  const ALL = null; // every branch
   const cashierId = '1c1c1c1c-1c1c-4c1c-8c1c-1c1c1c1c1c1c';
 
   console.log(
@@ -534,7 +535,7 @@ async function main(): Promise<void> {
   }
 
   const activeShift = await withTenantContext(tenantA, () =>
-    shiftsService.openShift(cashierId, {
+    shiftsService.openShift(cashierId, ALL, {
       branchId: branchA,
       registerCode: 'REG-BENCH-01',
       openingCash: '2000000.00',
@@ -542,21 +543,27 @@ async function main(): Promise<void> {
   );
 
   const promo = await withTenantContext(tenantA, () =>
-    promotionsService.createPromotion({
-      code: 'BENCH10K',
-      name: 'Benchmark 10k Off',
-      discountType: 'FIXED',
-      discountValue: 10000,
-      minOrderAmount: 50000,
-    }),
+    promotionsService.createPromotion(
+      {
+        code: 'BENCH10K',
+        name: 'Benchmark 10k Off',
+        discountType: 'FIXED',
+        discountValue: 10000,
+        minOrderAmount: 50000,
+      },
+      ALL,
+    ),
   );
 
   await withTenantContext(tenantA, () =>
-    promotionsService.createCoupon({
-      promotionId: promo.id,
-      code: 'BENCH10K',
-      maxUses: 100000,
-    }),
+    promotionsService.createCoupon(
+      {
+        promotionId: promo.id,
+        code: 'BENCH10K',
+        maxUses: 100000,
+      },
+      ALL,
+    ),
   );
 
   const variantIds = Array.from(
@@ -601,7 +608,7 @@ async function main(): Promise<void> {
             orderDiscountType: 'FIXED',
             orderDiscountValue: 5000,
             couponCode: 'BENCH10K',
-            role: 'manager',
+            role: 'branch_manager',
           }),
         );
       },
@@ -618,7 +625,8 @@ async function main(): Promise<void> {
         await withTenantContext(tenantA, () =>
           checkoutService.checkout(
             cashierId,
-            ['cashier'],
+            ['orders.create'],
+            ALL,
             `bench-single-checkout-${idx}`,
             {
               branchId: branchA,
@@ -644,7 +652,8 @@ async function main(): Promise<void> {
         await withTenantContext(tenantA, () =>
           checkoutService.checkout(
             cashierId,
-            ['manager'],
+            ['orders.approve'],
+            ALL,
             `bench-5item-checkout-${idx}`,
             {
               branchId: branchA,
@@ -695,7 +704,8 @@ async function main(): Promise<void> {
         await withTenantContext(tenantA, () =>
           checkoutService.checkout(
             cashierId,
-            ['cashier'],
+            ['orders.create'],
+            ALL,
             `bench-contention-100-${idx}`,
             {
               branchId: branchA,
@@ -718,7 +728,7 @@ async function main(): Promise<void> {
   // Scenario 6: Duplicate checkout idempotency replay
   const replayKey = 'bench-idempotent-replay-key-001';
   await withTenantContext(tenantA, () =>
-    checkoutService.checkout(cashierId, ['cashier'], replayKey, {
+    checkoutService.checkout(cashierId, ['orders.create'], ALL, replayKey, {
       branchId: branchA,
       warehouseId: warehouseA,
       shiftId: activeShift.id,
@@ -735,14 +745,20 @@ async function main(): Promise<void> {
       20,
       async () => {
         await withTenantContext(tenantA, () =>
-          checkoutService.checkout(cashierId, ['cashier'], replayKey, {
-            branchId: branchA,
-            warehouseId: warehouseA,
-            shiftId: activeShift.id,
-            lines: [{ variantId: variantIds[0], qty: 1 }],
-            paymentMethod: 'CASH',
-            tenderedCash: 100000,
-          }),
+          checkoutService.checkout(
+            cashierId,
+            ['orders.create'],
+            ALL,
+            replayKey,
+            {
+              branchId: branchA,
+              warehouseId: warehouseA,
+              shiftId: activeShift.id,
+              lines: [{ variantId: variantIds[0], qty: 1 }],
+              paymentMethod: 'CASH',
+              tenderedCash: 100000,
+            },
+          ),
         );
       },
     ),
@@ -779,7 +795,7 @@ async function main(): Promise<void> {
       20,
       async () => {
         await withTenantContext(tenantA, () =>
-          m3OrdersService.getOrderDetails(sampleOrderId),
+          m3OrdersService.getOrderDetails(sampleOrderId, ALL),
         );
       },
     ),

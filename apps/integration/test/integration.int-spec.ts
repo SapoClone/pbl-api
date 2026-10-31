@@ -32,7 +32,6 @@ import {
   WebhookInboxEventEntity,
 } from '../src/infrastructure/persistence/integration.entities';
 import { ProviderRateLimiterService } from '../src/infrastructure/rate-limiting/provider-rate-limiter.service';
-import { SalesOrderClient } from '../src/infrastructure/sales-client/sales-order.client';
 import { CreateM6IntegrationCore1791900000200 } from '../src/migrations/1791900000200-create-m6-integration-core';
 import { ConflictsService } from '../src/modules/conflicts/conflicts.service';
 import { ConnectionsService } from '../src/modules/connections/connections.service';
@@ -45,6 +44,7 @@ import { WebhooksService } from '../src/modules/webhooks/webhooks.service';
 import { LazadaProviderAdapter } from '../src/providers/lazada/lazada.adapter';
 import { ProviderRegistryService } from '../src/providers/provider-registry.service';
 import { ShopeeProviderAdapter } from '../src/providers/shopee/shopee.adapter';
+import { InMemorySalesOrderClient } from './support/in-memory-sales-order.client';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -75,7 +75,7 @@ describe('Integration M6 Core (Real PostgreSQL Integration, Concurrency & Fault-
   let shopeeAdapter: ShopeeProviderAdapter;
   let lazadaAdapter: LazadaProviderAdapter;
   let providerRegistry: ProviderRegistryService;
-  let salesOrderClient: SalesOrderClient;
+  let salesOrderClient: InMemorySalesOrderClient;
   let connectionsService: ConnectionsService;
   let skuMappingService: SkuMappingService;
   let orderSyncService: OrderSyncService;
@@ -87,6 +87,8 @@ describe('Integration M6 Core (Real PostgreSQL Integration, Concurrency & Fault-
   let eventsConsumer: IntegrationEventsConsumer;
 
   beforeAll(async () => {
+    process.env.INTEGRATION_CREDENTIAL_MASTER_KEY =
+      'test-only-integration-master-key-0123456789';
     useDatabase(schema);
     dataSource = await initializeDatabase({
       ...databaseOptions({
@@ -111,7 +113,7 @@ describe('Integration M6 Core (Real PostgreSQL Integration, Concurrency & Fault-
       shopeeAdapter,
       lazadaAdapter,
     );
-    salesOrderClient = new SalesOrderClient(dataSource);
+    salesOrderClient = new InMemorySalesOrderClient(dataSource);
     connectionsService = new ConnectionsService(
       dataSource,
       providerRegistry,

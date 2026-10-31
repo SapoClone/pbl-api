@@ -11,8 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, RequirePermission } from '@pbl/auth';
 import { rethrowFinanceHttpError } from '../../presentation/finance-http-error';
 import {
   ApplySupplierReturnCreditDto,
@@ -29,7 +28,7 @@ export class PayablesController {
   constructor(private readonly payablesService: PayablesService) {}
 
   @Post('v1/finance/payables')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('finance.create')
   @ApiOperation({ summary: 'Recognize a supplier payable obligation (AP)' })
   async recognizePayable(
     @CurrentUser() user: AuthUser,
@@ -49,7 +48,7 @@ export class PayablesController {
   }
 
   @Get('v1/finance/payables')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List supplier payables' })
   async listPayables(
     @CurrentUser() user: AuthUser,
@@ -63,7 +62,7 @@ export class PayablesController {
   }
 
   @Get('v1/finance/payables/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'Get supplier payable details' })
   async getPayable(
     @CurrentUser() user: AuthUser,
@@ -77,7 +76,7 @@ export class PayablesController {
   }
 
   @Get('v1/finance/suppliers/:id/debt')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({
     summary:
       'Get supplier outstanding payable balance, open payables, and immutable debt subledger',
@@ -98,7 +97,7 @@ export class PayablesController {
 
   @Post('v1/finance/payables/:id/payments')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('finance.create')
   @ApiOperation({
     summary: 'Record a partial or full payment against a supplier payable',
   })
@@ -123,7 +122,7 @@ export class PayablesController {
 
   @Post('v1/finance/payables/:id/return-credits')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('finance.update')
   @ApiOperation({
     summary: 'Apply a verified supplier return credit adjustment to a payable',
   })

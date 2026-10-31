@@ -20,6 +20,10 @@ import {
   parseMoneyToCents,
   parseQtyToMilli,
 } from '../../domain/inventory-domain';
+import {
+  applyWarehouseScope,
+  WarehouseScope,
+} from '../../scope/warehouse-scope';
 import { ReceivingService } from '../receiving/receiving.service';
 import {
   assertActiveWarehouse,
@@ -580,7 +584,11 @@ export class ProcurementService {
     });
   }
 
-  async listPurchaseOrders(supplierId?: string, status?: string) {
+  async listPurchaseOrders(
+    supplierId?: string,
+    status?: string,
+    scope?: WarehouseScope,
+  ) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
       const params: unknown[] = [tenantId];
@@ -594,6 +602,7 @@ export class ProcurementService {
         params.push(status);
         filters.push(`AND status = $${params.length}`);
       }
+      applyWarehouseScope(params, filters, 'warehouse_id', scope);
 
       const headers = await em.query(
         `

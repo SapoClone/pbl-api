@@ -20,6 +20,12 @@ import {
   nextTenantDocumentCode,
 } from '../../infrastructure/persistence/sales-code.generator';
 import {
+  BranchScope,
+  assertBranchAllowed,
+  branchAllowed,
+  branchFilter,
+} from '../../presentation/access';
+import {
   CloseShiftReqDto,
   ListShiftsQueryDto,
   OpenShiftReqDto,
@@ -56,8 +62,15 @@ export class ShiftsService {
 
   async openShift(
     staffId: string,
+    scope: BranchScope,
     dto: OpenShiftReqDto,
   ): Promise<PosShiftResponse> {
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'SHIFT_NOT_FOUND',
+      'Branch not found',
+    );
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
     const registerCode = (dto.registerCode ?? 'REG-01').trim().toUpperCase();
@@ -158,9 +171,16 @@ export class ShiftsService {
 
   async getActiveShift(
     staffId: string,
+    scope: BranchScope,
     branchId?: string,
     registerCode?: string,
   ): Promise<PosShiftResponse> {
+    const branchIds = branchFilter(
+      scope,
+      branchId,
+      'SHIFT_NOT_FOUND',
+      'Branch not found',
+    );
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
 
@@ -170,9 +190,9 @@ export class ShiftsService {
       ]);
       const params: unknown[] = [tenantId, staffId];
       const filters: string[] = [];
-      if (branchId) {
-        params.push(branchId);
-        filters.push(`AND branch_id = $${params.length}`);
+      if (branchIds) {
+        params.push(branchIds);
+        filters.push(`AND branch_id = ANY($${params.length}::uuid[])`);
       }
       if (registerCode) {
         params.push(registerCode.trim().toUpperCase());
@@ -202,6 +222,7 @@ export class ShiftsService {
   async closeShift(
     shiftId: string,
     actorId: string,
+    scope: BranchScope,
     dto: CloseShiftReqDto,
   ): Promise<PosShiftResponse> {
     const tenantId = TenantContext.require();
@@ -221,7 +242,7 @@ export class ShiftsService {
         `,
         [tenantId, shiftId],
       );
-      if (rows.length === 0) {
+      if (rows.length === 0 || !branchAllowed(scope, rows[0].branch_id)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.SHIFT_NOT_FOUND,
           `Shift ${shiftId} not found`,
@@ -311,7 +332,10 @@ export class ShiftsService {
     });
   }
 
-  async getById(shiftId: string): Promise<PosShiftResponse> {
+  async getById(
+    shiftId: string,
+    scope: BranchScope,
+  ): Promise<PosShiftResponse> {
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
     return this.dataSource.transaction(async (em) => {
@@ -322,7 +346,7 @@ export class ShiftsService {
         `SELECT * FROM ${prefix}"pos_shifts" WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
         [tenantId, shiftId],
       );
-      if (rows.length === 0) {
+      if (rows.length === 0 || !branchAllowed(scope, rows[0].branch_id)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.SHIFT_NOT_FOUND,
           `Shift ${shiftId} not found`,
@@ -333,7 +357,13 @@ export class ShiftsService {
     });
   }
 
-  async listShifts(query: ListShiftsQueryDto) {
+  async listShifts(query: ListShiftsQueryDto, scope: BranchScope) {
+    const branchIds = branchFilter(
+      scope,
+      query.branchId,
+      'SHIFT_NOT_FOUND',
+      'Branch not found',
+    );
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
     const limit = query.limit ?? 20;
@@ -346,9 +376,9 @@ export class ShiftsService {
       ]);
       const params: unknown[] = [tenantId];
       const filters: string[] = [];
-      if (query.branchId) {
-        params.push(query.branchId);
-        filters.push(`AND branch_id = $${params.length}`);
+      if (branchIds) {
+        params.push(branchIds);
+        filters.push(`AND branch_id = ANY($${params.length}::uuid[])`);
       }
       if (query.status) {
         params.push(query.status.toUpperCase());

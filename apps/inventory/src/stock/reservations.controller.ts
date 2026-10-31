@@ -13,6 +13,7 @@ import {
   Post,
   Query,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -22,11 +23,13 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Public, RequireRoles } from '@pbl/auth';
+import { AllowedBranches, Public, RequirePermission } from '@pbl/auth';
 import { TenantContext } from '@pbl/common';
-import { ROLES, StockReservation } from '@pbl/contracts';
+import { StockReservation } from '@pbl/contracts';
 import type { Response } from 'express';
+import { InternalTokenGuard } from '../internal/internal-token.guard';
 import { rethrowInventoryHttpError } from '../presentation/inventory-http-error';
+import { WarehouseScopeService } from '../scope/warehouse-scope';
 import {
   CreateWarehouseReservationDto,
   ReleaseWarehouseReservationDto,
@@ -65,10 +68,19 @@ function resolveInternalTenantId(headerTenantId?: string): string {
  */
 @ApiTags('internal')
 @ApiBearerAuth()
-@RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+@ApiHeader({
+  name: 'x-internal-token',
+  required: true,
+  description: 'Service token: the value of INTERNAL_S2S_TOKEN',
+})
+@UseGuards(InternalTokenGuard)
+@RequirePermission('pos.create', 'orders.create', 'orders.update')
 @Controller('internal/reservations')
 export class ReservationsController {
-  constructor(private readonly reservations: ReservationsService) {}
+  constructor(
+    private readonly reservations: ReservationsService,
+    private readonly scope: WarehouseScopeService,
+  ) {}
 
   /** 201 when the stock is held, 200 for an order that was already held, 409 with the shortages otherwise */
   @Post()
@@ -87,8 +99,10 @@ export class ReservationsController {
   })
   async reserve(
     @Body() dto: ReserveStockReqDto,
+    @AllowedBranches() branches: string[] | null,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StockReservation> {
+    this.scope.assertBranch(branches, dto.branchId);
     try {
       const { created, reservation } = await this.reservations.reserve(dto);
       res.status(created ? HttpStatus.CREATED : HttpStatus.OK);
@@ -220,6 +234,13 @@ function normalizeCreateWarehouseReservationPayload(
  */
 @ApiTags('internal')
 @Public()
+@ApiHeader({
+  name: 'x-internal-token',
+  required: true,
+  description:
+    'Service token: the value of INTERNAL_S2S_TOKEN. Checked before X-Tenant-Id is honoured',
+})
+@UseGuards(InternalTokenGuard)
 @Controller('internal/v1/reservations')
 export class WarehouseReservationsController {
   constructor(private readonly reservations: ReservationsService) {}

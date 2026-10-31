@@ -16,8 +16,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import { ResolvedVariantPrice } from '../../domain/catalog-domain';
 import {
   CreatePriceListReqDto,
@@ -35,7 +34,7 @@ export class PricingController {
   constructor(private readonly pricingService: PricingService) {}
 
   @Post('price-lists')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   @ApiOperation({ summary: 'Create a catalog price list' })
   @ApiResponse({ status: 201, description: 'Price list created' })
   @ApiResponse({ status: 409, description: 'PRICE_LIST_CONFLICT' })
@@ -44,6 +43,7 @@ export class PricingController {
   }
 
   @Get('price-lists')
+  @RequirePermission('products.view')
   @ApiOperation({ summary: 'List catalog price lists for the current tenant' })
   @ApiResponse({ status: 200, description: 'Price lists retrieved' })
   listPriceLists(): Promise<PriceListRes[]> {
@@ -51,6 +51,7 @@ export class PricingController {
   }
 
   @Get('price-lists/:id')
+  @RequirePermission('products.view')
   @ApiOperation({ summary: 'Get a price list and its variant price items' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Price list retrieved' })
@@ -62,7 +63,7 @@ export class PricingController {
   }
 
   @Patch('price-lists/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({ summary: 'Update a catalog price list' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Price list updated' })
@@ -79,7 +80,7 @@ export class PricingController {
   }
 
   @Put('price-lists/:id/items')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({
     summary: 'Atomically upsert variant prices within a price list',
   })
@@ -97,6 +98,7 @@ export class PricingController {
   }
 
   @Get('variants/:id/price')
+  @RequirePermission('products.view', 'pos.create', 'orders.create')
   @ApiOperation({
     summary:
       'Deterministically resolve the active sellable price for a variant',

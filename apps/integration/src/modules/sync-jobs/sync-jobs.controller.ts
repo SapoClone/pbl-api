@@ -10,9 +10,15 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthenticatedContext, CurrentContext, Permissions } from '@pbl/auth';
+import {
+  AllowedBranches,
+  AuthenticatedContext,
+  CurrentContext,
+  RequirePermission,
+} from '@pbl/auth';
 import { randomUUID } from 'node:crypto';
 import { rethrowIntegrationHttpError } from '../../presentation/integration-http-error';
+import { BranchScopeService } from '../branch-scope/branch-scope.service';
 import { RetrySyncJobDto, TriggerConnectionSyncDto } from './sync-jobs.dto';
 import { SyncJobsService } from './sync-jobs.service';
 
@@ -20,20 +26,25 @@ import { SyncJobsService } from './sync-jobs.service';
 @ApiBearerAuth()
 @Controller('api/v1/integrations')
 export class SyncJobsController {
-  constructor(private readonly syncJobsService: SyncJobsService) {}
+  constructor(
+    private readonly syncJobsService: SyncJobsService,
+    private readonly scope: BranchScopeService,
+  ) {}
 
   @Post('connections/:id/sync/orders')
   @HttpCode(HttpStatus.ACCEPTED)
-  @Permissions('integration.order_sync.execute')
+  @RequirePermission('channels.update')
   @ApiOperation({
     summary: 'Enqueue incremental order synchronization job for a connection',
   })
   async triggerOrderSync(
+    @AllowedBranches() branches: string[] | null,
     @Param('id', ParseUUIDPipe) connectionId: string,
     @CurrentContext() ctx: AuthenticatedContext,
     @Body() dto: TriggerConnectionSyncDto,
   ) {
     try {
+      await this.scope.assertConnection(branches, connectionId);
       const enqueued = await this.syncJobsService.enqueueSyncJob({
         tenantId: ctx.tenantId,
         connectionId,
@@ -61,16 +72,18 @@ export class SyncJobsController {
 
   @Post('connections/:id/sync/inventory')
   @HttpCode(HttpStatus.ACCEPTED)
-  @Permissions('integration.inventory_sync.execute')
+  @RequirePermission('channels.update')
   @ApiOperation({
     summary: 'Enqueue inventory availability publication job for a connection',
   })
   async triggerInventorySync(
+    @AllowedBranches() branches: string[] | null,
     @Param('id', ParseUUIDPipe) connectionId: string,
     @CurrentContext() ctx: AuthenticatedContext,
     @Body() dto: TriggerConnectionSyncDto,
   ) {
     try {
+      await this.scope.assertConnection(branches, connectionId);
       const enqueued = await this.syncJobsService.enqueueSyncJob({
         tenantId: ctx.tenantId,
         connectionId,
@@ -96,16 +109,18 @@ export class SyncJobsController {
 
   @Post('connections/:id/sync/products')
   @HttpCode(HttpStatus.ACCEPTED)
-  @Permissions('integration.product_sync.execute')
+  @RequirePermission('channels.update')
   @ApiOperation({
     summary: 'Enqueue product listing discovery and mapping sync job',
   })
   async triggerProductSync(
+    @AllowedBranches() branches: string[] | null,
     @Param('id', ParseUUIDPipe) connectionId: string,
     @CurrentContext() ctx: AuthenticatedContext,
     @Body() dto: TriggerConnectionSyncDto,
   ) {
     try {
+      await this.scope.assertConnection(branches, connectionId);
       const enqueued = await this.syncJobsService.enqueueSyncJob({
         tenantId: ctx.tenantId,
         connectionId,
@@ -130,29 +145,38 @@ export class SyncJobsController {
   }
 
   @Get('sync-jobs')
-  @Permissions('integration.jobs.read')
+  @RequirePermission('channels.view')
   @ApiOperation({ summary: 'List background synchronization jobs' })
   async listSyncJobs(
+    @AllowedBranches() branches: string[] | null,
     @Query('connectionId') connectionId?: string,
     @Query('status') status?: string,
     @Query('jobType') jobType?: string,
   ) {
     try {
-      return await this.syncJobsService.listSyncJobs({
-        connectionId,
-        status,
-        jobType,
-      });
+      await this.scope.assertConnection(branches, connectionId);
+      return await this.scope.filterRows(
+        branches,
+        await this.syncJobsService.listSyncJobs({
+          connectionId,
+          status,
+          jobType,
+        }),
+      );
     } catch (error) {
       rethrowIntegrationHttpError(error);
     }
   }
 
   @Get('sync-jobs/:id')
-  @Permissions('integration.jobs.read')
+  @RequirePermission('channels.view')
   @ApiOperation({ summary: 'Get synchronization job details' })
-  async getSyncJob(@Param('id', ParseUUIDPipe) id: string) {
+  async getSyncJob(
+    @AllowedBranches() branches: string[] | null,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     try {
+      await this.scope.assertJob(branches, id);
       return await this.syncJobsService.getSyncJobById(id);
     } catch (error) {
       rethrowIntegrationHttpError(error);
@@ -161,16 +185,18 @@ export class SyncJobsController {
 
   @Post('sync-jobs/:id/retry')
   @HttpCode(HttpStatus.OK)
-  @Permissions('integration.jobs.retry')
+  @RequirePermission('channels.update')
   @ApiOperation({
     summary: 'Replay a failed or dead-lettered synchronization job',
   })
   async retrySyncJob(
+    @AllowedBranches() branches: string[] | null,
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentContext() ctx: AuthenticatedContext,
     @Body() dto: RetrySyncJobDto,
   ) {
     try {
+      await this.scope.assertJob(branches, id);
       return await this.syncJobsService.retrySyncJob(id, ctx.userId, dto);
     } catch (error) {
       rethrowIntegrationHttpError(error);

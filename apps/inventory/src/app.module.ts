@@ -34,6 +34,7 @@ import { TransfersController } from './modules/transfers/transfers.controller';
 import { TransfersService } from './modules/transfers/transfers.service';
 import { WarehousesController } from './modules/warehouses/warehouses.controller';
 import { WarehousesService } from './modules/warehouses/warehouses.service';
+import { WarehouseScopeService } from './scope/warehouse-scope';
 import {
   InventoryLedgerEntity,
   StockItemEntity,
@@ -103,6 +104,7 @@ import { StockService } from './stock/stock.service';
     WarehouseReservationsController,
   ],
   providers: [
+    WarehouseScopeService,
     StockService,
     WarehousesService,
     StockQueryService,

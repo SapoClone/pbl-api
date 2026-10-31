@@ -11,8 +11,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, RequirePermission } from '@pbl/auth';
+import {
+  assertBranchNamed,
+  assertRowBranch,
+  branchScopeOf,
+} from '../../presentation/branch-scope';
 import { rethrowFinanceHttpError } from '../../presentation/finance-http-error';
 import {
   ListReceivablesQueryDto,
@@ -27,8 +31,18 @@ import { ReceivablesService } from './receivables.service';
 export class ReceivablesController {
   constructor(private readonly receivablesService: ReceivablesService) {}
 
+  /** The receivable, or 404 when it belongs to a branch the member may not use. */
+  private async loadReceivable(user: AuthUser, id: string) {
+    const receivable = await this.receivablesService.getReceivableById(
+      id,
+      user.tenantId!,
+    );
+    assertRowBranch(user, receivable.branchId);
+    return receivable;
+  }
+
   @Post('v1/finance/receivables')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.create')
   @ApiOperation({ summary: 'Recognize a customer receivable (AR)' })
   async recognizeReceivable(
     @CurrentUser() user: AuthUser,
@@ -36,6 +50,7 @@ export class ReceivablesController {
     @Body() dto: RecognizeReceivableDto,
   ) {
     try {
+      assertBranchNamed(user, dto.branchId);
       return await this.receivablesService.recognizeReceivable(
         user.id,
         idempotencyKey,
@@ -48,7 +63,7 @@ export class ReceivablesController {
   }
 
   @Get('v1/finance/receivables')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List customer receivables' })
   async listReceivables(
     @CurrentUser() user: AuthUser,
@@ -58,6 +73,7 @@ export class ReceivablesController {
       return await this.receivablesService.listReceivables(
         query,
         user.tenantId!,
+        branchScopeOf(user),
       );
     } catch (error) {
       rethrowFinanceHttpError(error);
@@ -65,24 +81,21 @@ export class ReceivablesController {
   }
 
   @Get('v1/finance/receivables/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'Get customer receivable details' })
   async getReceivable(
     @CurrentUser() user: AuthUser,
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     try {
-      return await this.receivablesService.getReceivableById(
-        id,
-        user.tenantId!,
-      );
+      return await this.loadReceivable(user, id);
     } catch (error) {
       rethrowFinanceHttpError(error);
     }
   }
 
   @Get('v1/finance/customers/:id/debt')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({
     summary:
       'Get customer outstanding debt summary, open receivables, and immutable debt subledger',
@@ -103,7 +116,7 @@ export class ReceivablesController {
 
   @Post('v1/finance/receivables/:id/payments')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.create')
   @ApiOperation({
     summary: 'Record a partial or full payment against a specific receivable',
   })
@@ -114,6 +127,8 @@ export class ReceivablesController {
     @Body() dto: RecordReceivablePaymentDto,
   ) {
     try {
+      await this.loadReceivable(user, id);
+      assertBranchNamed(user, dto.branchId);
       return await this.receivablesService.recordReceivablePayment(
         id,
         null,
@@ -129,7 +144,7 @@ export class ReceivablesController {
 
   @Post('v1/finance/customers/:id/debt/payments')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.create')
   @ApiOperation({
     summary:
       'Record a customer debt payment allocated across one or more open receivables',
@@ -141,6 +156,7 @@ export class ReceivablesController {
     @Body() dto: RecordReceivablePaymentDto,
   ) {
     try {
+      assertBranchNamed(user, dto.branchId);
       return await this.receivablesService.recordReceivablePayment(
         null,
         customerId,

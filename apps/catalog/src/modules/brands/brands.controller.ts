@@ -18,8 +18,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import { PaginatedResult } from '../categories/categories.service';
 import {
   BrandRes,
@@ -37,7 +36,7 @@ export class BrandsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   @ApiOperation({ summary: 'Create a product brand' })
   @ApiResponse({ status: HttpStatus.CREATED, description: 'Created brand' })
   create(@Body() dto: CreateBrandReqDto): Promise<BrandRes> {
@@ -45,7 +44,7 @@ export class BrandsController {
   }
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({ summary: 'List or search brands' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Paginated brands' })
   list(@Query() query: ListBrandsReqDto): Promise<PaginatedResult<BrandRes>> {
@@ -53,7 +52,7 @@ export class BrandsController {
   }
 
   @Get(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({ summary: 'Retrieve brand by ID' })
   @ApiParam({ name: 'id', description: 'Brand UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Brand details' })
@@ -62,7 +61,7 @@ export class BrandsController {
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({ summary: 'Update brand details or status' })
   @ApiParam({ name: 'id', description: 'Brand UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Updated brand' })
@@ -75,7 +74,7 @@ export class BrandsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.delete')
   @ApiOperation({
     summary: 'Deactivate brand (preserves historical product references)',
   })

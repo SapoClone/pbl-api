@@ -13,6 +13,8 @@ import { OrderEntity } from './entities/order.entity';
 import { hashRequest, OrdersService, SalesErrorCode } from './orders.service';
 
 const KEY = '33333333-3333-4333-8333-333333333333';
+/** every branch (an owner or a member with no assignment) */
+const ALL = null;
 
 const dto = (
   overrides: Partial<CreateOrderReqDto> = {},
@@ -27,7 +29,7 @@ const dto = (
 });
 
 describe('OrdersService', () => {
-  let order: { save: jest.Mock };
+  let order: { save: jest.Mock; findOne: jest.Mock };
   let items: { save: jest.Mock };
   let orders: Record<string, jest.Mock>;
   let branches: { findOne: jest.Mock };
@@ -37,9 +39,16 @@ describe('OrdersService', () => {
   let service: OrdersService;
 
   beforeEach(() => {
-    order = { save: jest.fn(async (o: OrderEntity) => o) };
+    order = {
+      save: jest.fn(async (o: OrderEntity) => o),
+      findOne: jest.fn().mockResolvedValue(null), // no racing winner
+    };
     items = { save: jest.fn(async (rows: unknown[]) => rows) };
-    em = { getRepository: jest.fn(() => items), connection: {} };
+    em = {
+      getRepository: jest.fn(() => items),
+      query: jest.fn().mockResolvedValue([]), // the advisory lock
+      connection: {},
+    };
     orders = {
       transaction: jest.fn(async (work) => work(order, em)),
       findOne: jest.fn().mockResolvedValue(null),
@@ -79,7 +88,12 @@ describe('OrdersService', () => {
   afterEach(() => jest.restoreAllMocks());
 
   it('computes the total from the lines, never from the client', async () => {
-    const { order: res, replayed } = await service.create('acc-1', KEY, dto());
+    const { order: res, replayed } = await service.create(
+      'acc-1',
+      ALL,
+      KEY,
+      dto(),
+    );
 
     expect(replayed).toBe(false);
     expect(res.totalAmount).toBe(2 * 120000 + 350000);
@@ -90,7 +104,7 @@ describe('OrdersService', () => {
   });
 
   it('stores the key and the request hash on the order', async () => {
-    await service.create('acc-1', KEY, dto());
+    await service.create('acc-1', ALL, KEY, dto());
 
     expect(order.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -101,7 +115,7 @@ describe('OrdersService', () => {
   });
 
   it('writes the order.completed event in the same transaction', async () => {
-    const { order: res } = await service.create('acc-1', KEY, dto());
+    const { order: res } = await service.create('acc-1', ALL, KEY, dto());
 
     expect(orders.transaction).toHaveBeenCalledTimes(1);
     expect(outbox.add).toHaveBeenCalledWith(
@@ -130,7 +144,9 @@ describe('OrdersService', () => {
   ])('rejects %s with S001 and writes nothing', async (_name, branch) => {
     branches.findOne.mockResolvedValue(branch);
 
-    const error = await service.create('acc-1', KEY, dto()).catch((e) => e);
+    const error = await service
+      .create('acc-1', ALL, KEY, dto())
+      .catch((e) => e);
 
     expect(error).toBeInstanceOf(BadRequestException);
     expect(error.getResponse()).toMatchObject({
@@ -142,7 +158,7 @@ describe('OrdersService', () => {
 
   describe('stock', () => {
     it('holds the stock of every line before the order exists, under the order id', async () => {
-      const { order: res } = await service.create('acc-1', KEY, dto());
+      const { order: res } = await service.create('acc-1', ALL, KEY, dto());
 
       expect(inventory.reserve).toHaveBeenCalledWith(res.id, 'b1', [
         { sku: 'AO-01', quantity: 2 },
@@ -157,7 +173,9 @@ describe('OrdersService', () => {
       const shortages = [{ sku: 'AO-01', requested: 2, available: 1 }];
       inventory.reserve.mockResolvedValue(shortages);
 
-      const error = await service.create('acc-1', KEY, dto()).catch((e) => e);
+      const error = await service
+        .create('acc-1', ALL, KEY, dto())
+        .catch((e) => e);
 
       expect(error).toBeInstanceOf(ConflictException);
       expect(error.getResponse()).toMatchObject({
@@ -171,7 +189,7 @@ describe('OrdersService', () => {
     it('refuses the sale when inventory cannot be reached, and creates nothing', async () => {
       inventory.reserve.mockRejectedValue(new ServiceUnavailableException());
 
-      await expect(service.create('acc-1', KEY, dto())).rejects.toThrow(
+      await expect(service.create('acc-1', ALL, KEY, dto())).rejects.toThrow(
         ServiceUnavailableException,
       );
       expect(orders.transaction).not.toHaveBeenCalled();
@@ -180,7 +198,7 @@ describe('OrdersService', () => {
     it('gives the stock back at once when the order cannot be saved', async () => {
       orders.transaction.mockRejectedValue(new Error('connection lost'));
 
-      await expect(service.create('acc-1', KEY, dto())).rejects.toThrow(
+      await expect(service.create('acc-1', ALL, KEY, dto())).rejects.toThrow(
         'connection lost',
       );
 
@@ -194,7 +212,7 @@ describe('OrdersService', () => {
         .mockResolvedValueOnce(null) // the first lookup
         .mockResolvedValue(new OrderEntity()); // the order is there after all
 
-      await expect(service.create('acc-1', KEY, dto())).rejects.toThrow(
+      await expect(service.create('acc-1', ALL, KEY, dto())).rejects.toThrow(
         'connection lost',
       );
 
@@ -202,10 +220,11 @@ describe('OrdersService', () => {
     });
 
     it('asks for the same hold for the same key, and a different one for another key', async () => {
-      await service.create('acc-1', KEY, dto());
-      await service.create('acc-1', KEY, dto());
+      await service.create('acc-1', ALL, KEY, dto());
+      await service.create('acc-1', ALL, KEY, dto());
       await service.create(
         'acc-1',
+        ALL,
         'cccccccc-3333-4333-8333-333333333333',
         dto(),
       );
@@ -234,7 +253,7 @@ describe('OrdersService', () => {
         }),
       );
 
-      const result = await service.create('acc-1', KEY, dto());
+      const result = await service.create('acc-1', ALL, KEY, dto());
 
       expect(result.replayed).toBe(true);
       expect(inventory.reserve).not.toHaveBeenCalled();
@@ -262,7 +281,7 @@ describe('OrdersService', () => {
     it('returns the first order for a retried request and sells nothing again', async () => {
       orders.findOne.mockResolvedValue(existing());
 
-      const result = await service.create('acc-1', KEY, dto());
+      const result = await service.create('acc-1', ALL, KEY, dto());
 
       expect(result.replayed).toBe(true);
       expect(result.order.id).toBe('o1');
@@ -273,7 +292,7 @@ describe('OrdersService', () => {
     it('does not even look at the branch on a replay', async () => {
       orders.findOne.mockResolvedValue(existing());
 
-      await service.create('acc-1', KEY, dto());
+      await service.create('acc-1', ALL, KEY, dto());
 
       expect(branches.findOne).not.toHaveBeenCalled();
     });
@@ -282,7 +301,7 @@ describe('OrdersService', () => {
       orders.findOne.mockResolvedValue(existing());
 
       const error = await service
-        .create('acc-1', KEY, dto({ paymentMethod: 'card' }))
+        .create('acc-1', ALL, KEY, dto({ paymentMethod: 'card' }))
         .catch((e) => e);
 
       expect(error).toBeInstanceOf(ConflictException);
@@ -313,7 +332,7 @@ describe('OrdersService', () => {
         ),
       );
 
-      const result = await service.create('acc-1', KEY, dto());
+      const result = await service.create('acc-1', ALL, KEY, dto());
 
       expect(result).toMatchObject({ replayed: true, order: { id: 'o1' } });
       // the hold is shared with the winner (same order id): it is not given back
@@ -323,22 +342,82 @@ describe('OrdersService', () => {
     it('rethrows other database errors', async () => {
       orders.transaction.mockRejectedValue(new Error('connection lost'));
 
-      await expect(service.create('acc-1', KEY, dto())).rejects.toThrow(
+      await expect(service.create('acc-1', ALL, KEY, dto())).rejects.toThrow(
         'connection lost',
       );
+    });
+  });
+
+  describe('branch scope (ADR-0020)', () => {
+    const ONLY_B2 = ['b2'];
+
+    it('creates only in an allowed branch: 404 and no stock held otherwise', async () => {
+      await expect(
+        service.create('acc-1', ONLY_B2, KEY, dto({ branchId: 'b1' })),
+      ).rejects.toThrow(NotFoundException);
+      expect(inventory.reserve).not.toHaveBeenCalled();
+      expect(order.save).not.toHaveBeenCalled();
+
+      await expect(
+        service.create('acc-1', ONLY_B2, KEY, dto({ branchId: 'b2' })),
+      ).resolves.toMatchObject({ replayed: false });
+    });
+
+    it('answers 404 for an order of another branch, 200 for its own', async () => {
+      orders.findOne.mockResolvedValue({
+        id: 'o1',
+        branchId: 'b1',
+        items: [],
+        createdAt: new Date(),
+      });
+
+      await expect(service.get('o1', ONLY_B2)).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.get('o1', ['b1'])).resolves.toMatchObject({
+        id: 'o1',
+      });
+      await expect(service.get('o1', ALL)).resolves.toMatchObject({
+        id: 'o1',
+      });
+    });
+
+    it('lists only the allowed branches when no filter is given', async () => {
+      await service.list({ page: 1, limit: 10 } as never, ['b1', 'b2']);
+
+      const where = orders.findAndCount.mock.calls[0][0].where;
+      expect(where.branchId._value).toEqual(['b1', 'b2']);
+    });
+
+    it('answers 404 for a branch filter outside the scope and an empty page for no branch', async () => {
+      await expect(
+        service.list({ page: 1, limit: 10, branchId: 'b1' } as never, ONLY_B2),
+      ).rejects.toThrow(NotFoundException);
+
+      const page = await service.list({ page: 1, limit: 10 } as never, []);
+      expect(page.data).toEqual([]);
+      expect(orders.findAndCount).not.toHaveBeenCalled();
+    });
+
+    it('does not filter for every branch', async () => {
+      await service.list({ page: 1, limit: 10 } as never, ALL);
+
+      expect(orders.findAndCount.mock.calls[0][0].where).toEqual({});
     });
   });
 
   it('answers 404 for an order that is not in the store', async () => {
     orders.findOne.mockResolvedValue(null);
 
-    await expect(service.get('missing')).rejects.toThrow(NotFoundException);
+    await expect(service.get('missing', ALL)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('pages the list and reports the next page', async () => {
     orders.findAndCount.mockResolvedValue([[], 25]);
 
-    const page = await service.list({ page: 1, limit: 10 } as never);
+    const page = await service.list({ page: 1, limit: 10 } as never, ALL);
 
     expect(orders.findAndCount).toHaveBeenCalledWith(
       expect.objectContaining({ take: 10, skip: 0 }),
@@ -433,7 +512,7 @@ describe('OrdersService', () => {
       );
 
       const outcome = await TenantContext.run('t1', () =>
-        svc.checkout('acc-1', KEY, checkoutDto),
+        svc.checkout('acc-1', ALL, KEY, checkoutDto),
       );
 
       expect(outcome.state).toBe('CONFIRMED');
@@ -513,7 +592,7 @@ describe('OrdersService', () => {
 
       // 1. Initial call fails with timeout -> workflow saved as RECOVERY_PENDING
       const err = await TenantContext.run('t1', () =>
-        svc.checkout('acc-1', KEY, checkoutDto),
+        svc.checkout('acc-1', ALL, KEY, checkoutDto),
       ).catch((e) => e);
 
       expect(err).toBeInstanceOf(ServiceUnavailableException);
@@ -530,7 +609,7 @@ describe('OrdersService', () => {
 
       // 2. Recovery call replays the exact same reservationIdempotencyKey and confirms the order
       const recovered = await TenantContext.run('t1', () =>
-        svc.recoverCheckout(savedWorkflow.id),
+        svc.recoverCheckout(savedWorkflow.id, ALL),
       );
       expect(recovered.state).toBe('CONFIRMED');
       expect(recovered.reservationId).toBe('rsv-timeout-1');

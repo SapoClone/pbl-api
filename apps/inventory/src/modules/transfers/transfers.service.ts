@@ -22,6 +22,7 @@ import {
   parseMoneyToCents,
   parseQtyToMilli,
 } from '../../domain/inventory-domain';
+import { WarehouseScope } from '../../scope/warehouse-scope';
 import {
   assertActiveWarehouse,
   schemaPrefix,
@@ -747,7 +748,11 @@ export class TransfersService {
     });
   }
 
-  async listTransfers(warehouseId?: string, status?: string) {
+  async listTransfers(
+    warehouseId?: string,
+    status?: string,
+    scope?: WarehouseScope,
+  ) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
       const params: unknown[] = [tenantId];
@@ -762,6 +767,13 @@ export class TransfersService {
       if (status) {
         params.push(status);
         filters.push(`AND status = $${params.length}`);
+      }
+      if (scope) {
+        // visible when either end is in scope
+        params.push(scope);
+        filters.push(
+          `AND (from_warehouse_id = ANY($${params.length}::uuid[]) OR to_warehouse_id = ANY($${params.length}::uuid[]))`,
+        );
       }
 
       const headers = await em.query(

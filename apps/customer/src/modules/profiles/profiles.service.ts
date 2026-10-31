@@ -20,7 +20,7 @@ import {
   CustomerDomainError,
   CustomerDomainErrorCode,
   formatVnd,
-  maskEmailAddress,
+  maskAddressPhones,
   maskPhoneNumber,
   normalizeEmail,
   normalizePhoneNumber,
@@ -84,34 +84,35 @@ export class ProfilesService {
   private formatCustomerRecord(
     customer: CustomerEntity,
     options?: {
-      maskPii?: boolean;
+      /** Full phone only for callers holding customers.update (set by the controller). */
+      fullPhone?: boolean;
       group?: CustomerGroupEntity | null;
       tier?: MembershipTierEntity | null;
       loyaltyAccount?: LoyaltyAccountEntity | null;
       defaultAddress?: CustomerAddressEntity | null;
     },
   ) {
-    const mask = options?.maskPii === true;
+    const maskPhone = options?.fullPhone !== true;
     const loyalty = options?.loyaltyAccount;
     return {
       id: customer.id,
       tenantId: customer.tenantId,
       code: customer.code,
       name: customer.name,
-      phone: mask ? maskPhoneNumber(customer.phone) : customer.phone,
-      phoneNormalized: mask
+      phone: maskPhone ? maskPhoneNumber(customer.phone) : customer.phone,
+      phoneNormalized: maskPhone
         ? maskPhoneNumber(customer.phoneNormalized)
         : customer.phoneNormalized,
-      email: mask ? maskEmailAddress(customer.email) : customer.email,
+      email: customer.email,
       gender: customer.gender,
-      dateOfBirth: mask ? null : customer.dateOfBirth,
+      dateOfBirth: customer.dateOfBirth,
       source: customer.source,
       status: customer.status,
       customerGroupId: customer.customerGroupId,
       membershipTierId: customer.membershipTierId,
       debtLimit: customer.debtLimit,
       currentDebt: customer.currentDebt,
-      note: mask ? null : customer.note,
+      note: customer.note,
       mergedIntoCustomerId: customer.mergedIntoCustomerId,
       version: customer.version,
       createdAt: customer.createdAt,
@@ -159,7 +160,12 @@ export class ProfilesService {
           }
         : {}),
       ...(options?.defaultAddress !== undefined
-        ? { defaultAddress: options.defaultAddress }
+        ? {
+            defaultAddress: maskAddressPhones(
+              options.defaultAddress,
+              !maskPhone,
+            ),
+          }
         : {}),
     };
   }
@@ -168,6 +174,7 @@ export class ProfilesService {
     tenantId: string,
     _actorId: string,
     dto: CreateCustomerDto,
+    fullPhone = false,
   ) {
     const trimmedName = dto.name?.trim();
     if (!trimmedName) {
@@ -331,6 +338,7 @@ export class ProfilesService {
         await this.outbox.add(em, CUSTOMER_CREATED, eventPayload, { tenantId });
 
         return this.formatCustomerRecord(savedCustomer, {
+          fullPhone,
           group,
           tier,
           loyaltyAccount: savedLoyalty,
@@ -352,12 +360,11 @@ export class ProfilesService {
   async listCustomers(
     tenantId: string,
     query: ListCustomersQueryDto,
-    callerRoles: string[] = [],
+    fullPhone = false,
   ) {
     const page = Math.max(1, Number(query.page ?? 1));
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 20)));
     const offset = (page - 1) * limit;
-    const shouldMaskPii = query.maskPii === true;
 
     return this.runInTenantTx(tenantId, async (em) => {
       const qb = em
@@ -454,7 +461,7 @@ export class ProfilesService {
       return {
         items: items.map((c) =>
           this.formatCustomerRecord(c, {
-            maskPii: shouldMaskPii,
+            fullPhone,
             loyaltyAccount: loyaltyByCustomer.get(c.id) ?? null,
           }),
         ),
@@ -462,13 +469,15 @@ export class ProfilesService {
         page,
         limit,
         nextCursor,
-        piiMasked: shouldMaskPii,
-        callerRoles,
       };
     });
   }
 
-  async lookupCustomer(tenantId: string, query: LookupCustomerQueryDto) {
+  async lookupCustomer(
+    tenantId: string,
+    query: LookupCustomerQueryDto,
+    fullPhone = false,
+  ) {
     if (!query.phone && !query.code && !query.email) {
       throw new CustomerDomainError(
         CustomerDomainErrorCode.VALIDATION_ERROR,
@@ -546,6 +555,7 @@ export class ProfilesService {
       ]);
 
       return this.formatCustomerRecord(customer, {
+        fullPhone,
         group,
         tier,
         loyaltyAccount,
@@ -557,7 +567,7 @@ export class ProfilesService {
   async getCustomerById(
     tenantId: string,
     customerId: string,
-    options?: { maskPii?: boolean },
+    options?: { fullPhone?: boolean },
   ) {
     return this.runInTenantTx(tenantId, async (em) => {
       const customer = await em.getRepository(CustomerEntity).findOne({
@@ -596,7 +606,7 @@ export class ProfilesService {
       ]);
 
       return this.formatCustomerRecord(customer, {
-        maskPii: options?.maskPii,
+        fullPhone: options?.fullPhone,
         group,
         tier,
         loyaltyAccount,
@@ -610,6 +620,7 @@ export class ProfilesService {
     customerId: string,
     actorId: string,
     dto: UpdateCustomerDto,
+    fullPhone = false,
   ) {
     try {
       return await this.runInTenantTx(tenantId, async (em) => {
@@ -819,6 +830,7 @@ export class ProfilesService {
         });
 
         return this.formatCustomerRecord(saved, {
+          fullPhone,
           group,
           tier,
           loyaltyAccount,
@@ -1039,9 +1051,13 @@ export class ProfilesService {
     });
   }
 
-  async getCustomerSummary(tenantId: string, customerId: string) {
+  async getCustomerSummary(
+    tenantId: string,
+    customerId: string,
+    fullPhone = false,
+  ) {
     const [profile, purchaseSummary] = await Promise.all([
-      this.getCustomerById(tenantId, customerId),
+      this.getCustomerById(tenantId, customerId, { fullPhone }),
       this.getPurchaseSummary(tenantId, customerId),
     ]);
 

@@ -11,8 +11,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, RequirePermission } from '@pbl/auth';
+import {
+  assertBranchNamed,
+  assertRowBranch,
+  branchScopeOf,
+} from '../../presentation/branch-scope';
 import { rethrowFinanceHttpError } from '../../presentation/finance-http-error';
 import {
   CreateCashbookCategoryDto,
@@ -29,8 +33,15 @@ import { CashbookService } from './cashbook.service';
 export class CashbookController {
   constructor(private readonly cashbookService: CashbookService) {}
 
+  /** The entry, or 404 when it belongs to a branch the member may not use. */
+  private async loadEntry(user: AuthUser, id: string) {
+    const entry = await this.cashbookService.getEntryById(id, user.tenantId!);
+    assertRowBranch(user, entry.branchId);
+    return entry;
+  }
+
   @Get('v1/finance/cashbook/categories')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List cashbook receipt and expense categories' })
   async listCategories(
     @CurrentUser() user: AuthUser,
@@ -47,7 +58,7 @@ export class CashbookController {
   }
 
   @Post('v1/finance/cashbook/categories')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('finance.create')
   @ApiOperation({ summary: 'Create a custom cashbook category' })
   async createCategory(
     @CurrentUser() user: AuthUser,
@@ -61,7 +72,7 @@ export class CashbookController {
   }
 
   @Post('v1/finance/cashbook/receipts')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.create')
   @ApiOperation({ summary: 'Create a cashbook receipt voucher (PT)' })
   async createReceipt(
     @CurrentUser() user: AuthUser,
@@ -69,11 +80,13 @@ export class CashbookController {
     @Body() dto: CreateCashbookVoucherDto,
   ) {
     try {
+      assertBranchNamed(user, dto.branchId);
       return await this.cashbookService.createReceiptVoucher(
         user.id,
         idempotencyKey,
         dto,
         user.tenantId!,
+        branchScopeOf(user),
       );
     } catch (error) {
       rethrowFinanceHttpError(error);
@@ -81,7 +94,7 @@ export class CashbookController {
   }
 
   @Post('v1/finance/cashbook/expenses')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.create')
   @ApiOperation({ summary: 'Create a cashbook expense voucher (PC)' })
   async createExpense(
     @CurrentUser() user: AuthUser,
@@ -89,11 +102,13 @@ export class CashbookController {
     @Body() dto: CreateCashbookVoucherDto,
   ) {
     try {
+      assertBranchNamed(user, dto.branchId);
       return await this.cashbookService.createExpenseVoucher(
         user.id,
         idempotencyKey,
         dto,
         user.tenantId!,
+        branchScopeOf(user),
       );
     } catch (error) {
       rethrowFinanceHttpError(error);
@@ -101,7 +116,7 @@ export class CashbookController {
   }
 
   @Get('v1/finance/cashbook/entries')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({
     summary: 'List cashbook entries with filtering and pagination',
   })
@@ -110,35 +125,45 @@ export class CashbookController {
     @Query() query: ListCashbookEntriesQueryDto,
   ) {
     try {
-      return await this.cashbookService.listEntries(query, user.tenantId!);
+      assertBranchNamed(user, query.branchId);
+      return await this.cashbookService.listEntries(
+        query,
+        user.tenantId!,
+        branchScopeOf(user),
+      );
     } catch (error) {
       rethrowFinanceHttpError(error);
     }
   }
 
   @Get('v1/finance/cashbook/export')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'Export cashbook entries as CSV' })
   async exportEntries(
     @CurrentUser() user: AuthUser,
     @Query() query: ListCashbookEntriesQueryDto,
   ) {
     try {
-      return await this.cashbookService.exportEntriesCsv(query, user.tenantId!);
+      assertBranchNamed(user, query.branchId);
+      return await this.cashbookService.exportEntriesCsv(
+        query,
+        user.tenantId!,
+        branchScopeOf(user),
+      );
     } catch (error) {
       rethrowFinanceHttpError(error);
     }
   }
 
   @Get('v1/finance/cashbook/entries/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'Get cashbook voucher details' })
   async getEntry(
     @CurrentUser() user: AuthUser,
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     try {
-      return await this.cashbookService.getEntryById(id, user.tenantId!);
+      return await this.loadEntry(user, id);
     } catch (error) {
       rethrowFinanceHttpError(error);
     }
@@ -146,13 +171,14 @@ export class CashbookController {
 
   @Post('v1/finance/cashbook/entries/:id/approve')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('finance.approve')
   @ApiOperation({ summary: 'Approve a DRAFT cashbook voucher' })
   async approveEntry(
     @CurrentUser() user: AuthUser,
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     try {
+      await this.loadEntry(user, id);
       return await this.cashbookService.approveEntry(
         id,
         user.id,
@@ -165,7 +191,7 @@ export class CashbookController {
 
   @Post('v1/finance/cashbook/entries/:id/post')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('finance.approve')
   @ApiOperation({
     summary:
       'Post a cashbook voucher, atomically writing a balanced journal and updating cash account balance',
@@ -177,6 +203,7 @@ export class CashbookController {
     @Body() dto?: PostCashbookEntryDto,
   ) {
     try {
+      await this.loadEntry(user, id);
       return await this.cashbookService.postEntry(
         id,
         user.id,
@@ -190,7 +217,7 @@ export class CashbookController {
 
   @Post('v1/finance/cashbook/entries/:id/reverse')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('finance.approve')
   @ApiOperation({
     summary:
       'Reverse a POSTED cashbook voucher using a compensating reversal voucher and journal',
@@ -202,6 +229,7 @@ export class CashbookController {
     @Body() dto: ReverseCashbookEntryDto,
   ) {
     try {
+      await this.loadEntry(user, id);
       return await this.cashbookService.reverseEntry(
         id,
         user.id,

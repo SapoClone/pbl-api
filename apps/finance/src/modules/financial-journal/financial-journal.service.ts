@@ -19,6 +19,7 @@ import {
   FinancialJournalEntity,
   FinancialJournalLineEntity,
 } from '../../infrastructure/persistence/finance.entities';
+import { applyBranchScope, BranchScope } from '../../presentation/branch-scope';
 import {
   CreateFinancialAccountDto,
   ListJournalsQueryDto,
@@ -426,6 +427,7 @@ export class FinancialJournalService {
   async listJournals(
     query: ListJournalsQueryDto,
     tenantId = TenantContext.require(),
+    scope: BranchScope = null,
   ) {
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 20)));
     const offset = Math.max(0, Number(query.offset ?? 0));
@@ -444,6 +446,7 @@ export class FinancialJournalService {
       if (query.branchId) {
         where.branchId = query.branchId;
       }
+      applyBranchScope(where, scope);
       if (query.status) {
         where.status = query.status;
       }

@@ -199,66 +199,103 @@ describe('Catalog service HTTP & RBAC contract', () => {
         .expect(403);
     });
 
-    it('allows cashier to read products, lookup SKU/barcode, and resolve prices, but forbids mutations (403)', async () => {
+    const U = SAMPLE_UUID;
+    const lookupPerms = [
+      'products.view',
+      'pos.create',
+      'orders.create',
+      'inventory.view',
+    ];
+    // [method, path, permissions that open the route]
+    const matrix: Array<[string, string, string[]]> = [
+      ['post', '/api/v1/categories', ['products.create']],
+      ['get', '/api/v1/categories', ['products.view']],
+      ['get', '/api/v1/categories/tree', ['products.view']],
+      ['get', `/api/v1/categories/${U}`, ['products.view']],
+      ['patch', `/api/v1/categories/${U}`, ['products.update']],
+      ['patch', `/api/v1/categories/${U}/status`, ['products.update']],
+      ['post', `/api/v1/categories/${U}/reparent`, ['products.update']],
+      ['delete', `/api/v1/categories/${U}`, ['products.delete']],
+      ['post', '/api/v1/brands', ['products.create']],
+      ['get', '/api/v1/brands', ['products.view']],
+      ['get', `/api/v1/brands/${U}`, ['products.view']],
+      ['patch', `/api/v1/brands/${U}`, ['products.update']],
+      ['delete', `/api/v1/brands/${U}`, ['products.delete']],
+      ['post', '/api/v1/attributes', ['products.create']],
+      ['get', '/api/v1/attributes', ['products.view']],
+      ['patch', `/api/v1/attributes/${U}`, ['products.update']],
+      ['post', `/api/v1/attributes/${U}/values`, ['products.create']],
+      ['get', `/api/v1/attributes/${U}/values`, ['products.view']],
+      ['post', '/api/v1/products', ['products.create']],
+      ['get', '/api/v1/products', ['products.view']],
+      ['get', '/api/v1/products/lookup?sku=A', lookupPerms],
+      ['get', `/api/v1/products/${U}`, ['products.view']],
+      ['patch', `/api/v1/products/${U}`, ['products.update']],
+      ['patch', `/api/v1/products/${U}/status`, ['products.update']],
+      ['delete', `/api/v1/products/${U}`, ['products.delete']],
+      ['post', `/api/v1/products/${U}/variants`, ['products.create']],
+      ['post', `/api/v1/products/${U}/variants/generate`, ['products.create']],
+      ['get', `/api/v1/products/${U}/variants`, ['products.view']],
+      ['get', `/api/v1/variants/${U}`, ['products.view']],
+      ['patch', `/api/v1/variants/${U}`, ['products.update']],
+      ['patch', `/api/v1/variants/${U}/status`, ['products.update']],
+      ['post', `/api/v1/products/${U}/units`, ['products.create']],
+      ['get', `/api/v1/products/${U}/units`, ['products.view']],
+      ['post', '/api/v1/price-lists', ['products.create']],
+      ['get', '/api/v1/price-lists', ['products.view']],
+      ['get', `/api/v1/price-lists/${U}`, ['products.view']],
+      ['patch', `/api/v1/price-lists/${U}`, ['products.update']],
+      ['put', `/api/v1/price-lists/${U}/items`, ['products.update']],
+      [
+        'get',
+        `/api/v1/variants/${U}/price`,
+        ['products.view', 'pos.create', 'orders.create'],
+      ],
+    ];
+    const call = (method: string, path: string, authz: string) =>
+      (request(url()) as any)
+        [method](path)
+        .set('Authorization', authz)
+        .send({});
+    const withPerms = (permissions: string[]) =>
+      auth.bearerWithPermissions('custom_role', permissions, TENANT);
+
+    it.each(matrix)(
+      '%s %s: allowed with its permission, 403 without, owner passes',
+      async (method, path, perms) => {
+        for (const perm of perms) {
+          const res = await call(method, path, withPerms([perm]));
+          expect(res.status).not.toBe(403);
+          expect(res.status).not.toBe(401);
+        }
+        // a permission that opens no catalog route
+        expect(
+          (await call(method, path, withPerms(['staff.view']))).status,
+        ).toBe(403);
+        expect((await call(method, path, withPerms([]))).status).toBe(403);
+        const owner = await call(method, path, as(['owner']));
+        expect(owner.status).not.toBe(403);
+        expect(owner.status).not.toBe(401);
+      },
+    );
+
+    it('does not map a role name to permissions', async () => {
       await request(url())
         .get('/api/v1/products')
-        .set('Authorization', as(['cashier']))
-        .expect(200);
-
-      await request(url())
-        .get('/api/v1/products/lookup?sku=TSHIRT-BLK-M')
-        .set('Authorization', as(['cashier']))
-        .expect(200);
-
-      await request(url())
-        .get(`/api/v1/variants/${SAMPLE_UUID}/price`)
-        .set('Authorization', as(['cashier']))
-        .expect(200);
-
-      await request(url())
-        .post('/api/v1/categories')
-        .set('Authorization', as(['cashier']))
-        .send({ name: 'Clothing' })
-        .expect(403);
-
-      await request(url())
-        .post('/api/v1/products')
-        .set('Authorization', as(['cashier']))
-        .send({ name: 'Áo thun cotton nam' })
-        .expect(403);
-
-      await request(url())
-        .post('/api/v1/price-lists')
-        .set('Authorization', as(['cashier']))
-        .send({ name: 'Retail' })
+        .set('Authorization', as(['branch_manager']))
         .expect(403);
     });
 
-    it('allows owner and manager to create categories, brands, products, variants, and price lists', async () => {
-      for (const role of ['owner', 'manager']) {
+    it('lets a POS, order or stock reader look up a variant but not list products', async () => {
+      for (const perm of ['pos.create', 'orders.create', 'inventory.view']) {
         await request(url())
-          .post('/api/v1/categories')
-          .set('Authorization', as([role]))
-          .send({ name: 'Clothing' })
-          .expect(201);
-
+          .get('/api/v1/products/lookup?sku=TSHIRT-BLK-M')
+          .set('Authorization', withPerms([perm]))
+          .expect(200);
         await request(url())
-          .post('/api/v1/brands')
-          .set('Authorization', as([role]))
-          .send({ name: 'Local Basic' })
-          .expect(201);
-
-        await request(url())
-          .post('/api/v1/products')
-          .set('Authorization', as([role]))
-          .send({ name: 'Áo thun cotton nam' })
-          .expect(201);
-
-        await request(url())
-          .post('/api/v1/price-lists')
-          .set('Authorization', as([role]))
-          .send({ name: 'Retail Default', isDefault: true })
-          .expect(201);
+          .get('/api/v1/products')
+          .set('Authorization', withPerms([perm]))
+          .expect(403);
       }
     });
   });

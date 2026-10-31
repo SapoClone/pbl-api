@@ -66,6 +66,8 @@ services:
       DATABASE_PASSWORD: postgres
       DATABASE_NAME: pbl
       DATABASE_SCHEMA: finance
+      # service-to-service calls (the x-internal-token header): a LOCAL development value; deployments set a real secret
+      INTERNAL_S2S_TOKEN: ${INTERNAL_S2S_TOKEN:-local-dev-internal-token-change-me}
       EVENTS_TRANSPORT: sqs-direct
       AWS_REGION: ap-southeast-1
       AWS_ENDPOINT_URL_SQS: http://elasticmq:9324
@@ -98,6 +100,10 @@ services:
       DATABASE_PASSWORD: postgres
       DATABASE_NAME: pbl
       DATABASE_SCHEMA: integration
+      # service-to-service calls (the x-internal-token header): a LOCAL development value; deployments set a real secret
+      INTERNAL_S2S_TOKEN: ${INTERNAL_S2S_TOKEN:-local-dev-internal-token-change-me}
+      # encrypts marketplace credentials: a LOCAL development value (at least 32 characters); deployments set a real secret
+      INTEGRATION_CREDENTIAL_MASTER_KEY: ${INTEGRATION_CREDENTIAL_MASTER_KEY:-local-dev-credential-key-0123456789abcdef}
       EVENTS_TRANSPORT: sqs-direct
       AWS_REGION: ap-southeast-1
       AWS_ENDPOINT_URL_SQS: http://elasticmq:9324
@@ -159,6 +165,8 @@ services:
       DATABASE_PASSWORD: postgres
       DATABASE_NAME: pbl
       DATABASE_SCHEMA: inventory
+      # service-to-service calls (the x-internal-token header): a LOCAL development value; deployments set a real secret
+      INTERNAL_S2S_TOKEN: ${INTERNAL_S2S_TOKEN:-local-dev-internal-token-change-me}
       # events: ElasticMQ locally, the consumer runs inside the service
       EVENTS_TRANSPORT: sqs-direct
       AWS_REGION: ap-southeast-1
@@ -194,6 +202,8 @@ services:
       DATABASE_PASSWORD: postgres
       DATABASE_NAME: pbl
       DATABASE_SCHEMA: sales
+      # service-to-service calls (the x-internal-token header): a LOCAL development value; deployments set a real secret
+      INTERNAL_S2S_TOKEN: ${INTERNAL_S2S_TOKEN:-local-dev-internal-token-change-me}
       # events: ElasticMQ locally, the relay and consumer run inside the service
       EVENTS_TRANSPORT: sqs-direct
       AWS_REGION: ap-southeast-1
@@ -225,6 +235,8 @@ services:
       DATABASE_PASSWORD: postgres
       DATABASE_NAME: pbl
       DATABASE_SCHEMA: customer
+      # service-to-service calls (the x-internal-token header): a LOCAL development value; deployments set a real secret
+      INTERNAL_S2S_TOKEN: ${INTERNAL_S2S_TOKEN:-local-dev-internal-token-change-me}
       # events: the customer service consumes sales.order.completed (spend, loyalty points)
       EVENTS_TRANSPORT: sqs-direct
       AWS_REGION: ap-southeast-1

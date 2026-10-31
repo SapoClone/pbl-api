@@ -379,11 +379,32 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
   const ownerToken = () =>
     auth.token({ sub: 'owner-1', tid: TENANT, roles: ['owner'] });
   const accountantToken = () =>
-    auth.token({ sub: 'acc-1', tid: TENANT, roles: ['accountant'] });
+    auth.token({
+      sub: 'acc-1',
+      tid: TENANT,
+      roles: ['accountant'],
+      permissions: [
+        'finance.view',
+        'finance.create',
+        'finance.update',
+        'finance.approve',
+      ],
+    });
+  // sales_staff default: finance.view + finance.create
   const cashierToken = () =>
-    auth.token({ sub: 'cashier-1', tid: TENANT, roles: ['cashier'] });
+    auth.token({
+      sub: 'cashier-1',
+      tid: TENANT,
+      roles: ['sales_staff'],
+      permissions: ['finance.view', 'finance.create'],
+    });
   const staffToken = () =>
-    auth.token({ sub: 'staff-1', tid: TENANT, roles: ['staff'] });
+    auth.token({
+      sub: 'staff-1',
+      tid: TENANT,
+      roles: ['warehouse_staff'],
+      permissions: ['inventory.view'],
+    });
   const makerOwnerToken = () =>
     auth.token({ sub: 'maker-1', tid: TENANT, roles: ['owner'] });
 
@@ -418,7 +439,7 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
     await request(url()).get('/v1/finance/summary').expect(401);
   });
 
-  it('enforces RBAC: rejects warehouse staff on cashbook, payables, and adjustments with 403', async () => {
+  it('enforces RBAC: rejects a member without finance permissions on cashbook and payables with 403', async () => {
     await request(url())
       .post('/v1/finance/cashbook/receipts')
       .set('Authorization', `Bearer ${staffToken()}`)
@@ -437,7 +458,7 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .expect(403);
   });
 
-  it('enforces RBAC: allows cashier to create cashbook receipts and collect receivables, but forbids supplier payable payments and adjustment approvals', async () => {
+  it('enforces RBAC: allows finance.create to record receipts and collect receivables, but forbids refund and adjustment approvals', async () => {
     await request(url())
       .post('/v1/finance/cashbook/receipts')
       .set('Authorization', `Bearer ${cashierToken()}`)
@@ -457,11 +478,9 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .expect(200);
 
     await request(url())
-      .post(`/v1/finance/payables/${DOC_ID}/payments`)
+      .post(`/v1/finance/refunds/${DOC_ID}/approve`)
       .set('Authorization', `Bearer ${cashierToken()}`)
-      .send({
-        amount: '150000.00',
-      })
+      .send({})
       .expect(403);
 
     await request(url())

@@ -149,7 +149,7 @@ export class WarehousesService {
     });
   }
 
-  async list(query?: ListWarehousesQueryDto) {
+  async list(query?: ListWarehousesQueryDto, branches?: string[] | null) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
       const params: unknown[] = [tenantId];
@@ -166,6 +166,11 @@ export class WarehousesService {
       if (query?.branchId) {
         params.push(query.branchId);
         filters.push(`AND branch_id = $${params.length}`);
+      }
+      if (branches) {
+        // a warehouse without a branch is for unrestricted members only
+        params.push(branches);
+        filters.push(`AND branch_id = ANY($${params.length}::uuid[])`);
       }
 
       return em.query(

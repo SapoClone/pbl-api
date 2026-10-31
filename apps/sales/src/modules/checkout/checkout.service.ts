@@ -11,7 +11,7 @@ import {
 } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
 import { createHash, randomUUID } from 'node:crypto';
-import { DataSource, QueryFailedError } from 'typeorm';
+import { DataSource, In, QueryFailedError } from 'typeorm';
 import {
   CalculatedOrderQuote,
   SalesDomainError,
@@ -40,6 +40,12 @@ import {
   CheckoutWorkflowState,
   OrderEntity,
 } from '../../orders/entities/order.entity';
+import {
+  BranchScope,
+  assertBranchAllowed,
+  branchAllowed,
+  discountTierFor,
+} from '../../presentation/access';
 import { PosService } from '../pos/pos.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { ConfirmCheckoutPaymentDto, PosCheckoutDto } from './checkout.dto';
@@ -121,10 +127,17 @@ export class CheckoutService {
 
   async checkout(
     staffId: string,
-    roles: string[],
+    permissions: string[],
+    scope: BranchScope,
     headerIdempotencyKey: string | undefined,
     dto: PosCheckoutDto,
   ): Promise<PosCheckoutResult> {
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'ORDER_NOT_FOUND',
+      'Branch not found',
+    );
     const tenantId = TenantContext.require();
     const rawKey = (headerIdempotencyKey ?? dto.idempotencyKey ?? '').trim();
     if (!rawKey) {
@@ -141,6 +154,7 @@ export class CheckoutService {
     // Step 0: Check existing checkout_workflow for idempotency
     const existingWf = await this.findWorkflowByKey(tenantId, idempotencyKey);
     if (existingWf) {
+      this.assertWorkflowInScope(existingWf, scope);
       if (existingWf.requestSha256 !== requestSha256) {
         throw new SalesDomainError(
           SalesDomainErrorCode.IDEMPOTENCY_CONFLICT,
@@ -155,7 +169,7 @@ export class CheckoutService {
     // Step 1: Pre-flight validation (branch active, shift open, Catalog price waterfall, discount authority, tenders)
     await this.validateBranchAndShift(tenantId, dto.branchId, dto.shiftId);
 
-    const primaryRole = roles[0] ?? 'cashier';
+    const primaryRole = discountTierFor(permissions);
     const quote = await this.posService.resolveAndQuoteLines({
       branchId: dto.branchId,
       customerId: dto.customerId,
@@ -165,7 +179,7 @@ export class CheckoutService {
       couponCode: dto.couponCode,
       shippingFee: dto.shippingFee,
       role: primaryRole,
-      permissions: roles,
+      permissions,
       discountApprovedBy: dto.discountApprovedBy,
     });
 
@@ -346,10 +360,13 @@ export class CheckoutService {
     );
   }
 
-  async getCheckout(checkoutId: string): Promise<PosCheckoutResult> {
+  async getCheckout(
+    checkoutId: string,
+    scope: BranchScope,
+  ): Promise<PosCheckoutResult> {
     const tenantId = TenantContext.require();
     const wf = await this.findWorkflowById(tenantId, checkoutId);
-    if (!wf) {
+    if (!wf || !branchAllowed(scope, wf.branchId)) {
       throw new SalesDomainError(
         SalesDomainErrorCode.ORDER_NOT_FOUND,
         `Checkout workflow ${checkoutId} not found`,
@@ -362,10 +379,11 @@ export class CheckoutService {
   async retryCheckout(
     checkoutId: string,
     actorId: string,
+    scope: BranchScope,
   ): Promise<PosCheckoutResult> {
     const tenantId = TenantContext.require();
     const wf = await this.findWorkflowById(tenantId, checkoutId);
-    if (!wf) {
+    if (!wf || !branchAllowed(scope, wf.branchId)) {
       throw new SalesDomainError(
         SalesDomainErrorCode.ORDER_NOT_FOUND,
         `Checkout workflow ${checkoutId} not found`,
@@ -378,11 +396,12 @@ export class CheckoutService {
   async confirmCheckoutPayment(
     checkoutId: string,
     actorId: string,
+    scope: BranchScope,
     dto: ConfirmCheckoutPaymentDto,
   ): Promise<PosCheckoutResult> {
     const tenantId = TenantContext.require();
     const wf = await this.findWorkflowById(tenantId, checkoutId);
-    if (!wf) {
+    if (!wf || !branchAllowed(scope, wf.branchId)) {
       throw new SalesDomainError(
         SalesDomainErrorCode.ORDER_NOT_FOUND,
         `Checkout workflow ${checkoutId} not found`,
@@ -451,11 +470,12 @@ export class CheckoutService {
   async cancelCheckout(
     checkoutId: string,
     actorId: string,
+    scope: BranchScope,
     reason?: string,
   ): Promise<PosCheckoutResult> {
     const tenantId = TenantContext.require();
     const wf = await this.findWorkflowById(tenantId, checkoutId);
-    if (!wf) {
+    if (!wf || !branchAllowed(scope, wf.branchId)) {
       throw new SalesDomainError(
         SalesDomainErrorCode.ORDER_NOT_FOUND,
         `Checkout workflow ${checkoutId} not found`,
@@ -509,7 +529,7 @@ export class CheckoutService {
    * Background reconciliation worker for stuck checkout workflows.
    * Safe to invoke periodically or on demand.
    */
-  async reconcilePendingCheckouts(): Promise<{
+  async reconcilePendingCheckouts(scope: BranchScope): Promise<{
     inspected: number;
     finalized: number;
     cancelled: number;
@@ -518,6 +538,7 @@ export class CheckoutService {
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
 
+    const inBranches = scope === null ? {} : { branchId: In([...scope]) };
     const stuckRows: CheckoutWorkflowEntity[] =
       await this.dataSource.transaction(async (em) => {
         await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
@@ -525,11 +546,11 @@ export class CheckoutService {
         ]);
         return em.getRepository(CheckoutWorkflowEntity).find({
           where: [
-            { tenantId, state: 'RESERVING_STOCK' },
-            { tenantId, state: 'STOCK_RESERVED' },
-            { tenantId, state: 'COMMITTING_STOCK' },
-            { tenantId, state: 'FINALIZING' },
-            { tenantId, state: 'RECOVERY_PENDING' },
+            { tenantId, state: 'RESERVING_STOCK', ...inBranches },
+            { tenantId, state: 'STOCK_RESERVED', ...inBranches },
+            { tenantId, state: 'COMMITTING_STOCK', ...inBranches },
+            { tenantId, state: 'FINALIZING', ...inBranches },
+            { tenantId, state: 'RECOVERY_PENDING', ...inBranches },
           ],
           order: { createdAt: 'ASC' },
           take: 50,
@@ -1341,6 +1362,19 @@ export class CheckoutService {
       return 'COMBINED';
     }
     return summary.tenders[0]?.method ?? fallback ?? 'CASH';
+  }
+
+  private assertWorkflowInScope(
+    wf: CheckoutWorkflowEntity,
+    scope: BranchScope,
+  ): void {
+    if (!branchAllowed(scope, wf.branchId)) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.ORDER_NOT_FOUND,
+        `Checkout workflow ${wf.id} not found`,
+        404,
+      );
+    }
   }
 
   private async findWorkflowByKey(

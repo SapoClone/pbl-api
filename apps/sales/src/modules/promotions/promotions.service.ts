@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TenantContext } from '@pbl/common';
 import { randomUUID } from 'node:crypto';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull } from 'typeorm';
 import {
   SalesDomainError,
   SalesDomainErrorCode,
@@ -15,6 +15,11 @@ import {
   CouponUsageEntity,
   PromotionEntity,
 } from '../../infrastructure/persistence/sales.entities';
+import {
+  BranchScope,
+  assertBranchAllowed,
+  branchAllowed,
+} from '../../presentation/access';
 import { CreateCouponDto, CreatePromotionDto } from './promotions.dto';
 
 export interface EvaluatedCouponResult {
@@ -28,7 +33,18 @@ export interface EvaluatedCouponResult {
 export class PromotionsService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async createPromotion(dto: CreatePromotionDto): Promise<PromotionEntity> {
+  async createPromotion(
+    dto: CreatePromotionDto,
+    scope: BranchScope,
+  ): Promise<PromotionEntity> {
+    if (dto.branchId) {
+      assertBranchAllowed(
+        scope,
+        dto.branchId,
+        'VALIDATION_ERROR',
+        'Branch not found',
+      );
+    }
     const tenantId = TenantContext.require();
     if (dto.discountType === 'PERCENT' && dto.discountValue > 100) {
       throw new SalesDomainError(
@@ -76,20 +92,30 @@ export class PromotionsService {
     });
   }
 
-  async listPromotions(): Promise<PromotionEntity[]> {
+  async listPromotions(scope: BranchScope): Promise<PromotionEntity[]> {
     const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
         tenantId,
       ]);
+      // store-wide promotions (no branch) plus those of the caller's branches
       return em.getRepository(PromotionEntity).find({
-        where: { tenantId },
+        where:
+          scope === null
+            ? { tenantId }
+            : [
+                { tenantId, branchId: IsNull() },
+                { tenantId, branchId: In([...scope]) },
+              ],
         order: { createdAt: 'DESC' },
       });
     });
   }
 
-  async createCoupon(dto: CreateCouponDto): Promise<CouponEntity> {
+  async createCoupon(
+    dto: CreateCouponDto,
+    scope: BranchScope,
+  ): Promise<CouponEntity> {
     const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
@@ -98,7 +124,10 @@ export class PromotionsService {
       const promotion = await em.getRepository(PromotionEntity).findOne({
         where: { id: dto.promotionId, tenantId },
       });
-      if (!promotion) {
+      if (
+        !promotion ||
+        (promotion.branchId && !branchAllowed(scope, promotion.branchId))
+      ) {
         throw new SalesDomainError(
           SalesDomainErrorCode.VALIDATION_ERROR,
           'Promotion not found',

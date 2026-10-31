@@ -11,7 +11,6 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   CustomerDomainError,
   CustomerDomainErrorCode,
-  maskEmailAddress,
   maskPhoneNumber,
   normalizeEmail,
   normalizePhoneNumber,
@@ -719,8 +718,10 @@ export class DataManagementService {
     tenantId: string,
     actorId: string,
     dto: CreateExportJobDto,
+    fullPhone = false,
   ) {
-    const maskPii = dto.maskPii === true;
+    // Phones are unmasked only for a caller holding customers.update.
+    const maskPhone = !fullPhone;
 
     return this.runInTenantTx(tenantId, async (em) => {
       const jobCode = await nextCustomerDocumentCode(em, tenantId, 'EXP');
@@ -753,11 +754,11 @@ export class DataManagementService {
 
       const header = 'code,name,phone,email,status,source,note';
       const csvLines = customers.map((c) => {
-        const phoneVal = maskPii
-          ? maskPhoneNumber(c.phoneNormalized ?? c.phone)
+        const phoneVal = maskPhone
+          ? (maskPhoneNumber(c.phoneNormalized ?? c.phone) ?? '')
           : (c.phoneNormalized ?? c.phone ?? '');
-        const emailVal = maskPii ? maskEmailAddress(c.email) : (c.email ?? '');
-        const noteVal = maskPii ? '' : (c.note ?? '');
+        const emailVal = c.email ?? '';
+        const noteVal = c.note ?? '';
         return [
           sanitizeCsvCell(c.code),
           sanitizeCsvCell(c.name),
@@ -791,12 +792,19 @@ export class DataManagementService {
     });
   }
 
-  async getExportJob(tenantId: string, jobId: string) {
+  async getExportJob(
+    tenantId: string,
+    jobId: string,
+    actorId: string,
+    fullPhone = false,
+  ) {
     return this.runInTenantTx(tenantId, async (em) => {
       const job = await em.getRepository(CustomerDataJobEntity).findOne({
         where: { id: jobId, tenantId, jobType: 'EXPORT' },
       });
-      if (!job) {
+      // The stored CSV may hold full phones (created by a customers.update
+      // holder): only its creator or another such holder may read it back.
+      if (!job || (!fullPhone && job.createdBy !== actorId)) {
         throw new CustomerDomainError(
           CustomerDomainErrorCode.CUSTOMER_NOT_FOUND,
           `Export job '${jobId}' not found`,

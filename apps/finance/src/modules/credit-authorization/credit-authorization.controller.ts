@@ -12,9 +12,9 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, Public, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, Public, RequirePermission } from '@pbl/auth';
 import { rethrowFinanceHttpError } from '../../presentation/finance-http-error';
+import { assertInternalToken } from '../../presentation/internal-auth';
 import {
   CommitCreditAuthorizationDto,
   CreateCreditAuthorizationDto,
@@ -29,19 +29,17 @@ import { CreditAuthorizationService } from './credit-authorization.service';
 export class CreditAuthorizationController {
   constructor(private readonly creditAuthService: CreditAuthorizationService) {}
 
+  /**
+   * Internal routes are not routed by the gateway and never trust a bearer or
+   * a tenant header on their own: the `x-internal-token` check (mandatory,
+   * constant time) comes first, only then `x-tenant-id` is honoured.
+   */
   private resolveS2STenant(
-    user: AuthUser | undefined,
     tenantIdHeader: string | undefined,
     internalCallHeader: string | undefined,
     internalTokenHeader: string | undefined,
   ): { tenantId: string; actorId: string } {
-    if (user?.tenantId) {
-      return { tenantId: user.tenantId, actorId: user.id };
-    }
-    const expectedToken = process.env.INTERNAL_S2S_TOKEN;
-    if (expectedToken && internalTokenHeader !== expectedToken) {
-      throw new ForbiddenException('Invalid internal S2S token');
-    }
+    assertInternalToken(internalTokenHeader);
     if (!internalCallHeader) {
       throw new ForbiddenException('Missing x-internal-call header');
     }
@@ -55,7 +53,7 @@ export class CreditAuthorizationController {
   }
 
   @Get('v1/finance/customers/:id/credit-profile')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({
     summary:
       'Get customer credit limit, posted debt, held credit exposure, and available credit',
@@ -72,7 +70,7 @@ export class CreditAuthorizationController {
   }
 
   @Put('v1/finance/customers/:id/credit-limit')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('finance.approve')
   @ApiOperation({ summary: 'Update a customer credit limit' })
   async updateCreditLimit(
     @CurrentUser() user: AuthUser,
@@ -99,7 +97,6 @@ export class CreditAuthorizationController {
       'Internal S2S: Atomically authorize customer credit exposure and create a HELD credit hold',
   })
   async createAuthorization(
-    @CurrentUser() user: AuthUser | undefined,
     @Headers('x-tenant-id') tenantIdHeader: string | undefined,
     @Headers('x-internal-call') internalCallHeader: string | undefined,
     @Headers('x-internal-token') internalTokenHeader: string | undefined,
@@ -107,7 +104,6 @@ export class CreditAuthorizationController {
     @Body() dto: CreateCreditAuthorizationDto,
   ) {
     const { tenantId, actorId } = this.resolveS2STenant(
-      user,
       tenantIdHeader,
       internalCallHeader,
       internalTokenHeader,
@@ -131,14 +127,12 @@ export class CreditAuthorizationController {
       'Internal S2S: Recover credit authorization outcome by original idempotency key',
   })
   async getAuthorizationByKey(
-    @CurrentUser() user: AuthUser | undefined,
     @Headers('x-tenant-id') tenantIdHeader: string | undefined,
     @Headers('x-internal-call') internalCallHeader: string | undefined,
     @Headers('x-internal-token') internalTokenHeader: string | undefined,
     @Param('key') key: string,
   ) {
     const { tenantId } = this.resolveS2STenant(
-      user,
       tenantIdHeader,
       internalCallHeader,
       internalTokenHeader,
@@ -157,14 +151,12 @@ export class CreditAuthorizationController {
   @Get('internal/v1/finance/credit-authorizations/:id')
   @ApiOperation({ summary: 'Internal S2S: Get credit authorization by ID' })
   async getAuthorization(
-    @CurrentUser() user: AuthUser | undefined,
     @Headers('x-tenant-id') tenantIdHeader: string | undefined,
     @Headers('x-internal-call') internalCallHeader: string | undefined,
     @Headers('x-internal-token') internalTokenHeader: string | undefined,
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     const { tenantId } = this.resolveS2STenant(
-      user,
       tenantIdHeader,
       internalCallHeader,
       internalTokenHeader,
@@ -184,7 +176,6 @@ export class CreditAuthorizationController {
       'Internal S2S: Commit HELD credit authorization into an authoritative CustomerReceivable and balanced journal',
   })
   async commitAuthorization(
-    @CurrentUser() user: AuthUser | undefined,
     @Headers('x-tenant-id') tenantIdHeader: string | undefined,
     @Headers('x-internal-call') internalCallHeader: string | undefined,
     @Headers('x-internal-token') internalTokenHeader: string | undefined,
@@ -192,7 +183,6 @@ export class CreditAuthorizationController {
     @Body() dto: CommitCreditAuthorizationDto,
   ) {
     const { tenantId, actorId } = this.resolveS2STenant(
-      user,
       tenantIdHeader,
       internalCallHeader,
       internalTokenHeader,
@@ -217,7 +207,6 @@ export class CreditAuthorizationController {
       'Internal S2S: Release HELD credit authorization and restore available credit',
   })
   async releaseAuthorization(
-    @CurrentUser() user: AuthUser | undefined,
     @Headers('x-tenant-id') tenantIdHeader: string | undefined,
     @Headers('x-internal-call') internalCallHeader: string | undefined,
     @Headers('x-internal-token') internalTokenHeader: string | undefined,
@@ -225,7 +214,6 @@ export class CreditAuthorizationController {
     @Body() dto: ReleaseCreditAuthorizationDto,
   ) {
     const { tenantId, actorId } = this.resolveS2STenant(
-      user,
       tenantIdHeader,
       internalCallHeader,
       internalTokenHeader,

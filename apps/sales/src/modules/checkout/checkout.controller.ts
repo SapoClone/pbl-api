@@ -17,9 +17,14 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import {
+  AllowedBranches,
+  AuthUser,
+  CurrentUser,
+  RequirePermission,
+} from '@pbl/auth';
 import type { Response } from 'express';
+import { BranchScope } from '../../presentation/access';
 import { SalesExceptionFilter } from '../../presentation/sales-http-error';
 import { ConfirmCheckoutPaymentDto, PosCheckoutDto } from './checkout.dto';
 import { CheckoutService, PosCheckoutResult } from './checkout.service';
@@ -27,12 +32,12 @@ import { CheckoutService, PosCheckoutResult } from './checkout.service';
 @ApiTags('pos-checkout')
 @ApiBearerAuth()
 @UseFilters(SalesExceptionFilter)
-@RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
 @Controller('api/v1/pos')
 export class CheckoutController {
   constructor(private readonly checkoutService: CheckoutService) {}
 
   @Post('checkout')
+  @RequirePermission('orders.create', 'pos.create')
   @ApiOperation({
     summary:
       'Execute POS checkout saga (price waterfall + stock reserve/commit + tender settlement)',
@@ -44,13 +49,15 @@ export class CheckoutController {
   })
   async checkout(
     @CurrentUser() user: AuthUser,
+    @AllowedBranches() scope: BranchScope,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() dto: PosCheckoutDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<PosCheckoutResult> {
     const outcome = await this.checkoutService.checkout(
       user.id,
-      user.roles ?? [],
+      user.permissions,
+      scope,
       idempotencyKey,
       dto,
     );
@@ -62,37 +69,42 @@ export class CheckoutController {
   }
 
   @Post('checkouts')
+  @RequirePermission('orders.create', 'pos.create')
   @ApiOperation({
     summary: 'Execute POS checkout saga (alias for POST /api/v1/pos/checkout)',
   })
   async checkoutAlias(
     @CurrentUser() user: AuthUser,
+    @AllowedBranches() scope: BranchScope,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() dto: PosCheckoutDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<PosCheckoutResult> {
-    return this.checkout(user, idempotencyKey, dto, res);
+    return this.checkout(user, scope, idempotencyKey, dto, res);
   }
 
   @Post('checkouts/reconcile')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('orders.approve')
   @ApiOperation({
     summary: 'Run background reconciliation for pending/stuck POS checkouts',
   })
-  reconcile() {
-    return this.checkoutService.reconcilePendingCheckouts();
+  reconcile(@AllowedBranches() scope: BranchScope) {
+    return this.checkoutService.reconcilePendingCheckouts(scope);
   }
 
   @Get('checkouts/:id')
+  @RequirePermission('orders.view')
   @ApiOperation({ summary: 'Get POS checkout workflow status by ID' })
   getCheckout(
     @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() scope: BranchScope,
   ): Promise<PosCheckoutResult> {
-    return this.checkoutService.getCheckout(id);
+    return this.checkoutService.getCheckout(id, scope);
   }
 
   @Post('checkouts/:id/retry')
+  @RequirePermission('orders.update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Retry / recover a pending or timed-out POS checkout workflow',
@@ -100,11 +112,13 @@ export class CheckoutController {
   retryCheckout(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') actorId: string,
+    @AllowedBranches() scope: BranchScope,
   ): Promise<PosCheckoutResult> {
-    return this.checkoutService.retryCheckout(id, actorId);
+    return this.checkoutService.retryCheckout(id, actorId, scope);
   }
 
   @Post('checkouts/:id/confirm-payment')
+  @RequirePermission('orders.update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
@@ -113,12 +127,14 @@ export class CheckoutController {
   confirmPayment(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') actorId: string,
+    @AllowedBranches() scope: BranchScope,
     @Body() dto: ConfirmCheckoutPaymentDto,
   ): Promise<PosCheckoutResult> {
-    return this.checkoutService.confirmCheckoutPayment(id, actorId, dto);
+    return this.checkoutService.confirmCheckoutPayment(id, actorId, scope, dto);
   }
 
   @Post('checkouts/:id/cancel')
+  @RequirePermission('orders.delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Cancel an uncompleted POS checkout and release reserved stock',
@@ -126,8 +142,9 @@ export class CheckoutController {
   cancelCheckout(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') actorId: string,
+    @AllowedBranches() scope: BranchScope,
     @Body('reason') reason?: string,
   ): Promise<PosCheckoutResult> {
-    return this.checkoutService.cancelCheckout(id, actorId, reason);
+    return this.checkoutService.cancelCheckout(id, actorId, scope, reason);
   }
 }

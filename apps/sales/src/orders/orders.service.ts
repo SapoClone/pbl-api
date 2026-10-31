@@ -14,12 +14,18 @@ import {
 import { OrderCompletedPayload, SALES_ORDER_COMPLETED } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
 import { createHash, randomUUID } from 'crypto';
-import { QueryFailedError } from 'typeorm';
+import { In, QueryFailedError } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
 import {
   InventoryClient,
   InventoryClientErrorCode,
 } from '../inventory/inventory.client';
+import {
+  BranchScope,
+  assertBranchAllowed,
+  branchAllowed,
+  branchFilter,
+} from '../presentation/access';
 import {
   CreateCheckoutReqDto,
   CreateOrderReqDto,
@@ -156,9 +162,16 @@ export class OrdersService {
 
   async create(
     accountId: string,
+    scope: BranchScope,
     idempotencyKey: string,
     dto: CreateOrderReqDto,
   ): Promise<CreateOrderResult> {
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'ORDER_NOT_FOUND',
+      'Branch not found',
+    );
     const requestHash = hashRequest(dto);
     const earlier = await this.findByKey(idempotencyKey);
     if (earlier) return this.replay(earlier, requestHash);
@@ -208,21 +221,15 @@ export class OrdersService {
 
     try {
       const txResult = await this.orders.transaction(async (orders, em) => {
-        if (typeof (em as { query?: unknown }).query === 'function') {
-          await em.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
-            `${TenantContext.require()}:${idempotencyKey}`,
-          ]);
-        }
-        if (
-          typeof (orders as Partial<typeof this.orders>).findOne === 'function'
-        ) {
-          const winner = await orders.findOne({
-            where: { idempotencyKey },
-            relations: { items: true },
-          });
-          if (winner) {
-            return { row: winner, replayed: true };
-          }
+        await em.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+          `${TenantContext.require()}:${idempotencyKey}`,
+        ]);
+        const winner = await orders.findOne({
+          where: { idempotencyKey },
+          relations: { items: true },
+        });
+        if (winner) {
+          return { row: winner, replayed: true };
         }
         const row = await orders.save(order);
         const lines = await TenantScopedRepository.forEntity(
@@ -272,9 +279,16 @@ export class OrdersService {
    */
   async checkout(
     accountId: string,
+    scope: BranchScope,
     idempotencyKey: string,
     dto: CreateCheckoutReqDto,
   ): Promise<CheckoutWorkflowResponse> {
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'ORDER_NOT_FOUND',
+      'Branch not found',
+    );
     const checkoutsRepo = this.requireCheckoutsRepo();
     const tenantId = TenantContext.require();
     const requestSha256 = hashCheckoutRequest(dto);
@@ -283,6 +297,12 @@ export class OrdersService {
       where: { idempotencyKey },
     });
     if (existing) {
+      assertBranchAllowed(
+        scope,
+        existing.branchId,
+        'CHECKOUT_NOT_FOUND',
+        'Checkout workflow not found',
+      );
       if (existing.requestSha256 !== requestSha256) {
         throw new ConflictException({
           errorCode: SalesErrorCode.IDEMPOTENCY_KEY_REUSED,
@@ -344,12 +364,15 @@ export class OrdersService {
     return this.executeReservationAndConfirm(workflow, false);
   }
 
-  async getCheckout(checkoutId: string): Promise<CheckoutWorkflowResponse> {
+  async getCheckout(
+    checkoutId: string,
+    scope: BranchScope,
+  ): Promise<CheckoutWorkflowResponse> {
     const checkoutsRepo = this.requireCheckoutsRepo();
     const workflow = await checkoutsRepo.findOne({
       where: { id: checkoutId },
     });
-    if (!workflow) {
+    if (!workflow || !branchAllowed(scope, workflow.branchId)) {
       throw new NotFoundException({
         errorCode: 'CHECKOUT_NOT_FOUND',
         message: 'Checkout workflow not found',
@@ -362,12 +385,15 @@ export class OrdersService {
    * Deterministic recovery for a checkout workflow stuck in `RECOVERY_PENDING`
    * after an ambiguous network timeout calling Inventory (`POST /internal/v1/reservations`).
    */
-  async recoverCheckout(checkoutId: string): Promise<CheckoutWorkflowResponse> {
+  async recoverCheckout(
+    checkoutId: string,
+    scope: BranchScope,
+  ): Promise<CheckoutWorkflowResponse> {
     const checkoutsRepo = this.requireCheckoutsRepo();
     const workflow = await checkoutsRepo.findOne({
       where: { id: checkoutId },
     });
-    if (!workflow) {
+    if (!workflow || !branchAllowed(scope, workflow.branchId)) {
       throw new NotFoundException({
         errorCode: 'CHECKOUT_NOT_FOUND',
         message: 'Checkout workflow not found',
@@ -379,12 +405,15 @@ export class OrdersService {
     return this.reconcileCheckout(workflow, false);
   }
 
-  async cancelCheckout(checkoutId: string): Promise<CheckoutWorkflowResponse> {
+  async cancelCheckout(
+    checkoutId: string,
+    scope: BranchScope,
+  ): Promise<CheckoutWorkflowResponse> {
     const checkoutsRepo = this.requireCheckoutsRepo();
     const workflow = await checkoutsRepo.findOne({
       where: { id: checkoutId },
     });
-    if (!workflow) {
+    if (!workflow || !branchAllowed(scope, workflow.branchId)) {
       throw new NotFoundException({
         errorCode: 'CHECKOUT_NOT_FOUND',
         message: 'Checkout workflow not found',
@@ -405,13 +434,25 @@ export class OrdersService {
     return this.toCheckoutResponse(workflow, false);
   }
 
-  async list(query: ListOrdersReqDto): Promise<Page<OrderRes>> {
-    const [rows, total] = await this.orders.findAndCount({
-      where: query.branchId ? { branchId: query.branchId } : {},
-      order: { createdAt: 'DESC' },
-      take: query.limit,
-      skip: (query.page - 1) * query.limit,
-    });
+  async list(
+    query: ListOrdersReqDto,
+    scope: BranchScope,
+  ): Promise<Page<OrderRes>> {
+    const branchIds = branchFilter(
+      scope,
+      query.branchId,
+      'ORDER_NOT_FOUND',
+      'Branch not found',
+    );
+    const [rows, total] =
+      branchIds?.length === 0
+        ? [[], 0]
+        : await this.orders.findAndCount({
+            where: branchIds ? { branchId: In(branchIds) } : {},
+            order: { createdAt: 'DESC' },
+            take: query.limit,
+            skip: (query.page - 1) * query.limit,
+          });
     const totalPages = Math.max(1, Math.ceil(total / query.limit));
     return {
       data: rows.map(toOrderRes),
@@ -425,13 +466,13 @@ export class OrdersService {
     };
   }
 
-  async get(id: string): Promise<OrderRes> {
+  async get(id: string, scope: BranchScope): Promise<OrderRes> {
     const order = await this.orders.findOne({
       where: { id },
       relations: { items: true },
     });
-    if (!order) {
-      // also another store's order: never revealed (api-conventions §6)
+    if (!order || !branchAllowed(scope, order.branchId)) {
+      // also another store's or another branch's order: never revealed (api-conventions §6, ADR-0020)
       throw new NotFoundException();
     }
     return toOrderRes(order);

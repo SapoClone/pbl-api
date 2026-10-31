@@ -10,8 +10,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, RequirePermission } from '@pbl/auth';
 import { rethrowCustomerHttpError } from '../../presentation/customer-http-error';
 import {
   AssignCustomerGroupDto,
@@ -27,7 +26,7 @@ export class GroupsController {
   constructor(private readonly groupsService: GroupsService) {}
 
   @Post('customer-groups')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.create')
   @ApiOperation({ summary: 'Create a customer group (VIP, Wholesale, Member)' })
   async createGroup(@Body() dto: CreateCustomerGroupDto) {
     try {
@@ -38,7 +37,7 @@ export class GroupsController {
   }
 
   @Get('customer-groups')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({ summary: 'List customer groups for current tenant' })
   async listGroups() {
     try {
@@ -49,7 +48,7 @@ export class GroupsController {
   }
 
   @Patch('customer-groups/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.update')
   @ApiOperation({ summary: 'Update or deactivate a customer group' })
   async updateGroup(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -64,7 +63,7 @@ export class GroupsController {
 
   @Post('customers/:id/assign-group')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.update')
   @ApiOperation({
     summary: 'Assign or unassign a customer to a customer group',
   })

@@ -33,6 +33,12 @@ import {
 import { InventoryClient } from '../../inventory/inventory.client';
 import { OrderItemEntity } from '../../orders/entities/order-item.entity';
 import { OrderEntity } from '../../orders/entities/order.entity';
+import {
+  BranchScope,
+  assertBranchAllowed,
+  branchAllowed,
+  discountTierFor,
+} from '../../presentation/access';
 import { PosService } from '../pos/pos.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import {
@@ -59,9 +65,16 @@ export class M3OrdersService {
 
   async createOmnichannelOrder(
     actorId: string,
-    roles: string[],
+    permissions: string[],
+    scope: BranchScope,
     dto: CreateOmnichannelOrderDto,
   ) {
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'ORDER_NOT_FOUND',
+      'Branch not found',
+    );
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
 
@@ -80,7 +93,7 @@ export class M3OrdersService {
         });
       });
       if (existing) {
-        const details = await this.getOrderDetails(existing.id);
+        const details = await this.getOrderDetails(existing.id, scope);
         return { ...details, replayed: true };
       }
     }
@@ -93,8 +106,8 @@ export class M3OrdersService {
       orderDiscountValue: dto.orderDiscountValue,
       couponCode: dto.couponCode,
       shippingFee: dto.shippingFee,
-      role: roles[0] ?? 'owner',
-      permissions: roles,
+      role: discountTierFor(permissions),
+      permissions,
     });
 
     const initialStatus: CommercialOrderStatus = dto.initialStatus ?? 'PENDING';
@@ -277,7 +290,7 @@ export class M3OrdersService {
           });
         });
         if (raced) {
-          const details = await this.getOrderDetails(raced.id);
+          const details = await this.getOrderDetails(raced.id, scope);
           return { ...details, replayed: true };
         }
       }
@@ -285,20 +298,26 @@ export class M3OrdersService {
     }
 
     if (dto.autoConfirm && dto.warehouseId) {
-      const confirmed = await this.confirmOrder(createdOrderId, actorId, {
-        warehouseId: dto.warehouseId,
-      });
+      const confirmed = await this.confirmOrder(
+        createdOrderId,
+        actorId,
+        scope,
+        {
+          warehouseId: dto.warehouseId,
+        },
+      );
       return { ...confirmed, replayed: false };
     }
 
-    const details = await this.getOrderDetails(createdOrderId);
+    const details = await this.getOrderDetails(createdOrderId, scope);
     return { ...details, replayed: false };
   }
 
   async updateDraftOrder(
     orderId: string,
     actorId: string,
-    roles: string[],
+    permissions: string[],
+    scope: BranchScope,
     dto: UpdateDraftOrderDto,
   ) {
     const tenantId = TenantContext.require();
@@ -313,7 +332,7 @@ export class M3OrdersService {
       });
     });
 
-    if (!current) {
+    if (!current || !branchAllowed(scope, current.branchId)) {
       throw new SalesDomainError(
         SalesDomainErrorCode.ORDER_NOT_FOUND,
         `Order ${orderId} not found`,
@@ -342,8 +361,8 @@ export class M3OrdersService {
             dto.orderDiscountValue ?? Number(current.orderDiscountValue ?? 0),
           couponCode: current.couponCode,
           shippingFee: dto.shippingFee ?? Number(current.shippingFee ?? 0),
-          role: roles[0] ?? 'owner',
-          permissions: roles,
+          role: discountTierFor(permissions),
+          permissions,
         })
       : null;
 
@@ -356,7 +375,7 @@ export class M3OrdersService {
         where: { id: orderId, tenantId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!order) {
+      if (!order || !branchAllowed(scope, order.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.ORDER_NOT_FOUND,
           `Order ${orderId} not found`,
@@ -441,10 +460,15 @@ export class M3OrdersService {
       await em.save(OrderEntity, order);
     });
 
-    return this.getOrderDetails(orderId);
+    return this.getOrderDetails(orderId, scope);
   }
 
-  async confirmOrder(orderId: string, actorId: string, dto: ConfirmOrderDto) {
+  async confirmOrder(
+    orderId: string,
+    actorId: string,
+    scope: BranchScope,
+    dto: ConfirmOrderDto,
+  ) {
     const tenantId = TenantContext.require();
 
     const { order, items } = await this.dataSource.transaction(async (em) => {
@@ -454,7 +478,7 @@ export class M3OrdersService {
       const o = await em.getRepository(OrderEntity).findOne({
         where: { id: orderId, tenantId },
       });
-      if (!o) {
+      if (!o || !branchAllowed(scope, o.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.ORDER_NOT_FOUND,
           `Order ${orderId} not found`,
@@ -468,7 +492,7 @@ export class M3OrdersService {
     });
 
     if (order.orderStatus === 'CONFIRMED') {
-      return this.getOrderDetails(orderId);
+      return this.getOrderDetails(orderId, scope);
     }
 
     if (order.orderStatus !== 'DRAFT' && order.orderStatus !== 'PENDING') {
@@ -593,10 +617,15 @@ export class M3OrdersService {
       } satisfies SalesOrderLifecycleEventPayload);
     });
 
-    return this.getOrderDetails(orderId);
+    return this.getOrderDetails(orderId, scope);
   }
 
-  async cancelOrder(orderId: string, actorId: string, dto: CancelOrderDto) {
+  async cancelOrder(
+    orderId: string,
+    actorId: string,
+    scope: BranchScope,
+    dto: CancelOrderDto,
+  ) {
     const tenantId = TenantContext.require();
 
     const order = await this.dataSource.transaction(async (em) => {
@@ -608,7 +637,7 @@ export class M3OrdersService {
       });
     });
 
-    if (!order) {
+    if (!order || !branchAllowed(scope, order.branchId)) {
       throw new SalesDomainError(
         SalesDomainErrorCode.ORDER_NOT_FOUND,
         `Order ${orderId} not found`,
@@ -617,7 +646,7 @@ export class M3OrdersService {
     }
 
     if (order.orderStatus === 'CANCELLED') {
-      return this.getOrderDetails(orderId);
+      return this.getOrderDetails(orderId, scope);
     }
 
     assertCanCancelOrder({
@@ -710,10 +739,10 @@ export class M3OrdersService {
       } satisfies SalesOrderLifecycleEventPayload);
     });
 
-    return this.getOrderDetails(orderId);
+    return this.getOrderDetails(orderId, scope);
   }
 
-  async getOrderDetails(orderId: string) {
+  async getOrderDetails(orderId: string, scope: BranchScope) {
     const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
@@ -722,7 +751,7 @@ export class M3OrdersService {
       const order = await em.getRepository(OrderEntity).findOne({
         where: { id: orderId, tenantId },
       });
-      if (!order) {
+      if (!order || !branchAllowed(scope, order.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.ORDER_NOT_FOUND,
           `Order ${orderId} not found`,
@@ -751,7 +780,10 @@ export class M3OrdersService {
     });
   }
 
-  async getOrderHistory(orderId: string): Promise<OrderStatusHistoryEntity[]> {
+  async getOrderHistory(
+    orderId: string,
+    scope: BranchScope,
+  ): Promise<OrderStatusHistoryEntity[]> {
     const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
@@ -760,7 +792,7 @@ export class M3OrdersService {
       const order = await em.getRepository(OrderEntity).findOne({
         where: { id: orderId, tenantId },
       });
-      if (!order) {
+      if (!order || !branchAllowed(scope, order.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.ORDER_NOT_FOUND,
           `Order ${orderId} not found`,

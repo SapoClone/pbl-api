@@ -15,6 +15,7 @@ import {
   CashAccountEntity,
   CashbookEntryEntity,
 } from '../../infrastructure/persistence/finance.entities';
+import { applyBranchScope, BranchScope } from '../../presentation/branch-scope';
 import {
   CreateCashAccountDto,
   ListCashAccountsQueryDto,
@@ -150,12 +151,14 @@ export class CashAccountsService {
   async listCashAccounts(
     query: ListCashAccountsQueryDto,
     tenantId = TenantContext.require(),
+    scope: BranchScope = null,
   ): Promise<CashAccountEntity[]> {
     return this.runInTenantTx(tenantId, async (em) => {
       const where: Record<string, unknown> = { tenantId };
       if (query.branchId) {
         where.branchId = query.branchId;
       }
+      applyBranchScope(where, scope);
       if (query.status) {
         where.status = query.status;
       }

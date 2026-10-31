@@ -11,8 +11,13 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import {
+  AuthUser,
+  CurrentUser,
+  RequirePermission,
+  hasPermission,
+} from '@pbl/auth';
+import { maskAddressPhones } from '../../domain/customer-domain';
 import { rethrowCustomerHttpError } from '../../presentation/customer-http-error';
 import {
   CreateCustomerAddressDto,
@@ -27,43 +32,52 @@ export class AddressesController {
   constructor(private readonly addressesService: AddressesService) {}
 
   @Post()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.create')
   @ApiOperation({ summary: 'Add an address to a customer profile' })
   async addAddress(
+    @CurrentUser() user: AuthUser,
     @Param('id', new ParseUUIDPipe()) customerId: string,
     @Body() dto: CreateCustomerAddressDto,
   ) {
     try {
-      return await this.addressesService.addAddress(customerId, dto);
+      return maskAddressPhones(
+        await this.addressesService.addAddress(customerId, dto),
+        hasPermission(user, 'customers.update'),
+      );
     } catch (error) {
       rethrowCustomerHttpError(error);
     }
   }
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({ summary: 'List active addresses for a customer' })
-  async listAddresses(@Param('id', new ParseUUIDPipe()) customerId: string) {
+  async listAddresses(
+    @CurrentUser() user: AuthUser,
+    @Param('id', new ParseUUIDPipe()) customerId: string,
+  ) {
     try {
-      return await this.addressesService.listAddresses(customerId);
+      return (await this.addressesService.listAddresses(customerId)).map((a) =>
+        maskAddressPhones(a, hasPermission(user, 'customers.update')),
+      );
     } catch (error) {
       rethrowCustomerHttpError(error);
     }
   }
 
   @Patch(':addressId')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.update')
   @ApiOperation({ summary: 'Update a customer address' })
   async updateAddress(
+    @CurrentUser() user: AuthUser,
     @Param('id', new ParseUUIDPipe()) customerId: string,
     @Param('addressId', new ParseUUIDPipe()) addressId: string,
     @Body() dto: UpdateCustomerAddressDto,
   ) {
     try {
-      return await this.addressesService.updateAddress(
-        customerId,
-        addressId,
-        dto,
+      return maskAddressPhones(
+        await this.addressesService.updateAddress(customerId, addressId, dto),
+        hasPermission(user, 'customers.update'),
       );
     } catch (error) {
       rethrowCustomerHttpError(error);
@@ -71,7 +85,7 @@ export class AddressesController {
   }
 
   @Delete(':addressId')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.delete')
   @ApiOperation({ summary: 'Soft-deactivate a customer address' })
   async deleteAddress(
     @Param('id', new ParseUUIDPipe()) customerId: string,
@@ -89,18 +103,19 @@ export class AddressesController {
 
   @Post(':addressId/set-default')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.update')
   @ApiOperation({
     summary: 'Set an address as the single active default address',
   })
   async setDefaultAddress(
+    @CurrentUser() user: AuthUser,
     @Param('id', new ParseUUIDPipe()) customerId: string,
     @Param('addressId', new ParseUUIDPipe()) addressId: string,
   ) {
     try {
-      return await this.addressesService.setDefaultAddress(
-        customerId,
-        addressId,
+      return maskAddressPhones(
+        await this.addressesService.setDefaultAddress(customerId, addressId),
+        hasPermission(user, 'customers.update'),
       );
     } catch (error) {
       rethrowCustomerHttpError(error);

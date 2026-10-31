@@ -9,8 +9,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, RequirePermission } from '@pbl/auth';
+import {
+  assertBranchNamed,
+  assertRowBranch,
+  branchScopeOf,
+} from '../../presentation/branch-scope';
 import { rethrowFinanceHttpError } from '../../presentation/finance-http-error';
 import {
   ConfirmRefundOutcomeDto,
@@ -26,14 +30,15 @@ import { RefundsService } from './refunds.service';
 export class RefundsController {
   constructor(private readonly refundsService: RefundsService) {}
 
+  /** The refund, or 404 when it belongs to a branch the member may not use. */
+  private async loadRefund(user: AuthUser, id: string) {
+    const refund = await this.refundsService.getRefundById(id, user.tenantId!);
+    assertRowBranch(user, refund.branchId);
+    return refund;
+  }
+
   @Post()
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.refund.process',
-  )
+  @RequirePermission('finance.create')
   @ApiOperation({ summary: 'Create a refund operation against an order' })
   async create(
     @CurrentUser() user: AuthUser,
@@ -41,6 +46,7 @@ export class RefundsController {
     @Body() dto: CreateRefundDto,
   ) {
     try {
+      assertBranchNamed(user, dto.branchId);
       return await this.refundsService.createRefund(
         user.id ?? 'system',
         idempotencyKey,
@@ -53,58 +59,46 @@ export class RefundsController {
   }
 
   @Get()
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.report.read',
-  )
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List refund operations' })
   async list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListRefundsQueryDto,
   ) {
     try {
-      return await this.refundsService.listRefunds(query, user.tenantId!);
+      return await this.refundsService.listRefunds(
+        query,
+        user.tenantId!,
+        branchScopeOf(user),
+      );
     } catch (error) {
       rethrowFinanceHttpError(error);
     }
   }
 
   @Get(':id')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.report.read',
-  )
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'Get refund operation by id' })
   async getOne(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     try {
-      return await this.refundsService.getRefundById(id, user.tenantId!);
+      return await this.loadRefund(user, id);
     } catch (error) {
       rethrowFinanceHttpError(error);
     }
   }
 
   @Post(':id/approve')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    'accountant',
-    'finance.refund.approve',
-  )
+  @RequirePermission('finance.approve')
   @ApiOperation({ summary: 'Approve a requested refund operation' })
   async approve(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     try {
+      await this.loadRefund(user, id);
       return await this.refundsService.approveRefund(
         id,
         user.id ?? 'system',
@@ -116,13 +110,7 @@ export class RefundsController {
   }
 
   @Post(':id/execute')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.refund.process',
-  )
+  @RequirePermission('finance.approve')
   @ApiOperation({ summary: 'Execute an approved refund operation' })
   async execute(
     @CurrentUser() user: AuthUser,
@@ -130,6 +118,7 @@ export class RefundsController {
     @Body() dto: ExecuteRefundDto,
   ) {
     try {
+      await this.loadRefund(user, id);
       return await this.refundsService.executeRefund(
         id,
         user.id ?? 'system',
@@ -142,12 +131,7 @@ export class RefundsController {
   }
 
   @Post(':id/confirm-outcome')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    'accountant',
-    'finance.refund.process',
-  )
+  @RequirePermission('finance.approve')
   @ApiOperation({
     summary:
       'Confirm external provider outcome for a PENDING_CONFIRMATION or RECONCILIATION_REQUIRED refund',
@@ -158,6 +142,7 @@ export class RefundsController {
     @Body() dto: ConfirmRefundOutcomeDto,
   ) {
     try {
+      await this.loadRefund(user, id);
       return await this.refundsService.confirmRefundOutcome(
         id,
         user.id ?? 'system',

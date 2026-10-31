@@ -21,6 +21,19 @@ import {
 } from './integration-domain';
 
 describe('M6 Integration Domain Model Unit Tests', () => {
+  const savedKey = process.env.INTEGRATION_CREDENTIAL_MASTER_KEY;
+  beforeAll(() => {
+    process.env.INTEGRATION_CREDENTIAL_MASTER_KEY =
+      'test-only-integration-master-key-0123456789';
+  });
+  afterAll(() => {
+    if (savedKey === undefined) {
+      delete process.env.INTEGRATION_CREDENTIAL_MASTER_KEY;
+    } else {
+      process.env.INTEGRATION_CREDENTIAL_MASTER_KEY = savedKey;
+    }
+  });
+
   describe('Connection lifecycle transitions', () => {
     it('allows legal transitions and rejects illegal transitions', () => {
       expect(() =>

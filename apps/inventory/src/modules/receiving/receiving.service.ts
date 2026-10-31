@@ -24,6 +24,10 @@ import {
 } from '../../domain/inventory-domain';
 import { assertCatalogSkuEligible } from '../../infrastructure/catalog-reference/catalog-sku-projection.handler';
 import {
+  applyWarehouseScope,
+  WarehouseScope,
+} from '../../scope/warehouse-scope';
+import {
   assertActiveWarehouse,
   schemaPrefix,
 } from '../warehouses/warehouses.service';
@@ -439,7 +443,11 @@ export class ReceivingService {
     return this.loadReceiptResponse(em, prefix, tenantId, receiptId);
   }
 
-  async listReceipts(warehouseId?: string, status?: string) {
+  async listReceipts(
+    warehouseId?: string,
+    status?: string,
+    scope?: WarehouseScope,
+  ) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
       const params: unknown[] = [tenantId];
@@ -453,6 +461,7 @@ export class ReceivingService {
         params.push(status);
         filters.push(`AND status = $${params.length}`);
       }
+      applyWarehouseScope(params, filters, 'warehouse_id', scope);
 
       const headers = await em.query(
         `

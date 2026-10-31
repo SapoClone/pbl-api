@@ -9,8 +9,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, RequirePermission } from '@pbl/auth';
+import {
+  assertBranchNamed,
+  branchScopeOf,
+} from '../../presentation/branch-scope';
 import { rethrowFinanceHttpError } from '../../presentation/finance-http-error';
 import {
   CreateFinancialAdjustmentDto,
@@ -28,19 +31,14 @@ export class ReconciliationController {
   constructor(private readonly reconciliationService: ReconciliationService) {}
 
   @Post('shifts/reconcile')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.shift.reconcile',
-  )
+  @RequirePermission('finance.approve')
   @ApiOperation({ summary: 'Reconcile POS shift cash drawer' })
   async reconcileShift(
     @CurrentUser() user: AuthUser,
     @Body() dto: ReconcileShiftCashDto,
   ) {
     try {
+      assertBranchNamed(user, dto.branchId);
       return await this.reconciliationService.reconcileShiftCash(
         user.id ?? 'system',
         dto,
@@ -52,22 +50,18 @@ export class ReconciliationController {
   }
 
   @Get('shifts/reconciliations')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.report.read',
-  )
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List POS shift cash reconciliations' })
   async listShiftReconciliations(
     @CurrentUser() user: AuthUser,
     @Query('branchId') branchId?: string,
   ) {
     try {
+      assertBranchNamed(user, branchId);
       return await this.reconciliationService.listShiftReconciliations(
         branchId,
         user.tenantId!,
+        branchScopeOf(user),
       );
     } catch (error) {
       rethrowFinanceHttpError(error);
@@ -75,13 +69,7 @@ export class ReconciliationController {
   }
 
   @Post('adjustments')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    'accountant',
-    'finance.cashbook.create',
-    'finance.adjustment.approve',
-  )
+  @RequirePermission('finance.create')
   @ApiOperation({ summary: 'Request a controlled financial adjustment' })
   async createAdjustment(
     @CurrentUser() user: AuthUser,
@@ -101,12 +89,7 @@ export class ReconciliationController {
   }
 
   @Post('adjustments/:id/approve')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    'accountant',
-    'finance.adjustment.approve',
-  )
+  @RequirePermission('finance.approve')
   @ApiOperation({
     summary:
       'Approve and post a financial adjustment (enforces maker-checker separation)',
@@ -127,7 +110,7 @@ export class ReconciliationController {
   }
 
   @Get('adjustments')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, 'accountant', 'finance.report.read')
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List financial adjustments' })
   async listAdjustments(@CurrentUser() user: AuthUser) {
     try {
@@ -138,14 +121,7 @@ export class ReconciliationController {
   }
 
   @Post('settlements/reconciliation-runs')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    'accountant',
-    'finance.settlement.reconcile',
-    'finance.cod.reconcile',
-    'finance.report.read',
-  )
+  @RequirePermission('finance.approve')
   @ApiOperation({
     summary: 'Trigger an operational financial reconciliation run',
   })
@@ -165,7 +141,7 @@ export class ReconciliationController {
   }
 
   @Get('settlements/reconciliation-runs/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, 'accountant', 'finance.report.read')
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'Get reconciliation run and issues by id' })
   async getRun(
     @CurrentUser() user: AuthUser,
@@ -182,7 +158,7 @@ export class ReconciliationController {
   }
 
   @Get('reconciliation-issues')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, 'accountant', 'finance.report.read')
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List financial reconciliation issues' })
   async listIssues(
     @CurrentUser() user: AuthUser,
@@ -199,14 +175,7 @@ export class ReconciliationController {
   }
 
   @Post('reconciliation-issues/:id/resolve')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    'accountant',
-    'finance.adjustment.approve',
-    'finance.settlement.reconcile',
-    'finance.cod.reconcile',
-  )
+  @RequirePermission('finance.approve')
   @ApiOperation({ summary: 'Resolve an open financial reconciliation issue' })
   async resolveIssue(
     @CurrentUser() user: AuthUser,
@@ -226,11 +195,14 @@ export class ReconciliationController {
   }
 
   @Get('summary')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, 'accountant', 'finance.report.read')
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'Get tenant financial summary and subledger KPIs' })
   async getSummary(@CurrentUser() user: AuthUser) {
     try {
-      return await this.reconciliationService.getFinanceSummary(user.tenantId!);
+      return await this.reconciliationService.getFinanceSummary(
+        user.tenantId!,
+        branchScopeOf(user),
+      );
     } catch (error) {
       rethrowFinanceHttpError(error);
     }

@@ -6,6 +6,7 @@ import {
   randomBytes,
   timingSafeEqual,
 } from 'node:crypto';
+import { readCredentialMasterKey } from '../config/integration.config';
 
 export type MarketplaceProvider = 'SHOPEE' | 'LAZADA';
 
@@ -207,14 +208,9 @@ export function assertValidConnectionTransition(
 // 2. ENVELOPE ENCRYPTION FOR CREDENTIALS (AES-256-GCM)
 // ============================================================================
 
-const DEFAULT_DEV_MASTER_KEY =
-  'sapoclone-m6-integration-default-master-key-32b!';
-
 function deriveAesKey(rawMasterKey?: string): Buffer {
-  const secret =
-    rawMasterKey ||
-    process.env.INTEGRATION_CREDENTIAL_MASTER_KEY ||
-    DEFAULT_DEV_MASTER_KEY;
+  // no development fallback: a missing key is a deployment error
+  const secret = rawMasterKey || readCredentialMasterKey();
   return createHash('sha256').update(secret, 'utf8').digest();
 }
 

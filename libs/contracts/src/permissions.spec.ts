@@ -13,7 +13,8 @@ describe('permissions', () => {
   it('lists sorted, unique codes', () => {
     expect([...ALL_PERMISSIONS]).toEqual([...new Set(ALL_PERMISSIONS)].sort());
     expect(ALL_PERMISSIONS).toContain('orders.approve');
-    expect(ALL_PERMISSIONS).toHaveLength(38);
+    expect(ALL_PERMISSIONS).toHaveLength(42);
+    expect(ALL_PERMISSIONS).toContain('finance.approve');
   });
 
   it('only grants permissions that exist, without duplicates', () => {
@@ -45,6 +46,21 @@ describe('permissions', () => {
     expect(perms).not.toContain('staff.create');
     expect(perms).not.toContain('settings.update');
     expect(perms).toContain('staff.view');
+  });
+
+  it('grants finance by role', () => {
+    const d = DEFAULT_ROLE_PERMISSIONS;
+    const finance = (r: readonly string[] | '*') =>
+      (r as readonly string[]).filter((p) => p.startsWith('finance.'));
+    expect(finance(d.branch_manager)).toHaveLength(4);
+    expect(finance(d.accountant)).toEqual([
+      'finance.view',
+      'finance.create',
+      'finance.update',
+      'finance.approve',
+    ]);
+    expect(finance(d.sales_staff)).toEqual(['finance.view', 'finance.create']);
+    expect(finance(d.warehouse_staff)).toEqual([]);
   });
 
   it('maps legacy role names', () => {

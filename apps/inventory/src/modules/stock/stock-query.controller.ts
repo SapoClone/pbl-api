@@ -17,9 +17,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, RequirePermission } from '@pbl/auth';
 import { rethrowInventoryHttpError } from '../../presentation/inventory-http-error';
+import { WarehouseScopeService } from '../../scope/warehouse-scope';
 import {
   ListStockMovementsQueryDto,
   ListStocksQueryDto,
@@ -32,10 +32,13 @@ import { StockQueryService } from './stock-query.service';
 @ApiBearerAuth()
 @Controller('api/v1')
 export class StockQueryController {
-  constructor(private readonly stockQuery: StockQueryService) {}
+  constructor(
+    private readonly stockQuery: StockQueryService,
+    private readonly scope: WarehouseScopeService,
+  ) {}
 
   @Get('stocks')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view', 'pos.create', 'orders.create')
   @ApiOperation({
     summary: 'List warehouse stock balances',
     description:
@@ -45,16 +48,23 @@ export class StockQueryController {
     status: HttpStatus.OK,
     description: 'Paginated stock balances',
   })
-  async listStocks(@Query() query: ListStocksQueryDto) {
+  async listStocks(
+    @Query() query: ListStocksQueryDto,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
-      return await this.stockQuery.listStocks(query);
+      await this.scope.assertWarehouse(branches, query.warehouseId);
+      return await this.stockQuery.listStocks(
+        query,
+        await this.scope.warehouseIds(branches),
+      );
     } catch (error) {
       rethrowInventoryHttpError(error);
     }
   }
 
   @Get('stocks/:skuId')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view', 'pos.create', 'orders.create')
   @ApiOperation({
     summary: 'Get aggregated and per-warehouse stock for a SKU',
   })
@@ -63,16 +73,22 @@ export class StockQueryController {
     status: HttpStatus.OK,
     description: 'Aggregated and warehouse breakdown for the SKU',
   })
-  async getStockBySku(@Param('skuId', new ParseUUIDPipe()) skuId: string) {
+  async getStockBySku(
+    @Param('skuId', new ParseUUIDPipe()) skuId: string,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
-      return await this.stockQuery.getStockBySku(skuId);
+      return await this.stockQuery.getStockBySku(
+        skuId,
+        await this.scope.warehouseIds(branches),
+      );
     } catch (error) {
       rethrowInventoryHttpError(error);
     }
   }
 
   @Get('stock-movements')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view')
   @ApiOperation({
     summary: 'List immutable inventory ledger movements',
     description:
@@ -82,16 +98,23 @@ export class StockQueryController {
     status: HttpStatus.OK,
     description: 'Paginated inventory ledger entries',
   })
-  async listMovements(@Query() query: ListStockMovementsQueryDto) {
+  async listMovements(
+    @Query() query: ListStockMovementsQueryDto,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
-      return await this.stockQuery.listMovements(query);
+      await this.scope.assertWarehouse(branches, query.warehouseId);
+      return await this.stockQuery.listMovements(
+        query,
+        await this.scope.warehouseIds(branches),
+      );
     } catch (error) {
       rethrowInventoryHttpError(error);
     }
   }
 
   @Get('stock-thresholds')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view')
   @ApiOperation({
     summary: 'List stock thresholds and low-stock alerts',
   })
@@ -99,16 +122,23 @@ export class StockQueryController {
     status: HttpStatus.OK,
     description: 'List of stock thresholds',
   })
-  async listThresholds(@Query() query: ListStockThresholdsQueryDto) {
+  async listThresholds(
+    @Query() query: ListStockThresholdsQueryDto,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
-      return await this.stockQuery.listThresholds(query);
+      await this.scope.assertWarehouse(branches, query.warehouseId);
+      return await this.stockQuery.listThresholds(
+        query,
+        await this.scope.warehouseIds(branches),
+      );
     } catch (error) {
       rethrowInventoryHttpError(error);
     }
   }
 
   @Put('stock-thresholds')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('inventory.update')
   @ApiOperation({
     summary:
       'Configure minimum and maximum stock thresholds for a warehouse SKU',
@@ -117,8 +147,12 @@ export class StockQueryController {
     status: HttpStatus.OK,
     description: 'Upserted stock threshold',
   })
-  async upsertThreshold(@Body() dto: UpsertStockThresholdDto) {
+  async upsertThreshold(
+    @Body() dto: UpsertStockThresholdDto,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
+      await this.scope.assertWarehouse(branches, dto.warehouseId);
       return await this.stockQuery.upsertThreshold(dto);
     } catch (error) {
       rethrowInventoryHttpError(error);
@@ -127,7 +161,7 @@ export class StockQueryController {
 
   @Post('stocks/reconcile')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('inventory.approve')
   @ApiOperation({
     summary: 'Run operational stock reconciliation',
     description:
@@ -137,9 +171,11 @@ export class StockQueryController {
     status: HttpStatus.OK,
     description: 'Reconciliation report',
   })
-  async reconcile() {
+  async reconcile(@AllowedBranches() branches: string[] | null) {
     try {
-      return await this.stockQuery.reconcile();
+      return await this.stockQuery.reconcile(
+        await this.scope.warehouseIds(branches),
+      );
     } catch (error) {
       rethrowInventoryHttpError(error);
     }

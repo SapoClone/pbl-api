@@ -24,6 +24,7 @@ import {
   PaymentSettlementEntity,
   ReconciliationIssueEntity,
 } from '../../infrastructure/persistence/finance.entities';
+import { applyBranchScope, BranchScope } from '../../presentation/branch-scope';
 import { CashAccountsService } from '../cash-accounts/cash-accounts.service';
 import { CashbookService } from '../cashbook/cashbook.service';
 import { FinancialJournalService } from '../financial-journal/financial-journal.service';
@@ -429,6 +430,7 @@ export class SettlementsService {
   async listSettlements(
     query: ListSettlementsQueryDto,
     tenantId = TenantContext.require(),
+    scope: BranchScope = null,
   ) {
     const limit = Math.min(100, Math.max(1, Number(query.limit ?? 20)));
     const offset = Math.max(0, Number(query.offset ?? 0));
@@ -441,6 +443,7 @@ export class SettlementsService {
       if (query.settlementStatus) {
         where.settlementStatus = query.settlementStatus;
       }
+      applyBranchScope(where, scope);
       const [items, total] = await em
         .getRepository(PaymentSettlementEntity)
         .findAndCount({

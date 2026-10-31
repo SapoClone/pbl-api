@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -16,12 +17,18 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
+import {
+  AllowedBranches,
+  CurrentUser,
+  hasPermission,
+  RequirePermission,
+  type AuthUser,
+} from '@pbl/auth';
 import { validationExceptionFactory } from '@pbl/common';
-import { ROLES } from '@pbl/contracts';
 import { CreateStockReceiptDto } from '../modules/receiving/receiving.dto';
 import { ReceivingService } from '../modules/receiving/receiving.service';
 import { rethrowInventoryHttpError } from '../presentation/inventory-http-error';
+import { WarehouseScopeService } from '../scope/warehouse-scope';
 import {
   ListStockReqDto,
   ReceiveStockBalanceDto,
@@ -42,12 +49,13 @@ const polymorphicPipe = new ValidationPipe({
 export class StockController {
   constructor(
     private readonly stock: StockService,
+    private readonly scope: WarehouseScopeService,
     @Optional() private readonly receiving?: ReceivingService,
   ) {}
 
   @Post('stock-receipts')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('inventory.create')
   @ApiOperation({
     summary:
       'Create a warehouse stock receipt document (M2) or receive branch stock (P1)',
@@ -58,7 +66,11 @@ export class StockController {
     status: HttpStatus.CREATED,
     description: 'Created stock receipt document or updated branch stock rows',
   })
-  async receive(@Body() body: Record<string, unknown>): Promise<unknown> {
+  async receive(
+    @Body() body: Record<string, unknown>,
+    @AllowedBranches() branches: string[] | null,
+    @CurrentUser() user: AuthUser,
+  ): Promise<unknown> {
     if (
       body &&
       typeof body === 'object' &&
@@ -70,6 +82,13 @@ export class StockController {
         metatype: CreateStockReceiptDto,
       })) as CreateStockReceiptDto;
       try {
+        // an auto-posted receipt moves stock at once: that is an approval
+        if (dto.autoPost && !hasPermission(user, 'inventory.approve')) {
+          throw new ForbiddenException(
+            'inventory.approve is required to autoPost',
+          );
+        }
+        await this.scope.assertWarehouse(branches, dto.warehouseId);
         return await this.receiving.createReceipt(dto);
       } catch (error) {
         rethrowInventoryHttpError(error);
@@ -80,11 +99,12 @@ export class StockController {
       type: 'body',
       metatype: StockReceiptReqDto,
     })) as StockReceiptReqDto;
+    this.scope.assertBranch(branches, dto.branchId);
     return this.stock.receive(dto);
   }
 
   @Get('stock')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view', 'pos.create', 'orders.create')
   @ApiOperation({
     summary: 'List branch stock levels',
     description:
@@ -94,13 +114,17 @@ export class StockController {
     status: HttpStatus.OK,
     description: 'Paginated branch stock levels',
   })
-  list(@Query() query: ListStockReqDto): Promise<Page<StockRes>> {
-    return this.stock.list(query);
+  list(
+    @Query() query: ListStockReqDto,
+    @AllowedBranches() branches: string[] | null,
+  ): Promise<Page<StockRes>> {
+    if (query.branchId) this.scope.assertBranch(branches, query.branchId);
+    return this.stock.list(query, branches);
   }
 
   @Post('stock-balances/receipts')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('inventory.create')
   @ApiOperation({
     summary: 'Receive warehouse stock balance',
     description:
@@ -110,12 +134,16 @@ export class StockController {
     status: HttpStatus.CREATED,
     description: 'Updated warehouse stock balance',
   })
-  receiveStockBalance(@Body() dto: ReceiveStockBalanceDto) {
+  async receiveStockBalance(
+    @Body() dto: ReceiveStockBalanceDto,
+    @AllowedBranches() branches: string[] | null,
+  ) {
+    await this.scope.assertWarehouse(branches, dto.warehouseId);
     return this.stock.receiveStockBalance(dto);
   }
 
   @Get('stock-balances')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view', 'pos.create', 'orders.create')
   @ApiOperation({
     summary: 'List warehouse stock balances',
     description:
@@ -130,7 +158,14 @@ export class StockController {
     status: HttpStatus.OK,
     description: 'List of warehouse stock balances',
   })
-  listStockBalances(@Query('warehouseId') warehouseId?: string) {
-    return this.stock.listStockBalances(warehouseId);
+  async listStockBalances(
+    @AllowedBranches() branches: string[] | null,
+    @Query('warehouseId') warehouseId?: string,
+  ) {
+    await this.scope.assertWarehouse(branches, warehouseId);
+    return this.stock.listStockBalances(
+      warehouseId,
+      await this.scope.warehouseIds(branches),
+    );
   }
 }

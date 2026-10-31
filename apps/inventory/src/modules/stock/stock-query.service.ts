@@ -12,6 +12,10 @@ import {
   parseQtyToMilli,
 } from '../../domain/inventory-domain';
 import {
+  applyWarehouseScope,
+  WarehouseScope,
+} from '../../scope/warehouse-scope';
+import {
   assertActiveWarehouse,
   schemaPrefix,
 } from '../warehouses/warehouses.service';
@@ -38,7 +42,7 @@ export interface ReconciliationMismatch {
 export class StockQueryService {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
-  async listStocks(query: ListStocksQueryDto) {
+  async listStocks(query: ListStocksQueryDto, scope?: WarehouseScope) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
       const params: unknown[] = [tenantId];
@@ -48,6 +52,7 @@ export class StockQueryService {
         params.push(query.warehouseId);
         filters.push(`AND b.warehouse_id = $${params.length}`);
       }
+      applyWarehouseScope(params, filters, 'b.warehouse_id', scope);
       if (query.skuId) {
         params.push(query.skuId);
         filters.push(`AND b.sku_id = $${params.length}`);
@@ -125,9 +130,12 @@ export class StockQueryService {
     });
   }
 
-  async getStockBySku(skuId: string) {
+  async getStockBySku(skuId: string, scope?: WarehouseScope) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
+      const params: unknown[] = [tenantId, skuId];
+      const filters: string[] = [];
+      applyWarehouseScope(params, filters, 'b.warehouse_id', scope);
       const rows = await em.query(
         `
         SELECT
@@ -154,10 +162,10 @@ export class StockQueryService {
           ON t.tenant_id = b.tenant_id
           AND t.warehouse_id = b.warehouse_id
           AND t.sku_id = b.sku_id
-        WHERE b.tenant_id = $1 AND b.sku_id = $2
+        WHERE b.tenant_id = $1 AND b.sku_id = $2 ${filters.join(' ')}
         ORDER BY w.code ASC
         `,
-        [tenantId, skuId],
+        params,
       );
 
       const warehouses = rows.map((r: Record<string, unknown>) =>
@@ -191,7 +199,10 @@ export class StockQueryService {
     });
   }
 
-  async listMovements(query: ListStockMovementsQueryDto) {
+  async listMovements(
+    query: ListStockMovementsQueryDto,
+    scope?: WarehouseScope,
+  ) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
       const params: unknown[] = [tenantId];
@@ -201,6 +212,7 @@ export class StockQueryService {
         params.push(query.warehouseId);
         filters.push(`AND warehouse_id = $${params.length}`);
       }
+      applyWarehouseScope(params, filters, 'warehouse_id', scope);
       if (query.skuId) {
         params.push(query.skuId);
         filters.push(`AND sku_id = $${params.length}`);
@@ -351,7 +363,10 @@ export class StockQueryService {
     });
   }
 
-  async listThresholds(query: ListStockThresholdsQueryDto) {
+  async listThresholds(
+    query: ListStockThresholdsQueryDto,
+    scope?: WarehouseScope,
+  ) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
       const params: unknown[] = [tenantId];
@@ -361,6 +376,7 @@ export class StockQueryService {
         params.push(query.warehouseId);
         filters.push(`AND t.warehouse_id = $${params.length}`);
       }
+      applyWarehouseScope(params, filters, 't.warehouse_id', scope);
       if (query.onlyAlerts === 'true') {
         filters.push(
           `AND COALESCE(b.on_hand_qty - b.reserved_qty, 0) < t.min_qty`,
@@ -422,10 +438,17 @@ export class StockQueryService {
    * 3. Sum of unresolved in-transit `stock_transfer_item` quantities targeting `to_warehouse_id`.
    * Never silently overwrites authoritative balances; returns a structured diagnostic report.
    */
-  async reconcile() {
+  async reconcile(scope?: WarehouseScope) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
+      const scoped = (column: string) => {
+        const extra: string[] = [];
+        const extraParams: unknown[] = [tenantId];
+        applyWarehouseScope(extraParams, extra, column, scope);
+        return { sql: extra.join(' '), params: extraParams };
+      };
 
+      const balancesScope = scoped('warehouse_id');
       const balances = await em.query(
         `
         SELECT
@@ -435,12 +458,13 @@ export class StockQueryService {
           reserved_qty AS "reservedQty",
           in_transit_qty AS "inTransitQty"
         FROM ${prefix}"stock_balance"
-        WHERE tenant_id = $1
+        WHERE tenant_id = $1 ${balancesScope.sql}
         ORDER BY warehouse_id ASC, sku_id ASC
         `,
-        [tenantId],
+        balancesScope.params,
       );
 
+      const ledgerScope = scoped('warehouse_id');
       const ledgerSums = await em.query(
         `
         SELECT
@@ -448,12 +472,13 @@ export class StockQueryService {
           sku_id AS "skuId",
           COALESCE(SUM(qty_delta), 0) AS "ledgerNetQty"
         FROM ${prefix}"stock_balance_ledger"
-        WHERE tenant_id = $1
+        WHERE tenant_id = $1 ${ledgerScope.sql}
         GROUP BY warehouse_id, sku_id
         `,
-        [tenantId],
+        ledgerScope.params,
       );
 
+      const heldScope = scoped('l.warehouse_id');
       const heldSums = await em.query(
         `
         SELECT
@@ -463,12 +488,13 @@ export class StockQueryService {
         FROM ${prefix}"warehouse_reservation_line" l
         INNER JOIN ${prefix}"warehouse_reservation" r
           ON r.tenant_id = l.tenant_id AND r.id = l.reservation_id
-        WHERE l.tenant_id = $1 AND r.state = 'HELD'
+        WHERE l.tenant_id = $1 AND r.state = 'HELD' ${heldScope.sql}
         GROUP BY l.warehouse_id, l.sku_id
         `,
-        [tenantId],
+        heldScope.params,
       );
 
+      const transitScope = scoped('t.to_warehouse_id');
       const inTransitSums = await em.query(
         `
         SELECT
@@ -479,10 +505,10 @@ export class StockQueryService {
         INNER JOIN ${prefix}"stock_transfer" t
           ON t.tenant_id = ti.tenant_id AND t.id = ti.transfer_id
         WHERE ti.tenant_id = $1
-          AND t.status IN ('DISPATCHED', 'PARTIALLY_RECEIVED', 'DISCREPANCY')
+          AND t.status IN ('DISPATCHED', 'PARTIALLY_RECEIVED', 'DISCREPANCY') ${transitScope.sql}
         GROUP BY t.to_warehouse_id, ti.sku_id
         `,
-        [tenantId],
+        transitScope.params,
       );
 
       const ledgerMap = new Map<string, bigint>();

@@ -4,6 +4,13 @@ All notable changes to `@sapoclone/pbl-auth` are recorded here.
 The project follows [Semantic Versioning](https://semver.org): a removed or
 renamed export, or any other breaking change, bumps the major version.
 
+## [1.2.0] - 2026-10-31
+
+### Added
+
+- `CurrentContext` parameter decorator and the `AuthenticatedContext` type: the verified caller and the required
+  store (user id, tenant id, roles, session id, subject type) in one object, for tenant-scoped services.
+
 ## [1.1.0] - 2026-10-31
 
 ### Added

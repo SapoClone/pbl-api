@@ -1,3 +1,4 @@
+import { discountTierFor } from '../presentation/access';
 import {
   AuthoritativeCatalogVariant,
   SalesDomainErrorCode,
@@ -146,18 +147,18 @@ describe('Sales M3 Pure Domain Layer', () => {
   });
 
   describe('RBAC discount authority', () => {
-    it('enforces cashier 10% limit unless override permission or approval is present', () => {
+    it('enforces the sales_staff 10% limit unless override permission or approval is present', () => {
       expect(() =>
         assertDiscountAuthority({
           effectiveDiscountPercent: 10,
-          role: 'cashier',
+          role: 'sales_staff',
         }),
       ).not.toThrow();
 
       expect(() =>
         assertDiscountAuthority({
           effectiveDiscountPercent: 15,
-          role: 'cashier',
+          role: 'sales_staff',
         }),
       ).toThrow(
         expect.objectContaining({
@@ -168,17 +169,41 @@ describe('Sales M3 Pure Domain Layer', () => {
       expect(() =>
         assertDiscountAuthority({
           effectiveDiscountPercent: 25,
-          role: 'manager',
+          role: 'branch_manager',
         }),
       ).not.toThrow();
 
       expect(() =>
         assertDiscountAuthority({
           effectiveDiscountPercent: 50,
-          role: 'cashier',
+          role: 'sales_staff',
           permissions: ['sales.pos.discount.override'],
         }),
       ).not.toThrow();
+    });
+  });
+
+  describe('discount tier from permissions', () => {
+    it('owner (*) gets 100, whoever approves orders 30, others 10', () => {
+      expect(discountTierFor(['*'])).toBe('owner');
+      expect(discountTierFor(['orders.approve'])).toBe('branch_manager');
+      expect(discountTierFor(['orders.create'])).toBe('sales_staff');
+      expect(discountTierFor([])).toBe('sales_staff');
+    });
+
+    it('accepts the legacy role names as input', () => {
+      expect(() =>
+        assertDiscountAuthority({
+          effectiveDiscountPercent: 25,
+          role: 'manager',
+        }),
+      ).not.toThrow();
+      expect(() =>
+        assertDiscountAuthority({
+          effectiveDiscountPercent: 15,
+          role: 'cashier',
+        }),
+      ).toThrow();
     });
   });
 

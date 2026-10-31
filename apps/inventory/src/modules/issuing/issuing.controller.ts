@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Headers,
   HttpCode,
@@ -19,9 +20,15 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import {
+  AllowedBranches,
+  CurrentUser,
+  hasPermission,
+  RequirePermission,
+  type AuthUser,
+} from '@pbl/auth';
 import { rethrowInventoryHttpError } from '../../presentation/inventory-http-error';
+import { WarehouseScopeService } from '../../scope/warehouse-scope';
 import { CreateStockIssueDto } from './issuing.dto';
 import { IssuingService } from './issuing.service';
 
@@ -29,11 +36,14 @@ import { IssuingService } from './issuing.service';
 @ApiBearerAuth()
 @Controller('api/v1/stock-issues')
 export class IssuingController {
-  constructor(private readonly issuing: IssuingService) {}
+  constructor(
+    private readonly issuing: IssuingService,
+    private readonly scope: WarehouseScopeService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('inventory.create')
   @ApiOperation({
     summary: 'Create a stock issue document (DRAFT or auto-posted)',
   })
@@ -44,9 +54,18 @@ export class IssuingController {
   })
   async create(
     @Body() dto: CreateStockIssueDto,
+    @AllowedBranches() branches: string[] | null,
+    @CurrentUser() user: AuthUser,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     try {
+      // an auto-posted issue moves stock at once: that is an approval
+      if (dto.autoPost && !hasPermission(user, 'inventory.approve')) {
+        throw new ForbiddenException(
+          'inventory.approve is required to autoPost',
+        );
+      }
+      await this.scope.assertWarehouse(branches, dto.warehouseId);
       return await this.issuing.createIssue(dto, idempotencyKey);
     } catch (error) {
       rethrowInventoryHttpError(error);
@@ -54,25 +73,36 @@ export class IssuingController {
   }
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view')
   @ApiOperation({ summary: 'List stock issue documents' })
   @ApiQuery({ name: 'warehouseId', required: false })
   @ApiResponse({ status: HttpStatus.OK, description: 'List of stock issues' })
-  async list(@Query('warehouseId') warehouseId?: string) {
+  async list(
+    @AllowedBranches() branches: string[] | null,
+    @Query('warehouseId') warehouseId?: string,
+  ) {
     try {
-      return await this.issuing.listIssues(warehouseId);
+      await this.scope.assertWarehouse(branches, warehouseId);
+      return await this.issuing.listIssues(
+        warehouseId,
+        await this.scope.warehouseIds(branches),
+      );
     } catch (error) {
       rethrowInventoryHttpError(error);
     }
   }
 
   @Get(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view')
   @ApiOperation({ summary: 'Get stock issue details by ID' })
   @ApiParam({ name: 'id', description: 'Stock issue UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Stock issue details' })
-  async getById(@Param('id', new ParseUUIDPipe()) id: string) {
+  async getById(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
+      await this.scope.assertDocument(branches, 'stock_issue', id);
       return await this.issuing.getIssueById(id);
     } catch (error) {
       rethrowInventoryHttpError(error);
@@ -81,7 +111,7 @@ export class IssuingController {
 
   @Post(':id/post')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('inventory.approve')
   @ApiOperation({
     summary: 'Approve and post a DRAFT stock issue',
     description:
@@ -96,9 +126,11 @@ export class IssuingController {
   })
   async post(
     @Param('id', new ParseUUIDPipe()) id: string,
+    @AllowedBranches() branches: string[] | null,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     try {
+      await this.scope.assertDocument(branches, 'stock_issue', id);
       return await this.issuing.postIssue(id, idempotencyKey);
     } catch (error) {
       rethrowInventoryHttpError(error);

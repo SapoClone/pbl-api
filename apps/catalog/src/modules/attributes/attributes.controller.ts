@@ -16,8 +16,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import {
   AttributeRes,
   AttributeValueRes,
@@ -35,7 +34,7 @@ export class AttributesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   @ApiOperation({
     summary: 'Create a product attribute (e.g. Color, Size, Material)',
   })
@@ -45,7 +44,7 @@ export class AttributesController {
   }
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({ summary: 'List tenant attributes with their values' })
   @ApiResponse({ status: HttpStatus.OK, description: 'List of attributes' })
   list(): Promise<AttributeRes[]> {
@@ -53,7 +52,7 @@ export class AttributesController {
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({ summary: 'Update attribute name' })
   @ApiParam({ name: 'id', description: 'Attribute UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Updated attribute' })
@@ -66,7 +65,7 @@ export class AttributesController {
 
   @Post(':id/values')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   @ApiOperation({ summary: 'Add a value to an attribute (e.g. Black, M)' })
   @ApiParam({ name: 'id', description: 'Attribute UUID' })
   @ApiResponse({
@@ -81,7 +80,7 @@ export class AttributesController {
   }
 
   @Get(':id/values')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({ summary: 'List values belonging to an attribute' })
   @ApiParam({ name: 'id', description: 'Attribute UUID' })
   @ApiResponse({

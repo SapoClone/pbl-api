@@ -17,9 +17,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, RequirePermission } from '@pbl/auth';
 import { rethrowInventoryHttpError } from '../../presentation/inventory-http-error';
+import { WarehouseScopeService } from '../../scope/warehouse-scope';
 import {
   CreateM2WarehouseDto,
   ListWarehousesQueryDto,
@@ -31,11 +31,14 @@ import { WarehousesService } from './warehouses.service';
 @ApiBearerAuth()
 @Controller('api/v1/warehouses')
 export class WarehousesController {
-  constructor(private readonly warehouses: WarehousesService) {}
+  constructor(
+    private readonly warehouses: WarehousesService,
+    private readonly scope: WarehouseScopeService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('inventory.create')
   @ApiOperation({
     summary: 'Create a warehouse',
     description:
@@ -45,8 +48,13 @@ export class WarehousesController {
     status: HttpStatus.CREATED,
     description: 'Warehouse created',
   })
-  async create(@Body() dto: CreateM2WarehouseDto) {
+  async create(
+    @Body() dto: CreateM2WarehouseDto,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
+      // a restricted member creates warehouses of their own branches only
+      this.scope.assertBranch(branches, dto.branchId ?? null);
       return await this.warehouses.create(dto);
     } catch (error) {
       rethrowInventoryHttpError(error);
@@ -54,28 +62,36 @@ export class WarehousesController {
   }
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view')
   @ApiOperation({
     summary: 'List tenant warehouses',
     description:
       'Lists warehouses with optional status, kind, or branchId filter.',
   })
   @ApiResponse({ status: HttpStatus.OK, description: 'List of warehouses' })
-  async list(@Query() query: ListWarehousesQueryDto) {
+  async list(
+    @Query() query: ListWarehousesQueryDto,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
-      return await this.warehouses.list(query);
+      if (query.branchId) this.scope.assertBranch(branches, query.branchId);
+      return await this.warehouses.list(query, branches);
     } catch (error) {
       rethrowInventoryHttpError(error);
     }
   }
 
   @Get(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view')
   @ApiOperation({ summary: 'Retrieve warehouse details by ID' })
   @ApiParam({ name: 'id', description: 'Warehouse UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Warehouse details' })
-  async getById(@Param('id', new ParseUUIDPipe()) id: string) {
+  async getById(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
+      await this.scope.assertWarehouse(branches, id);
       return await this.warehouses.getById(id);
     } catch (error) {
       rethrowInventoryHttpError(error);
@@ -83,7 +99,7 @@ export class WarehousesController {
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('inventory.update')
   @ApiOperation({
     summary: 'Update or deactivate a warehouse',
     description:
@@ -98,8 +114,12 @@ export class WarehousesController {
   async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateM2WarehouseDto,
+    @AllowedBranches() branches: string[] | null,
   ) {
     try {
+      await this.scope.assertWarehouse(branches, id);
+      // moving a warehouse to a branch is allowed only into the member's own
+      if (dto.branchId) this.scope.assertBranch(branches, dto.branchId);
       return await this.warehouses.update(id, dto);
     } catch (error) {
       rethrowInventoryHttpError(error);

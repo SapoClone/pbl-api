@@ -25,8 +25,6 @@ class Handlers {
   @RequirePermission('orders.create') createOrder() {}
   @RequirePermission('orders.create', 'pos.create') anyOf() {}
   @RequireRoles('owner') @RequirePermission('orders.create') both() {}
-  @RequireRoles('finance.cashbook.read') legacyFinance() {}
-  @RequireRoles('integration.connection.read') legacyIntegration() {}
 }
 
 const user = (overrides: Partial<AuthUser> = {}): AuthUser => ({
@@ -229,26 +227,6 @@ describe('AuthGuard', () => {
       await expect(
         run('both', { ...base, roles: ['owner'], permissions: [] }),
       ).rejects.toThrow(ForbiddenException);
-    });
-  });
-  describe('legacy role-name rules (M1-M6 services, removed in a later phase)', () => {
-    const run = (handler: keyof Handlers, roles: string[]) => {
-      verifier.verify.mockResolvedValue(user({ tenantId: 't1', roles }));
-      return guardFor('required').canActivate(
-        context(handler, 'Bearer tkn').ctx,
-      );
-    };
-
-    it('still maps owner/manager/accountant/cashier onto finance. and integration. strings', async () => {
-      await expect(run('legacyFinance', ['accountant'])).resolves.toBe(true);
-      await expect(run('legacyFinance', ['cashier'])).resolves.toBe(true);
-      await expect(run('legacyFinance', ['viewer'])).rejects.toThrow(
-        ForbiddenException,
-      );
-      await expect(run('legacyIntegration', ['manager'])).resolves.toBe(true);
-      await expect(run('legacyIntegration', ['accountant'])).rejects.toThrow(
-        ForbiddenException,
-      );
     });
   });
 });

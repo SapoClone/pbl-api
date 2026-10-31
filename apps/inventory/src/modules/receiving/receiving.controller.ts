@@ -18,19 +18,22 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, RequirePermission } from '@pbl/auth';
 import { rethrowInventoryHttpError } from '../../presentation/inventory-http-error';
+import { WarehouseScopeService } from '../../scope/warehouse-scope';
 import { ReceivingService } from './receiving.service';
 
 @ApiTags('receiving')
 @ApiBearerAuth()
 @Controller('api/v1/stock-receipts')
 export class ReceivingController {
-  constructor(private readonly receiving: ReceivingService) {}
+  constructor(
+    private readonly receiving: ReceivingService,
+    private readonly scope: WarehouseScopeService,
+  ) {}
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view')
   @ApiOperation({ summary: 'List stock receipt documents' })
   @ApiQuery({ name: 'warehouseId', required: false })
   @ApiQuery({
@@ -40,23 +43,33 @@ export class ReceivingController {
   })
   @ApiResponse({ status: HttpStatus.OK, description: 'List of stock receipts' })
   async list(
+    @AllowedBranches() branches: string[] | null,
     @Query('warehouseId') warehouseId?: string,
     @Query('status') status?: string,
   ) {
     try {
-      return await this.receiving.listReceipts(warehouseId, status);
+      await this.scope.assertWarehouse(branches, warehouseId);
+      return await this.receiving.listReceipts(
+        warehouseId,
+        status,
+        await this.scope.warehouseIds(branches),
+      );
     } catch (error) {
       rethrowInventoryHttpError(error);
     }
   }
 
   @Get(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('inventory.view')
   @ApiOperation({ summary: 'Get stock receipt details by ID' })
   @ApiParam({ name: 'id', description: 'Stock receipt UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Stock receipt details' })
-  async getById(@Param('id', new ParseUUIDPipe()) id: string) {
+  async getById(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @AllowedBranches() branches: string[] | null,
+  ) {
     try {
+      await this.scope.assertDocument(branches, 'stock_receipt', id);
       return await this.receiving.getReceiptById(id);
     } catch (error) {
       rethrowInventoryHttpError(error);
@@ -65,7 +78,7 @@ export class ReceivingController {
 
   @Post(':id/post')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('inventory.approve')
   @ApiOperation({
     summary: 'Approve and post a DRAFT stock receipt',
     description:
@@ -80,9 +93,11 @@ export class ReceivingController {
   })
   async post(
     @Param('id', new ParseUUIDPipe()) id: string,
+    @AllowedBranches() branches: string[] | null,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     try {
+      await this.scope.assertDocument(branches, 'stock_receipt', id);
       return await this.receiving.postReceipt(id, idempotencyKey);
     } catch (error) {
       rethrowInventoryHttpError(error);

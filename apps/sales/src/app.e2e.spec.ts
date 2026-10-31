@@ -62,8 +62,10 @@ describe('Sales service bootstrap', () => {
 
   const url = () =>
     `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
-  const as = (roles: string[], tid: string | null = TENANT) =>
-    auth.bearer(roles, tid ?? undefined);
+  const as = (permissions: string[], tid: string | null = TENANT) =>
+    auth.bearerWithPermissions('custom', permissions, tid ?? undefined);
+  const OWNER = ['*'];
+  const SELLER = ['orders.view', 'orders.create'];
 
   it('GET /health reports the service', async () => {
     const res = await request(url()).get('/health').expect(200);
@@ -101,20 +103,20 @@ describe('Sales service bootstrap', () => {
     it('refuses a token without a store (403)', async () => {
       await request(url())
         .get('/api/v1/orders')
-        .set('Authorization', as(['owner'], null))
+        .set('Authorization', as(OWNER, null))
         .expect(403);
     });
 
-    it.each([[[]], [['viewer']], [['someone-else']]])(
-      'refuses the roles %j (403)',
-      async (roles) => {
+    it.each([[[]], [['orders.view']], [['pos.view', 'customers.create']]])(
+      'refuses the permissions %j on creating (403)',
+      async (perms) => {
         await request(url())
           .get('/api/v1/orders')
-          .set('Authorization', as(roles))
+          .set('Authorization', as(['customers.view']))
           .expect(403);
         await request(url())
           .post('/api/v1/orders')
-          .set('Authorization', as(roles))
+          .set('Authorization', as(perms))
           .set('Idempotency-Key', KEY)
           .send(body)
           .expect(403);
@@ -122,28 +124,25 @@ describe('Sales service bootstrap', () => {
       },
     );
 
-    it.each([['owner'], ['manager'], ['cashier']])(
-      'lets a %s sell and read orders',
-      async (role) => {
-        await request(url())
-          .get('/api/v1/orders')
-          .set('Authorization', as([role]))
-          .expect(200);
-        await request(url())
-          .post('/api/v1/orders')
-          .set('Authorization', as([role]))
-          .set('Idempotency-Key', KEY)
-          .send(body)
-          .expect(201);
-      },
-    );
+    it.each([
+      ['an owner', OWNER],
+      ['a seller', SELLER],
+      ['a pos user', ['pos.create']],
+    ])('lets %s sell', async (_name, perms) => {
+      await request(url())
+        .post('/api/v1/orders')
+        .set('Authorization', as(perms))
+        .set('Idempotency-Key', KEY)
+        .send(body)
+        .expect(201);
+    });
   });
 
   describe('Idempotency-Key', () => {
     const post = () =>
       request(url())
         .post('/api/v1/orders')
-        .set('Authorization', as(['cashier']))
+        .set('Authorization', as(SELLER))
         .send(body);
 
     it('is required (400 S002)', async () => {
@@ -161,6 +160,7 @@ describe('Sales service bootstrap', () => {
       await post().set('Idempotency-Key', KEY.toUpperCase()).expect(201);
       expect(ordersService.create).toHaveBeenCalledWith(
         'account-1',
+        null, // every branch
         KEY,
         expect.objectContaining({ branchId: BRANCH }),
       );
@@ -182,7 +182,7 @@ describe('Sales service bootstrap', () => {
   it('validates the order body (422)', async () => {
     await request(url())
       .post('/api/v1/orders')
-      .set('Authorization', as(['cashier']))
+      .set('Authorization', as(SELLER))
       .set('Idempotency-Key', KEY)
       .send({ ...body, items: [] })
       .expect(422);

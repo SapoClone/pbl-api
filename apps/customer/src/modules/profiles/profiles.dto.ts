@@ -214,12 +214,6 @@ export class ListCustomersQueryDto {
   @IsString()
   source?: string;
 
-  @ApiPropertyOptional({ description: 'Mask PII fields in list response' })
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  maskPii?: boolean;
-
   @ApiPropertyOptional({
     description: 'Cursor (customer UUID) for keyset pagination',
   })

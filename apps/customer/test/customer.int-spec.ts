@@ -866,9 +866,7 @@ describe('Customer & Loyalty M4 Core (Real PostgreSQL Integration & Concurrency)
     const exportJob = await dataManagementService.createExportJob(
       TENANT_A,
       ACTOR_MANAGER,
-      {
-        maskPii: true,
-      },
+      {},
     );
     expect(exportJob.resultCsv).toContain("'=CMD|");
     expect(exportJob.resultCsv).toContain('090***3456');

@@ -10,11 +10,18 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, Public, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import {
+  AuthUser,
+  CurrentUser,
+  Public,
+  RequirePermission,
+  hasPermission,
+} from '@pbl/auth';
 import { rethrowCustomerHttpError } from '../../presentation/customer-http-error';
+import { InternalTokenGuard } from '../../presentation/internal-token.guard';
 import {
   CreateCustomerDto,
   DeactivateCustomerQueryDto,
@@ -32,7 +39,7 @@ export class ProfilesController {
   constructor(private readonly profilesService: ProfilesService) {}
 
   @Post('v1/customers')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.create')
   @ApiOperation({
     summary: 'Create a customer profile with an initialized loyalty account',
   })
@@ -45,6 +52,7 @@ export class ProfilesController {
         user.tenantId!,
         user.id ?? 'system',
         dto,
+        hasPermission(user, 'customers.update'),
       );
     } catch (err) {
       rethrowCustomerHttpError(err);
@@ -52,7 +60,7 @@ export class ProfilesController {
   }
 
   @Get('v1/customers')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary: 'List and search customer profiles with cursor/offset pagination',
   })
@@ -64,7 +72,7 @@ export class ProfilesController {
       return await this.profilesService.listCustomers(
         user.tenantId!,
         query,
-        user.roles ?? [],
+        hasPermission(user, 'customers.update'),
       );
     } catch (err) {
       rethrowCustomerHttpError(err);
@@ -72,7 +80,7 @@ export class ProfilesController {
   }
 
   @Get('v1/customers/lookup')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary: 'Fast exact customer lookup by normalized phone, code, or email',
   })
@@ -81,23 +89,26 @@ export class ProfilesController {
     @Query() query: LookupCustomerQueryDto,
   ) {
     try {
-      return await this.profilesService.lookupCustomer(user.tenantId!, query);
+      return await this.profilesService.lookupCustomer(
+        user.tenantId!,
+        query,
+        hasPermission(user, 'customers.update'),
+      );
     } catch (err) {
       rethrowCustomerHttpError(err);
     }
   }
 
   @Get('v1/customers/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({ summary: 'Get customer profile by ID' })
   async getCustomerById(
     @CurrentUser() user: AuthUser,
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Query('maskPii') maskPii?: string,
   ) {
     try {
       return await this.profilesService.getCustomerById(user.tenantId!, id, {
-        maskPii: maskPii === 'true',
+        fullPhone: hasPermission(user, 'customers.update'),
       });
     } catch (err) {
       rethrowCustomerHttpError(err);
@@ -105,7 +116,7 @@ export class ProfilesController {
   }
 
   @Patch('v1/customers/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.update')
   @ApiOperation({
     summary: 'Update customer profile with optional optimistic version check',
   })
@@ -120,6 +131,7 @@ export class ProfilesController {
         id,
         user.id ?? 'system',
         dto,
+        hasPermission(user, 'customers.update'),
       );
     } catch (err) {
       rethrowCustomerHttpError(err);
@@ -127,7 +139,7 @@ export class ProfilesController {
   }
 
   @Delete('v1/customers/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.delete')
   @ApiOperation({
     summary: 'Deactivate or privacy-anonymize a customer profile',
   })
@@ -149,7 +161,7 @@ export class ProfilesController {
   }
 
   @Get('v1/customers/:id/summary')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary:
       'Get 360-degree customer summary (profile, loyalty, purchase projection, financial summary)',
@@ -159,14 +171,18 @@ export class ProfilesController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     try {
-      return await this.profilesService.getCustomerSummary(user.tenantId!, id);
+      return await this.profilesService.getCustomerSummary(
+        user.tenantId!,
+        id,
+        hasPermission(user, 'customers.update'),
+      );
     } catch (err) {
       rethrowCustomerHttpError(err);
     }
   }
 
   @Get('v1/customers/:id/purchase-summary')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary: 'Get customer purchase summary from event-driven read model',
   })
@@ -182,7 +198,7 @@ export class ProfilesController {
   }
 
   @Get('v1/customers/:id/orders')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary: 'List customer historical orders from event-driven projection',
   })
@@ -203,6 +219,7 @@ export class ProfilesController {
   }
 
   @Public()
+  @UseGuards(InternalTokenGuard)
   @Get('internal/v1/customers/:id/eligibility')
   @ApiOperation({
     summary:
@@ -211,13 +228,8 @@ export class ProfilesController {
   async getCustomerEligibility(
     @Headers('x-tenant-id') tenantIdHeader: string | undefined,
     @Headers('x-internal-call') internalCallHeader: string | undefined,
-    @Headers('x-internal-token') internalTokenHeader: string | undefined,
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
-    const expectedToken = process.env.INTERNAL_S2S_TOKEN;
-    if (expectedToken && internalTokenHeader !== expectedToken) {
-      throw new ForbiddenException('Invalid internal S2S token');
-    }
     if (!internalCallHeader) {
       throw new ForbiddenException('Missing x-internal-call header');
     }

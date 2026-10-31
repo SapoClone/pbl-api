@@ -10,8 +10,8 @@ import {
   UseFilters,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, CurrentUser, RequirePermission } from '@pbl/auth';
+import { BranchScope } from '../../presentation/access';
 import { SalesExceptionFilter } from '../../presentation/sales-http-error';
 import { CreateFulfillmentDto } from './fulfillment.dto';
 import { FulfillmentService } from './fulfillment.service';
@@ -19,29 +19,40 @@ import { FulfillmentService } from './fulfillment.service';
 @ApiTags('fulfillments')
 @ApiBearerAuth()
 @UseFilters(SalesExceptionFilter)
-@RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
 @Controller('api/v1')
 export class FulfillmentController {
   constructor(private readonly fulfillmentService: FulfillmentService) {}
 
   @Post('orders/:id/fulfillments')
+  @RequirePermission('orders.update')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a fulfillment record for an order' })
   createFulfillment(
     @Param('id', ParseUUIDPipe) orderId: string,
     @CurrentUser('id') actorId: string,
+    @AllowedBranches() scope: BranchScope,
     @Body() dto: CreateFulfillmentDto,
   ) {
-    return this.fulfillmentService.createFulfillment(orderId, actorId, dto);
+    return this.fulfillmentService.createFulfillment(
+      orderId,
+      actorId,
+      scope,
+      dto,
+    );
   }
 
   @Get('orders/:id/fulfillments')
+  @RequirePermission('orders.view')
   @ApiOperation({ summary: 'List fulfillments for an order' })
-  listOrderFulfillments(@Param('id', ParseUUIDPipe) orderId: string) {
-    return this.fulfillmentService.listOrderFulfillments(orderId);
+  listOrderFulfillments(
+    @Param('id', ParseUUIDPipe) orderId: string,
+    @AllowedBranches() scope: BranchScope,
+  ) {
+    return this.fulfillmentService.listOrderFulfillments(orderId, scope);
   }
 
   @Post('fulfillments/:id/confirm')
+  @RequirePermission('orders.update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
@@ -50,7 +61,8 @@ export class FulfillmentController {
   confirmFulfillment(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') actorId: string,
+    @AllowedBranches() scope: BranchScope,
   ) {
-    return this.fulfillmentService.confirmFulfillment(id, actorId);
+    return this.fulfillmentService.confirmFulfillment(id, actorId, scope);
   }
 }

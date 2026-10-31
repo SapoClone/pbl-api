@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
-  IsBoolean,
   IsIn,
   IsNotEmpty,
   IsOptional,
@@ -109,10 +108,4 @@ export class CreateExportJobDto {
   @IsOptional()
   @IsUUID()
   membershipTierId?: string;
-
-  @ApiPropertyOptional({ default: false })
-  @IsOptional()
-  @Type(() => Boolean)
-  @IsBoolean()
-  maskPii?: boolean;
 }

@@ -18,8 +18,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import {
   CreateProductReqDto,
   CreateUnitConversionReqDto,
@@ -49,7 +48,7 @@ export class ProductsController {
 
   @Post('products')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   @ApiOperation({
     summary: 'Create a product (with optional default variant)',
     description:
@@ -61,7 +60,7 @@ export class ProductsController {
   }
 
   @Get('products')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({
     summary: 'List and filter products (offset + keyset cursor pagination)',
   })
@@ -71,7 +70,12 @@ export class ProductsController {
   }
 
   @Get('products/lookup')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission(
+    'products.view',
+    'pos.create',
+    'orders.create',
+    'inventory.view',
+  )
   @ApiOperation({
     summary: 'Exact indexed lookup by SKU code or barcode',
   })
@@ -84,7 +88,7 @@ export class ProductsController {
   }
 
   @Get('products/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({
     summary: 'Retrieve product details, variants, and unit conversions',
   })
@@ -95,7 +99,7 @@ export class ProductsController {
   }
 
   @Patch('products/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({
     summary: 'Update product details (supports optimistic locking via version)',
   })
@@ -109,7 +113,7 @@ export class ProductsController {
   }
 
   @Patch('products/:id/status')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({
     summary:
       'Transition product lifecycle status (DRAFT/ACTIVE/INACTIVE/ARCHIVED)',
@@ -125,7 +129,7 @@ export class ProductsController {
 
   @Delete('products/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.delete')
   @ApiOperation({
     summary:
       'Soft-delete product and archive its variants (preserves historical SKU/variant references)',
@@ -138,7 +142,7 @@ export class ProductsController {
 
   @Post('products/:id/variants')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   @ApiOperation({
     summary: 'Create a single variant under a product',
     description:
@@ -155,7 +159,7 @@ export class ProductsController {
 
   @Post('products/:id/variants/generate')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   @ApiOperation({
     summary:
       'Generate Cartesian attribute-combination variants transactionally',
@@ -175,7 +179,7 @@ export class ProductsController {
   }
 
   @Get('products/:id/variants')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({ summary: 'List variants belonging to a product' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'List of variants' })
@@ -186,7 +190,7 @@ export class ProductsController {
   }
 
   @Get('variants/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({ summary: 'Retrieve variant by ID' })
   @ApiParam({ name: 'id', description: 'Variant UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Variant details' })
@@ -195,7 +199,7 @@ export class ProductsController {
   }
 
   @Patch('variants/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({
     summary:
       'Update variant (SKU, barcode, base price, weight, optimistic version)',
@@ -210,7 +214,7 @@ export class ProductsController {
   }
 
   @Patch('variants/:id/status')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({ summary: 'Activate, deactivate, or archive a variant' })
   @ApiParam({ name: 'id', description: 'Variant UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Updated variant' })
@@ -223,7 +227,7 @@ export class ProductsController {
 
   @Post('products/:id/units')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   @ApiOperation({
     summary: 'Add a packaging unit conversion to a product (e.g. Pack = 6)',
   })
@@ -240,7 +244,7 @@ export class ProductsController {
   }
 
   @Get('products/:id/units')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({ summary: 'List unit conversions for a product' })
   @ApiParam({ name: 'id', description: 'Product UUID' })
   @ApiResponse({

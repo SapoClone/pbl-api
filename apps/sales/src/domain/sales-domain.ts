@@ -582,8 +582,11 @@ export function calculateOrderQuote(
 
 // ---- RBAC Discount Authority ----
 
+/** Keyed by role code; `manager` and `cashier` are legacy input names (ADR-0020) */
 export const ROLE_MAX_DISCOUNT_PERCENT: Record<string, number> = {
   owner: 100,
+  branch_manager: 30,
+  sales_staff: 10,
   manager: 30,
   cashier: 10,
 };
@@ -605,7 +608,7 @@ export function assertDiscountAuthority(params: {
   ) {
     return;
   }
-  const roleKey = (params.role ?? 'cashier').toLowerCase();
+  const roleKey = (params.role ?? 'sales_staff').toLowerCase();
   const maxAllowed = ROLE_MAX_DISCOUNT_PERCENT[roleKey] ?? 10;
   if (params.effectiveDiscountPercent > maxAllowed) {
     throw new SalesDomainError(

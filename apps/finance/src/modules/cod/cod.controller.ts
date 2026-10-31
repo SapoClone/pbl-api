@@ -9,8 +9,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, RequirePermission } from '@pbl/auth';
+import {
+  assertBranchNamed,
+  branchScopeOf,
+} from '../../presentation/branch-scope';
 import { rethrowFinanceHttpError } from '../../presentation/finance-http-error';
 import {
   CreateCodReceivableDto,
@@ -28,12 +31,7 @@ export class CodController {
   constructor(private readonly codService: CodService) {}
 
   @Post('receivables')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    'accountant',
-    'finance.cod.reconcile',
-  )
+  @RequirePermission('finance.create')
   @ApiOperation({ summary: 'Recognize a COD carrier receivable' })
   async createReceivable(
     @CurrentUser() user: AuthUser,
@@ -41,6 +39,7 @@ export class CodController {
     @Body() dto: CreateCodReceivableDto,
   ) {
     try {
+      assertBranchNamed(user, dto.branchId);
       return await this.codService.createCodReceivable(
         user.id ?? 'system',
         idempotencyKey,
@@ -53,32 +52,25 @@ export class CodController {
   }
 
   @Get('receivables')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.report.read',
-  )
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List COD carrier receivables' })
   async listReceivables(
     @CurrentUser() user: AuthUser,
     @Query() query: ListCodReceivablesQueryDto,
   ) {
     try {
-      return await this.codService.listCodReceivables(query, user.tenantId!);
+      return await this.codService.listCodReceivables(
+        query,
+        user.tenantId!,
+        branchScopeOf(user),
+      );
     } catch (error) {
       rethrowFinanceHttpError(error);
     }
   }
 
   @Post('settlement-batches')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    'accountant',
-    'finance.cod.reconcile',
-  )
+  @RequirePermission('finance.create')
   @ApiOperation({
     summary:
       'Import and optionally reconcile a carrier COD settlement statement batch',
@@ -101,13 +93,7 @@ export class CodController {
   }
 
   @Get('settlement-batches')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.report.read',
-  )
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List COD settlement batches' })
   async listBatches(
     @CurrentUser() user: AuthUser,
@@ -121,13 +107,7 @@ export class CodController {
   }
 
   @Get('settlement-batches/:id')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    ROLES.CASHIER,
-    'accountant',
-    'finance.report.read',
-  )
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'Get COD settlement batch and lines by id' })
   async getBatch(
     @CurrentUser() user: AuthUser,
@@ -141,12 +121,7 @@ export class CodController {
   }
 
   @Post('settlement-batches/:id/reconcile')
-  @RequireRoles(
-    ROLES.OWNER,
-    ROLES.MANAGER,
-    'accountant',
-    'finance.cod.reconcile',
-  )
+  @RequirePermission('finance.approve')
   @ApiOperation({ summary: 'Reconcile an imported COD settlement batch' })
   async reconcileBatch(
     @CurrentUser() user: AuthUser,

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TenantContext } from '@pbl/common';
 import { randomUUID } from 'node:crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import {
   CalculatedOrderQuote,
   QuoteLineInput,
@@ -16,6 +16,13 @@ import {
 import { CatalogClient } from '../../infrastructure/catalog-client/catalog.client';
 import { getSchemaPrefix } from '../../infrastructure/persistence/sales-code.generator';
 import { PosDraftEntity } from '../../infrastructure/persistence/sales.entities';
+import {
+  BranchScope,
+  assertBranchAllowed,
+  branchAllowed,
+  branchFilter,
+  discountTierFor,
+} from '../../presentation/access';
 import { PromotionsService } from '../promotions/promotions.service';
 import {
   CreatePosDraftDto,
@@ -180,9 +187,15 @@ export class PosService {
 
   async quoteOrder(
     dto: PosQuoteDto,
-    role?: string | null,
-    permissions?: string[],
+    permissions: string[],
+    scope: BranchScope,
   ) {
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'ORDER_NOT_FOUND',
+      'Branch not found',
+    );
     return this.resolveAndQuoteLines({
       branchId: dto.branchId,
       customerId: dto.customerId,
@@ -191,7 +204,7 @@ export class PosService {
       orderDiscountValue: dto.orderDiscountValue,
       couponCode: dto.couponCode,
       shippingFee: dto.shippingFee,
-      role,
+      role: discountTierFor(permissions),
       permissions,
       discountApprovedBy: dto.discountApprovedBy,
     });
@@ -199,8 +212,15 @@ export class PosService {
 
   async createDraft(
     staffId: string,
+    scope: BranchScope,
     dto: CreatePosDraftDto,
   ): Promise<PosDraftEntity> {
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'POS_DRAFT_NOT_FOUND',
+      'Branch not found',
+    );
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
 
@@ -285,8 +305,16 @@ export class PosService {
 
   async listDrafts(
     staffId: string,
+    scope: BranchScope,
     branchId?: string,
   ): Promise<PosDraftEntity[]> {
+    const branchIds = branchFilter(
+      scope,
+      branchId,
+      'POS_DRAFT_NOT_FOUND',
+      'Branch not found',
+    );
+    if (branchIds?.length === 0) return [];
     const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
@@ -297,8 +325,8 @@ export class PosService {
         staffId,
         status: 'ACTIVE',
       };
-      if (branchId) {
-        where.branchId = branchId;
+      if (branchIds) {
+        where.branchId = In(branchIds);
       }
       return em.getRepository(PosDraftEntity).find({
         where,
@@ -310,6 +338,7 @@ export class PosService {
   async updateDraft(
     staffId: string,
     draftId: string,
+    scope: BranchScope,
     dto: UpdatePosDraftDto,
   ): Promise<PosDraftEntity> {
     const tenantId = TenantContext.require();
@@ -321,7 +350,11 @@ export class PosService {
         where: { id: draftId, tenantId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!draft || draft.status !== 'ACTIVE') {
+      if (
+        !draft ||
+        draft.status !== 'ACTIVE' ||
+        !branchAllowed(scope, draft.branchId)
+      ) {
         throw new SalesDomainError(
           SalesDomainErrorCode.POS_DRAFT_NOT_FOUND,
           'Active POS draft not found',
@@ -365,6 +398,7 @@ export class PosService {
   async discardDraft(
     staffId: string,
     draftId: string,
+    scope: BranchScope,
   ): Promise<{ id: string; status: string }> {
     const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
@@ -375,7 +409,7 @@ export class PosService {
         where: { id: draftId, tenantId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!draft) {
+      if (!draft || !branchAllowed(scope, draft.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.POS_DRAFT_NOT_FOUND,
           'POS draft not found',

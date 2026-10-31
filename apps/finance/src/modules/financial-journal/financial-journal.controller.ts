@@ -11,8 +11,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AuthUser, CurrentUser, RequirePermission } from '@pbl/auth';
+import {
+  assertBranchNamed,
+  assertRowBranch,
+  branchScopeOf,
+} from '../../presentation/branch-scope';
 import { rethrowFinanceHttpError } from '../../presentation/finance-http-error';
 import {
   CreateFinancialAccountDto,
@@ -28,8 +32,18 @@ import { FinancialJournalService } from './financial-journal.service';
 export class FinancialJournalController {
   constructor(private readonly journalService: FinancialJournalService) {}
 
+  /** The journal, or 404 when it belongs to a branch the member may not use. */
+  private async loadJournal(user: AuthUser, id: string) {
+    const journal = await this.journalService.getJournalById(
+      id,
+      user.tenantId!,
+    );
+    assertRowBranch(user, journal.branchId);
+    return journal;
+  }
+
   @Get('v1/finance/accounts')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List tenant financial chart of accounts' })
   async listAccounts(@CurrentUser() user: AuthUser) {
     try {
@@ -40,7 +54,7 @@ export class FinancialJournalController {
   }
 
   @Post('v1/finance/accounts')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, 'accountant')
+  @RequirePermission('finance.create')
   @ApiOperation({ summary: 'Create a custom financial account' })
   async createAccount(
     @CurrentUser() user: AuthUser,
@@ -54,35 +68,40 @@ export class FinancialJournalController {
   }
 
   @Get('v1/finance/journals')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, 'accountant')
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'List posted financial journals with filtering' })
   async listJournals(
     @CurrentUser() user: AuthUser,
     @Query() query: ListJournalsQueryDto,
   ) {
     try {
-      return await this.journalService.listJournals(query, user.tenantId!);
+      assertBranchNamed(user, query.branchId);
+      return await this.journalService.listJournals(
+        query,
+        user.tenantId!,
+        branchScopeOf(user),
+      );
     } catch (error) {
       rethrowFinanceHttpError(error);
     }
   }
 
   @Get('v1/finance/journals/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, 'accountant')
+  @RequirePermission('finance.view')
   @ApiOperation({ summary: 'Get financial journal details and balanced lines' })
   async getJournal(
     @CurrentUser() user: AuthUser,
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     try {
-      return await this.journalService.getJournalById(id, user.tenantId!);
+      return await this.loadJournal(user, id);
     } catch (error) {
       rethrowFinanceHttpError(error);
     }
   }
 
   @Post('v1/finance/journals')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, 'accountant')
+  @RequirePermission('finance.approve')
   @ApiOperation({ summary: 'Post a balanced financial journal' })
   async postJournal(
     @CurrentUser() user: AuthUser,
@@ -90,6 +109,8 @@ export class FinancialJournalController {
     @Body() dto: PostJournalDto,
   ) {
     try {
+      assertBranchNamed(user, dto.branchId);
+      dto.lines?.forEach((line) => assertBranchNamed(user, line.branchId));
       return await this.journalService.postManualJournal(
         user.id,
         idempotencyKey,
@@ -103,7 +124,7 @@ export class FinancialJournalController {
 
   @Post('v1/finance/journals/:id/reverse')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, 'accountant')
+  @RequirePermission('finance.approve')
   @ApiOperation({
     summary: 'Reverse a posted financial journal using compensating entries',
   })
@@ -114,6 +135,7 @@ export class FinancialJournalController {
     @Body() dto: ReverseJournalDto,
   ) {
     try {
+      await this.loadJournal(user, id);
       return await this.journalService.reverseJournal(
         id,
         user.id,

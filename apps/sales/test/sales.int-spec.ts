@@ -58,6 +58,8 @@ const BRANCH_A = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
 const BRANCH_B = '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b';
 const WAREHOUSE_A = '77777777-7777-4777-8777-777777777777';
 const ACCOUNT = '99999999-9999-4999-8999-999999999999';
+/** every branch (an owner, or a member with no branch assignment) */
+const ALL = null;
 const VARIANT_A = '11111111-1111-4111-8111-111111111111';
 const VARIANT_B = '22222222-2222-4222-8222-222222222222';
 const PRODUCT_A = '33333333-3333-4333-8333-333333333333';
@@ -319,28 +321,28 @@ describe('sales (Postgres)', () => {
   describe('tenant isolation', () => {
     it("never shows one store's orders to another", async () => {
       const { order } = await as(TENANT_A, () =>
-        service.create(ACCOUNT, randomUUID(), dto()),
+        service.create(ACCOUNT, ALL, randomUUID(), dto()),
       );
 
-      await expect(as(TENANT_B, () => service.get(order.id))).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        as(TENANT_B, () => service.get(order.id, ALL)),
+      ).rejects.toThrow(NotFoundException);
       const listB = await as(TENANT_B, () =>
-        service.list({ page: 1, limit: 10 } as never),
+        service.list({ page: 1, limit: 10 } as never, ALL),
       );
       expect(listB.pagination.totalRecords).toBe(0);
       const listA = await as(TENANT_A, () =>
-        service.list({ page: 1, limit: 10 } as never),
+        service.list({ page: 1, limit: 10 } as never, ALL),
       );
       expect(listA.pagination.totalRecords).toBe(1);
       expect(listA.data[0].items).toEqual([]); // the list does not load the lines
-      const read = await as(TENANT_A, () => service.get(order.id));
+      const read = await as(TENANT_A, () => service.get(order.id, ALL));
       expect(read.items).toHaveLength(1);
     });
 
     it("refuses an order for another store's branch (S001)", async () => {
       const error = await as(TENANT_B, () =>
-        service.create(ACCOUNT, randomUUID(), dto()),
+        service.create(ACCOUNT, ALL, randomUUID(), dto()),
       ).catch((e) => e);
 
       expect(error.getResponse()).toMatchObject({
@@ -361,11 +363,11 @@ describe('sales (Postgres)', () => {
 
     it('does not let a key of one store replay in another', async () => {
       const key = randomUUID();
-      await as(TENANT_A, () => service.create(ACCOUNT, key, dto()));
+      await as(TENANT_A, () => service.create(ACCOUNT, ALL, key, dto()));
       await learnBranch(TENANT_B, BRANCH_B);
 
       const result = await as(TENANT_B, () =>
-        service.create(ACCOUNT, key, dto({ branchId: BRANCH_B })),
+        service.create(ACCOUNT, ALL, key, dto({ branchId: BRANCH_B })),
       );
 
       expect(result.replayed).toBe(false);
@@ -378,10 +380,10 @@ describe('sales (Postgres)', () => {
       const key = randomUUID();
 
       const first = await as(TENANT_A, () =>
-        service.create(ACCOUNT, key, dto()),
+        service.create(ACCOUNT, ALL, key, dto()),
       );
       const second = await as(TENANT_A, () =>
-        service.create(ACCOUNT, key, dto()),
+        service.create(ACCOUNT, ALL, key, dto()),
       );
 
       expect(first.replayed).toBe(false);
@@ -393,11 +395,11 @@ describe('sales (Postgres)', () => {
 
     it('refuses the same key for a different request (409)', async () => {
       const key = randomUUID();
-      await as(TENANT_A, () => service.create(ACCOUNT, key, dto()));
+      await as(TENANT_A, () => service.create(ACCOUNT, ALL, key, dto()));
 
       await expect(
         as(TENANT_A, () =>
-          service.create(ACCOUNT, key, dto({ paymentMethod: 'card' })),
+          service.create(ACCOUNT, ALL, key, dto({ paymentMethod: 'card' })),
         ),
       ).rejects.toThrow(ConflictException);
     });
@@ -406,8 +408,8 @@ describe('sales (Postgres)', () => {
       const key = randomUUID();
 
       const results = await Promise.all([
-        as(TENANT_A, () => service.create(ACCOUNT, key, dto())),
-        as(TENANT_A, () => service.create(ACCOUNT, key, dto())),
+        as(TENANT_A, () => service.create(ACCOUNT, ALL, key, dto())),
+        as(TENANT_A, () => service.create(ACCOUNT, ALL, key, dto())),
       ]);
 
       expect(new Set(results.map((r) => r.order.id)).size).toBe(1);
@@ -429,7 +431,7 @@ describe('sales (Postgres)', () => {
       ]);
 
       const error = await as(TENANT_A, () =>
-        service.create(ACCOUNT, randomUUID(), dto()),
+        service.create(ACCOUNT, ALL, randomUUID(), dto()),
       ).catch((e) => e);
 
       expect(error.getResponse()).toMatchObject({
@@ -442,7 +444,7 @@ describe('sales (Postgres)', () => {
 
     it('holds stock under the id of the order it then creates', async () => {
       const { order } = await as(TENANT_A, () =>
-        service.create(ACCOUNT, randomUUID(), dto()),
+        service.create(ACCOUNT, ALL, randomUUID(), dto()),
       );
 
       expect(inventory.reserve).toHaveBeenCalledWith(order.id, BRANCH_A, [
@@ -452,8 +454,8 @@ describe('sales (Postgres)', () => {
 
     it('does not ask for stock again on a retry', async () => {
       const key = randomUUID();
-      await as(TENANT_A, () => service.create(ACCOUNT, key, dto()));
-      await as(TENANT_A, () => service.create(ACCOUNT, key, dto()));
+      await as(TENANT_A, () => service.create(ACCOUNT, ALL, key, dto()));
+      await as(TENANT_A, () => service.create(ACCOUNT, ALL, key, dto()));
 
       expect(inventory.reserve).toHaveBeenCalledTimes(1);
     });
@@ -461,7 +463,7 @@ describe('sales (Postgres)', () => {
 
   it('writes the order, its lines and the event together, in the store of the order', async () => {
     const { order } = await as(TENANT_A, () =>
-      service.create(ACCOUNT, randomUUID(), dto()),
+      service.create(ACCOUNT, ALL, randomUUID(), dto()),
     );
 
     const [event] = await dataSource.getRepository(OutboxEventEntity).find();
@@ -512,7 +514,7 @@ describe('sales (Postgres)', () => {
     );
 
     const error = await as(TENANT_A, () =>
-      service.create(ACCOUNT, randomUUID(), dto()),
+      service.create(ACCOUNT, ALL, randomUUID(), dto()),
     ).catch((e) => e);
 
     expect(error.getResponse()).toMatchObject({
@@ -564,7 +566,7 @@ describe('sales (Postgres)', () => {
 
       const key = randomUUID();
       const outcome = await as(TENANT_A, () =>
-        service.checkout(ACCOUNT, key, checkoutDto()),
+        service.checkout(ACCOUNT, ALL, key, checkoutDto()),
       );
 
       expect(outcome.state).toBe('CONFIRMED');
@@ -573,7 +575,7 @@ describe('sales (Postgres)', () => {
       expect(outcome.replayed).toBe(false);
 
       const replay = await as(TENANT_A, () =>
-        service.checkout(ACCOUNT, key, checkoutDto()),
+        service.checkout(ACCOUNT, ALL, key, checkoutDto()),
       );
       expect(replay.replayed).toBe(true);
       expect(replay.orderId).toBe(outcome.orderId);
@@ -610,7 +612,7 @@ describe('sales (Postgres)', () => {
 
       const key = randomUUID();
       const err = await as(TENANT_A, () =>
-        service.checkout(ACCOUNT, key, checkoutDto()),
+        service.checkout(ACCOUNT, ALL, key, checkoutDto()),
       ).catch((e) => e);
 
       expect(err).toBeInstanceOf(ServiceUnavailableException);
@@ -624,7 +626,7 @@ describe('sales (Postgres)', () => {
       expect(workflow.state).toBe('RECOVERY_PENDING');
 
       const recovered = await as(TENANT_A, () =>
-        service.recoverCheckout(workflow.id),
+        service.recoverCheckout(workflow.id, ALL),
       );
       expect(recovered.state).toBe('CONFIRMED');
       expect(recovered.reservationId).toBe(reservationId);
@@ -677,12 +679,18 @@ describe('sales (Postgres)', () => {
 
       const attempts = Array.from({ length: 50 }, (_, idx) =>
         as(TENANT_A, () =>
-          checkoutService.checkout(ACCOUNT, ['cashier'], `test-a-key-${idx}`, {
-            branchId: BRANCH_A,
-            warehouseId: WAREHOUSE_A,
-            lines: [{ variantId: VARIANT_A, qty: 1 }],
-            paymentMethod: 'CASH',
-          }),
+          checkoutService.checkout(
+            ACCOUNT,
+            ['orders.create'],
+            ALL,
+            `test-a-key-${idx}`,
+            {
+              branchId: BRANCH_A,
+              warehouseId: WAREHOUSE_A,
+              lines: [{ variantId: VARIANT_A, qty: 1 }],
+              paymentMethod: 'CASH',
+            },
+          ),
         ),
       );
 
@@ -708,7 +716,13 @@ describe('sales (Postgres)', () => {
       const outcomes = await Promise.all(
         Array.from({ length: 20 }, () =>
           as(TENANT_A, () =>
-            checkoutService.checkout(ACCOUNT, ['cashier'], sharedKey, payload),
+            checkoutService.checkout(
+              ACCOUNT,
+              ['orders.create'],
+              ALL,
+              sharedKey,
+              payload,
+            ),
           ),
         ),
       );
@@ -720,7 +734,7 @@ describe('sales (Postgres)', () => {
       // Test C: same key with different payload -> 409 IDEMPOTENCY_CONFLICT
       await expect(
         as(TENANT_A, () =>
-          checkoutService.checkout(ACCOUNT, ['cashier'], sharedKey, {
+          checkoutService.checkout(ACCOUNT, ['orders.create'], ALL, sharedKey, {
             ...payload,
             lines: [{ variantId: VARIANT_A, qty: 3 }],
           }),
@@ -764,14 +778,20 @@ describe('sales (Postgres)', () => {
       // Cashier submits stale expectedUnitPrice = 100000 -> 409 PRICE_CHANGED
       await expect(
         as(TENANT_A, () =>
-          checkoutService.checkout(ACCOUNT, ['cashier'], randomUUID(), {
-            branchId: BRANCH_A,
-            warehouseId: WAREHOUSE_A,
-            lines: [
-              { variantId: VARIANT_A, qty: 1, expectedUnitPrice: 100000 },
-            ],
-            paymentMethod: 'CASH',
-          }),
+          checkoutService.checkout(
+            ACCOUNT,
+            ['orders.create'],
+            ALL,
+            randomUUID(),
+            {
+              branchId: BRANCH_A,
+              warehouseId: WAREHOUSE_A,
+              lines: [
+                { variantId: VARIANT_A, qty: 1, expectedUnitPrice: 100000 },
+              ],
+              paymentMethod: 'CASH',
+            },
+          ),
         ),
       ).rejects.toMatchObject({
         code: SalesDomainErrorCode.PRICE_CHANGED,
@@ -781,14 +801,20 @@ describe('sales (Postgres)', () => {
       // Test E: Cashier requests 25% discount (limit is 10%) -> 403 DISCOUNT_APPROVAL_REQUIRED
       await expect(
         as(TENANT_A, () =>
-          checkoutService.checkout(ACCOUNT, ['cashier'], randomUUID(), {
-            branchId: BRANCH_A,
-            warehouseId: WAREHOUSE_A,
-            lines: [{ variantId: VARIANT_A, qty: 1 }],
-            orderDiscountType: 'PERCENT',
-            orderDiscountValue: 25,
-            paymentMethod: 'CASH',
-          }),
+          checkoutService.checkout(
+            ACCOUNT,
+            ['orders.create'],
+            ALL,
+            randomUUID(),
+            {
+              branchId: BRANCH_A,
+              warehouseId: WAREHOUSE_A,
+              lines: [{ variantId: VARIANT_A, qty: 1 }],
+              orderDiscountType: 'PERCENT',
+              orderDiscountValue: 25,
+              paymentMethod: 'CASH',
+            },
+          ),
         ),
       ).rejects.toMatchObject({
         code: SalesDomainErrorCode.DISCOUNT_APPROVAL_REQUIRED,
@@ -797,14 +823,20 @@ describe('sales (Postgres)', () => {
 
       // Manager requests 25% discount (limit is 30%) -> succeeds!
       const managerSale = await as(TENANT_A, () =>
-        checkoutService.checkout(ACCOUNT, ['manager'], randomUUID(), {
-          branchId: BRANCH_A,
-          warehouseId: WAREHOUSE_A,
-          lines: [{ variantId: VARIANT_A, qty: 1 }],
-          orderDiscountType: 'PERCENT',
-          orderDiscountValue: 25,
-          paymentMethod: 'CASH',
-        }),
+        checkoutService.checkout(
+          ACCOUNT,
+          ['orders.approve'],
+          ALL,
+          randomUUID(),
+          {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            lines: [{ variantId: VARIANT_A, qty: 1 }],
+            orderDiscountType: 'PERCENT',
+            orderDiscountValue: 25,
+            paymentMethod: 'CASH',
+          },
+        ),
       );
       expect(managerSale.state).toBe('CONFIRMED');
       expect(managerSale.quote.grandTotal).toBe('90000.00');
@@ -837,7 +869,7 @@ describe('sales (Postgres)', () => {
 
       await expect(
         as(TENANT_A, () =>
-          checkoutService.checkout(ACCOUNT, ['owner'], randomUUID(), {
+          checkoutService.checkout(ACCOUNT, ['*'], ALL, randomUUID(), {
             branchId: BRANCH_A,
             warehouseId: WAREHOUSE_A,
             lines: [{ variantId: VARIANT_B, qty: 1 }],
@@ -854,7 +886,7 @@ describe('sales (Postgres)', () => {
       // Create order with Item A (qty=5 @ 100k = 500k) + Item B (qty=1 @ 300k = 300k) = 800k, order discount = 80k (10%)
       // Allocated discount: Item A gets 50k (lineTotal = 450k, 90k/unit), Item B gets 30k (lineTotal = 270k)
       const sale = await as(TENANT_A, () =>
-        checkoutService.checkout(ACCOUNT, ['owner'], randomUUID(), {
+        checkoutService.checkout(ACCOUNT, ['*'], ALL, randomUUID(), {
           branchId: BRANCH_A,
           warehouseId: WAREHOUSE_A,
           lines: [
@@ -868,7 +900,7 @@ describe('sales (Postgres)', () => {
       );
 
       const orderDetails = await as(TENANT_A, () =>
-        m3OrdersService.getOrderDetails(sale.orderId!),
+        m3OrdersService.getOrderDetails(sale.orderId!, ALL),
       );
       const itemA = orderDetails.items.find((i) => i.sku === 'SKU-A')!;
       const itemB = orderDetails.items.find((i) => i.sku === 'SKU-B')!;
@@ -878,7 +910,7 @@ describe('sales (Postgres)', () => {
       // Test F: Two concurrent partial return requests of qty=3 on itemA (sold qty=5)
       const [ret1, ret2] = await Promise.allSettled([
         as(TENANT_A, () =>
-          returnsService.createReturn(ACCOUNT, {
+          returnsService.createReturn(ACCOUNT, ALL, {
             orderId: sale.orderId!,
             warehouseId: WAREHOUSE_A,
             items: [
@@ -888,7 +920,7 @@ describe('sales (Postgres)', () => {
           }),
         ),
         as(TENANT_A, () =>
-          returnsService.createReturn(ACCOUNT, {
+          returnsService.createReturn(ACCOUNT, ALL, {
             orderId: sale.orderId!,
             warehouseId: WAREHOUSE_A,
             items: [
@@ -923,6 +955,7 @@ describe('sales (Postgres)', () => {
         returnsService.createRefundRequest(
           winReturn.id,
           ACCOUNT,
+          ALL,
           'refund-key-1',
           { method: 'CASH' },
         ),
@@ -933,19 +966,25 @@ describe('sales (Postgres)', () => {
 
     it('Test H: 10 concurrent POS checkouts with a single-use coupon (max_uses = 1) -> 1 succeeds, 9 fail with 409 COUPON_USAGE_LIMIT_EXCEEDED', async () => {
       const promo = await as(TENANT_A, () =>
-        promotionsService.createPromotion({
-          code: 'PROMO-SINGLE',
-          name: 'Single Use Promo',
-          discountType: 'FIXED',
-          discountValue: 20000,
-        }),
+        promotionsService.createPromotion(
+          {
+            code: 'PROMO-SINGLE',
+            name: 'Single Use Promo',
+            discountType: 'FIXED',
+            discountValue: 20000,
+          },
+          ALL,
+        ),
       );
       const coupon = await as(TENANT_A, () =>
-        promotionsService.createCoupon({
-          promotionId: promo.id,
-          code: 'SINGLE50',
-          maxUses: 1,
-        }),
+        promotionsService.createCoupon(
+          {
+            promotionId: promo.id,
+            code: 'SINGLE50',
+            maxUses: 1,
+          },
+          ALL,
+        ),
       );
 
       const results = await Promise.allSettled(
@@ -953,7 +992,8 @@ describe('sales (Postgres)', () => {
           as(TENANT_A, () =>
             checkoutService.checkout(
               ACCOUNT,
-              ['cashier'],
+              ['orders.create'],
+              ALL,
               `coupon-race-${idx}`,
               {
                 branchId: BRANCH_A,
@@ -980,19 +1020,25 @@ describe('sales (Postgres)', () => {
 
     it('Test I: 10 concurrent payment confirmations on an AWAITING_PAYMENT checkout -> 1 order finalized, 0 duplicates', async () => {
       const pendingCheckout = await as(TENANT_A, () =>
-        checkoutService.checkout(ACCOUNT, ['cashier'], randomUUID(), {
-          branchId: BRANCH_A,
-          warehouseId: WAREHOUSE_A,
-          lines: [{ variantId: VARIANT_A, qty: 1 }],
-          tenders: [
-            {
-              method: 'BANK_TRANSFER',
-              amount: 100000,
-              status: 'PENDING',
-              verified: false,
-            },
-          ],
-        }),
+        checkoutService.checkout(
+          ACCOUNT,
+          ['orders.create'],
+          ALL,
+          randomUUID(),
+          {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            lines: [{ variantId: VARIANT_A, qty: 1 }],
+            tenders: [
+              {
+                method: 'BANK_TRANSFER',
+                amount: 100000,
+                status: 'PENDING',
+                verified: false,
+              },
+            ],
+          },
+        ),
       );
       expect(pendingCheckout.state).toBe('AWAITING_PAYMENT');
       expect(pendingCheckout.orderId).toBeNull();
@@ -1003,6 +1049,7 @@ describe('sales (Postgres)', () => {
             checkoutService.confirmCheckoutPayment(
               pendingCheckout.checkoutId,
               ACCOUNT,
+              ALL,
               { externalRef: 'BANK-TX-999' },
             ),
           ),
@@ -1017,7 +1064,7 @@ describe('sales (Postgres)', () => {
 
     it('Test J: POS shift blocks close while checkout is in flight (409 SHIFT_HAS_PENDING_TRANSACTIONS) and reconciles cash sales & refunds on close', async () => {
       const shift = await as(TENANT_A, () =>
-        shiftsService.openShift(ACCOUNT, {
+        shiftsService.openShift(ACCOUNT, ALL, {
           branchId: BRANCH_A,
           registerCode: 'POS-01',
           openingCash: '500000.00',
@@ -1027,13 +1074,19 @@ describe('sales (Postgres)', () => {
 
       // Complete 1 cash sale of 200,000 VND on this shift
       const cashSale = await as(TENANT_A, () =>
-        checkoutService.checkout(ACCOUNT, ['cashier'], randomUUID(), {
-          branchId: BRANCH_A,
-          warehouseId: WAREHOUSE_A,
-          shiftId: shift.id,
-          lines: [{ variantId: VARIANT_A, qty: 2 }],
-          tenders: [{ method: 'CASH', amount: 200000, tenderedCash: 250000 }],
-        }),
+        checkoutService.checkout(
+          ACCOUNT,
+          ['orders.create'],
+          ALL,
+          randomUUID(),
+          {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            shiftId: shift.id,
+            lines: [{ variantId: VARIANT_A, qty: 2 }],
+            tenders: [{ method: 'CASH', amount: 200000, tenderedCash: 250000 }],
+          },
+        ),
       );
       expect(cashSale.tenders.totalChangeDue).toBe('50000.00');
 
@@ -1041,21 +1094,27 @@ describe('sales (Postgres)', () => {
       const inFlightKey = randomUUID();
       await expect(
         as(TENANT_A, () =>
-          checkoutService.checkout(ACCOUNT, ['cashier'], inFlightKey, {
-            branchId: BRANCH_A,
-            warehouseId: WAREHOUSE_A,
-            shiftId: shift.id,
-            lines: [{ variantId: VARIANT_A, qty: 1 }],
-            paymentMethod: 'CASH',
-            simulateFailureAfterReserve: true,
-          }),
+          checkoutService.checkout(
+            ACCOUNT,
+            ['orders.create'],
+            ALL,
+            inFlightKey,
+            {
+              branchId: BRANCH_A,
+              warehouseId: WAREHOUSE_A,
+              shiftId: shift.id,
+              lines: [{ variantId: VARIANT_A, qty: 1 }],
+              paymentMethod: 'CASH',
+              simulateFailureAfterReserve: true,
+            },
+          ),
         ),
       ).rejects.toBeDefined();
 
       // Attempting to close shift while checkout is in RECOVERY_PENDING fails with 409 SHIFT_HAS_PENDING_TRANSACTIONS
       await expect(
         as(TENANT_A, () =>
-          shiftsService.closeShift(shift.id, ACCOUNT, {
+          shiftsService.closeShift(shift.id, ACCOUNT, ALL, {
             actualCash: '700000.00',
           }),
         ),
@@ -1069,12 +1128,12 @@ describe('sales (Postgres)', () => {
         .getRepository(CheckoutWorkflowEntity)
         .find({ where: { idempotencyKey: inFlightKey } });
       await as(TENANT_A, () =>
-        checkoutService.retryCheckout(stuckWf.id, ACCOUNT),
+        checkoutService.retryCheckout(stuckWf.id, ACCOUNT, ALL),
       );
 
       // Close shift with actualCash = 795,000 (expected = 500k + 200k + 100k = 800k -> variance = -5,000.00)
       const closedShift = await as(TENANT_A, () =>
-        shiftsService.closeShift(shift.id, ACCOUNT, {
+        shiftsService.closeShift(shift.id, ACCOUNT, ALL, {
           actualCash: '795000.00',
           note: 'Short 5k VND',
         }),
@@ -1104,12 +1163,18 @@ describe('sales (Postgres)', () => {
       });
 
       const resK = await as(TENANT_A, () =>
-        checkoutService.checkout(ACCOUNT, ['cashier'], randomUUID(), {
-          branchId: BRANCH_A,
-          warehouseId: WAREHOUSE_A,
-          lines: [{ variantId: VARIANT_A, qty: 1 }],
-          paymentMethod: 'CASH',
-        }),
+        checkoutService.checkout(
+          ACCOUNT,
+          ['orders.create'],
+          ALL,
+          randomUUID(),
+          {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            lines: [{ variantId: VARIANT_A, qty: 1 }],
+            paymentMethod: 'CASH',
+          },
+        ),
       );
       expect(resK.state).toBe('CONFIRMED');
       expect(resK.reservationId).toBe(recoveredRsvId);
@@ -1118,7 +1183,7 @@ describe('sales (Postgres)', () => {
       const keyM = randomUUID();
       await expect(
         as(TENANT_A, () =>
-          checkoutService.checkout(ACCOUNT, ['cashier'], keyM, {
+          checkoutService.checkout(ACCOUNT, ['orders.create'], ALL, keyM, {
             branchId: BRANCH_A,
             warehouseId: WAREHOUSE_A,
             lines: [{ variantId: VARIANT_A, qty: 1 }],
@@ -1134,7 +1199,7 @@ describe('sales (Postgres)', () => {
       const commitCallCountBefore =
         inventory.commitWarehouseReservation.mock.calls.length;
       const recSummary = await as(TENANT_A, () =>
-        checkoutService.reconcilePendingCheckouts(),
+        checkoutService.reconcilePendingCheckouts(ALL),
       );
       expect(recSummary.finalized).toBe(1);
       // Should NOT have called commitWarehouseReservation again since commitConfirmed was already true
@@ -1146,7 +1211,7 @@ describe('sales (Postgres)', () => {
     it('Test N & O: Omnichannel order idempotency, fulfillment confirmation, cancel guard, POS 5-draft limit, and cross-tenant isolation', async () => {
       // Omnichannel order with external idempotency
       const omni1 = await as(TENANT_A, () =>
-        m3OrdersService.createOmnichannelOrder(ACCOUNT, ['owner'], {
+        m3OrdersService.createOmnichannelOrder(ACCOUNT, ['*'], ALL, {
           branchId: BRANCH_A,
           warehouseId: WAREHOUSE_A,
           channelType: 'MARKETPLACE',
@@ -1162,7 +1227,7 @@ describe('sales (Postgres)', () => {
 
       // Duplicate webhook with same (sourceConnectionId, externalOrderId) -> replayed: true
       const omni2 = await as(TENANT_A, () =>
-        m3OrdersService.createOmnichannelOrder(ACCOUNT, ['owner'], {
+        m3OrdersService.createOmnichannelOrder(ACCOUNT, ['*'], ALL, {
           branchId: BRANCH_A,
           warehouseId: WAREHOUSE_A,
           channelType: 'MARKETPLACE',
@@ -1176,21 +1241,21 @@ describe('sales (Postgres)', () => {
 
       // Create & confirm fulfillment -> commits reservation and marks FULFILLED
       const ff = await as(TENANT_A, () =>
-        fulfillmentService.createFulfillment(omni1.id, ACCOUNT, {
+        fulfillmentService.createFulfillment(omni1.id, ACCOUNT, ALL, {
           fulfillmentType: 'DELIVERY',
           carrierCode: 'GHN',
           trackingNumber: 'GHN-123456',
         }),
       );
       const confirmedFf = await as(TENANT_A, () =>
-        fulfillmentService.confirmFulfillment(ff.id, ACCOUNT),
+        fulfillmentService.confirmFulfillment(ff.id, ACCOUNT, ALL),
       );
       expect(confirmedFf.status).toBe('COMPLETED');
 
       // Test N: Cannot cancel a FULFILLED order
       await expect(
         as(TENANT_A, () =>
-          m3OrdersService.cancelOrder(omni1.id, ACCOUNT, {
+          m3OrdersService.cancelOrder(omni1.id, ACCOUNT, ALL, {
             reason: 'Too late',
           }),
         ),
@@ -1202,7 +1267,7 @@ describe('sales (Postgres)', () => {
       // POS Draft limit: max 5 active drafts per staff per branch
       for (let i = 1; i <= 5; i++) {
         await as(TENANT_A, () =>
-          posService.createDraft(ACCOUNT, {
+          posService.createDraft(ACCOUNT, ALL, {
             branchId: BRANCH_A,
             title: `Draft ${i}`,
             lines: [{ variantId: VARIANT_A, qty: 1 }],
@@ -1211,7 +1276,7 @@ describe('sales (Postgres)', () => {
       }
       await expect(
         as(TENANT_A, () =>
-          posService.createDraft(ACCOUNT, {
+          posService.createDraft(ACCOUNT, ALL, {
             branchId: BRANCH_A,
             title: 'Draft 6',
             lines: [{ variantId: VARIANT_A, qty: 1 }],
@@ -1224,13 +1289,13 @@ describe('sales (Postgres)', () => {
 
       // Test O: Tenant B cannot access Tenant A's order details or drafts
       await expect(
-        as(TENANT_B, () => m3OrdersService.getOrderDetails(omni1.id)),
+        as(TENANT_B, () => m3OrdersService.getOrderDetails(omni1.id, ALL)),
       ).rejects.toMatchObject({
         code: SalesDomainErrorCode.ORDER_NOT_FOUND,
         httpStatus: 404,
       });
       const tenantBDrafts = await as(TENANT_B, () =>
-        posService.listDrafts(ACCOUNT, BRANCH_A),
+        posService.listDrafts(ACCOUNT, ALL, BRANCH_A),
       );
       expect(tenantBDrafts).toHaveLength(0);
     });

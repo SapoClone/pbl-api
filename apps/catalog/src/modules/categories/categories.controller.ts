@@ -19,8 +19,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import {
   CategoryRes,
   CategoryTreeNodeRes,
@@ -40,7 +39,7 @@ export class CategoriesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   @ApiOperation({
     summary: 'Create a product category',
     description:
@@ -52,7 +51,7 @@ export class CategoriesController {
   }
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({
     summary: 'List or search categories',
     description: 'Returns paginated tenant categories.',
@@ -68,7 +67,7 @@ export class CategoriesController {
   }
 
   @Get('tree')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({
     summary: 'Get hierarchical category tree (up to 3 levels)',
   })
@@ -86,7 +85,7 @@ export class CategoriesController {
   }
 
   @Get(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   @ApiOperation({ summary: 'Retrieve category by ID' })
   @ApiParam({ name: 'id', description: 'Category UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Category details' })
@@ -95,7 +94,7 @@ export class CategoriesController {
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({ summary: 'Update category name or slug' })
   @ApiParam({ name: 'id', description: 'Category UUID' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Updated category' })
@@ -107,7 +106,7 @@ export class CategoriesController {
   }
 
   @Patch(':id/status')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({
     summary: 'Activate or deactivate a category',
     description:
@@ -124,7 +123,7 @@ export class CategoriesController {
 
   @Post(':id/reparent')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   @ApiOperation({
     summary: 'Reparent a category and its subtree transactionally',
     description:
@@ -141,7 +140,7 @@ export class CategoriesController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.delete')
   @ApiOperation({
     summary: 'Delete an unreferenced category',
     description:

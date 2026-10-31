@@ -11,10 +11,11 @@ A permission is `<module>.<action>`; the catalog and the default roles live in
 | dashboard, reports                   | view                                  |
 | products, channels, customers, staff | view, create, update, delete          |
 | inventory, orders, purchasing        | view, create, update, delete, approve |
+| finance                              | view, create, update, approve         |
 | pos                                  | view, create, update                  |
 | settings                             | view, update                          |
 
-Exports: `PERMISSION_CATALOG`, `PERMISSION_MODULES`, `PERMISSION_ACTIONS`, `PermissionCode`,
+42 codes in all. Exports: `PERMISSION_CATALOG`, `PERMISSION_MODULES`, `PERMISSION_ACTIONS`, `PermissionCode`,
 `ALL_PERMISSIONS`, `isPermissionCode()`, `WILDCARD_PERMISSION` (`'*'`).
 
 ## Default roles
@@ -22,11 +23,11 @@ Exports: `PERMISSION_CATALOG`, `PERMISSION_MODULES`, `PERMISSION_ACTIONS`, `Perm
 `owner` has `*`. `branch_manager` has everything except `staff.create|update|delete` and
 `settings.update`. The others (`DEFAULT_ROLE_PERMISSIONS`):
 
-| Role (`ROLE_CODES`)                | Permissions                                                                                                              |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `sales_staff` (Nhân viên bán hàng) | dashboard/products/inventory view; orders view, create, update; pos view, create, update; customers view, create, update |
-| `warehouse_staff` (Nhân viên kho)  | dashboard/products/orders view; inventory view, create, update; purchasing view, create                                  |
-| `accountant` (Kế toán)             | dashboard, orders, customers, inventory view; purchasing view, update; reports view                                      |
+| Role (`ROLE_CODES`)                | Permissions                                                                                                                                    |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sales_staff` (Nhân viên bán hàng) | dashboard/products/inventory view; orders view, create, update; pos view, create, update; customers view, create, update; finance view, create |
+| `warehouse_staff` (Nhân viên kho)  | dashboard/products/orders view; inventory view, create, update; purchasing view, create                                                        |
+| `accountant` (Kế toán)             | dashboard, orders, customers, inventory view; purchasing view, update; reports view; finance view, create, update, approve                     |
 
 Legacy `manager` and `cashier` map to `branch_manager` and `sales_staff` (`normalizeRoleCode()`).
 

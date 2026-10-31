@@ -24,7 +24,6 @@ import {
   WebhookInboxEventEntity,
 } from '../../src/infrastructure/persistence/integration.entities';
 import { ProviderRateLimiterService } from '../../src/infrastructure/rate-limiting/provider-rate-limiter.service';
-import { SalesOrderClient } from '../../src/infrastructure/sales-client/sales-order.client';
 import { CreateM6IntegrationCore1791900000200 } from '../../src/migrations/1791900000200-create-m6-integration-core';
 import { ConnectionsService } from '../../src/modules/connections/connections.service';
 import { InventorySyncService } from '../../src/modules/inventory-sync/inventory-sync.service';
@@ -35,6 +34,7 @@ import { WebhooksService } from '../../src/modules/webhooks/webhooks.service';
 import { LazadaProviderAdapter } from '../../src/providers/lazada/lazada.adapter';
 import { ProviderRegistryService } from '../../src/providers/provider-registry.service';
 import { ShopeeProviderAdapter } from '../../src/providers/shopee/shopee.adapter';
+import { InMemorySalesOrderClient } from '../support/in-memory-sales-order.client';
 
 const TENANT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const BRANCH_ID = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
@@ -92,6 +92,8 @@ async function runBenchmark() {
       ],
     }),
   });
+  process.env.INTEGRATION_CREDENTIAL_MASTER_KEY ??=
+    'benchmark-only-master-key-0123456789';
 
   const outbox = new EventOutbox();
   const rateLimiter = new ProviderRateLimiterService(dataSource);
@@ -101,7 +103,7 @@ async function runBenchmark() {
     shopeeAdapter,
     lazadaAdapter,
   );
-  const salesOrderClient = new SalesOrderClient(dataSource);
+  const salesOrderClient = new InMemorySalesOrderClient(dataSource);
   const connectionsService = new ConnectionsService(
     dataSource,
     providerRegistry,

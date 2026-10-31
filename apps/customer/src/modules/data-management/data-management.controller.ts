@@ -8,8 +8,12 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import {
+  AuthUser,
+  CurrentUser,
+  RequirePermission,
+  hasPermission,
+} from '@pbl/auth';
 import { rethrowCustomerHttpError } from '../../presentation/customer-http-error';
 import {
   CreateExportJobDto,
@@ -25,7 +29,7 @@ export class DataManagementController {
   constructor(private readonly dataManagementService: DataManagementService) {}
 
   @Get('v1/customers/duplicates')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary: 'Detect duplicate customer profiles within the tenant',
   })
@@ -38,7 +42,7 @@ export class DataManagementController {
   }
 
   @Post('v1/customers/merge')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.update')
   @ApiOperation({
     summary:
       'Merge source customer into target customer with atomic loyalty ledger transfer',
@@ -61,7 +65,7 @@ export class DataManagementController {
   }
 
   @Post('v1/customers/import-jobs')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.create')
   @ApiOperation({
     summary: 'Create a customer CSV/batch import job with row-level validation',
   })
@@ -81,7 +85,7 @@ export class DataManagementController {
   }
 
   @Get('v1/customers/import-jobs/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.view')
   @ApiOperation({ summary: 'Get customer import job status and row errors' })
   async getImportJob(
     @CurrentUser() user: AuthUser,
@@ -95,10 +99,10 @@ export class DataManagementController {
   }
 
   @Post('v1/customers/export-jobs')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.view')
   @ApiOperation({
     summary:
-      'Create a formula-injection-safe customer CSV export job with optional PII masking',
+      'Create a formula-injection-safe customer CSV export job with phones masked unless the caller holds customers.update',
   })
   async createExportJob(
     @CurrentUser() user: AuthUser,
@@ -109,6 +113,7 @@ export class DataManagementController {
         user.tenantId!,
         user.id ?? 'system',
         dto,
+        hasPermission(user, 'customers.update'),
       );
     } catch (err) {
       rethrowCustomerHttpError(err);
@@ -116,14 +121,19 @@ export class DataManagementController {
   }
 
   @Get('v1/customers/export-jobs/:id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.view')
   @ApiOperation({ summary: 'Get customer export job status and CSV output' })
   async getExportJob(
     @CurrentUser() user: AuthUser,
     @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     try {
-      return await this.dataManagementService.getExportJob(user.tenantId!, id);
+      return await this.dataManagementService.getExportJob(
+        user.tenantId!,
+        id,
+        user.id ?? 'system',
+        hasPermission(user, 'customers.update'),
+      );
     } catch (err) {
       rethrowCustomerHttpError(err);
     }

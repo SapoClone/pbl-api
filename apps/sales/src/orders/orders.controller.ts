@@ -20,9 +20,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, CurrentUser, RequirePermission } from '@pbl/auth';
 import type { Response } from 'express';
+import { BranchScope } from '../presentation/access';
 import {
   CreateCheckoutReqDto,
   CreateOrderReqDto,
@@ -39,12 +39,12 @@ import {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Every role of a store can sell and look at orders. Which roles may do what is
- * the demo of permissions: a role that is not listed gets 403 from the guard.
+ * Permissions per route (ADR-0020): a counter sale opens with `orders.create`
+ * or `pos.create`; reads need `orders.view`; cancelling a checkout needs
+ * `orders.delete`. A branch outside the caller's scope answers 404.
  */
 @ApiTags('orders')
 @ApiBearerAuth()
-@RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
 @Controller('api/v1/orders')
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
@@ -55,6 +55,7 @@ export class OrdersController {
    * body is 409.
    */
   @Post()
+  @RequirePermission('orders.create', 'pos.create')
   @ApiOperation({
     summary: 'Create a sales order (POS / branch checkout)',
     description:
@@ -79,6 +80,7 @@ export class OrdersController {
   })
   async create(
     @CurrentUser('id') accountId: string,
+    @AllowedBranches() scope: BranchScope,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() dto: CreateOrderReqDto,
     @Res({ passthrough: true }) res: Response,
@@ -91,6 +93,7 @@ export class OrdersController {
     }
     const { order, replayed } = await this.orders.create(
       accountId,
+      scope,
       idempotencyKey.toLowerCase(),
       dto,
     );
@@ -104,6 +107,7 @@ export class OrdersController {
    * with deterministic `RECOVERY_PENDING` handling on Inventory timeout (ADR-0012).
    */
   @Post('checkouts')
+  @RequirePermission('orders.create', 'pos.create')
   @ApiOperation({
     summary: 'Execute warehouse-backed checkout workflow',
     description:
@@ -124,6 +128,7 @@ export class OrdersController {
   })
   async checkout(
     @CurrentUser('id') accountId: string,
+    @AllowedBranches() scope: BranchScope,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() dto: CreateCheckoutReqDto,
     @Res({ passthrough: true }) res: Response,
@@ -136,6 +141,7 @@ export class OrdersController {
     }
     const outcome = await this.orders.checkout(
       accountId,
+      scope,
       idempotencyKey.toLowerCase(),
       dto,
     );
@@ -145,6 +151,7 @@ export class OrdersController {
   }
 
   @Get('checkouts/:id')
+  @RequirePermission('orders.view')
   @ApiOperation({
     summary: 'Get checkout workflow status by ID',
     description:
@@ -157,11 +164,13 @@ export class OrdersController {
   })
   getCheckout(
     @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() scope: BranchScope,
   ): Promise<CheckoutWorkflowResponse> {
-    return this.orders.getCheckout(id);
+    return this.orders.getCheckout(id, scope);
   }
 
   @Post('checkouts/:id/recover')
+  @RequirePermission('orders.update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Recover a timed-out checkout workflow',
@@ -175,11 +184,13 @@ export class OrdersController {
   })
   recoverCheckout(
     @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() scope: BranchScope,
   ): Promise<CheckoutWorkflowResponse> {
-    return this.orders.recoverCheckout(id);
+    return this.orders.recoverCheckout(id, scope);
   }
 
   @Post('checkouts/:id/cancel')
+  @RequirePermission('orders.delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Cancel a checkout workflow and release reserved stock',
@@ -193,11 +204,13 @@ export class OrdersController {
   })
   cancelCheckout(
     @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() scope: BranchScope,
   ): Promise<CheckoutWorkflowResponse> {
-    return this.orders.cancelCheckout(id);
+    return this.orders.cancelCheckout(id, scope);
   }
 
   @Get()
+  @RequirePermission('orders.view')
   @ApiOperation({
     summary: 'List sales orders',
     description: 'Returns paginated sales orders for the current tenant.',
@@ -206,11 +219,15 @@ export class OrdersController {
     status: HttpStatus.OK,
     description: 'Paginated sales orders',
   })
-  list(@Query() query: ListOrdersReqDto): Promise<Page<OrderRes>> {
-    return this.orders.list(query);
+  list(
+    @Query() query: ListOrdersReqDto,
+    @AllowedBranches() scope: BranchScope,
+  ): Promise<Page<OrderRes>> {
+    return this.orders.list(query, scope);
   }
 
   @Get(':id')
+  @RequirePermission('orders.view')
   @ApiOperation({
     summary: 'Get sales order by ID',
     description: 'Returns a single sales order and its line items.',
@@ -220,7 +237,10 @@ export class OrdersController {
     status: HttpStatus.OK,
     description: 'Sales order details',
   })
-  get(@Param('id', ParseUUIDPipe) id: string): Promise<OrderRes> {
-    return this.orders.get(id);
+  get(
+    @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() scope: BranchScope,
+  ): Promise<OrderRes> {
+    return this.orders.get(id, scope);
   }
 }

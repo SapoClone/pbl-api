@@ -55,7 +55,10 @@ describe('Catalog Architecture & Ownership Boundaries (ADR-0010, ADR-0013)', () 
     ];
 
     for (const file of sourceFiles) {
-      const content = fs.readFileSync(file, 'utf8');
+      // permission codes such as 'inventory.view' are not schema references
+      const content = fs
+        .readFileSync(file, 'utf8')
+        .replace(/'[a-z]+\.(view|create|update|delete|approve)'/g, "''");
       for (const schemaRef of forbiddenSchemas) {
         expect(content.toLowerCase()).not.toContain(schemaRef);
       }

@@ -19,6 +19,7 @@ import {
 import { InventoryClient } from '../../inventory/inventory.client';
 import { OrderItemEntity } from '../../orders/entities/order-item.entity';
 import { OrderEntity } from '../../orders/entities/order.entity';
+import { BranchScope, branchAllowed } from '../../presentation/access';
 import { CreateFulfillmentDto } from './fulfillment.dto';
 
 @Injectable()
@@ -32,6 +33,7 @@ export class FulfillmentService {
   async createFulfillment(
     orderId: string,
     actorId: string,
+    scope: BranchScope,
     dto: CreateFulfillmentDto,
   ) {
     const tenantId = TenantContext.require();
@@ -45,7 +47,7 @@ export class FulfillmentService {
         where: { id: orderId, tenantId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!order) {
+      if (!order || !branchAllowed(scope, order.branchId)) {
         throw new SalesDomainError(
           SalesDomainErrorCode.ORDER_NOT_FOUND,
           `Order ${orderId} not found`,
@@ -124,12 +126,22 @@ export class FulfillmentService {
     });
   }
 
-  async listOrderFulfillments(orderId: string) {
+  async listOrderFulfillments(orderId: string, scope: BranchScope) {
     const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
         tenantId,
       ]);
+      const order = await em.getRepository(OrderEntity).findOne({
+        where: { id: orderId, tenantId },
+      });
+      if (!order || !branchAllowed(scope, order.branchId)) {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.ORDER_NOT_FOUND,
+          `Order ${orderId} not found`,
+          404,
+        );
+      }
       const fulfillments = await em.getRepository(OrderFulfillmentEntity).find({
         where: { tenantId, orderId },
         order: { createdAt: 'ASC' },
@@ -145,7 +157,11 @@ export class FulfillmentService {
     });
   }
 
-  async confirmFulfillment(fulfillmentId: string, actorId: string) {
+  async confirmFulfillment(
+    fulfillmentId: string,
+    actorId: string,
+    scope: BranchScope,
+  ) {
     const tenantId = TenantContext.require();
 
     const { fulfillment, order } = await this.dataSource.transaction(
@@ -166,6 +182,13 @@ export class FulfillmentService {
         const o = await em.getRepository(OrderEntity).findOne({
           where: { id: f.orderId, tenantId },
         });
+        if (!o || !branchAllowed(scope, o.branchId)) {
+          throw new SalesDomainError(
+            SalesDomainErrorCode.FULFILLMENT_NOT_FOUND,
+            `Fulfillment ${fulfillmentId} not found`,
+            404,
+          );
+        }
         return { fulfillment: f, order: o };
       },
     );
