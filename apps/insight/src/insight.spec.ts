@@ -1,5 +1,7 @@
 import { RequestContext, TenantScopedRepository } from '@pbl/common';
 import { AuditHandler } from './audit/audit.handler';
+import { NotificationHandler } from './notifications/notification.handler';
+import { toCsv } from './reports/report-export.service';
 import {
   SalesSummaryHandler,
   salesDate,
@@ -44,6 +46,142 @@ describe('SalesSummaryHandler', () => {
     expect(sql).toContain('"insight"."daily_sales"');
     expect(sql).toContain('ON CONFLICT');
     expect(params).toEqual(['tenant-a', 'b1', '2026-10-18', 590000]);
+  });
+});
+
+describe('SalesSummaryHandler read models', () => {
+  const run = async (payload: object) => {
+    const query = jest.fn();
+    const manager = { query, connection: { options: { schema: 'insight' } } };
+    await RequestContext.run({ tenantId: 'tenant-a' }, () =>
+      new SalesSummaryHandler().onOrderCompleted(
+        envelope('sales.order.completed', {
+          branchId: 'b1',
+          totalAmount: 100,
+          completedAt: '2026-10-18T18:30:00.000Z',
+          ...payload,
+        }),
+        manager as never,
+      ),
+    );
+    return query.mock.calls.map(([sql, params]) => ({
+      sql: sql as string,
+      params,
+    }));
+  };
+
+  it('keeps the daily counter first and defaults an old event to pos, unknown cost, no customer', async () => {
+    const calls = await run({});
+
+    expect(calls[0].sql).toContain('"insight"."daily_sales"');
+    expect(calls[1].sql).toContain('"insight"."hourly_sales"');
+    // 18:30Z is 01:30 on the 19th in Vietnam
+    expect(calls[1].params).toEqual([
+      'tenant-a',
+      'b1',
+      'pos',
+      '2026-10-19',
+      1,
+      100,
+      null,
+      0,
+    ]);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('adds channel, cost, one row per SKU and the customer when present', async () => {
+    const calls = await run({
+      channel: 'shopee',
+      costAmount: 60,
+      customerId: 'c1',
+      items: [
+        { sku: 'A', name: 'a', quantity: 1, unitPrice: 10 },
+        { sku: 'A', name: 'a', quantity: 2, unitPrice: 10 },
+        { sku: 'B', name: 'b', quantity: 1, unitPrice: 5 },
+      ],
+    });
+
+    expect(calls[1].params).toEqual([
+      'tenant-a',
+      'b1',
+      'shopee',
+      '2026-10-19',
+      1,
+      100,
+      60,
+      100,
+    ]);
+    const products = calls.filter((c) => c.sql.includes('product_sales_daily'));
+    expect(products.map((c) => c.params.slice(3))).toEqual([
+      ['A', 'a', 3, 30],
+      ['B', 'b', 1, 5],
+    ]);
+    const customer = calls.find((c) => c.sql.includes('customer_sales_daily'));
+    expect(customer?.params).toEqual(['tenant-a', 'b1', '2026-10-19', 'c1', 1]);
+  });
+});
+
+describe('csv', () => {
+  it('quotes cells and neutralises formulas', () => {
+    expect(
+      toCsv(
+        ['a', 'b'],
+        [
+          ['x,y', 1],
+          ['=1+1', null],
+          ['say "hi"', 'ok'],
+        ],
+      ),
+    ).toBe('a,b\r\n"x,y",1\r\n\'=1+1,\r\n"say ""hi""",ok\r\n');
+  });
+});
+
+describe('NotificationHandler', () => {
+  const create = jest.fn();
+  const handler = new NotificationHandler({ create } as never);
+  beforeEach(() => create.mockClear());
+
+  it('writes an order notification keyed by the event id', async () => {
+    await handler.onOrderCompleted(
+      envelope('sales.order.completed', {
+        orderId: 'o1',
+        code: 'DH-7',
+        branchId: 'b1',
+        totalAmount: 1259000,
+        itemCount: 3,
+      }),
+      'm' as never,
+    );
+
+    expect(create).toHaveBeenCalledWith(
+      {
+        id: '0b0f4a8e-6c0e-4c53-9d62-1f5a8c9d1e11',
+        type: 'order',
+        title: 'Đơn hàng mới DH-7',
+        body: '1.259.000 đ · 3 sản phẩm',
+        refType: 'order',
+        refId: 'o1',
+        branchId: 'b1',
+      },
+      'm',
+    );
+  });
+
+  it('writes a staff notification for a granted membership', async () => {
+    await handler.onMembershipGranted(
+      envelope('platform.membership.granted', {
+        accountId: 'a1',
+        email: 'x@y.vn',
+        role: 'cashier',
+      }),
+      'm' as never,
+    );
+
+    expect(create.mock.calls[0][0]).toMatchObject({
+      type: 'staff',
+      refType: 'account',
+      refId: 'a1',
+    });
   });
 });
 

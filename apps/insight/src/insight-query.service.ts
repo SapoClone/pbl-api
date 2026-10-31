@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import {
   InjectTenantScopedRepository,
+  TenantContext,
   TenantScopedRepository,
 } from '@pbl/common';
 import { Between, FindOptionsWhere } from 'typeorm';
 import { AuditLogEntity } from './audit/audit-log.entity';
 import { ListAuditLogsReqDto, SalesSummaryReqDto } from './insight.dto';
+import { ReportsService } from './reports/reports.service';
 import { DailySalesEntity } from './sales-summary/daily-sales.entity';
 import { salesDate } from './sales-summary/sales-summary.handler';
 
@@ -17,6 +19,7 @@ export class InsightQueryService {
     private readonly audit: TenantScopedRepository<AuditLogEntity>,
     @InjectTenantScopedRepository(DailySalesEntity)
     private readonly daily: TenantScopedRepository<DailySalesEntity>,
+    private readonly reports: ReportsService,
   ) {}
 
   async auditLogs(query: ListAuditLogsReqDto) {
@@ -46,7 +49,9 @@ export class InsightQueryService {
     };
   }
 
-  async dailySales(query: SalesSummaryReqDto) {
+  async dailySales(
+    query: SalesSummaryReqDto & { groupBy?: 'day' | 'day_channel' },
+  ) {
     const today = salesDate(new Date().toISOString());
     const to = query.to ?? today;
     const from =
@@ -59,17 +64,50 @@ export class InsightQueryService {
     };
     if (query.branchId) where.branchId = query.branchId;
 
+    if (query.groupBy === 'day_channel') {
+      // the channel only exists in the hourly table (events from before it have none)
+      const data = await this.reports.dailyByChannel(from, to, query.branchId);
+      return {
+        data,
+        totals: {
+          orderCount: data.reduce((sum, row) => sum + row.orderCount, 0),
+          revenue: data.reduce((sum, row) => sum + row.revenue, 0),
+        },
+        from,
+        to,
+      };
+    }
+
     const rows = await this.daily.find({
       where,
       order: { salesDate: 'ASC', branchId: 'ASC' },
     });
+    const costs = await this.reports.costRows(
+      TenantContext.require(),
+      from,
+      to,
+      ['branch_id', 'sales_date'],
+      query.branchId,
+    );
+    const cost = new Map(
+      costs.map((c) => [`${c.sales_date}|${c.branch_id}`, c]),
+    );
     return {
-      data: rows.map((row) => ({
-        date: row.salesDate,
-        branchId: row.branchId,
-        orderCount: row.orderCount,
-        revenue: row.revenue,
-      })),
+      data: rows.map((row) => {
+        const known = cost.get(`${row.salesDate}|${row.branchId}`);
+        return {
+          date: row.salesDate,
+          branchId: row.branchId,
+          channelId: null,
+          channel: null,
+          orderCount: row.orderCount,
+          revenue: row.revenue,
+          // not carried by sales.order.completed yet
+          discountAmount: null,
+          costAmount: known?.cost ?? null,
+          grossProfit: known?.profit ?? null,
+        };
+      }),
       totals: {
         orderCount: rows.reduce((sum, row) => sum + row.orderCount, 0),
         revenue: rows.reduce((sum, row) => sum + row.revenue, 0),
