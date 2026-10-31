@@ -12,7 +12,9 @@ export interface EventDefinition {
 /** Store roles carried in the access token (`roles`) and in `account_tenant.role`. */
 export const ROLES = {
   OWNER: 'owner',
+  /** @deprecated use ROLE_CODES.BRANCH_MANAGER (`branch_manager`) */
   MANAGER: 'manager',
+  /** @deprecated use ROLE_CODES.SALES_STAFF (`sales_staff`) */
   CASHIER: 'cashier',
 } as const;
 export type Role = (typeof ROLES)[keyof typeof ROLES];

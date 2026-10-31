@@ -8,6 +8,15 @@ import { JwtService } from '@nestjs/jwt';
 import { ACCESS_TOKEN_ALGORITHM, PBL_AUTH_OPTIONS } from './auth.constants';
 import { AccessTokenClaims, AuthUser, PblAuthOptions } from './auth.types';
 
+const OWNER_ROLE = 'owner';
+const WILDCARD = '*';
+
+/** The string elements of a claim, or undefined when it is not an array. */
+const stringList = (value: unknown): string[] | undefined =>
+  Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === 'string')
+    : undefined;
+
 /**
  * Verifies platform-issued access tokens in any service (ADR-0004): RS256
  * only, signature checked with the key for the token's kid, issuer and
@@ -68,14 +77,18 @@ export class AccessTokenVerifier {
       throw new UnauthorizedException();
     }
 
+    const roles = stringList(claims.roles) ?? [];
+    const perms = stringList(claims.perms);
+    const branches = stringList(claims.branches);
+
     return {
       id: claims.sub,
       sessionId: claims.sid,
       subjectType: claims.sub_type,
       tenantId: claims.tid || undefined,
-      roles: Array.isArray(claims.roles)
-        ? claims.roles.filter((r): r is string => typeof r === 'string')
-        : [],
+      roles,
+      permissions: perms ?? (roles.includes(OWNER_ROLE) ? [WILDCARD] : []),
+      branches: branches ?? [WILDCARD],
       exp: claims.exp,
     };
   }

@@ -11,6 +11,10 @@ export type AccessTokenClaims = {
   sub_type: AccessTokenSubjectType;
   tid?: string;
   roles?: string[];
+  /** Permission codes in the selected store; `['*']` = all (ADR-0012) */
+  perms?: string[];
+  /** Branch ids the member may act in; `['*']` = all */
+  branches?: string[];
   iss: string;
   aud: string;
   iat: number;
@@ -26,6 +30,10 @@ export type AuthUser = {
   tenantId?: string;
   /** Roles in the selected store (`roles` claim); [] without a store */
   roles: string[];
+  /** Permission codes (`perms` claim); `['*']` = every permission */
+  permissions: string[];
+  /** Branch ids the member may act in (`branches` claim); `['*']` = every branch */
+  branches: string[];
   /** Expiry of the access token, seconds since epoch */
   exp: number;
 };

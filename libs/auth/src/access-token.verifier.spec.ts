@@ -60,6 +60,8 @@ describe('AccessTokenVerifier', () => {
       subjectType: 'account',
       tenantId: undefined,
       roles: [],
+      permissions: [],
+      branches: ['*'],
       exp: expect.any(Number),
     });
   });
@@ -214,6 +216,50 @@ describe('AccessTokenVerifier', () => {
       });
 
       await expect(revoking.verify(await sign())).rejects.toBe(outage);
+    });
+  });
+
+  it('should read perms and branches, keeping only strings', async () => {
+    const token = await sign({
+      payload: {
+        ...claims,
+        tid: 't1',
+        roles: ['sales_staff'],
+        perms: ['orders.view', 3, null],
+        branches: ['b1', {}],
+      },
+    });
+
+    await expect(verifier.verify(token)).resolves.toMatchObject({
+      permissions: ['orders.view'],
+      branches: ['b1'],
+    });
+  });
+
+  it('should default a missing perms to the wildcard for an owner only', async () => {
+    const owner = await sign({
+      payload: { ...claims, tid: 't1', roles: ['owner'] },
+    });
+    const other = await sign({
+      payload: { ...claims, tid: 't1', roles: ['manager'] },
+    });
+
+    await expect(verifier.verify(owner)).resolves.toMatchObject({
+      permissions: ['*'],
+      branches: ['*'],
+    });
+    await expect(verifier.verify(other)).resolves.toMatchObject({
+      permissions: [],
+    });
+  });
+
+  it('should treat non-array perms as missing', async () => {
+    const token = await sign({
+      payload: { ...claims, roles: ['owner'], perms: 'orders.view' },
+    });
+
+    await expect(verifier.verify(token)).resolves.toMatchObject({
+      permissions: ['*'],
     });
   });
 });
