@@ -12,8 +12,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import { Page, PageQueryDto } from '../common/page';
 import { AttributesService } from './attributes.service';
 import { BrandsService } from './brands.service';
@@ -31,8 +30,7 @@ import {
 } from './taxonomy.dto';
 
 /**
- * Permission codes of the contract, as roles (no RBAC yet): `products.view` is every
- * role; `products.create|update|delete` are owner and manager.
+ * ADR-0012: `products.view` reads, `products.create|update|delete` write.
  */
 @ApiTags('categories')
 @ApiBearerAuth()
@@ -41,20 +39,20 @@ export class CategoriesController {
   constructor(private readonly categories: CategoriesService) {}
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   list(@Query() query: ListCategoriesReqDto): Promise<Page<CategoryRes>> {
     return this.categories.list(query);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   create(@Body() dto: CreateCategoryReqDto): Promise<CategoryRes> {
     return this.categories.create(dto);
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCategoryReqDto,
@@ -64,7 +62,7 @@ export class CategoriesController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.delete')
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.categories.remove(id);
   }
@@ -77,20 +75,20 @@ export class BrandsController {
   constructor(private readonly brands: BrandsService) {}
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   list(@Query() query: PageQueryDto): Promise<Page<BrandRes>> {
     return this.brands.list(query);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   create(@Body() dto: NameReqDto): Promise<BrandRes> {
     return this.brands.create(dto.name);
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.update')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBrandReqDto,
@@ -100,7 +98,7 @@ export class BrandsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.delete')
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.brands.remove(id);
   }
@@ -113,14 +111,14 @@ export class AttributesController {
   constructor(private readonly attributes: AttributesService) {}
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('products.view')
   list(@Query() query: PageQueryDto): Promise<Page<AttributeRes>> {
     return this.attributes.list(query);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   create(@Body() dto: NameReqDto): Promise<AttributeRes> {
     return this.attributes.create(dto.name);
   }
@@ -128,7 +126,7 @@ export class AttributesController {
   /** Answers with the attribute and all its values */
   @Post(':id/values')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('products.create')
   addValue(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateAttributeValueReqDto,
