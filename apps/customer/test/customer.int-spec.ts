@@ -96,21 +96,31 @@ describe('Customer & Loyalty M4 Core (Real PostgreSQL Integration & Concurrency)
 
   it('Test A: Concurrent customer creation with equivalent Vietnamese phone formats allows only 1 winner', async () => {
     const results = await Promise.allSettled([
-      profilesService.createCustomer(TENANT_A, ACTOR_MANAGER, {
-        name: 'Nguyen Van A1',
-        phone: '+84 912 345 678',
-        email: 'a1@example.com',
-        initialAddress: {
-          addressLine: '123 Le Loi',
-          district: 'Quan 1',
-          province: 'TP.HCM',
+      profilesService.createCustomer(
+        TENANT_A,
+        ACTOR_MANAGER,
+        {
+          name: 'Nguyen Van A1',
+          phone: '+84 912 345 678',
+          email: 'a1@example.com',
+          initialAddress: {
+            addressLine: '123 Le Loi',
+            district: 'Quan 1',
+            province: 'TP.HCM',
+          },
         },
-      }),
-      profilesService.createCustomer(TENANT_A, ACTOR_MANAGER, {
-        name: 'Nguyen Van A2',
-        phone: '0912-345-678',
-        email: 'a2@example.com',
-      }),
+        true,
+      ),
+      profilesService.createCustomer(
+        TENANT_A,
+        ACTOR_MANAGER,
+        {
+          name: 'Nguyen Van A2',
+          phone: '0912-345-678',
+          email: 'a2@example.com',
+        },
+        true,
+      ),
     ]);
 
     const fulfilled = results.filter(
@@ -336,10 +346,10 @@ describe('Customer & Loyalty M4 Core (Real PostgreSQL Integration & Concurrency)
         customerId: customer.id,
         totalAmount: 5500000,
         itemCount: 1,
-        subtotal: '5500000.00',
-        discountTotal: '0.00',
-        taxTotal: '0.00',
-        grandTotal: '5500000.00',
+        subtotal: 5500000,
+        discountTotal: 0,
+        taxTotal: 0,
+        grandTotal: 5500000,
         paymentMethod: 'CASH',
         createdBy: ACTOR_MANAGER,
         completedAt: new Date().toISOString(),
@@ -594,10 +604,10 @@ describe('Customer & Loyalty M4 Core (Real PostgreSQL Integration & Concurrency)
         customerId: customer.id,
         totalAmount: 1500000,
         itemCount: 1,
-        subtotal: '1500000.00',
-        discountTotal: '0.00',
-        taxTotal: '0.00',
-        grandTotal: '1500000.00',
+        subtotal: 1500000,
+        discountTotal: 0,
+        taxTotal: 0,
+        grandTotal: 1500000,
         paymentMethod: 'CASH',
         createdBy: ACTOR_MANAGER,
         completedAt: new Date().toISOString(),
@@ -643,7 +653,7 @@ describe('Customer & Loyalty M4 Core (Real PostgreSQL Integration & Concurrency)
         customerId: customer.id,
         branchId: BRANCH_A,
         status: 'COMPLETED',
-        totalRefundAmount: '500000.00',
+        totalRefundAmount: 500000,
         occurredAt: new Date().toISOString(),
       },
     };
@@ -673,7 +683,7 @@ describe('Customer & Loyalty M4 Core (Real PostgreSQL Integration & Concurrency)
         customerId: customer.id,
         branchId: BRANCH_A,
         status: 'COMPLETED',
-        totalRefundAmount: '1000000.00',
+        totalRefundAmount: 1000000,
         occurredAt: new Date().toISOString(),
       },
     });
@@ -718,7 +728,7 @@ describe('Customer & Loyalty M4 Core (Real PostgreSQL Integration & Concurrency)
         customerId: outOfOrderCustomer.id,
         branchId: BRANCH_A,
         status: 'COMPLETED',
-        totalRefundAmount: '400000.00',
+        totalRefundAmount: 400000,
         occurredAt: new Date().toISOString(),
       },
     });
@@ -739,10 +749,10 @@ describe('Customer & Loyalty M4 Core (Real PostgreSQL Integration & Concurrency)
         customerId: outOfOrderCustomer.id,
         totalAmount: 1000000,
         itemCount: 1,
-        subtotal: '1000000.00',
-        discountTotal: '0.00',
-        taxTotal: '0.00',
-        grandTotal: '1000000.00',
+        subtotal: 1000000,
+        discountTotal: 0,
+        taxTotal: 0,
+        grandTotal: 1000000,
         paymentMethod: 'CASH',
         createdBy: ACTOR_MANAGER,
         completedAt: new Date().toISOString(),
@@ -882,6 +892,7 @@ describe('Customer & Loyalty M4 Core (Real PostgreSQL Integration & Concurrency)
         phone: '0912345678',
         email: 'tenantb@example.com',
       },
+      true,
     );
     expect(tenantBCust.phoneNormalized).toBe('0912345678');
 

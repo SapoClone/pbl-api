@@ -13,14 +13,14 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   computeValuationAfterDeduction,
   computeWeightedAverageCostOnReceipt,
-  formatCentsToMoney,
   formatMilliToQty,
   InventoryDomainError,
   InventoryDomainErrorCode,
   normalizeAndSortWarehouseLines,
   normalizeInventoryCode,
-  parseMoneyToCents,
+  parseMoneyToVnd,
   parseQtyToMilli,
+  vndToNumber,
 } from '../../domain/inventory-domain';
 import { WarehouseScope } from '../../scope/warehouse-scope';
 import {
@@ -155,7 +155,7 @@ export class TransfersService {
       // Lock source balances in deterministic sku_id order and check available stock
       const sourceBalances = new Map<
         string,
-        { onHandQty: string; reservedQty: string; avgUnitCost: string }
+        { onHandQty: string; reservedQty: string; avgUnitCost: number }
       >();
       const shortages: {
         warehouseId: string;
@@ -206,8 +206,8 @@ export class TransfersService {
           sourceBalances.set(String(item.skuId), {
             onHandQty: formatMilliToQty(onHandMilli),
             reservedQty: formatMilliToQty(reservedMilli),
-            avgUnitCost: formatCentsToMoney(
-              parseMoneyToCents(String(balRows[0].avgUnitCost)),
+            avgUnitCost: vndToNumber(
+              parseMoneyToVnd(String(balRows[0].avgUnitCost)),
             ),
           });
         }
@@ -245,7 +245,7 @@ export class TransfersService {
           UPDATE ${prefix}"stock_balance"
           SET
             on_hand_qty = $4::numeric(18,3),
-            valuation_amount = $5::numeric(18,2),
+            valuation_amount = $5::bigint,
             version = version + 1,
             updated_at = now()
           WHERE tenant_id = $1 AND warehouse_id = $2 AND sku_id = $3
@@ -283,7 +283,7 @@ export class TransfersService {
           UPDATE ${prefix}"stock_transfer_item"
           SET
             dispatched_qty = $3::numeric(18,3),
-            unit_cost = $4::numeric(18,2)
+            unit_cost = $4::bigint
           WHERE tenant_id = $1 AND id = $2
           `,
           [tenantId, item.id, qtyStr, srcBal.avgUnitCost],
@@ -300,7 +300,7 @@ export class TransfersService {
           ) VALUES (
             $1, $2, $3, $4, 'TRANSFER_DISPATCH',
             $5::numeric(18,3), $6::numeric(18,3), $7::numeric(18,3), $8::numeric(18,3),
-            $9::numeric(18,2), $10::numeric(18,2), 'STOCK_TRANSFER', $11,
+            $9::bigint, $10::bigint, 'STOCK_TRANSFER', $11,
             $12, $13, $14, $15
           )
           `,
@@ -550,19 +550,17 @@ export class TransfersService {
             : '0.000';
         const oldAvgCost =
           destBalRows.length > 0
-            ? formatCentsToMoney(
-                parseMoneyToCents(String(destBalRows[0].avgUnitCost)),
-              )
-            : '0.00';
+            ? vndToNumber(parseMoneyToVnd(String(destBalRows[0].avgUnitCost)))
+            : 0;
         const oldValuation =
           destBalRows.length > 0
-            ? formatCentsToMoney(
-                parseMoneyToCents(String(destBalRows[0].valuationAmount)),
+            ? vndToNumber(
+                parseMoneyToVnd(String(destBalRows[0].valuationAmount)),
               )
-            : '0.00';
+            : 0;
 
-        const unitCostStr = formatCentsToMoney(
-          parseMoneyToCents(String(dbItem.unitCost ?? '0')),
+        const unitCostStr = vndToNumber(
+          parseMoneyToVnd(String(dbItem.unitCost ?? '0')),
         );
         const clearedStr = formatMilliToQty(totalClearedNowMilli);
 
@@ -592,7 +590,7 @@ export class TransfersService {
             ) VALUES (
               $1, $2, $3, $4, 'TRANSFER_RECEIPT',
               $5::numeric(18,3), $6::numeric(18,3), $7::numeric(18,3), $8::numeric(18,3),
-              $9::numeric(18,2), $10::numeric(18,2), 'STOCK_TRANSFER', $11,
+              $9::bigint, $10::bigint, 'STOCK_TRANSFER', $11,
               $12, $13, $14, $15
             )
             `,
@@ -639,8 +637,8 @@ export class TransfersService {
             SET
               on_hand_qty = $4::numeric(18,3),
               in_transit_qty = GREATEST(0, in_transit_qty - $5::numeric(18,3)),
-              avg_unit_cost = $6::numeric(18,2),
-              valuation_amount = $7::numeric(18,2),
+              avg_unit_cost = $6::bigint,
+              valuation_amount = $7::bigint,
               version = version + 1,
               updated_at = now()
             WHERE tenant_id = $1 AND warehouse_id = $2 AND sku_id = $3
@@ -881,9 +879,7 @@ export class TransfersService {
         inTransitRemainingQty: formatMilliToQty(
           parseQtyToMilli(String(i.inTransitRemainingQty ?? '0'), true, true),
         ),
-        unitCost: formatCentsToMoney(
-          parseMoneyToCents(String(i.unitCost ?? '0')),
-        ),
+        unitCost: vndToNumber(parseMoneyToVnd(String(i.unitCost ?? '0'))),
         discrepancyReason: i.discrepancyReason,
       })),
     };

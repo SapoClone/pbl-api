@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -33,7 +34,7 @@ export class PosCartLineDto {
   qty!: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   expectedUnitPrice?: number;
 
@@ -81,7 +82,7 @@ export class PosQuoteDto {
   couponCode?: string;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   shippingFee?: number;
 

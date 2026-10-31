@@ -11,14 +11,14 @@ import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   computeValuationAfterDeduction,
-  formatCentsToMoney,
   formatMilliToQty,
   InventoryDomainError,
   InventoryDomainErrorCode,
   normalizeAndSortWarehouseLines,
   normalizeInventoryCode,
-  parseMoneyToCents,
+  parseMoneyToVnd,
   parseQtyToMilli,
+  vndToNumber,
 } from '../../domain/inventory-domain';
 import {
   applyWarehouseScope,
@@ -190,7 +190,7 @@ export class IssuingService {
     // 1. Lock all balances in deterministic sku_id order and verify available_qty >= qty
     const lockedBalances = new Map<
       string,
-      { onHandQty: string; reservedQty: string; avgUnitCost: string }
+      { onHandQty: string; reservedQty: string; avgUnitCost: number }
     >();
     const shortages: {
       warehouseId: string;
@@ -237,8 +237,8 @@ export class IssuingService {
         lockedBalances.set(String(item.skuId), {
           onHandQty: formatMilliToQty(onHandMilli),
           reservedQty: formatMilliToQty(reservedMilli),
-          avgUnitCost: formatCentsToMoney(
-            parseMoneyToCents(String(balanceRows[0].avgUnitCost)),
+          avgUnitCost: vndToNumber(
+            parseMoneyToVnd(String(balanceRows[0].avgUnitCost)),
           ),
         });
       }
@@ -276,7 +276,7 @@ export class IssuingService {
         UPDATE ${prefix}"stock_balance"
         SET
           on_hand_qty = $4::numeric(18,3),
-          valuation_amount = $5::numeric(18,2),
+          valuation_amount = $5::bigint,
           version = version + 1,
           updated_at = now()
         WHERE tenant_id = $1 AND warehouse_id = $2 AND sku_id = $3
@@ -295,7 +295,7 @@ export class IssuingService {
       await em.query(
         `
         UPDATE ${prefix}"stock_issue_item"
-        SET unit_cost = $3::numeric(18,2)
+        SET unit_cost = $3::bigint
         WHERE tenant_id = $1 AND id = $2
         `,
         [tenantId, item.id, bal.avgUnitCost],
@@ -311,7 +311,7 @@ export class IssuingService {
         ) VALUES (
           $1, $2, $3, $4, 'MANUAL_ISSUE',
           $5::numeric(18,3), $6::numeric(18,3), $7::numeric(18,3), $8::numeric(18,3),
-          $9::numeric(18,2), $10::numeric(18,2), 'STOCK_ISSUE', $11,
+          $9::bigint, $10::bigint, 'STOCK_ISSUE', $11,
           $12, $13, $14, $15
         )
         `,
@@ -470,9 +470,7 @@ export class IssuingService {
         lineNo: Number(i.lineNo),
         skuId: i.skuId,
         qty: formatMilliToQty(parseQtyToMilli(String(i.qty), false, false)),
-        unitCost: formatCentsToMoney(
-          parseMoneyToCents(String(i.unitCost ?? '0')),
-        ),
+        unitCost: vndToNumber(parseMoneyToVnd(String(i.unitCost ?? '0'))),
       })),
     };
   }

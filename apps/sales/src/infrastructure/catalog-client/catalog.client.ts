@@ -13,6 +13,7 @@ import {
 import { OnEvent, qualifiedTable } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { toMoney } from '../../common/money';
 import {
   AuthoritativeCatalogVariant,
   SalesDomainError,
@@ -106,7 +107,7 @@ export class CatalogClient {
       `
       UPDATE ${table}
       SET
-        unit_price = $3::numeric(18,2),
+        unit_price = $3::bigint,
         source_updated_at = $4::timestamptz,
         synced_at = now()
       WHERE tenant_id = $1
@@ -115,7 +116,7 @@ export class CatalogClient {
       [
         event.tenantId,
         event.payload.variantId,
-        event.payload.price,
+        toMoney(event.payload.price),
         event.payload.updatedAt,
       ],
     );
@@ -185,7 +186,7 @@ export class CatalogClient {
         p.barcode ?? null,
         p.name,
         p.name,
-        p.basePrice,
+        toMoney(p.basePrice),
         p.status,
         p.aggregateVersion ?? 1,
         p.updatedAt ?? new Date().toISOString(),
@@ -263,7 +264,7 @@ export class CatalogClient {
         variantName: r.variantName,
         unitCode: r.unitCode ?? 'PCS',
         conversionFactor: String(r.conversionFactor ?? '1.0000'),
-        unitPrice: String(r.unitPrice),
+        unitPrice: toMoney(r.unitPrice),
         status: r.status,
       };
       result.set(r.variantId, mapped);
@@ -347,7 +348,7 @@ export class CatalogClient {
       variantName: r.variantName,
       unitCode: r.unitCode ?? 'PCS',
       conversionFactor: String(r.conversionFactor ?? '1.0000'),
-      unitPrice: String(r.unitPrice),
+      unitPrice: toMoney(r.unitPrice),
       status: r.status,
     };
   }

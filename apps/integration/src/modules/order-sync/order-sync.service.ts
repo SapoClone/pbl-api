@@ -8,6 +8,7 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'node:crypto';
 import { DataSource, In } from 'typeorm';
+import { toMoney } from '../../common/money';
 import {
   IntegrationDomainError,
   IntegrationDomainErrorCode,
@@ -334,8 +335,8 @@ export class OrderSyncService {
           externalUpdatedAt: normalizedOrder.externalUpdatedAt,
           buyerName: normalizedOrder.buyerName,
           currency: normalizedOrder.currency,
-          totalAmount: normalizedOrder.totalAmount.toFixed(2),
-          shippingFee: normalizedOrder.shippingFee.toFixed(2),
+          totalAmount: toMoney(normalizedOrder.totalAmount),
+          shippingFee: toMoney(normalizedOrder.shippingFee),
           paymentMethod: normalizedOrder.paymentMethod,
           rawOrderSnapshot: normalizedOrder.rawPayload,
           mappingSnapshot: {
@@ -673,8 +674,8 @@ export class OrderSyncService {
         externalUpdatedAt: params.normalizedOrder.externalUpdatedAt,
         buyerName: params.normalizedOrder.buyerName,
         currency: params.normalizedOrder.currency,
-        totalAmount: params.normalizedOrder.totalAmount.toFixed(2),
-        shippingFee: params.normalizedOrder.shippingFee.toFixed(2),
+        totalAmount: toMoney(params.normalizedOrder.totalAmount),
+        shippingFee: toMoney(params.normalizedOrder.shippingFee),
         paymentMethod: params.normalizedOrder.paymentMethod,
         rawOrderSnapshot: params.normalizedOrder.rawPayload,
         mappingSnapshot: null,

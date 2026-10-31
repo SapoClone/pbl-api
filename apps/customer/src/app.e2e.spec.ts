@@ -425,6 +425,23 @@ describe('Customer & Loyalty M4 HTTP shell & RBAC', () => {
         .expect(422);
     });
 
+    it('rejects fractional or string money with 422', async () => {
+      for (const debtLimit of [5000000.5, '5000000', -1]) {
+        await request(url())
+          .post('/v1/customers')
+          .set('Authorization', withPerms(['customers.create']))
+          .send({ name: 'A', debtLimit })
+          .expect(422);
+      }
+      for (const redeemValuePerPoint of [1000.5, '1000']) {
+        await request(url())
+          .put('/v1/loyalty/settings')
+          .set('Authorization', withPerms(['customers.update']))
+          .send({ redeemValuePerPoint })
+          .expect(422);
+      }
+    });
+
     describe('internal routes: service token (x-internal-token)', () => {
       const eligibility = `/internal/v1/customers/${CUSTOMER_ID}/eligibility`;
 

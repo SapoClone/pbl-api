@@ -5,12 +5,14 @@ import {
   ArrayMinSize,
   IsArray,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -91,12 +93,12 @@ export class CreatePurchaseOrderItemDto {
   orderedQty!: string;
 
   @ApiProperty({
-    example: '100000.00',
-    description: 'Agreed unit cost per base unit (NUMERIC(18,2))',
+    example: 100000,
+    description: 'Agreed unit cost per base unit (integer VND)',
   })
-  @IsString()
-  @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/)
-  unitCost!: string;
+  @IsInt()
+  @Min(0)
+  unitCost!: number;
 
   @ApiPropertyOptional({ default: 'PCS', maxLength: 32 })
   @IsOptional()
@@ -155,13 +157,14 @@ export class ReceivePurchaseOrderLineDto {
   qty!: string;
 
   @ApiPropertyOptional({
-    example: '100000.00',
-    description: 'Optional unit cost override (defaults to PO line unitCost)',
+    example: 100000,
+    description:
+      'Optional unit cost override (defaults to PO line unitCost) (integer VND)',
   })
   @IsOptional()
-  @IsString()
-  @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/)
-  unitCost?: string;
+  @IsInt()
+  @Min(0)
+  unitCost?: number;
 }
 
 export class ReceivePurchaseOrderDto {

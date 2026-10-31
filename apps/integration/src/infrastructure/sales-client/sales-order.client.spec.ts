@@ -43,6 +43,34 @@ describe('SalesOrderClient', () => {
     expect(options).toEqual({ asService: true });
   });
 
+  it('sends money to sales as JSON numbers', async () => {
+    process.env.SALES_SERVICE_URL = 'http://sales:3000/';
+    process.env.INTERNAL_S2S_TOKEN = 'tok';
+    const post = jest.fn(async () => ({
+      data: { order: { id: 'o', code: 'c' } },
+    }));
+    const client = new SalesOrderClient({
+      post,
+    } as unknown as InternalHttpClient);
+    await client.createOrRecoverOmnichannelOrder({
+      ...cmd,
+      shippingFee: 30000,
+      lines: [
+        {
+          variantId: 'v1',
+          skuCode: 'S',
+          itemName: 'n',
+          quantity: 2,
+          unitPrice: 250000,
+          lineDiscount: 0,
+        },
+      ],
+    });
+    const [, body] = post.mock.calls[0] as unknown as any[];
+    expect(body.shippingFee).toBe(30000);
+    expect(body.lines[0].unitPriceOverride).toBe(250000);
+  });
+
   it('fails clearly, with no in-memory fallback, when SALES_SERVICE_URL is unset', async () => {
     delete process.env.SALES_SERVICE_URL;
     process.env.INTERNAL_S2S_TOKEN = 'tok';

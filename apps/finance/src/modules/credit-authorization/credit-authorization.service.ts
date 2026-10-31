@@ -11,15 +11,15 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { toMoney } from '../../common/money';
 import {
   computePayloadHash,
   DEFAULT_CUSTOMER_CREDIT_LIMIT_VND,
   evaluateCreditAuthorization,
   FinanceDomainError,
   FinanceDomainErrorCode,
-  formatMoneyCents,
   GL_ACCOUNT_CODES,
-  parseMoneyCents,
+  parseVnd,
 } from '../../domain/finance-domain';
 import {
   getSchemaPrefix,
@@ -75,7 +75,7 @@ export class CreditAuthorizationService {
     await em.query(
       `INSERT INTO ${this.schemaPrefix}"customer_credit_profiles" (
          "id", "tenant_id", "customer_id", "credit_limit", "posted_debt", "held_credit", "prepayment_balance", "status", "version"
-       ) VALUES ($1, $2, $3, $4::numeric(18,2), 0.00, 0.00, 0.00, 'ACTIVE', 1)
+       ) VALUES ($1, $2, $3, $4::bigint, 0, 0, 0, 'ACTIVE', 1)
        ON CONFLICT ("tenant_id", "customer_id") DO NOTHING`,
       [randomUUID(), tenantId, customerId, DEFAULT_CUSTOMER_CREDIT_LIMIT_VND],
     );
@@ -90,22 +90,20 @@ export class CreditAuthorizationService {
   }
 
   private formatProfileResponse(profile: CustomerCreditProfileEntity) {
-    const limitCents = parseMoneyCents(profile.creditLimit, {
+    const limitVnd = parseVnd(profile.creditLimit, {
       allowZero: true,
       field: 'creditLimit',
     });
-    const postedCents = parseMoneyCents(profile.postedDebt, {
+    const postedVnd = parseVnd(profile.postedDebt, {
       allowZero: true,
       field: 'postedDebt',
     });
-    const heldCents = parseMoneyCents(profile.heldCredit, {
+    const heldVnd = parseVnd(profile.heldCredit, {
       allowZero: true,
       field: 'heldCredit',
     });
-    const availCents =
-      limitCents > postedCents + heldCents
-        ? limitCents - postedCents - heldCents
-        : 0n;
+    const availVnd =
+      limitVnd > postedVnd + heldVnd ? limitVnd - postedVnd - heldVnd : 0;
 
     return {
       customerId: profile.customerId,
@@ -113,7 +111,7 @@ export class CreditAuthorizationService {
       creditLimit: profile.creditLimit,
       postedDebt: profile.postedDebt,
       heldCredit: profile.heldCredit,
-      availableCredit: formatMoneyCents(availCents),
+      availableCredit: availVnd,
       prepaymentBalance: profile.prepaymentBalance,
       status: profile.status,
       version: profile.version,
@@ -140,7 +138,7 @@ export class CreditAuthorizationService {
     dto: UpdateCustomerCreditLimitDto,
     tenantId = TenantContext.require(),
   ) {
-    const newLimitCents = parseMoneyCents(dto.creditLimit, {
+    const newLimitVnd = parseVnd(dto.creditLimit, {
       allowZero: true,
       field: 'creditLimit',
     });
@@ -150,7 +148,7 @@ export class CreditAuthorizationService {
         tenantId,
         customerId,
       );
-      profile.creditLimit = formatMoneyCents(newLimitCents);
+      profile.creditLimit = newLimitVnd;
       profile.version += 1;
       profile.updatedAt = new Date();
       await em.getRepository(CustomerCreditProfileEntity).save(profile);
@@ -173,14 +171,13 @@ export class CreditAuthorizationService {
       );
     }
     const idempotencyKey = rawKey.toLowerCase();
-    const amountCents = parseMoneyCents(dto.amount, {
+    const amountVnd = parseVnd(dto.amount, {
       allowZero: false,
       field: 'amount',
     });
-    const amountStr = formatMoneyCents(amountCents);
     const requestHash = computePayloadHash({
       customerId: dto.customerId,
-      amount: amountStr,
+      amount: amountVnd,
       orderId: dto.orderId ?? null,
       branchId: dto.branchId ?? null,
       overrideApprovedBy: dto.overrideApprovedBy ?? null,
@@ -220,7 +217,7 @@ export class CreditAuthorizationService {
         creditLimit: profile.creditLimit,
         postedDebt: profile.postedDebt,
         heldCredit: profile.heldCredit,
-        requestedAmount: amountStr,
+        requestedAmount: amountVnd,
         overrideApprovedBy: dto.overrideApprovedBy,
         overrideReason: dto.overrideReason,
       });
@@ -242,7 +239,7 @@ export class CreditAuthorizationService {
         customerId: dto.customerId,
         orderId: dto.orderId ?? null,
         branchId: dto.branchId ?? null,
-        authorizedAmount: amountStr,
+        authorizedAmount: amountVnd,
         state: 'HELD',
         overrideApprovedBy: dto.overrideApprovedBy ?? null,
         overrideReason: dto.overrideReason ?? null,
@@ -376,22 +373,22 @@ export class CreditAuthorizationService {
         );
       }
 
-      const authCents = parseMoneyCents(auth.authorizedAmount, {
+      const authVnd = parseVnd(auth.authorizedAmount, {
         allowZero: false,
         field: 'authorizedAmount',
       });
-      const heldBeforeCents = parseMoneyCents(profile.heldCredit, {
+      const heldBeforeVnd = parseVnd(profile.heldCredit, {
         allowZero: true,
         field: 'heldCredit',
       });
-      const postedBeforeCents = parseMoneyCents(profile.postedDebt, {
+      const postedBeforeVnd = parseVnd(profile.postedDebt, {
         allowZero: true,
         field: 'postedDebt',
       });
 
-      const heldAfterCents =
-        heldBeforeCents >= authCents ? heldBeforeCents - authCents : 0n;
-      const postedAfterCents = postedBeforeCents + authCents;
+      const heldAfterVnd =
+        heldBeforeVnd >= authVnd ? heldBeforeVnd - authVnd : 0;
+      const postedAfterVnd = postedBeforeVnd + authVnd;
 
       const orderId = dto.orderId ?? auth.orderId ?? null;
       const branchId = dto.branchId ?? auth.branchId ?? null;
@@ -441,8 +438,8 @@ export class CreditAuthorizationService {
         branchId,
         creditAuthorizationId: auth.id,
         originalAmount: auth.authorizedAmount,
-        paidAmount: '0.00',
-        adjustedAmount: '0.00',
+        paidAmount: 0,
+        adjustedAmount: 0,
         outstandingAmount: auth.authorizedAmount,
         currency: 'VND',
         status: 'OPEN',
@@ -464,8 +461,8 @@ export class CreditAuthorizationService {
         receivableId: receivable.id,
         entryType: 'DEBT_RECOGNIZED',
         amountDelta: auth.authorizedAmount,
-        balanceBefore: formatMoneyCents(postedBeforeCents),
-        balanceAfter: formatMoneyCents(postedAfterCents),
+        balanceBefore: postedBeforeVnd,
+        balanceAfter: postedAfterVnd,
         paymentMethod: 'CREDIT',
         cashbookEntryId: null,
         journalId: postedJournal.journal.id,
@@ -478,8 +475,8 @@ export class CreditAuthorizationService {
       });
       await ledgerRepo.save(ledgerEntry);
 
-      profile.heldCredit = formatMoneyCents(heldAfterCents);
-      profile.postedDebt = formatMoneyCents(postedAfterCents);
+      profile.heldCredit = heldAfterVnd;
+      profile.postedDebt = postedAfterVnd;
       profile.version += 1;
       profile.updatedAt = now;
       await profileRepo.save(profile);
@@ -492,14 +489,14 @@ export class CreditAuthorizationService {
       auth.updatedAt = now;
       await authRepo.save(auth);
 
-      const limitCents = parseMoneyCents(profile.creditLimit, {
+      const limitVnd = parseVnd(profile.creditLimit, {
         allowZero: true,
         field: 'creditLimit',
       });
-      const availAfterCents =
-        limitCents > postedAfterCents + heldAfterCents
-          ? limitCents - postedAfterCents - heldAfterCents
-          : 0n;
+      const availAfterVnd =
+        limitVnd > postedAfterVnd + heldAfterVnd
+          ? limitVnd - postedAfterVnd - heldAfterVnd
+          : 0;
 
       await this.outbox.add(
         em,
@@ -513,7 +510,7 @@ export class CreditAuthorizationService {
           state: 'COMMITTED',
           postedDebtAfter: profile.postedDebt,
           heldCreditAfter: profile.heldCredit,
-          availableCreditAfter: formatMoneyCents(availAfterCents),
+          availableCreditAfter: availAfterVnd,
           receivableId: receivable.id,
           occurredAt: now.toISOString(),
         } satisfies FinanceCreditAuthorizationEventPayload,
@@ -590,19 +587,19 @@ export class CreditAuthorizationService {
         );
       }
 
-      const authCents = parseMoneyCents(auth.authorizedAmount, {
+      const authVnd = parseVnd(auth.authorizedAmount, {
         allowZero: false,
         field: 'authorizedAmount',
       });
-      const heldBeforeCents = parseMoneyCents(profile.heldCredit, {
+      const heldBeforeVnd = parseVnd(profile.heldCredit, {
         allowZero: true,
         field: 'heldCredit',
       });
-      const heldAfterCents =
-        heldBeforeCents >= authCents ? heldBeforeCents - authCents : 0n;
+      const heldAfterVnd =
+        heldBeforeVnd >= authVnd ? heldBeforeVnd - authVnd : 0;
 
       const now = new Date();
-      profile.heldCredit = formatMoneyCents(heldAfterCents);
+      profile.heldCredit = heldAfterVnd;
       profile.version += 1;
       profile.updatedAt = now;
       await profileRepo.save(profile);
@@ -614,18 +611,18 @@ export class CreditAuthorizationService {
       auth.updatedAt = now;
       await authRepo.save(auth);
 
-      const limitCents = parseMoneyCents(profile.creditLimit, {
+      const limitVnd = parseVnd(profile.creditLimit, {
         allowZero: true,
         field: 'creditLimit',
       });
-      const postedCents = parseMoneyCents(profile.postedDebt, {
+      const postedVnd = parseVnd(profile.postedDebt, {
         allowZero: true,
         field: 'postedDebt',
       });
-      const availAfterCents =
-        limitCents > postedCents + heldAfterCents
-          ? limitCents - postedCents - heldAfterCents
-          : 0n;
+      const availAfterVnd =
+        limitVnd > postedVnd + heldAfterVnd
+          ? limitVnd - postedVnd - heldAfterVnd
+          : 0;
 
       await this.outbox.add(
         em,
@@ -639,7 +636,7 @@ export class CreditAuthorizationService {
           state: 'RELEASED',
           postedDebtAfter: profile.postedDebt,
           heldCreditAfter: profile.heldCredit,
-          availableCreditAfter: formatMoneyCents(availAfterCents),
+          availableCreditAfter: availAfterVnd,
           occurredAt: now.toISOString(),
         } satisfies FinanceCreditAuthorizationEventPayload,
         { tenantId },
@@ -669,7 +666,7 @@ export class CreditAuthorizationService {
         const customerId = String(
           (row as unknown as Record<string, unknown>).customer_id,
         );
-        const amountStr = String(
+        const amountVnd = toMoney(
           (row as unknown as Record<string, unknown>).authorized_amount,
         );
         const profile = await this.lockOrCreateProfileInTx(
@@ -677,16 +674,16 @@ export class CreditAuthorizationService {
           tenantId,
           customerId,
         );
-        const heldBefore = parseMoneyCents(profile.heldCredit, {
+        const heldBefore = parseVnd(profile.heldCredit, {
           allowZero: true,
           field: 'heldCredit',
         });
-        const authCents = parseMoneyCents(amountStr, {
+        const authVnd = parseVnd(amountVnd, {
           allowZero: false,
           field: 'authorizedAmount',
         });
-        const heldAfter = heldBefore >= authCents ? heldBefore - authCents : 0n;
-        profile.heldCredit = formatMoneyCents(heldAfter);
+        const heldAfter = heldBefore >= authVnd ? heldBefore - authVnd : 0;
+        profile.heldCredit = heldAfter;
         profile.version += 1;
         profile.updatedAt = new Date();
         await em.getRepository(CustomerCreditProfileEntity).save(profile);
@@ -708,22 +705,20 @@ export class CreditAuthorizationService {
     auth: CustomerCreditAuthorizationEntity,
     profile: CustomerCreditProfileEntity,
   ) {
-    const limitCents = parseMoneyCents(profile.creditLimit, {
+    const limitVnd = parseVnd(profile.creditLimit, {
       allowZero: true,
       field: 'creditLimit',
     });
-    const postedCents = parseMoneyCents(profile.postedDebt, {
+    const postedVnd = parseVnd(profile.postedDebt, {
       allowZero: true,
       field: 'postedDebt',
     });
-    const heldCents = parseMoneyCents(profile.heldCredit, {
+    const heldVnd = parseVnd(profile.heldCredit, {
       allowZero: true,
       field: 'heldCredit',
     });
-    const availCents =
-      limitCents > postedCents + heldCents
-        ? limitCents - postedCents - heldCents
-        : 0n;
+    const availVnd =
+      limitVnd > postedVnd + heldVnd ? limitVnd - postedVnd - heldVnd : 0;
 
     return {
       authorizationId: auth.id,
@@ -745,7 +740,7 @@ export class CreditAuthorizationService {
         creditLimit: profile.creditLimit,
         postedDebt: profile.postedDebt,
         heldCredit: profile.heldCredit,
-        availableCredit: formatMoneyCents(availCents),
+        availableCredit: availVnd,
       },
     };
   }

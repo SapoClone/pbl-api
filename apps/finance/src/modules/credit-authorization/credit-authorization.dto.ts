@@ -1,6 +1,5 @@
 import {
   IsInt,
-  IsNumberString,
   IsOptional,
   IsString,
   IsUUID,
@@ -13,8 +12,8 @@ export class CreateCreditAuthorizationDto {
   @IsUUID()
   customerId!: string;
 
-  @IsNumberString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 
   @IsOptional()
   @IsUUID()
@@ -79,8 +78,8 @@ export class ReleaseCreditAuthorizationDto {
 }
 
 export class UpdateCustomerCreditLimitDto {
-  @IsNumberString()
-  creditLimit!: string;
+  @IsInt()
+  creditLimit!: number;
 
   @IsOptional()
   @IsString()

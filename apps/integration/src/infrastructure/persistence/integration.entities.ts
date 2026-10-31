@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { moneyTransformer } from '../../common/money';
 import type {
   ChannelOrderSyncStatus,
   ConnectionStatus,
@@ -61,12 +62,11 @@ export class IntegrationCatalogVariantEntity {
 
   @Column({
     name: 'base_price',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
     default: 0,
+    transformer: moneyTransformer,
   })
-  basePrice!: string;
+  basePrice!: number;
 
   @Column({ type: 'varchar', length: 16, default: 'ACTIVE' })
   status!: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
@@ -448,12 +448,11 @@ export class SkuMappingEntity {
 
   @Column({
     name: 'external_price',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
     nullable: true,
+    transformer: moneyTransformer,
   })
-  externalPrice!: string | null;
+  externalPrice!: number | null;
 
   @Column({ name: 'last_synced_at', type: 'timestamptz', nullable: true })
   lastSyncedAt!: Date | null;
@@ -534,21 +533,19 @@ export class ChannelOrderRefEntity {
 
   @Column({
     name: 'total_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
     default: 0,
+    transformer: moneyTransformer,
   })
-  totalAmount!: string;
+  totalAmount!: number;
 
   @Column({
     name: 'shipping_fee',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
     default: 0,
+    transformer: moneyTransformer,
   })
-  shippingFee!: string;
+  shippingFee!: number;
 
   @Column({
     name: 'payment_method',

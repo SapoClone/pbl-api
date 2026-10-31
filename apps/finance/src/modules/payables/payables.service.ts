@@ -11,13 +11,13 @@ import {
 import { EventOutbox, OnEvent } from '@pbl/events';
 import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager, In } from 'typeorm';
+import { toMoney } from '../../common/money';
 import {
   calculateDocumentAllocations,
   FinanceDomainError,
   FinanceDomainErrorCode,
-  formatMoneyCents,
   GL_ACCOUNT_CODES,
-  parseMoneyCents,
+  parseVnd,
 } from '../../domain/finance-domain';
 import {
   getSchemaPrefix,
@@ -68,17 +68,14 @@ export class PayablesService {
     em: EntityManager,
     tenantId: string,
     supplierId: string,
-  ): Promise<bigint> {
+  ): Promise<number> {
     const rows: Array<{ total: string | null }> = await em.query(
-      `SELECT COALESCE(SUM("outstanding_amount"), 0)::numeric(18,2) AS "total"
+      `SELECT COALESCE(SUM("outstanding_amount"), 0)::bigint AS "total"
        FROM ${this.schemaPrefix}"supplier_payables"
        WHERE "tenant_id" = $1 AND "supplier_id" = $2 AND "status" IN ('OPEN', 'PARTIALLY_PAID')`,
       [tenantId, supplierId],
     );
-    return parseMoneyCents(rows[0]?.total ?? '0.00', {
-      allowZero: true,
-      field: 'supplierTotalDebt',
-    });
+    return toMoney(rows[0]?.total ?? 0);
   }
 
   async recognizePayable(
@@ -87,11 +84,10 @@ export class PayablesService {
     dto: RecognizePayableDto,
     tenantId = TenantContext.require(),
   ) {
-    const amountCents = parseMoneyCents(dto.amount, {
+    const amountVnd = parseVnd(dto.amount, {
       allowZero: false,
       field: 'amount',
     });
-    const amountStr = formatMoneyCents(amountCents);
     const sourceType = (
       dto.sourceType ??
       (dto.purchaseOrderId ? 'PURCHASE_ORDER' : 'SUPPLIER_INVOICE')
@@ -102,7 +98,7 @@ export class PayablesService {
       dto.sourceId ??
       dto.purchaseOrderId ??
       dto.receiptId ??
-      `manual:${dto.supplierId}:${amountStr}`
+      `manual:${dto.supplierId}:${amountVnd}`
     ).trim();
     const idempotencyKey = (
       idempotencyKeyHeader ??
@@ -148,17 +144,17 @@ export class PayablesService {
         );
         return {
           ...existing,
-          supplierTotalDebtAfter: formatMoneyCents(totalDebt),
+          supplierTotalDebtAfter: totalDebt,
           replayed: true,
         };
       }
 
-      const debtBeforeCents = await this.computeSupplierTotalDebtInTx(
+      const debtBeforeVnd = await this.computeSupplierTotalDebtInTx(
         em,
         tenantId,
         dto.supplierId,
       );
-      const debtAfterCents = debtBeforeCents + amountCents;
+      const debtAfterVnd = debtBeforeVnd + amountVnd;
 
       const postedJournal = await this.journalService.postJournalInTx(
         em,
@@ -175,14 +171,14 @@ export class PayablesService {
           lines: [
             {
               accountCode: GL_ACCOUNT_CODES.INVENTORY_PURCHASE_CLEARING,
-              debitAmount: amountStr,
+              debitAmount: amountVnd,
               partyType: 'SUPPLIER',
               partyId: dto.supplierId,
               memo: `Inventory/purchase clearing for ${sourceType}:${sourceId}`,
             },
             {
               accountCode: GL_ACCOUNT_CODES.ACCOUNTS_PAYABLE,
-              creditAmount: amountStr,
+              creditAmount: amountVnd,
               partyType: 'SUPPLIER',
               partyId: dto.supplierId,
               memo: `Supplier payable for ${sourceType}:${sourceId}`,
@@ -201,10 +197,10 @@ export class PayablesService {
         purchaseOrderId: dto.purchaseOrderId ?? null,
         receiptId: dto.receiptId ?? null,
         warehouseId: dto.warehouseId ?? null,
-        originalAmount: amountStr,
-        paidAmount: '0.00',
-        adjustedAmount: '0.00',
-        outstandingAmount: amountStr,
+        originalAmount: amountVnd,
+        paidAmount: 0,
+        adjustedAmount: 0,
+        outstandingAmount: amountVnd,
         currency: 'VND',
         status: 'OPEN',
         dueDate: new Date(now.getTime() + 30 * 86400 * 1000),
@@ -224,9 +220,9 @@ export class PayablesService {
         supplierId: dto.supplierId,
         payableId: payable.id,
         entryType: 'PAYABLE_RECOGNIZED',
-        amountDelta: amountStr,
-        balanceBefore: formatMoneyCents(debtBeforeCents),
-        balanceAfter: formatMoneyCents(debtAfterCents),
+        amountDelta: amountVnd,
+        balanceBefore: debtBeforeVnd,
+        balanceAfter: debtAfterVnd,
         paymentMethod: null,
         cashbookEntryId: null,
         journalId: postedJournal.journal.id,
@@ -252,7 +248,7 @@ export class PayablesService {
           originalAmount: payable.originalAmount,
           paidAmount: payable.paidAmount,
           outstandingAmount: payable.outstandingAmount,
-          supplierTotalDebtAfter: formatMoneyCents(debtAfterCents),
+          supplierTotalDebtAfter: debtAfterVnd,
           status: payable.status,
           journalId: payable.journalId,
           occurredAt: now.toISOString(),
@@ -262,7 +258,7 @@ export class PayablesService {
 
       return {
         ...payable,
-        supplierTotalDebtAfter: formatMoneyCents(debtAfterCents),
+        supplierTotalDebtAfter: debtAfterVnd,
         replayed: false,
       };
     });
@@ -304,7 +300,7 @@ export class PayablesService {
         );
         return {
           payable: ap,
-          supplierTotalDebtAfter: formatMoneyCents(totalDebt),
+          supplierTotalDebtAfter: totalDebt,
           journalId: existingLedger.journalId,
           cashbookEntryId: existingLedger.cashbookEntryId,
           replayed: true,
@@ -437,7 +433,7 @@ export class PayablesService {
           },
         );
 
-      let runningDebtCents = await this.computeSupplierTotalDebtInTx(
+      let runningDebtVnd = await this.computeSupplierTotalDebtInTx(
         em,
         tenantId,
         target.supplierId,
@@ -449,14 +445,14 @@ export class PayablesService {
       for (let i = 0; i < allocationResult.allocations.length; i += 1) {
         const alloc = allocationResult.allocations[i];
         const doc = docMap.get(alloc.documentId)!;
-        const allocCents = parseMoneyCents(alloc.allocatedAmount, {
+        const allocVnd = parseVnd(alloc.allocatedAmount, {
           allowZero: false,
           field: 'allocatedAmount',
         });
-        const debtBeforeCents = runningDebtCents;
-        const debtAfterCents =
-          debtBeforeCents >= allocCents ? debtBeforeCents - allocCents : 0n;
-        runningDebtCents = debtAfterCents;
+        const debtBeforeVnd = runningDebtVnd;
+        const debtAfterVnd =
+          debtBeforeVnd >= allocVnd ? debtBeforeVnd - allocVnd : 0;
+        runningDebtVnd = debtAfterVnd;
 
         doc.paidAmount = alloc.paidAmountAfter;
         doc.outstandingAmount = alloc.outstandingAfter;
@@ -472,9 +468,9 @@ export class PayablesService {
           supplierId: target.supplierId,
           payableId: doc.id,
           entryType: 'PAYMENT_APPLIED',
-          amountDelta: `-${alloc.allocatedAmount}`,
-          balanceBefore: formatMoneyCents(debtBeforeCents),
-          balanceAfter: formatMoneyCents(debtAfterCents),
+          amountDelta: -alloc.allocatedAmount,
+          balanceBefore: debtBeforeVnd,
+          balanceAfter: debtAfterVnd,
           paymentMethod,
           cashbookEntryId: cashbookEntry.id,
           journalId: postedJournal.journal.id,
@@ -505,7 +501,7 @@ export class PayablesService {
           originalAmount: primaryAp.originalAmount,
           paidAmount: primaryAp.paidAmount,
           outstandingAmount: primaryAp.outstandingAmount,
-          supplierTotalDebtAfter: formatMoneyCents(runningDebtCents),
+          supplierTotalDebtAfter: runningDebtVnd,
           status: primaryAp.status,
           journalId: postedJournal.journal.id,
           occurredAt: now.toISOString(),
@@ -518,7 +514,7 @@ export class PayablesService {
         updatedPayables,
         allocations: allocationResult.allocations,
         totalAllocated: allocationResult.totalAllocated,
-        supplierTotalDebtAfter: formatMoneyCents(runningDebtCents),
+        supplierTotalDebtAfter: runningDebtVnd,
         journalId: postedJournal.journal.id,
         cashbookEntryId: cashbookEntry.id,
         replayed: false,
@@ -533,11 +529,10 @@ export class PayablesService {
     dto: ApplySupplierReturnCreditDto,
     tenantId = TenantContext.require(),
   ) {
-    const creditCents = parseMoneyCents(dto.amount, {
+    const creditVnd = parseVnd(dto.amount, {
       allowZero: false,
       field: 'amount',
     });
-    const creditStr = formatMoneyCents(creditCents);
     const cleanKey = (
       idempotencyKeyHeader ??
       dto.idempotencyKey ??
@@ -572,25 +567,25 @@ export class PayablesService {
         );
       }
 
-      const outBeforeCents = parseMoneyCents(payable.outstandingAmount, {
+      const outBeforeVnd = parseVnd(payable.outstandingAmount, {
         allowZero: true,
         field: 'outstandingAmount',
       });
-      if (creditCents > outBeforeCents) {
+      if (creditVnd > outBeforeVnd) {
         throw new FinanceDomainError(
           FinanceDomainErrorCode.SUPPLIER_PAYMENT_EXCEEDED,
-          `Supplier return credit (${creditStr}) exceeds payable outstanding amount (${payable.outstandingAmount})`,
+          `Supplier return credit (${creditVnd}) exceeds payable outstanding amount (${payable.outstandingAmount})`,
           409,
         );
       }
 
-      const debtBeforeCents = await this.computeSupplierTotalDebtInTx(
+      const debtBeforeVnd = await this.computeSupplierTotalDebtInTx(
         em,
         tenantId,
         payable.supplierId,
       );
-      const debtAfterCents =
-        debtBeforeCents >= creditCents ? debtBeforeCents - creditCents : 0n;
+      const debtAfterVnd =
+        debtBeforeVnd >= creditVnd ? debtBeforeVnd - creditVnd : 0;
 
       const postedJournal = await this.journalService.postJournalInTx(
         em,
@@ -607,14 +602,14 @@ export class PayablesService {
           lines: [
             {
               accountCode: GL_ACCOUNT_CODES.ACCOUNTS_PAYABLE,
-              debitAmount: creditStr,
+              debitAmount: creditVnd,
               partyType: 'SUPPLIER',
               partyId: payable.supplierId,
               memo: `Supplier return credit ${dto.returnRefId}`,
             },
             {
               accountCode: GL_ACCOUNT_CODES.INVENTORY_PURCHASE_CLEARING,
-              creditAmount: creditStr,
+              creditAmount: creditVnd,
               partyType: 'SUPPLIER',
               partyId: payable.supplierId,
               memo: `Inventory return reduction ${dto.returnRefId}`,
@@ -623,18 +618,18 @@ export class PayablesService {
         },
       );
 
-      const adjBeforeCents = parseMoneyCents(payable.adjustedAmount, {
+      const adjBeforeVnd = parseVnd(payable.adjustedAmount, {
         allowZero: true,
         field: 'adjustedAmount',
       });
-      const outAfterCents = outBeforeCents - creditCents;
+      const outAfterVnd = outBeforeVnd - creditVnd;
       const now = new Date();
 
-      payable.adjustedAmount = formatMoneyCents(adjBeforeCents + creditCents);
-      payable.outstandingAmount = formatMoneyCents(outAfterCents);
+      payable.adjustedAmount = adjBeforeVnd + creditVnd;
+      payable.outstandingAmount = outAfterVnd;
       payable.status =
-        outAfterCents === 0n
-          ? parseMoneyCents(payable.paidAmount, { allowZero: true }) > 0n
+        outAfterVnd === 0
+          ? parseVnd(payable.paidAmount, { allowZero: true }) > 0
             ? 'PAID'
             : 'ADJUSTED'
           : 'PARTIALLY_PAID';
@@ -648,9 +643,9 @@ export class PayablesService {
         supplierId: payable.supplierId,
         payableId: payable.id,
         entryType: 'SUPPLIER_RETURN_CREDIT',
-        amountDelta: `-${creditStr}`,
-        balanceBefore: formatMoneyCents(debtBeforeCents),
-        balanceAfter: formatMoneyCents(debtAfterCents),
+        amountDelta: -creditVnd,
+        balanceBefore: debtBeforeVnd,
+        balanceAfter: debtAfterVnd,
         paymentMethod: null,
         cashbookEntryId: null,
         journalId: postedJournal.journal.id,
@@ -665,7 +660,7 @@ export class PayablesService {
 
       return {
         payable,
-        supplierTotalDebtAfter: formatMoneyCents(debtAfterCents),
+        supplierTotalDebtAfter: debtAfterVnd,
         journalId: postedJournal.journal.id,
         replayed: false,
       };
@@ -680,11 +675,11 @@ export class PayablesService {
     if (!tenantId || !payload?.purchaseOrderId || !payload?.supplierId) {
       return;
     }
-    const amtCents = parseMoneyCents(payload.totalAmount, {
+    const amtVnd = parseVnd(payload.totalAmount, {
       allowZero: true,
       field: 'totalAmount',
     });
-    if (amtCents <= 0n) {
+    if (amtVnd <= 0) {
       return;
     }
     await this.recognizePayable(
@@ -692,7 +687,7 @@ export class PayablesService {
       `po-approved:${payload.purchaseOrderId}`,
       {
         supplierId: payload.supplierId,
-        amount: formatMoneyCents(amtCents),
+        amount: amtVnd,
         purchaseOrderId: payload.purchaseOrderId,
         warehouseId: payload.warehouseId,
         sourceType: 'PURCHASE_ORDER',
@@ -712,7 +707,7 @@ export class PayablesService {
       sourceType: string;
       purchaseOrderId?: string | null;
       supplierId?: string | null;
-      totalAmount?: string;
+      totalAmount?: number;
       postedAt: string;
     }>,
   ): Promise<void> {
@@ -720,11 +715,11 @@ export class PayablesService {
     if (!tenantId || !payload?.supplierId || !payload?.totalAmount) {
       return;
     }
-    const amtCents = parseMoneyCents(payload.totalAmount, {
+    const amtVnd = parseVnd(payload.totalAmount, {
       allowZero: true,
       field: 'totalAmount',
     });
-    if (amtCents <= 0n) {
+    if (amtVnd <= 0) {
       return;
     }
     await this.recognizePayable(
@@ -732,7 +727,7 @@ export class PayablesService {
       `stock-rcv:${payload.purchaseOrderId ?? payload.receiptId}`,
       {
         supplierId: payload.supplierId,
-        amount: formatMoneyCents(amtCents),
+        amount: amtVnd,
         purchaseOrderId: payload.purchaseOrderId ?? undefined,
         receiptId: payload.receiptId,
         warehouseId: payload.warehouseId,
@@ -805,7 +800,7 @@ export class PayablesService {
     tenantId = TenantContext.require(),
   ) {
     return this.runInTenantTx(tenantId, async (em) => {
-      const totalDebtCents = await this.computeSupplierTotalDebtInTx(
+      const totalDebtVnd = await this.computeSupplierTotalDebtInTx(
         em,
         tenantId,
         supplierId,
@@ -824,7 +819,7 @@ export class PayablesService {
       return {
         supplierId,
         tenantId,
-        totalOutstandingPayable: formatMoneyCents(totalDebtCents),
+        totalOutstandingPayable: totalDebtVnd,
         openPayablesCount: payables.filter(
           (p) => p.status === 'OPEN' || p.status === 'PARTIALLY_PAID',
         ).length,

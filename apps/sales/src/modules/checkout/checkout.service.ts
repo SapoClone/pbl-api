@@ -20,9 +20,7 @@ import {
   TenderMethod,
   ValidatedTenderSummary,
   formatQtyMillis,
-  formatVnd,
   parseQtyMillis,
-  parseVndAmount,
   validateOrderTenders,
 } from '../../domain/sales-domain';
 import {
@@ -223,12 +221,8 @@ export class CheckoutService {
 
         // Atomically claim coupon before calling Inventory so concurrent checkouts cannot over-redeem a coupon
         if (quote.couponCode) {
-          const subtotalVnd = parseVndAmount(quote.subtotal, true);
-          const itemDiscVnd = parseVndAmount(quote.itemDiscountTotal, true);
-          const orderDiscVnd = parseVndAmount(quote.orderDiscountTotal, true);
-          const afterOrderDisc = formatVnd(
-            subtotalVnd - itemDiscVnd - orderDiscVnd,
-          );
+          const afterOrderDisc =
+            quote.subtotal - quote.itemDiscountTotal - quote.orderDiscountTotal;
           await this.promotionsService.redeemCouponWithinTransaction(
             em,
             tenantId,
@@ -254,9 +248,9 @@ export class CheckoutService {
             sku: l.skuCode,
             name: l.productName,
             qty: l.baseQty,
-            unitPrice: Number(parseVndAmount(l.unitPrice, true)),
+            unitPrice: l.unitPrice,
           })),
-          totalAmount: Number(parseVndAmount(quote.grandTotal, true)),
+          totalAmount: quote.grandTotal,
           state: 'RESERVING_STOCK',
           reservationIdempotencyKey,
           reservationId: null,
@@ -1002,7 +996,7 @@ export class CheckoutService {
 
       const orderCode = await nextTenantDocumentCode(em, tenantId, 'HD');
       const now = new Date();
-      const grandTotalInt = Number(parseVndAmount(quote.grandTotal, true));
+      const grandTotalInt = quote.grandTotal;
       const itemCount = quote.lines.reduce(
         (sum, l) => sum + Math.max(1, Math.round(Number(l.qty))),
         0,
@@ -1010,12 +1004,8 @@ export class CheckoutService {
 
       // Ensure coupon claim exists if couponCode was used
       if (quote.couponCode) {
-        const subtotalVnd = parseVndAmount(quote.subtotal, true);
-        const itemDiscVnd = parseVndAmount(quote.itemDiscountTotal, true);
-        const orderDiscVnd = parseVndAmount(quote.orderDiscountTotal, true);
-        const afterOrderDisc = formatVnd(
-          subtotalVnd - itemDiscVnd - orderDiscVnd,
-        );
+        const afterOrderDisc =
+          quote.subtotal - quote.itemDiscountTotal - quote.orderDiscountTotal;
         await this.promotionsService.redeemCouponWithinTransaction(
           em,
           tenantId,
@@ -1053,7 +1043,7 @@ export class CheckoutService {
         taxTotal: quote.taxTotal,
         grandTotal: quote.grandTotal,
         paidAmount: tenderSummary.totalConfirmed,
-        refundedAmount: '0.00',
+        refundedAmount: 0,
         totalAmount: grandTotalInt,
         itemCount,
         reservationId,
@@ -1083,7 +1073,7 @@ export class CheckoutService {
           quantity: Math.max(1, Math.round(Number(line.qty))),
           qty: line.qty,
           baseQty: line.baseQty,
-          unitPrice: Number(parseVndAmount(line.unitPrice, true)),
+          unitPrice: line.unitPrice,
           lineGross: line.lineGross,
           itemDiscountType: line.itemDiscountType,
           itemDiscountValue: line.itemDiscountValue,
@@ -1092,10 +1082,10 @@ export class CheckoutService {
           lineNet: line.lineNet,
           taxRate: line.taxRate,
           taxAmount: line.taxAmount,
-          lineTotal: Number(parseVndAmount(line.lineTotal, true)),
+          lineTotal: line.lineTotal,
           unitCostSnapshot: line.unitCostSnapshot,
           returnedQty: '0.000',
-          refundedAmount: '0.00',
+          refundedAmount: 0,
         }),
       );
       await em.save(OrderItemEntity, itemEntities);
@@ -1141,15 +1131,14 @@ export class CheckoutService {
       await em.save(OrderStatusHistoryEntity, historyEntity);
 
       // Update POS shift cash_sales_total and expected_cash if cash was collected
-      const cashSalesVnd = parseVndAmount(tenderSummary.totalCashSales, true);
-      if (wf.shiftId && cashSalesVnd > 0n) {
+      if (wf.shiftId && tenderSummary.totalCashSales > 0) {
         await em.query(
           `UPDATE ${prefix}"pos_shifts"
-           SET cash_sales_total = cash_sales_total + $3::numeric(18,2),
-               expected_cash = expected_cash + $3::numeric(18,2),
+           SET cash_sales_total = cash_sales_total + $3::bigint,
+               expected_cash = expected_cash + $3::bigint,
                version = version + 1
            WHERE tenant_id = $1 AND id = $2`,
-          [tenantId, wf.shiftId, formatVnd(cashSalesVnd)],
+          [tenantId, wf.shiftId, tenderSummary.totalCashSales],
         );
       }
 
@@ -1172,11 +1161,10 @@ export class CheckoutService {
       wf.updatedAt = now;
       await em.save(CheckoutWorkflowEntity, wf);
 
-      const totalDiscountVnd = formatVnd(
-        parseVndAmount(quote.itemDiscountTotal, true) +
-          parseVndAmount(quote.orderDiscountTotal, true) +
-          parseVndAmount(quote.promotionDiscountTotal, true),
-      );
+      const totalDiscountVnd =
+        (quote.itemDiscountTotal ?? 0) +
+        (quote.orderDiscountTotal ?? 0) +
+        (quote.promotionDiscountTotal ?? 0);
 
       // Emit transactional outbox events
       await this.outbox.add(em, SALES_ORDER_COMPLETED, {
@@ -1197,7 +1185,7 @@ export class CheckoutService {
           sku: l.skuCode,
           name: l.productName,
           quantity: Math.max(1, Math.round(Number(l.qty))),
-          unitPrice: Number(parseVndAmount(l.unitPrice, true)),
+          unitPrice: l.unitPrice,
         })),
       } satisfies OrderCompletedPayload);
 
@@ -1315,7 +1303,7 @@ export class CheckoutService {
 
   private normalizeTenderInputs(
     dto: PosCheckoutDto,
-    grandTotalStr: string,
+    grandTotalVnd: number,
   ): TenderInputLine[] {
     if (dto.tenders && dto.tenders.length > 0) {
       return dto.tenders.map((t) => {
@@ -1345,9 +1333,9 @@ export class CheckoutService {
     return [
       {
         method,
-        amount: grandTotalStr,
+        amount: grandTotalVnd,
         tenderedCash:
-          dto.tenderedCash !== undefined ? dto.tenderedCash : grandTotalStr,
+          dto.tenderedCash !== undefined ? dto.tenderedCash : grandTotalVnd,
         verified: method !== 'COD',
         externalRef: method !== 'CASH' ? `POS-${method}` : undefined,
       },

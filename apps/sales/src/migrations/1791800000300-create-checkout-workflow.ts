@@ -17,7 +17,7 @@ export class CreateCheckoutWorkflow1791800000300 implements MigrationInterface {
         "payment_method" character varying(32) NOT NULL,
         "customer_name" character varying(120),
         "lines_json" jsonb NOT NULL,
-        "total_amount" integer NOT NULL,
+        "total_amount" bigint NOT NULL,
         "state" character varying(32) NOT NULL,
         "reservation_idempotency_key" character varying(128) NOT NULL,
         "reservation_id" uuid,

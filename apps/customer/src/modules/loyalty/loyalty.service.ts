@@ -27,8 +27,8 @@ import {
   calculateReturnPointReversal,
   computeAvailablePoints,
   computeCanonicalHash,
-  formatVnd,
   parseVndBigInt,
+  toVndNumber,
   validatePointRedemption,
 } from '../../domain/customer-domain';
 import { getSchemaPrefix } from '../../infrastructure/persistence/customer-code.generator';
@@ -83,11 +83,11 @@ export class LoyaltyService {
       }
       if (dto.earnAmountPerPoint !== undefined) {
         const val = parseVndBigInt(dto.earnAmountPerPoint, false);
-        settings.earnAmountPerPoint = formatVnd(val);
+        settings.earnAmountPerPoint = toVndNumber(val);
       }
       if (dto.redeemValuePerPoint !== undefined) {
         const val = parseVndBigInt(dto.redeemValuePerPoint, false);
-        settings.redeemValuePerPoint = formatVnd(val);
+        settings.redeemValuePerPoint = toVndNumber(val);
       }
       if (dto.minRedeemPoints !== undefined) {
         settings.minRedeemPoints = dto.minRedeemPoints;
@@ -1026,8 +1026,8 @@ export class LoyaltyService {
       orderCode: p.code,
       branchId: p.branchId,
       channelType: 'POS',
-      originalOrderTotalVnd: formatVnd(grandTotalVnd),
-      eligibleNetSpendVnd: formatVnd(eligibleNetSpendVnd),
+      originalOrderTotalVnd: toVndNumber(grandTotalVnd),
+      eligibleNetSpendVnd: toVndNumber(eligibleNetSpendVnd),
       completedAt: p.completedAt ? new Date(p.completedAt) : new Date(),
       manager,
     });
@@ -1055,8 +1055,8 @@ export class LoyaltyService {
       orderCode: p.code,
       branchId: p.branchId,
       channelType: p.channelType ?? 'POS',
-      originalOrderTotalVnd: p.grandTotal,
-      eligibleNetSpendVnd: formatVnd(eligibleNetSpendVnd),
+      originalOrderTotalVnd: toVndNumber(parseVndBigInt(p.grandTotal, true)),
+      eligibleNetSpendVnd: toVndNumber(eligibleNetSpendVnd),
       completedAt: p.occurredAt ? new Date(p.occurredAt) : new Date(),
       manager,
     });
@@ -1070,8 +1070,8 @@ export class LoyaltyService {
     orderCode: string;
     branchId?: string | null;
     channelType?: string;
-    originalOrderTotalVnd: string;
-    eligibleNetSpendVnd: string;
+    originalOrderTotalVnd: number;
+    eligibleNetSpendVnd: number;
     completedAt?: Date;
     manager?: EntityManager;
   }) {
@@ -1114,7 +1114,7 @@ export class LoyaltyService {
         true,
       );
 
-      const { earnedPoints, eligibleSpendFormatted, appliedRateFormatted } =
+      const { earnedPoints, eligibleSpendVnd, appliedRateVnd } =
         calculateEarnedPoints(params.eligibleNetSpendVnd, settings);
 
       // Upsert purchase projection (handling any out-of-order return that arrived early)
@@ -1125,9 +1125,7 @@ export class LoyaltyService {
           lock: { mode: 'pessimistic_write' },
         });
 
-      const preExistingReturnedVnd = projection
-        ? projection.returnedAmount
-        : '0.00';
+      const preExistingReturnedVnd = projection ? projection.returnedAmount : 0;
 
       if (!projection) {
         projection = em.create(CustomerPurchaseProjectionEntity, {
@@ -1140,8 +1138,8 @@ export class LoyaltyService {
           channelType: params.channelType ?? 'POS',
           orderStatus: 'COMPLETED',
           originalOrderTotal: params.originalOrderTotalVnd,
-          eligibleNetSpend: eligibleSpendFormatted,
-          returnedAmount: '0.00',
+          eligibleNetSpend: eligibleSpendVnd,
+          returnedAmount: 0,
           earnedPoints,
           reversedPoints: 0,
           completedAt: params.completedAt ?? new Date(),
@@ -1153,7 +1151,7 @@ export class LoyaltyService {
         projection.branchId = params.branchId ?? projection.branchId;
         projection.orderStatus = 'COMPLETED';
         projection.originalOrderTotal = params.originalOrderTotalVnd;
-        projection.eligibleNetSpend = eligibleSpendFormatted;
+        projection.eligibleNetSpend = eligibleSpendVnd;
         projection.earnedPoints = earnedPoints;
         projection.lastEventId = params.eventId;
         projection.updatedAt = new Date();
@@ -1183,8 +1181,8 @@ export class LoyaltyService {
           sourceRefId: params.orderId,
           idempotencyKey,
           orderId: params.orderId,
-          eligibleSpendAmount: eligibleSpendFormatted,
-          appliedRateAmountPerPoint: appliedRateFormatted,
+          eligibleSpendAmount: eligibleSpendVnd,
+          appliedRateAmountPerPoint: appliedRateVnd,
           reversedPointsTotal: 0,
           correlationId: params.eventId,
           reason: `Earned ${earnedPoints} points from order ${params.orderCode}`,
@@ -1218,7 +1216,7 @@ export class LoyaltyService {
         const revCalc = calculateReturnPointReversal({
           originalEarnedPoints: earnedPoints,
           alreadyReversedPoints: 0,
-          originalEligibleSpendVnd: eligibleSpendFormatted,
+          originalEligibleSpendVnd: eligibleSpendVnd,
           returnRefundAmountVnd: preExistingReturnedVnd,
           cumulativeRefundedAmountVnd: preExistingReturnedVnd,
         });
@@ -1247,7 +1245,7 @@ export class LoyaltyService {
             idempotencyKey: `earn_reversal:deferred:${params.orderId}`,
             orderId: params.orderId,
             originalTransactionId: earnTx.id,
-            appliedRateAmountPerPoint: appliedRateFormatted,
+            appliedRateAmountPerPoint: appliedRateVnd,
             reason: `Deferred return reversal for order ${params.orderCode}`,
           });
           const savedRevTx = await em.save(LoyaltyTransactionEntity, revTx);
@@ -1318,7 +1316,7 @@ export class LoyaltyService {
     returnCode: string;
     orderId: string;
     customerId?: string | null;
-    refundAmountVnd: string;
+    refundAmountVnd: number;
     manager?: EntityManager;
   }) {
     const run = async (em: EntityManager) => {
@@ -1360,9 +1358,9 @@ export class LoyaltyService {
           orderId: params.orderId,
           orderCode: `PENDING-${params.orderId.slice(0, 8)}`,
           orderStatus: 'PENDING_ORDER_EVENT',
-          originalOrderTotal: '0.00',
-          eligibleNetSpend: '0.00',
-          returnedAmount: formatVnd(refundVnd),
+          originalOrderTotal: 0,
+          eligibleNetSpend: 0,
+          returnedAmount: toVndNumber(refundVnd),
           earnedPoints: 0,
           reversedPoints: 0,
           lastEventId: `return:${params.returnId}`,
@@ -1377,7 +1375,7 @@ export class LoyaltyService {
 
       const prevReturnedVnd = parseVndBigInt(projection.returnedAmount, true);
       const newCumulativeReturnedVnd = prevReturnedVnd + refundVnd;
-      projection.returnedAmount = formatVnd(newCumulativeReturnedVnd);
+      projection.returnedAmount = toVndNumber(newCumulativeReturnedVnd);
       projection.lastEventId = `return:${params.returnId}`;
       projection.updatedAt = new Date();
 
@@ -1409,8 +1407,8 @@ export class LoyaltyService {
         alreadyReversedPoints,
         originalEligibleSpendVnd:
           earnTx.eligibleSpendAmount ?? projection.eligibleNetSpend,
-        returnRefundAmountVnd: formatVnd(refundVnd),
-        cumulativeRefundedAmountVnd: formatVnd(newCumulativeReturnedVnd),
+        returnRefundAmountVnd: toVndNumber(refundVnd),
+        cumulativeRefundedAmountVnd: toVndNumber(newCumulativeReturnedVnd),
       });
 
       projection.reversedPoints = alreadyReversedPoints + pointsToReverse;

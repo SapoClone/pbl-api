@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -19,12 +20,12 @@ export class PosTenderItemDto {
   @IsIn(['CASH', 'BANK_TRANSFER', 'CARD', 'E_WALLET', 'COD'])
   method!: Exclude<TenderMethod, 'COMBINED'>;
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
   amount!: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   tenderedCash?: number;
 
@@ -97,7 +98,7 @@ export class PosCheckoutDto {
   couponCode?: string;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   shippingFee?: number;
 
@@ -117,7 +118,7 @@ export class PosCheckoutDto {
   paymentMethod?: string;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   tenderedCash?: number;
 

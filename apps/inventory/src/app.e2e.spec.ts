@@ -429,7 +429,7 @@ describe('Inventory service bootstrap', () => {
         return {
           supplierId: ORDER,
           warehouseId: WH_A,
-          items: [{ skuId: SKU_ID, orderedQty: '1.000', unitCost: '1.00' }],
+          items: [{ skuId: SKU_ID, orderedQty: '1.000', unitCost: 1 }],
         };
       return undefined;
     };
@@ -492,7 +492,7 @@ describe('Inventory service bootstrap', () => {
       const receipt = {
         warehouseId: WH_A,
         autoPost: true,
-        items: [{ skuId: SKU_ID, qty: '1.000', unitCost: '1.00' }],
+        items: [{ skuId: SKU_ID, qty: '1.000', unitCost: 1 }],
       };
       const issue = {
         warehouseId: WH_A,
@@ -651,7 +651,7 @@ describe('Inventory service bootstrap', () => {
         .set('Authorization', view())
         .send({
           warehouseId: WH_B,
-          items: [{ skuId: SKU_ID, qty: '1.000', unitCost: '1.00' }],
+          items: [{ skuId: SKU_ID, qty: '1.000', unitCost: 1 }],
         })
         .expect(404);
       await request(url())
@@ -870,7 +870,7 @@ describe('Inventory service bootstrap', () => {
         .set('Authorization', as(['owner']))
         .send({
           warehouseId: WAREHOUSE,
-          items: [{ skuId: SKU_ID, qty: '10.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_ID, qty: '10.000', unitCost: 100000 }],
         })
         .expect(201);
 

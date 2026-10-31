@@ -11,15 +11,16 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'node:crypto';
 import { DataSource, In } from 'typeorm';
+import { toMoney } from '../../common/money';
 import {
   OriginalOrderLineSnapshot,
   SalesDomainError,
   SalesDomainErrorCode,
   calculateReturnRefund,
   formatQtyMillis,
-  formatVnd,
   parseQtyMillis,
   parseVndAmount,
+  vndNumber,
 } from '../../domain/sales-domain';
 import {
   getSchemaPrefix,
@@ -104,9 +105,7 @@ export class ReturnsService {
           const soldQtyStr = String(
             row.qty ?? `${Number(row.quantity ?? 1)}.000`,
           );
-          const lineTotalStr = formatVnd(
-            parseVndAmount(String(row.line_total ?? 0), true),
-          );
+          const lineTotal = toMoney(row.line_total ?? 0);
           return {
             orderItemId: String(row.id),
             variantId: String(row.variant_id ?? row.id),
@@ -114,13 +113,11 @@ export class ReturnsService {
             productName: String(row.name),
             soldQty: soldQtyStr,
             alreadyReturnedQty: String(row.returned_qty ?? '0.000'),
-            unitPrice: formatVnd(
-              parseVndAmount(String(row.unit_price ?? 0), true),
-            ),
-            lineNet: String(row.line_net ?? lineTotalStr),
-            taxAmount: String(row.tax_amount ?? '0.00'),
-            lineTotal: lineTotalStr,
-            alreadyRefundedAmount: String(row.refunded_amount ?? '0.00'),
+            unitPrice: toMoney(row.unit_price ?? 0),
+            lineNet: toMoney(row.line_net ?? lineTotal),
+            taxAmount: toMoney(row.tax_amount ?? 0),
+            lineTotal,
+            alreadyRefundedAmount: toMoney(row.refunded_amount ?? 0),
           };
         },
       );
@@ -140,7 +137,7 @@ export class ReturnsService {
         await em.query(
           `UPDATE ${prefix}"order_items"
            SET returned_qty = returned_qty + $3::numeric(18,3),
-               refunded_amount = refunded_amount + $4::numeric(18,2)
+               refunded_amount = refunded_amount + $4::bigint
            WHERE tenant_id = $1 AND id = $2`,
           [tenantId, line.orderItemId, line.returnQty, line.refundAmount],
         );
@@ -316,7 +313,7 @@ export class ReturnsService {
         await em.query(
           `UPDATE ${prefix}"order_items"
            SET returned_qty = GREATEST(0, returned_qty - $3::numeric(18,3)),
-               refunded_amount = GREATEST(0, refunded_amount - $4::numeric(18,2))
+               refunded_amount = GREATEST(0, refunded_amount - $4::bigint)
            WHERE tenant_id = $1 AND id = $2`,
           [tenantId, item.orderItemId, item.returnQty, item.refundAmount],
         );
@@ -399,7 +396,7 @@ export class ReturnsService {
         items: Array.from(qtyBySku.entries()).map(([skuId, millis]) => ({
           skuId,
           qty: formatQtyMillis(millis),
-          unitCost: '0.00',
+          unitCost: 0,
         })),
       });
       inventoryReceiptId = receiptRes.receiptId;
@@ -562,7 +559,7 @@ export class ReturnsService {
       if (alreadyRequestedForReturn + requestedVnd > maxReturnRefundVnd) {
         throw new SalesDomainError(
           SalesDomainErrorCode.REFUND_AMOUNT_EXCEEDED,
-          `Refund request (${formatVnd(requestedVnd)}) exceeds remaining refundable amount (${formatVnd(maxReturnRefundVnd - alreadyRequestedForReturn)}) for return ${ret.code}`,
+          `Refund request (${requestedVnd}) exceeds remaining refundable amount (${maxReturnRefundVnd - alreadyRequestedForReturn}) for return ${ret.code}`,
           409,
         );
       }
@@ -575,7 +572,7 @@ export class ReturnsService {
       if (orderRefundedVnd + requestedVnd > orderPaidVnd) {
         throw new SalesDomainError(
           SalesDomainErrorCode.REFUND_AMOUNT_EXCEEDED,
-          `Total order refunds (${formatVnd(orderRefundedVnd + requestedVnd)}) cannot exceed order paid amount (${formatVnd(orderPaidVnd)})`,
+          `Total order refunds (${orderRefundedVnd + requestedVnd}) cannot exceed order paid amount (${orderPaidVnd})`,
           409,
         );
       }
@@ -594,7 +591,7 @@ export class ReturnsService {
         branchId: ret.branchId,
         shiftId,
         idempotencyKey,
-        amount: formatVnd(requestedVnd),
+        amount: vndNumber(requestedVnd),
         method,
         status: refundStatus,
         externalSettlementRef: null,
@@ -615,7 +612,7 @@ export class ReturnsService {
             ? 'REFUNDED'
             : 'PARTIALLY_REFUNDED';
 
-      order.refundedAmount = formatVnd(newOrderRefundedVnd);
+      order.refundedAmount = vndNumber(newOrderRefundedVnd);
       order.paymentStatus = newPaymentStatus;
       order.version = Number(order.version ?? 1) + 1;
       order.updatedAt = now;
@@ -641,11 +638,11 @@ export class ReturnsService {
       if (shiftId && method === 'CASH' && requestedVnd > 0n) {
         await em.query(
           `UPDATE ${prefix}"pos_shifts"
-           SET cash_refunds_total = cash_refunds_total + $3::numeric(18,2),
-               expected_cash = expected_cash - $3::numeric(18,2),
+           SET cash_refunds_total = cash_refunds_total + $3::bigint,
+               expected_cash = expected_cash - $3::bigint,
                version = version + 1
            WHERE tenant_id = $1 AND id = $2`,
-          [tenantId, shiftId, formatVnd(requestedVnd)],
+          [tenantId, shiftId, vndNumber(requestedVnd)],
         );
       }
 

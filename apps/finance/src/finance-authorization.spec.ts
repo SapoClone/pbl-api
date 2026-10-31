@@ -355,7 +355,7 @@ describe('finance authorization: permissions, branch scope, internal routes', ()
     it('a body naming a foreign branch answers 404 and writes nothing', async () => {
       const voucher = {
         cashAccountId: ID,
-        amount: '1000.00',
+        amount: 1000,
         branchId: BRANCH_B,
       };
       await request(url())
@@ -374,9 +374,9 @@ describe('finance authorization: permissions, branch scope, internal routes', ()
         .send({
           shiftId: ID,
           branchId: BRANCH_B,
-          openingCash: '0.00',
-          confirmedCashSales: '0.00',
-          actualCountedCash: '0.00',
+          openingCash: 0,
+          confirmedCashSales: 0,
+          actualCountedCash: 0,
         })
         .expect(404);
       expect(services.cashbook.createReceiptVoucher).not.toHaveBeenCalled();
@@ -399,7 +399,7 @@ describe('finance authorization: permissions, branch scope, internal routes', ()
     const body = {
       customerId: ID,
       orderId: ID,
-      amount: '500000.00',
+      amount: 500000,
     };
     const savedToken = process.env.INTERNAL_S2S_TOKEN;
     const savedEnv = process.env.NODE_ENV;

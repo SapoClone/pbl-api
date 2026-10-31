@@ -13,9 +13,8 @@ import {
   evaluateCodSettlementLine,
   FinanceDomainError,
   FinanceDomainErrorCode,
-  formatMoneyCents,
   GL_ACCOUNT_CODES,
-  parseMoneyCents,
+  parseVnd,
 } from '../../domain/finance-domain';
 import { nextFinanceDocumentCode } from '../../infrastructure/persistence/finance-code.generator';
 import {
@@ -102,11 +101,10 @@ export class CodService {
       return { receivable: existing, replayed: true };
     }
 
-    const expectedCents = parseMoneyCents(dto.expectedCodAmount, {
+    const expectedVnd = parseVnd(dto.expectedCodAmount, {
       allowZero: false,
       field: 'expectedCodAmount',
     });
-    const expectedStr = formatMoneyCents(expectedCents);
 
     const code = await nextFinanceDocumentCode(em, tenantId, 'COD');
     const receivableId = randomUUID();
@@ -132,7 +130,7 @@ export class CodService {
         lines: [
           {
             accountCode: GL_ACCOUNT_CODES.COD_CARRIER_RECEIVABLE,
-            debitAmount: expectedStr,
+            debitAmount: expectedVnd,
             branchId: dto.branchId ?? null,
             partyType: 'CARRIER',
             partyId: carrierCode,
@@ -142,7 +140,7 @@ export class CodService {
           },
           {
             accountCode: GL_ACCOUNT_CODES.SALES_REVENUE_CLEARING,
-            creditAmount: expectedStr,
+            creditAmount: expectedVnd,
             branchId: dto.branchId ?? null,
             partyType: 'CARRIER',
             partyId: carrierCode,
@@ -163,13 +161,13 @@ export class CodService {
       branchId: dto.branchId ?? null,
       carrierCode,
       trackingNumber,
-      expectedCodAmount: expectedStr,
-      reportedCollectedAmount: '0.00',
-      carrierFeeAmount: '0.00',
-      adjustmentAmount: '0.00',
-      expectedNetAmount: expectedStr,
-      actualRemittedAmount: '0.00',
-      discrepancyAmount: '0.00',
+      expectedCodAmount: expectedVnd,
+      reportedCollectedAmount: 0,
+      carrierFeeAmount: 0,
+      adjustmentAmount: 0,
+      expectedNetAmount: expectedVnd,
+      actualRemittedAmount: 0,
+      discrepancyAmount: 0,
       status: 'COD_RECEIVABLE_RECOGNIZED',
       settlementBatchId: null,
       journalId: postedJournal.journal.id,
@@ -201,7 +199,7 @@ export class CodService {
         lines: dto.lines.map((l) => ({
           trackingNumber: l.trackingNumber.trim(),
           reportedCodAmount: l.reportedCodAmount,
-          carrierFeeAmount: l.carrierFeeAmount ?? '0.00',
+          carrierFeeAmount: l.carrierFeeAmount ?? 0,
           netPayoutAmount: l.netPayoutAmount,
         })),
       });
@@ -246,30 +244,30 @@ export class CodService {
       const code = await nextFinanceDocumentCode(em, tenantId, 'BAT');
       const batchId = randomUUID();
 
-      let totalReportedCents = 0n;
-      let totalFeeCents = 0n;
-      let totalNetCents = 0n;
+      let totalReportedVnd = 0;
+      let totalFeeVnd = 0;
+      let totalNetVnd = 0;
 
       const lineEntities: CodSettlementLineEntity[] = [];
       for (let i = 0; i < dto.lines.length; i += 1) {
         const lineDto = dto.lines[i];
-        const reportedCents = parseMoneyCents(lineDto.reportedCodAmount, {
+        const reportedVnd = parseVnd(lineDto.reportedCodAmount, {
           allowZero: true,
           field: `lines[${i}].reportedCodAmount`,
         });
-        const feeCents = parseMoneyCents(lineDto.carrierFeeAmount ?? '0.00', {
+        const feeVnd = parseVnd(lineDto.carrierFeeAmount ?? 0, {
           allowZero: true,
           field: `lines[${i}].carrierFeeAmount`,
         });
-        const netCents = parseMoneyCents(lineDto.netPayoutAmount, {
+        const netVnd = parseVnd(lineDto.netPayoutAmount, {
           allowZero: true,
           allowNegative: true,
           field: `lines[${i}].netPayoutAmount`,
         });
 
-        totalReportedCents += reportedCents;
-        totalFeeCents += feeCents;
-        totalNetCents += netCents;
+        totalReportedVnd += reportedVnd;
+        totalFeeVnd += feeVnd;
+        totalNetVnd += netVnd;
 
         lineEntities.push(
           lineRepo.create({
@@ -281,11 +279,11 @@ export class CodService {
             fulfillmentId: lineDto.fulfillmentId ?? null,
             orderId: lineDto.orderId ?? null,
             trackingNumber: lineDto.trackingNumber.trim(),
-            expectedCodAmount: '0.00',
-            reportedCodAmount: formatMoneyCents(reportedCents),
-            carrierFeeAmount: formatMoneyCents(feeCents),
-            netPayoutAmount: formatMoneyCents(netCents),
-            discrepancyAmount: '0.00',
+            expectedCodAmount: 0,
+            reportedCodAmount: reportedVnd,
+            carrierFeeAmount: feeVnd,
+            netPayoutAmount: netVnd,
+            discrepancyAmount: 0,
             lineStatus: 'MATCHED',
             discrepancyReason: null,
           }),
@@ -302,11 +300,11 @@ export class CodService {
         cashAccountId: dto.cashAccountId ?? null,
         periodFrom: null,
         periodTo: null,
-        totalExpectedCod: '0.00',
-        totalReportedCod: formatMoneyCents(totalReportedCents),
-        totalCarrierFee: formatMoneyCents(totalFeeCents),
-        totalNetPayout: formatMoneyCents(totalNetCents),
-        totalDiscrepancy: '0.00',
+        totalExpectedCod: 0,
+        totalReportedCod: totalReportedVnd,
+        totalCarrierFee: totalFeeVnd,
+        totalNetPayout: totalNetVnd,
+        totalDiscrepancy: 0,
         lineCount: lineEntities.length,
         matchedCount: 0,
         discrepancyCount: 0,
@@ -391,11 +389,11 @@ export class CodService {
       return { batch, lines };
     }
 
-    let totalExpectedCents = 0n;
-    let totalDiscrepancyCents = 0n;
-    let matchedExpectedCents = 0n;
-    let matchedFeeCents = 0n;
-    let matchedNetCents = 0n;
+    let totalExpectedVnd = 0;
+    let totalDiscrepancyVnd = 0;
+    let matchedExpectedVnd = 0;
+    let matchedFeeVnd = 0;
+    let matchedNetVnd = 0;
     let matchedCount = 0;
     let discrepancyCount = 0;
 
@@ -409,15 +407,15 @@ export class CodService {
         lock: { mode: 'pessimistic_write' },
       });
 
-      const reportedCents = parseMoneyCents(line.reportedCodAmount, {
+      const reportedVnd = parseVnd(line.reportedCodAmount, {
         allowZero: true,
         field: 'reportedCodAmount',
       });
-      const feeCents = parseMoneyCents(line.carrierFeeAmount, {
+      const feeVnd = parseVnd(line.carrierFeeAmount, {
         allowZero: true,
         field: 'carrierFeeAmount',
       });
-      const netCents = parseMoneyCents(line.netPayoutAmount, {
+      const netVnd = parseVnd(line.netPayoutAmount, {
         allowZero: true,
         allowNegative: true,
         field: 'netPayoutAmount',
@@ -425,9 +423,9 @@ export class CodService {
 
       if (!receivable) {
         line.lineStatus = 'UNKNOWN_SHIPMENT';
-        line.discrepancyAmount = formatMoneyCents(reportedCents);
+        line.discrepancyAmount = reportedVnd;
         line.discrepancyReason = `No COD receivable found for trackingNumber ${line.trackingNumber}`;
-        totalDiscrepancyCents += reportedCents;
+        totalDiscrepancyVnd += reportedVnd;
         discrepancyCount += 1;
         await lineRepo.save(line);
 
@@ -440,7 +438,7 @@ export class CodService {
             severity: 'HIGH',
             sourceType: 'COD_SETTLEMENT_LINE',
             sourceId: line.id,
-            expectedAmount: '0.00',
+            expectedAmount: 0,
             actualAmount: line.reportedCodAmount,
             differenceAmount: line.reportedCodAmount,
             status: 'OPEN',
@@ -453,11 +451,11 @@ export class CodService {
         continue;
       }
 
-      const expectedCents = parseMoneyCents(receivable.expectedCodAmount, {
+      const expectedVnd = parseVnd(receivable.expectedCodAmount, {
         allowZero: false,
         field: 'expectedCodAmount',
       });
-      totalExpectedCents += expectedCents;
+      totalExpectedVnd += expectedVnd;
       line.codReceivableId = receivable.id;
       line.orderId = receivable.orderId;
       line.fulfillmentId = receivable.fulfillmentId;
@@ -477,12 +475,12 @@ export class CodService {
 
       if (evalResult.status === 'DISCREPANCY') {
         discrepancyCount += 1;
-        const diffCents = parseMoneyCents(evalResult.discrepancyAmount, {
+        const diffVnd = parseVnd(evalResult.discrepancyAmount, {
           allowZero: true,
           allowNegative: true,
           field: 'discrepancyAmount',
         });
-        totalDiscrepancyCents += diffCents < 0n ? -diffCents : diffCents;
+        totalDiscrepancyVnd += diffVnd < 0 ? -diffVnd : diffVnd;
 
         receivable.status = 'DISCREPANCY';
         receivable.reportedCollectedAmount = line.reportedCodAmount;
@@ -515,16 +513,16 @@ export class CodService {
         );
       } else {
         matchedCount += 1;
-        matchedExpectedCents += expectedCents;
-        matchedFeeCents += feeCents;
-        matchedNetCents += netCents;
+        matchedExpectedVnd += expectedVnd;
+        matchedFeeVnd += feeVnd;
+        matchedNetVnd += netVnd;
 
         receivable.status = 'RECONCILED';
         receivable.reportedCollectedAmount = line.reportedCodAmount;
         receivable.carrierFeeAmount = line.carrierFeeAmount;
         receivable.expectedNetAmount = evalResult.expectedNetPayout;
         receivable.actualRemittedAmount = line.netPayoutAmount;
-        receivable.discrepancyAmount = '0.00';
+        receivable.discrepancyAmount = 0;
         receivable.settlementBatchId = batch.id;
         receivable.reconciledAt = new Date();
         receivable.version += 1;
@@ -535,7 +533,7 @@ export class CodService {
     let journalId: string | null = batch.journalId;
     let cashbookEntryId: string | null = batch.cashbookEntryId;
 
-    if (matchedExpectedCents > 0n && !journalId) {
+    if (matchedExpectedVnd > 0 && !journalId) {
       const targetCashAccountId = dto.cashAccountId ?? batch.cashAccountId;
       let cashAccount: CashAccountEntity | null = null;
       if (targetCashAccountId) {
@@ -557,25 +555,25 @@ export class CodService {
 
       const journalLines: Array<{
         accountCode: string;
-        debitAmount?: string;
-        creditAmount?: string;
+        debitAmount?: number;
+        creditAmount?: number;
         partyType?: 'CARRIER' | null;
         partyId?: string | null;
         memo?: string;
       }> = [
         {
           accountCode: debitBankGl,
-          debitAmount: formatMoneyCents(matchedNetCents),
+          debitAmount: matchedNetVnd,
           partyType: 'CARRIER',
           partyId: batch.carrierCode,
           memo: `COD net bank remittance for batch ${batch.code}`,
         },
       ];
 
-      if (matchedFeeCents > 0n) {
+      if (matchedFeeVnd > 0) {
         journalLines.push({
           accountCode: GL_ACCOUNT_CODES.CARRIER_FEE_EXPENSE,
-          debitAmount: formatMoneyCents(matchedFeeCents),
+          debitAmount: matchedFeeVnd,
           partyType: 'CARRIER',
           partyId: batch.carrierCode,
           memo: `Carrier COD fee for batch ${batch.code}`,
@@ -584,7 +582,7 @@ export class CodService {
 
       journalLines.push({
         accountCode: GL_ACCOUNT_CODES.COD_CARRIER_RECEIVABLE,
-        creditAmount: formatMoneyCents(matchedExpectedCents),
+        creditAmount: matchedExpectedVnd,
         partyType: 'CARRIER',
         partyId: batch.carrierCode,
         memo: `Clear COD receivable for batch ${batch.code}`,
@@ -605,7 +603,7 @@ export class CodService {
       );
       journalId = postedJournal.journal.id;
 
-      if (cashAccount && matchedNetCents > 0n) {
+      if (cashAccount && matchedNetVnd > 0) {
         const cbEntry =
           await this.cashbookService.createAndOptionallyPostVoucherInTx(
             em,
@@ -615,7 +613,7 @@ export class CodService {
               direction: 'RECEIPT',
               cashAccountId: cashAccount.id,
               categoryCode: 'COD_SETTLEMENT_RECEIPT',
-              amount: formatMoneyCents(matchedNetCents),
+              amount: matchedNetVnd,
               voucherType: 'COD_SETTLEMENT',
               sourceType: 'COD_SETTLEMENT_BATCH',
               sourceId: batch.id,
@@ -633,8 +631,8 @@ export class CodService {
     }
 
     const now = new Date();
-    batch.totalExpectedCod = formatMoneyCents(totalExpectedCents);
-    batch.totalDiscrepancy = formatMoneyCents(totalDiscrepancyCents);
+    batch.totalExpectedCod = totalExpectedVnd;
+    batch.totalDiscrepancy = totalDiscrepancyVnd;
     batch.matchedCount = matchedCount;
     batch.discrepancyCount = discrepancyCount;
     batch.journalId = journalId;
@@ -769,7 +767,7 @@ export class CodService {
       branchId?: string;
       carrierCode?: string;
       trackingNumber?: string;
-      codAmount?: string;
+      codAmount?: number;
     }>,
   ): Promise<void> {
     const { tenantId, payload } = envelope;
@@ -781,11 +779,11 @@ export class CodService {
     ) {
       return;
     }
-    const cents = parseMoneyCents(payload.codAmount, {
+    const cents = parseVnd(payload.codAmount, {
       allowZero: true,
       field: 'codAmount',
     });
-    if (cents <= 0n) {
+    if (cents <= 0) {
       return;
     }
     await this.createCodReceivable(
@@ -797,7 +795,7 @@ export class CodService {
         branchId: payload.branchId,
         carrierCode: payload.carrierCode ?? 'DEFAULT_CARRIER',
         trackingNumber: payload.trackingNumber,
-        expectedCodAmount: formatMoneyCents(cents),
+        expectedCodAmount: cents,
         idempotencyKey: `evt:cod:${payload.fulfillmentId ?? payload.trackingNumber}`,
       },
       tenantId,

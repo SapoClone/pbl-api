@@ -26,12 +26,12 @@ export class CreatePromotionDto {
   discountValue!: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   minOrderAmount?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   maxDiscountAmount?: number;
 

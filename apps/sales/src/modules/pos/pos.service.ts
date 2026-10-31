@@ -10,8 +10,6 @@ import {
   assertDiscountAuthority,
   calculateItemDiscount,
   calculateOrderQuote,
-  formatVnd,
-  parseVndAmount,
 } from '../../domain/sales-domain';
 import { CatalogClient } from '../../infrastructure/catalog-client/catalog.client';
 import { getSchemaPrefix } from '../../infrastructure/persistence/sales-code.generator';
@@ -124,7 +122,7 @@ export class PosService {
         lines: quoteLines,
         orderDiscountType: params.orderDiscountType ?? 'NONE',
         orderDiscountValue: params.orderDiscountValue ?? 0,
-        promotionDiscountAmount: '0.00',
+        promotionDiscountAmount: 0,
         shippingFee: params.shippingFee ?? 0,
       },
       catalogMap,
@@ -138,22 +136,14 @@ export class PosService {
       discountApprovedBy: params.discountApprovedBy,
     });
 
-    let couponDiscountVnd = '0.00';
+    let couponDiscountVnd = 0;
     let normalizedCouponCode: string | null = null;
 
     if (params.couponCode && params.couponCode.trim()) {
-      const subtotalVnd = parseVndAmount(preliminaryQuote.subtotal, true);
-      const itemDiscVnd = parseVndAmount(
-        preliminaryQuote.itemDiscountTotal,
-        true,
-      );
-      const orderDiscVnd = parseVndAmount(
-        preliminaryQuote.orderDiscountTotal,
-        true,
-      );
-      const afterOrderDiscountVnd = formatVnd(
-        subtotalVnd - itemDiscVnd - orderDiscVnd,
-      );
+      const afterOrderDiscountVnd =
+        preliminaryQuote.subtotal -
+        preliminaryQuote.itemDiscountTotal -
+        preliminaryQuote.orderDiscountTotal;
 
       const evaluated = await this.promotionsService.previewCouponDiscount(
         params.couponCode,
@@ -166,7 +156,7 @@ export class PosService {
     }
 
     const finalQuote =
-      couponDiscountVnd === '0.00'
+      couponDiscountVnd === 0
         ? preliminaryQuote
         : calculateOrderQuote(
             {
@@ -289,7 +279,7 @@ export class PosService {
         title: dto.title ?? `Draft #${activeRows.length + 1}`,
         linesJson: dto.lines,
         orderDiscountType: dto.orderDiscountType ?? 'NONE',
-        orderDiscountValue: Number(dto.orderDiscountValue ?? 0).toFixed(2),
+        orderDiscountValue: dto.orderDiscountValue ?? 0,
         couponCode: dto.couponCode?.trim().toUpperCase() ?? null,
         paymentMethod: dto.paymentMethod ?? 'CASH',
         note: dto.note ?? null,
@@ -377,7 +367,7 @@ export class PosService {
         draft.orderDiscountType = dto.orderDiscountType;
       }
       if (dto.orderDiscountValue !== undefined) {
-        draft.orderDiscountValue = Number(dto.orderDiscountValue).toFixed(2);
+        draft.orderDiscountValue = dto.orderDiscountValue;
       }
       if (dto.couponCode !== undefined) {
         draft.couponCode = dto.couponCode?.trim().toUpperCase() || null;

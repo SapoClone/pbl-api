@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -43,8 +44,8 @@ export class CreateRefundDto {
   @MaxLength(32)
   provider?: string;
 
-  @IsString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 
   @IsOptional()
   @IsBoolean()

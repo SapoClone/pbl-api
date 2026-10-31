@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
+import { roundVnd } from '../../common/money';
 import {
   IntegrationDomainError,
   IntegrationDomainErrorCode,
@@ -288,20 +289,20 @@ export class LazadaProviderAdapter implements MarketplaceProviderAdapter {
         : (item.externalSkuCode ?? null),
       itemName: String(item.name ?? item.itemName ?? 'Lazada Item'),
       quantity: Number(item.quantity ?? 1),
-      unitPrice: Number(
+      unitPrice: roundVnd(
         item.item_price ?? item.paid_price ?? item.unitPrice ?? 0,
       ),
-      lineDiscount: Number(item.voucher_amount ?? item.lineDiscount ?? 0),
+      lineDiscount: roundVnd(item.voucher_amount ?? item.lineDiscount ?? 0),
     }));
 
-    const shippingFee = Number(
+    const shippingFee = roundVnd(
       rawOrder.shipping_fee ?? rawOrder.shippingFee ?? 0,
     );
     const linesSubtotal = lines.reduce(
-      (acc, l) => acc + l.quantity * l.unitPrice - l.lineDiscount,
+      (acc, l) => acc + Math.round(l.quantity * l.unitPrice) - l.lineDiscount,
       0,
     );
-    const totalAmount = Number(
+    const totalAmount = roundVnd(
       rawOrder.price ?? rawOrder.total_amount ?? linesSubtotal + shippingFee,
     );
     const updateTimeSec = Number(

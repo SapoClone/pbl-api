@@ -8,7 +8,7 @@ import {
   GL_ACCOUNT_CODES,
   maskBankAccountNumber,
   normalizeFinanceCode,
-  parseMoneyCents,
+  parseVnd,
 } from '../../domain/finance-domain';
 import { getSchemaPrefix } from '../../infrastructure/persistence/finance-code.generator';
 import {
@@ -88,7 +88,7 @@ export class CashAccountsService {
     await em.query(
       `INSERT INTO ${this.schemaPrefix}"cash_accounts" (
          "id", "tenant_id", "branch_id", "code", "name", "account_type", "currency", "gl_account_code", "current_balance", "status"
-       ) VALUES ($1, $2, $3, $4, $5, $6, 'VND', $7, 0.00, 'ACTIVE')
+       ) VALUES ($1, $2, $3, $4, $5, $6, 'VND', $7, 0, 'ACTIVE')
        ON CONFLICT ("tenant_id", "code") DO NOTHING`,
       [
         randomUUID(),
@@ -138,7 +138,7 @@ export class CashAccountsService {
         accountType,
         currency: 'VND',
         glAccountCode,
-        currentBalance: '0.00',
+        currentBalance: 0,
         status: 'ACTIVE',
         bankName: dto.bankName?.trim() ?? null,
         maskedAccountNumber: maskBankAccountNumber(dto.accountNumber),
@@ -211,12 +211,12 @@ export class CashAccountsService {
       }
 
       if (dto.status === 'CLOSED') {
-        const balCents = parseMoneyCents(account.currentBalance, {
+        const balVnd = parseVnd(account.currentBalance, {
           allowZero: true,
           allowNegative: true,
           field: 'currentBalance',
         });
-        if (balCents !== 0n) {
+        if (balVnd !== 0) {
           throw new FinanceDomainError(
             FinanceDomainErrorCode.CASH_ACCOUNT_INACTIVE,
             `Cannot close cash account ${account.code} while balance is ${account.currentBalance} VND`,

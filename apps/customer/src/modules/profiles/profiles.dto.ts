@@ -103,10 +103,11 @@ export class CreateCustomerDto {
   @IsUUID()
   membershipTierId?: string | null;
 
-  @ApiPropertyOptional({ example: '5000000.00' })
+  @ApiPropertyOptional({ example: 5000000, description: 'Whole VND' })
   @IsOptional()
-  @IsString()
-  debtLimit?: string;
+  @IsInt()
+  @Min(0)
+  debtLimit?: number;
 
   @ApiPropertyOptional({ example: 'Khach hang than thiet' })
   @IsOptional()
@@ -166,10 +167,11 @@ export class UpdateCustomerDto {
   @IsIn(['ACTIVE', 'INACTIVE'])
   status?: 'ACTIVE' | 'INACTIVE';
 
-  @ApiPropertyOptional({ example: '5000000.00' })
+  @ApiPropertyOptional({ example: 5000000, description: 'Whole VND' })
   @IsOptional()
-  @IsString()
-  debtLimit?: string;
+  @IsInt()
+  @Min(0)
+  debtLimit?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

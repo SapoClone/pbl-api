@@ -68,7 +68,6 @@ export class InventoryDomainError extends Error {
 }
 
 const QTY_SCALE = 1000n;
-const MONEY_SCALE = 100n;
 const FACTOR_SCALE = 10000n;
 
 export function normalizeInventoryCode(
@@ -130,32 +129,43 @@ export function formatMilliToQty(milli: bigint): string {
   return `${negative ? '-' : ''}${whole.toString()}.${frac}`;
 }
 
-export function parseMoneyToCents(
-  value: string | number | undefined | null,
+export function parseMoneyToVnd(
+  value: string | number | bigint | undefined | null,
 ): bigint {
   if (value === undefined || value === null || value === '') {
     return 0n;
   }
+  if (typeof value === 'bigint') {
+    if (value < 0n) {
+      throw new InventoryDomainError(
+        InventoryDomainErrorCode.INVALID_MONEY_AMOUNT,
+        `Invalid money amount "${value}" (expected non-negative integer VND)`,
+        400,
+      );
+    }
+    return value;
+  }
   const str = String(value).trim();
-  const match = /^(0|[1-9]\d*)(?:\.(\d{1,2}))?$/.exec(str);
-  if (!match) {
+  if (!/^(0|[1-9]\d*)$/.test(str) || !Number.isSafeInteger(Number(str))) {
     throw new InventoryDomainError(
       InventoryDomainErrorCode.INVALID_MONEY_AMOUNT,
-      `Invalid money amount "${value}" (expected non-negative NUMERIC(18,2))`,
+      `Invalid money amount "${value}" (expected non-negative integer VND)`,
       400,
     );
   }
-  const whole = BigInt(match[1]);
-  const frac = BigInt((match[2] ?? '').padEnd(2, '0'));
-  return whole * MONEY_SCALE + frac;
+  return BigInt(str);
 }
 
-export function formatCentsToMoney(cents: bigint): string {
-  const negative = cents < 0n;
-  const abs = negative ? -cents : cents;
-  const whole = abs / MONEY_SCALE;
-  const frac = (abs % MONEY_SCALE).toString().padStart(2, '0');
-  return `${negative ? '-' : ''}${whole.toString()}.${frac}`;
+export function vndToNumber(vnd: bigint): number {
+  const n = Number(vnd);
+  if (!Number.isSafeInteger(n)) {
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.INVALID_MONEY_AMOUNT,
+      `Money amount ${vnd} exceeds the safe integer range`,
+      400,
+    );
+  }
+  return n;
 }
 
 export function parseConversionFactorToTenThousandths(
@@ -211,59 +221,59 @@ export function convertToBaseQtyMilli(
 
 export interface WeightedAverageCostResult {
   newOnHandMilli: bigint;
-  newAvgCostCents: bigint;
-  newValuationCents: bigint;
+  newAvgCostVnd: bigint;
+  newValuationVnd: bigint;
   newOnHandQty: string;
-  newAvgUnitCost: string;
-  newValuationAmount: string;
+  newAvgUnitCost: number;
+  newValuationAmount: number;
 }
 
 /**
  * Computes the updated weighted-average unit cost and total valuation using
  * exact scaled BigInt arithmetic:
- * new_avg_cost = round((old_qty * old_avg_cost + added_qty * unit_cost) / (old_qty + added_qty), 2)
+ * new_avg_cost = round_half_up((old_qty * old_avg_cost + added_qty * unit_cost) / (old_qty + added_qty))
+ * to whole VND (rounding point); valuation = round_half_up(on_hand * avg_cost).
  */
 export function computeWeightedAverageCostOnReceipt(params: {
   currentOnHandQty: string | number;
-  currentAvgUnitCost: string | number;
+  currentAvgUnitCost: number;
   receivedBaseQty: string | number;
-  receivedUnitCost: string | number;
+  receivedUnitCost: number;
 }): WeightedAverageCostResult {
   const oldQtyMilli = parseQtyToMilli(params.currentOnHandQty, true, false);
-  const oldAvgCents = parseMoneyToCents(params.currentAvgUnitCost);
+  const oldAvgVnd = parseMoneyToVnd(params.currentAvgUnitCost);
   const addQtyMilli = parseQtyToMilli(params.receivedBaseQty, false, false);
-  const addCostCents = parseMoneyToCents(params.receivedUnitCost);
+  const addCostVnd = parseMoneyToVnd(params.receivedUnitCost);
 
   const newOnHandMilli = oldQtyMilli + addQtyMilli;
-  // Each product is in (milli * cents) = 10^-5 units
-  const totalWeighted = oldQtyMilli * oldAvgCents + addQtyMilli * addCostCents;
-  const newAvgCostCents =
-    (totalWeighted + newOnHandMilli / 2n) / newOnHandMilli;
-  const newValuationCents =
-    (newOnHandMilli * newAvgCostCents + QTY_SCALE / 2n) / QTY_SCALE;
+  // Each product is in (milli * VND) = 10^-3 VND
+  const totalWeighted = oldQtyMilli * oldAvgVnd + addQtyMilli * addCostVnd;
+  const newAvgCostVnd = (totalWeighted + newOnHandMilli / 2n) / newOnHandMilli;
+  const newValuationVnd =
+    (newOnHandMilli * newAvgCostVnd + QTY_SCALE / 2n) / QTY_SCALE;
 
   return {
     newOnHandMilli,
-    newAvgCostCents,
-    newValuationCents,
+    newAvgCostVnd,
+    newValuationVnd,
     newOnHandQty: formatMilliToQty(newOnHandMilli),
-    newAvgUnitCost: formatCentsToMoney(newAvgCostCents),
-    newValuationAmount: formatCentsToMoney(newValuationCents),
+    newAvgUnitCost: vndToNumber(newAvgCostVnd),
+    newValuationAmount: vndToNumber(newValuationVnd),
   };
 }
 
 /**
  * Computes valuation after an outbound stock deduction (sale commit, manual issue, transfer dispatch).
  * Weighted-average unit cost remains unchanged on outbound movements; when on_hand reaches 0,
- * valuation_amount is 0.00.
+ * valuation_amount is 0.
  */
 export function computeValuationAfterDeduction(params: {
   currentOnHandQty: string | number;
-  currentAvgUnitCost: string | number;
+  currentAvgUnitCost: number;
   deductedBaseQty: string | number;
 }): WeightedAverageCostResult {
   const oldQtyMilli = parseQtyToMilli(params.currentOnHandQty, true, false);
-  const avgCents = parseMoneyToCents(params.currentAvgUnitCost);
+  const avgVnd = parseMoneyToVnd(params.currentAvgUnitCost);
   const deductMilli = parseQtyToMilli(params.deductedBaseQty, false, false);
   if (deductMilli > oldQtyMilli) {
     throw new InventoryDomainError(
@@ -273,18 +283,18 @@ export function computeValuationAfterDeduction(params: {
     );
   }
   const newOnHandMilli = oldQtyMilli - deductMilli;
-  const newValuationCents =
+  const newValuationVnd =
     newOnHandMilli === 0n
       ? 0n
-      : (newOnHandMilli * avgCents + QTY_SCALE / 2n) / QTY_SCALE;
+      : (newOnHandMilli * avgVnd + QTY_SCALE / 2n) / QTY_SCALE;
 
   return {
     newOnHandMilli,
-    newAvgCostCents: avgCents,
-    newValuationCents,
+    newAvgCostVnd: avgVnd,
+    newValuationVnd,
     newOnHandQty: formatMilliToQty(newOnHandMilli),
-    newAvgUnitCost: formatCentsToMoney(avgCents),
-    newValuationAmount: formatCentsToMoney(newValuationCents),
+    newAvgUnitCost: vndToNumber(avgVnd),
+    newValuationAmount: vndToNumber(newValuationVnd),
   };
 }
 

@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -77,8 +78,8 @@ export class CreateRefundRequestDto {
   idempotencyKey?: string;
 
   @IsOptional()
-  @IsNumber()
-  @Min(0.01)
+  @IsInt()
+  @Min(1)
   amount?: number;
 
   @IsOptional()

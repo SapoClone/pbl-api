@@ -138,12 +138,14 @@ export class CreateProductReqDto {
   defaultBarcode?: string;
 
   @ApiPropertyOptional({
-    example: '199000.00',
-    description: 'Optional base price (VND) for the initial default variant',
+    example: 199000,
+    description:
+      'Optional base price (whole VND) for the initial default variant',
   })
   @IsOptional()
-  @IsString()
-  defaultBasePrice?: string;
+  @IsInt()
+  @Min(0)
+  defaultBasePrice?: number;
 }
 
 export class UpdateProductReqDto {
@@ -317,10 +319,11 @@ export class CreateVariantReqDto {
   @MaxLength(240)
   name?: string;
 
-  @ApiPropertyOptional({ example: '199000.00', default: '0.00' })
+  @ApiPropertyOptional({ example: 199000, default: 0 })
   @IsOptional()
-  @IsString()
-  basePrice?: string;
+  @IsInt()
+  @Min(0)
+  basePrice?: number;
 
   @ApiPropertyOptional({ example: '0.250', nullable: true })
   @IsOptional()
@@ -367,10 +370,11 @@ export class GenerateVariantsReqDto {
   @MaxLength(40)
   skuPrefix!: string;
 
-  @ApiPropertyOptional({ example: '199000.00', default: '0.00' })
+  @ApiPropertyOptional({ example: 199000, default: 0 })
   @IsOptional()
-  @IsString()
-  basePrice?: string;
+  @IsInt()
+  @Min(0)
+  basePrice?: number;
 
   @ApiProperty({ type: [VariantGenerationAxisInputDto] })
   @IsArray()
@@ -413,10 +417,11 @@ export class UpdateVariantReqDto {
   @MaxLength(240)
   name?: string;
 
-  @ApiPropertyOptional({ example: '219000.00' })
+  @ApiPropertyOptional({ example: 219000 })
   @IsOptional()
-  @IsString()
-  basePrice?: string;
+  @IsInt()
+  @Min(0)
+  basePrice?: number;
 
   @ApiPropertyOptional({ example: '0.280', nullable: true })
   @IsOptional()
@@ -486,7 +491,7 @@ export interface VariantRes {
   skuCode: string;
   barcode: string | null;
   name: string;
-  basePrice: string;
+  basePrice: number;
   weight: string | null;
   imageUrl: string | null;
   combinationSignature: string;

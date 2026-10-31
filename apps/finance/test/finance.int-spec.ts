@@ -160,12 +160,12 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           customerId,
           orderId,
           branchId: BRANCH_A,
-          amount: '1000000.00',
+          amount: 1000000,
         },
         TENANT_A,
       ),
     );
-    expect(recognized.outstandingAmount).toBe('1000000.00');
+    expect(recognized.outstandingAmount).toBe(1000000);
 
     const results = await Promise.allSettled([
       runAsTenant(TENANT_A, () =>
@@ -175,7 +175,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           ACTOR_MAKER,
           `pay-a-1:${randomUUID()}`,
           {
-            amount: '700000.00',
+            amount: 700000,
             paymentMethod: 'CASH',
             overpaymentPolicy: 'REJECT',
           },
@@ -189,7 +189,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           ACTOR_CHECKER,
           `pay-a-2:${randomUUID()}`,
           {
-            amount: '700000.00',
+            amount: 700000,
             paymentMethod: 'CASH',
             overpaymentPolicy: 'REJECT',
           },
@@ -212,20 +212,20 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
     const updated = await runAsTenant(TENANT_A, () =>
       receivablesService.getReceivableById(recognized.id, TENANT_A),
     );
-    expect(updated.paidAmount).toBe('700000.00');
-    expect(updated.outstandingAmount).toBe('300000.00');
+    expect(updated.paidAmount).toBe(700000);
+    expect(updated.outstandingAmount).toBe(300000);
     expect(updated.status).toBe('PARTIALLY_PAID');
 
     const summary = await runAsTenant(TENANT_A, () =>
       receivablesService.getCustomerDebtSummary(customerId, TENANT_A),
     );
-    expect(summary.postedDebt).toBe('300000.00');
+    expect(summary.postedDebt).toBe(300000);
   });
 
   it('Test B: Concurrent credit-limit orders serialize under row lock and prevent credit limit breach', async () => {
     const customerId = randomUUID();
 
-    // Default credit limit is 2,000,000.00 VND. Recognize 1,500,000.00 VND existing debt -> 500,000.00 VND available.
+    // Default credit limit is 2,000,000 VND. Recognize 1,500,000 VND existing debt -> 500,000 VND available.
     await runAsTenant(TENANT_A, () =>
       receivablesService.recognizeReceivable(
         ACTOR_MAKER,
@@ -233,7 +233,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
         {
           customerId,
           orderId: randomUUID(),
-          amount: '1500000.00',
+          amount: 1500000,
         },
         TENANT_A,
       ),
@@ -247,7 +247,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           {
             customerId,
             orderId: randomUUID(),
-            amount: '400000.00',
+            amount: 400000,
           },
           TENANT_A,
         ),
@@ -259,7 +259,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           {
             customerId,
             orderId: randomUUID(),
-            amount: '400000.00',
+            amount: 400000,
           },
           TENANT_A,
         ),
@@ -280,10 +280,10 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
     const profile = await runAsTenant(TENANT_A, () =>
       creditAuthService.getCreditProfile(customerId, TENANT_A),
     );
-    expect(profile.creditLimit).toBe('2000000.00');
-    expect(profile.postedDebt).toBe('1500000.00');
-    expect(profile.heldCredit).toBe('400000.00');
-    expect(profile.availableCredit).toBe('100000.00');
+    expect(profile.creditLimit).toBe(2000000);
+    expect(profile.postedDebt).toBe(1500000);
+    expect(profile.heldCredit).toBe(400000);
+    expect(profile.availableCredit).toBe(100000);
   });
 
   it('Test C & Test D: Duplicate cashbook voucher submission is idempotent and concurrent reversal executes once', async () => {
@@ -310,7 +310,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
               cashAccountId: cashAcc.id,
               branchId: BRANCH_A,
               categoryCode: 'OTHER_RECEIPT',
-              amount: '250000.00',
+              amount: 250000,
               description: 'Idempotent cash receipt test',
               autoPost: true,
             },
@@ -334,7 +334,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
             cashAccountId: cashAcc.id,
             branchId: BRANCH_A,
             categoryCode: 'OTHER_RECEIPT',
-            amount: '999999.00',
+            amount: 999999,
             autoPost: true,
           },
           TENANT_A,
@@ -347,7 +347,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
     const accAfterReceipt = await runAsTenant(TENANT_A, () =>
       cashAccountsService.getCashAccountById(cashAcc.id, TENANT_A),
     );
-    expect(accAfterReceipt.currentBalance).toBe('250000.00');
+    expect(accAfterReceipt.currentBalance).toBe(250000);
 
     // Test D: Concurrent cashbook reversal
     const reversalResults = await Promise.allSettled([
@@ -382,7 +382,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
     const accAfterReversal = await runAsTenant(TENANT_A, () =>
       cashAccountsService.getCashAccountById(cashAcc.id, TENANT_A),
     );
-    expect(accAfterReversal.currentBalance).toBe('0.00');
+    expect(accAfterReversal.currentBalance).toBe(0);
   });
 
   it('Test E: Duplicate receivable recognition for the same order creates only one receivable and one ledger row', async () => {
@@ -400,7 +400,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
               orderId,
               sourceType: 'SALES_ORDER',
               sourceId: orderId,
-              amount: '450000.00',
+              amount: 450000,
             },
             TENANT_A,
           ),
@@ -414,7 +414,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
     const summary = await runAsTenant(TENANT_A, () =>
       receivablesService.getCustomerDebtSummary(customerId, TENANT_A),
     );
-    expect(summary.postedDebt).toBe('450000.00');
+    expect(summary.postedDebt).toBe(450000);
     expect(summary.openReceivablesCount).toBe(1);
   });
 
@@ -437,7 +437,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
         code: 'PO000100',
         supplierId,
         warehouseId,
-        totalAmount: '2000000.00',
+        totalAmount: 2000000,
         approvedAt: new Date().toISOString(),
       },
     };
@@ -457,7 +457,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
         sourceType: 'PURCHASE_ORDER',
         purchaseOrderId,
         supplierId,
-        totalAmount: '2000000.00',
+        totalAmount: 2000000,
         postedAt: new Date().toISOString(),
       },
     };
@@ -477,11 +477,11 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
     const supplierSummaryBefore = await runAsTenant(TENANT_A, () =>
       payablesService.getSupplierDebtSummary(supplierId, TENANT_A),
     );
-    expect(supplierSummaryBefore.totalOutstandingPayable).toBe('2000000.00');
+    expect(supplierSummaryBefore.totalOutstandingPayable).toBe(2000000);
     expect(supplierSummaryBefore.openPayablesCount).toBe(1);
     const payableId = supplierSummaryBefore.payables[0].id;
 
-    // Test G: Two concurrent supplier payments of 1,500,000.00 VND each against 2,000,000.00 VND payable
+    // Test G: Two concurrent supplier payments of 1,500,000 VND each against 2,000,000 VND payable
     const payResults = await Promise.allSettled([
       runAsTenant(TENANT_A, () =>
         payablesService.recordSupplierPayment(
@@ -489,7 +489,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           ACTOR_MAKER,
           `ap-pay-g1:${randomUUID()}`,
           {
-            amount: '1500000.00',
+            amount: 1500000,
             paymentMethod: 'BANK_TRANSFER',
           },
           TENANT_A,
@@ -501,7 +501,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           ACTOR_CHECKER,
           `ap-pay-g2:${randomUUID()}`,
           {
-            amount: '1500000.00',
+            amount: 1500000,
             paymentMethod: 'BANK_TRANSFER',
           },
           TENANT_A,
@@ -519,7 +519,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
       FinanceDomainErrorCode.SUPPLIER_PAYMENT_EXCEEDED,
     );
 
-    // Apply supplier return credit of 200,000.00 VND on remaining 500,000.00 VND
+    // Apply supplier return credit of 200,000 VND on remaining 500,000 VND
     const afterCredit = await runAsTenant(TENANT_A, () =>
       payablesService.applySupplierReturnCredit(
         payableId,
@@ -527,20 +527,20 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
         `ap-ret:${purchaseOrderId}`,
         {
           returnRefId: `RET-${purchaseOrderId}`,
-          amount: '200000.00',
+          amount: 200000,
           reason: 'Damaged cartons returned to supplier',
         },
         TENANT_A,
       ),
     );
-    expect(afterCredit.payable.outstandingAmount).toBe('300000.00');
-    expect(afterCredit.supplierTotalDebtAfter).toBe('300000.00');
+    expect(afterCredit.payable.outstandingAmount).toBe(300000);
+    expect(afterCredit.supplierTotalDebtAfter).toBe(300000);
   });
 
   it('Test H & Test I: Concurrent partial refunds enforce remaining refundable cap, and provider timeout recovers idempotently without double refunding', async () => {
     const orderId = randomUUID();
 
-    // Settle order payment of 1,000,000.00 VND
+    // Settle order payment of 1,000,000 VND
     const settled = await runAsTenant(TENANT_A, () =>
       settlementsService.confirmSettlement(
         ACTOR_MAKER,
@@ -552,16 +552,16 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           paymentMethod: 'EWALLET',
           provider: 'VNPAY',
           externalTxId: `VNP-${orderId}`,
-          requestedAmount: '1000000.00',
-          confirmedAmount: '1000000.00',
-          settledAmount: '1000000.00',
+          requestedAmount: 1000000,
+          confirmedAmount: 1000000,
+          settledAmount: 1000000,
         },
         TENANT_A,
       ),
     );
     expect(settled.settlement.settlementStatus).toBe('SETTLED');
 
-    // Test H: Two concurrent refund requests of 600,000.00 VND each against 1,000,000.00 VND paid order
+    // Test H: Two concurrent refund requests of 600,000 VND each against 1,000,000 VND paid order
     const refundResults = await Promise.allSettled([
       runAsTenant(TENANT_A, () =>
         refundsService.createRefund(
@@ -572,7 +572,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
             branchId: BRANCH_A,
             method: 'EWALLET',
             provider: 'VNPAY',
-            amount: '600000.00',
+            amount: 600000,
             autoApprove: true,
           },
           TENANT_A,
@@ -587,7 +587,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
             branchId: BRANCH_A,
             method: 'EWALLET',
             provider: 'VNPAY',
-            amount: '600000.00',
+            amount: 600000,
             autoApprove: true,
           },
           TENANT_A,
@@ -650,7 +650,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
     const updatedSettlement = await runAsTenant(TENANT_A, () =>
       settlementsService.getSettlementById(settled.settlement.id, TENANT_A),
     );
-    expect(updatedSettlement.refundedAmount).toBe('600000.00');
+    expect(updatedSettlement.refundedAmount).toBe(600000);
   });
 
   it('Test J: Duplicate payment callback and duplicate settlement events are deduplicated', async () => {
@@ -669,8 +669,8 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
               orderId,
               branchId: BRANCH_A,
               paymentMethod: 'EWALLET',
-              confirmedAmount: '350000.00',
-              requestedAmount: '350000.00',
+              confirmedAmount: 350000,
+              requestedAmount: 350000,
               providerStatus: 'SETTLED',
             },
             TENANT_A,
@@ -682,7 +682,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
     const settlementIds = new Set(callbacks.map((c) => c.settlement.id));
     expect(settlementIds.size).toBe(1);
     expect(callbacks[0].settlement.settlementStatus).toBe('SETTLED');
-    expect(callbacks[0].settlement.settledAmount).toBe('350000.00');
+    expect(callbacks[0].settlement.settledAmount).toBe(350000);
   });
 
   it('Test K & Test L: Duplicate COD settlement batch import deduplicates, and COD discrepancy creates reconciliation issue & emits event', async () => {
@@ -700,7 +700,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           branchId: BRANCH_A,
           carrierCode: 'GHN',
           trackingNumber: trackingMatched,
-          expectedCodAmount: '400000.00',
+          expectedCodAmount: 400000,
         },
         TENANT_A,
       ),
@@ -715,7 +715,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           branchId: BRANCH_A,
           carrierCode: 'GHN',
           trackingNumber: trackingShort,
-          expectedCodAmount: '500000.00',
+          expectedCodAmount: 500000,
         },
         TENANT_A,
       ),
@@ -729,15 +729,15 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
       lines: [
         {
           trackingNumber: trackingMatched,
-          reportedCodAmount: '400000.00',
-          carrierFeeAmount: '15000.00',
-          netPayoutAmount: '385000.00',
+          reportedCodAmount: 400000,
+          carrierFeeAmount: 15000,
+          netPayoutAmount: 385000,
         },
         {
           trackingNumber: trackingShort,
-          reportedCodAmount: '450000.00',
-          carrierFeeAmount: '20000.00',
-          netPayoutAmount: '430000.00',
+          reportedCodAmount: 450000,
+          carrierFeeAmount: 20000,
+          netPayoutAmount: 430000,
         },
       ],
     };
@@ -775,9 +775,9 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
       (c) => c.trackingNumber === trackingShort,
     )!;
     expect(matchedCod.status).toBe('RECONCILED');
-    expect(matchedCod.actualRemittedAmount).toBe('385000.00');
+    expect(matchedCod.actualRemittedAmount).toBe(385000);
     expect(discrepantCod.status).toBe('DISCREPANCY');
-    expect(discrepantCod.discrepancyAmount).toBe('-50000.00');
+    expect(discrepantCod.discrepancyAmount).toBe(-50000);
   });
 
   it('Test M: POS shift cash variance records shortage journal and reconciliation issue', async () => {
@@ -791,21 +791,64 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           shiftCode: 'SH-2026-001',
           branchId: BRANCH_A,
           staffId: ACTOR_MAKER,
-          openingCash: '1000000.00',
-          confirmedCashSales: '4200000.00',
-          confirmedCashRefunds: '200000.00',
-          actualCountedCash: '4920000.00',
+          openingCash: 1000000,
+          confirmedCashSales: 4200000,
+          confirmedCashRefunds: 200000,
+          actualCountedCash: 4920000,
         },
         TENANT_A,
       ),
     );
 
-    expect(res.reconciliation.expectedClosingCash).toBe('5000000.00');
-    expect(res.reconciliation.actualCountedCash).toBe('4920000.00');
-    expect(res.reconciliation.varianceAmount).toBe('-80000.00');
+    expect(res.reconciliation.expectedClosingCash).toBe(5000000);
+    expect(res.reconciliation.actualCountedCash).toBe(4920000);
+    expect(res.reconciliation.varianceAmount).toBe(-80000);
     expect(res.reconciliation.status).toBe('VARIANCE_DETECTED');
     expect(res.reconciliation.varianceJournalId).toBeTruthy();
     expect(res.reconciliation.reconciliationIssueId).toBeTruthy();
+  });
+
+  it('Test V: money is stored as bigint, round-trips as a number above 2^31, and rejects fractions', async () => {
+    const supplierId = randomUUID();
+    const big = 5_000_000_000;
+    const ar = await runAsTenant(TENANT_A, () =>
+      payablesService.recognizePayable(
+        ACTOR_MAKER,
+        `ap-big:${supplierId}`,
+        { supplierId, amount: big },
+        TENANT_A,
+      ),
+    );
+    expect(ar.originalAmount).toBe(big);
+    expect(ar.outstandingAmount).toBe(big);
+    expect(ar.paidAmount + ar.adjustedAmount + ar.outstandingAmount).toBe(
+      ar.originalAmount,
+    );
+    const reloaded = await runAsTenant(TENANT_A, () =>
+      payablesService.getPayableById(ar.id, TENANT_A),
+    );
+    expect(typeof reloaded.originalAmount).toBe('number');
+    expect(reloaded.originalAmount).toBe(big);
+
+    const cols: Array<{ data_type: string }> = await dataSource.query(
+      `SELECT data_type FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = 'supplier_payables'
+         AND column_name IN ('original_amount','paid_amount','outstanding_amount')`,
+      [schema],
+    );
+    expect(cols).toHaveLength(3);
+    expect(cols.every((c) => c.data_type === 'bigint')).toBe(true);
+
+    await expect(
+      runAsTenant(TENANT_A, () =>
+        payablesService.recognizePayable(
+          ACTOR_MAKER,
+          `ap-frac:${supplierId}`,
+          { supplierId, amount: 1000.5 },
+          TENANT_A,
+        ),
+      ),
+    ).rejects.toMatchObject({ httpStatus: 422 });
   });
 
   it('Test N: Tenant isolation & PostgreSQL RLS prevent cross-tenant reads and mutations', async () => {
@@ -817,7 +860,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
         {
           customerId: tenantACustomerId,
           orderId: randomUUID(),
-          amount: '300000.00',
+          amount: 300000,
         },
         TENANT_A,
       ),
@@ -841,7 +884,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           ACTOR_MAKER,
           `pay-rls-b:${randomUUID()}`,
           {
-            amount: '100000.00',
+            amount: 100000,
           },
           TENANT_B,
         ),
@@ -868,8 +911,8 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
             sourceType: 'MANUAL_TEST',
             sourceId: randomUUID(),
             lines: [
-              { accountCode: '1110', debitAmount: '500000.00' },
-              { accountCode: '5110', creditAmount: '400000.00' },
+              { accountCode: '1110', debitAmount: 500000 },
+              { accountCode: '5110', creditAmount: 400000 },
             ],
           },
           TENANT_A,
@@ -888,8 +931,8 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           sourceType: 'MANUAL_TEST',
           sourceId: randomUUID(),
           lines: [
-            { accountCode: '1110', debitAmount: '500000.00' },
-            { accountCode: '7110', creditAmount: '500000.00' },
+            { accountCode: '1110', debitAmount: 500000 },
+            { accountCode: '7110', creditAmount: 500000 },
           ],
         },
         TENANT_A,
@@ -915,7 +958,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           TENANT_A,
         ]);
         await em.query(
-          `UPDATE "${schema}"."financial_journals" SET "total_debit" = 999999.00 WHERE "id" = $1`,
+          `UPDATE "${schema}"."financial_journals" SET "total_debit" = 999999 WHERE "id" = $1`,
           [validPosted.journal.id],
         );
       }),
@@ -932,7 +975,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
         {
           customerId,
           orderId: randomUUID(),
-          amount: '300000.00',
+          amount: 300000,
         },
         TENANT_A,
       ),
@@ -944,7 +987,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
         {
           customerId,
           orderId: randomUUID(),
-          amount: '400000.00',
+          amount: 400000,
         },
         TENANT_A,
       ),
@@ -957,22 +1000,22 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
         ACTOR_MAKER,
         `pay-p-multi:${customerId}`,
         {
-          amount: '800000.00',
+          amount: 800000,
           paymentMethod: 'BANK_TRANSFER',
           overpaymentPolicy: 'PREPAYMENT',
           allocations: [
-            { receivableId: inv1.id, amount: '300000.00' },
-            { receivableId: inv2.id, amount: '400000.00' },
+            { receivableId: inv1.id, amount: 300000 },
+            { receivableId: inv2.id, amount: 400000 },
           ],
         },
         TENANT_A,
       ),
     );
 
-    expect(paymentRes.totalAllocated).toBe('700000.00');
-    expect(paymentRes.overpaymentAmount).toBe('100000.00');
-    expect(paymentRes.customerTotalDebtAfter).toBe('0.00');
-    expect(paymentRes.prepaymentBalanceAfter).toBe('100000.00');
+    expect(paymentRes.totalAllocated).toBe(700000);
+    expect(paymentRes.overpaymentAmount).toBe(100000);
+    expect(paymentRes.customerTotalDebtAfter).toBe(0);
+    expect(paymentRes.prepaymentBalanceAfter).toBe(100000);
 
     // Verify journal lines do NOT credit 5110 Sales Revenue Clearing
     const jnl = await runAsTenant(TENANT_A, () =>
@@ -996,7 +1039,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
         {
           customerId,
           orderId,
-          amount: '500000.00',
+          amount: 500000,
         },
         TENANT_A,
       ),
@@ -1021,7 +1064,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
         {
           customerId,
           orderId: randomUUID(),
-          amount: '200000.00',
+          amount: 200000,
           ttlSeconds: 1,
         },
         TENANT_A,
@@ -1035,8 +1078,8 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
     const profileAfterExpire = await runAsTenant(TENANT_A, () =>
       creditAuthService.getCreditProfile(customerId, TENANT_A),
     );
-    expect(profileAfterExpire.heldCredit).toBe('0.00');
-    expect(profileAfterExpire.postedDebt).toBe('500000.00');
+    expect(profileAfterExpire.heldCredit).toBe(0);
+    expect(profileAfterExpire.postedDebt).toBe(500000);
     expect(expiringHold.authorizationId).toBeTruthy();
 
     // Maker-Checker financial adjustment
@@ -1051,7 +1094,7 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
             targetType: 'RECEIVABLE',
             targetId:
               committed.committedReceivableId ?? committed.authorizationId,
-            amount: '50000.00',
+            amount: 50000,
             direction: 'DECREASE',
             reasonCode: 'ROUNDING_WRITE_OFF',
             explanation: 'Approved write-off adjustment',
@@ -1104,8 +1147,8 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
           tenderRef: `amb-tender:${ambiguousOrderId}`,
           paymentMethod: 'CARD',
           provider: 'NAPAS',
-          requestedAmount: '600000.00',
-          confirmedAmount: '550000.00',
+          requestedAmount: 600000,
+          confirmedAmount: 550000,
           ambiguousOutcome: true,
         },
         TENANT_A,

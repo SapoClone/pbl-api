@@ -1,4 +1,11 @@
-import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class ReconcileShiftCashDto {
   @IsUUID()
@@ -21,26 +28,26 @@ export class ReconcileShiftCashDto {
   @IsUUID()
   cashAccountId?: string;
 
-  @IsString()
-  openingCash!: string;
+  @IsInt()
+  openingCash!: number;
 
-  @IsString()
-  confirmedCashSales!: string;
-
-  @IsOptional()
-  @IsString()
-  confirmedCashRefunds?: string;
+  @IsInt()
+  confirmedCashSales!: number;
 
   @IsOptional()
-  @IsString()
-  otherCashReceipts?: string;
+  @IsInt()
+  confirmedCashRefunds?: number;
 
   @IsOptional()
-  @IsString()
-  otherCashExpenses?: string;
+  @IsInt()
+  otherCashReceipts?: number;
 
-  @IsString()
-  actualCountedCash!: string;
+  @IsOptional()
+  @IsInt()
+  otherCashExpenses?: number;
+
+  @IsInt()
+  actualCountedCash!: number;
 }
 
 export class CreateFinancialAdjustmentDto {
@@ -54,8 +61,8 @@ export class CreateFinancialAdjustmentDto {
   @IsUUID()
   targetId!: string;
 
-  @IsString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 
   @IsIn(['DECREASE', 'INCREASE'])
   direction!: 'DECREASE' | 'INCREASE';

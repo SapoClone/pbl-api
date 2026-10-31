@@ -13,6 +13,7 @@ import {
 import { OnEvent } from '@pbl/events';
 import { randomUUID } from 'node:crypto';
 import { EntityManager } from 'typeorm';
+import { toMoney } from '../common/money';
 import {
   IntegrationCatalogVariantEntity,
   IntegrationStockProjectionEntity,
@@ -119,7 +120,7 @@ export class IntegrationEventsConsumer {
     const resolvedUpdatedAt = p.updatedAt
       ? new Date(p.updatedAt)
       : new Date(event.occurredAt);
-    const resolvedBasePrice = Number(p.basePrice ?? 0).toFixed(2);
+    const resolvedBasePrice = toMoney(p.basePrice ?? 0);
 
     if (!existing) {
       const created = em.create(IntegrationCatalogVariantEntity, {

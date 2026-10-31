@@ -348,7 +348,7 @@ async function main() {
           });
           await productsService.generateVariants(prod.id, {
             skuPrefix: `BGEN${idx}`,
-            basePrice: '249000.00',
+            basePrice: 249000,
             axes: [
               { attributeId: benchColorAttrId, valueIds: benchColorValIds },
               { attributeId: benchSizeAttrId, valueIds: benchSizeValIds },

@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { moneyTransformer } from '../../common/money';
 
 @Entity('customer_code_sequence')
 export class CustomerCodeSequenceEntity {
@@ -151,21 +152,19 @@ export class CustomerEntity {
 
   @Column({
     name: 'debt_limit',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '2000000.00',
+    type: 'bigint',
+    default: 2000000,
+    transformer: moneyTransformer,
   })
-  debtLimit!: string;
+  debtLimit!: number;
 
   @Column({
     name: 'current_debt',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  currentDebt!: string;
+  currentDebt!: number;
 
   @Column({ type: 'text', nullable: true })
   note!: string | null;
@@ -249,21 +248,19 @@ export class LoyaltySettingEntity {
 
   @Column({
     name: 'earn_amount_per_point',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '10000.00',
+    type: 'bigint',
+    default: 10000,
+    transformer: moneyTransformer,
   })
-  earnAmountPerPoint!: string;
+  earnAmountPerPoint!: number;
 
   @Column({
     name: 'redeem_value_per_point',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '1000.00',
+    type: 'bigint',
+    default: 1000,
+    transformer: moneyTransformer,
   })
-  redeemValuePerPoint!: string;
+  redeemValuePerPoint!: number;
 
   @Column({ name: 'min_redeem_points', type: 'int', default: 10 })
   minRedeemPoints!: number;
@@ -394,21 +391,19 @@ export class LoyaltyTransactionEntity {
 
   @Column({
     name: 'eligible_spend_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
     nullable: true,
+    transformer: moneyTransformer,
   })
-  eligibleSpendAmount!: string | null;
+  eligibleSpendAmount!: number | null;
 
   @Column({
     name: 'applied_rate_amount_per_point',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
     nullable: true,
+    transformer: moneyTransformer,
   })
-  appliedRateAmountPerPoint!: string | null;
+  appliedRateAmountPerPoint!: number | null;
 
   @Column({ name: 'reversed_points_total', type: 'int', default: 0 })
   reversedPointsTotal!: number;
@@ -478,12 +473,11 @@ export class LoyaltyHoldEntity {
 
   @Column({
     name: 'discount_value_vnd',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  discountValueVnd!: string;
+  discountValueVnd!: number;
 
   @Column({ type: 'varchar', length: 24, default: 'HELD' })
   state!: 'HELD' | 'COMMITTED' | 'RELEASED' | 'EXPIRED';
@@ -548,30 +542,27 @@ export class CustomerPurchaseProjectionEntity {
 
   @Column({
     name: 'original_order_total',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  originalOrderTotal!: string;
+  originalOrderTotal!: number;
 
   @Column({
     name: 'eligible_net_spend',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  eligibleNetSpend!: string;
+  eligibleNetSpend!: number;
 
   @Column({
     name: 'returned_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  returnedAmount!: string;
+  returnedAmount!: number;
 
   @Column({ name: 'earned_points', type: 'int', default: 0 })
   earnedPoints!: number;

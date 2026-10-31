@@ -141,7 +141,7 @@ describe('sales (Postgres)', () => {
       skuCode: string;
       barcode?: string;
       name: string;
-      basePrice: string;
+      basePrice: number;
       status?: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
       version?: number;
     },
@@ -306,7 +306,7 @@ describe('sales (Postgres)', () => {
       skuCode: 'SKU-A',
       barcode: '893000000001',
       name: 'San pham A',
-      basePrice: '100000.00',
+      basePrice: 100000,
     });
     await seedCatalogVariant(TENANT_A, {
       variantId: VARIANT_B,
@@ -314,7 +314,7 @@ describe('sales (Postgres)', () => {
       skuCode: 'SKU-B',
       barcode: '893000000002',
       name: 'San pham B',
-      basePrice: '300000.00',
+      basePrice: 300000,
     });
   });
 
@@ -764,7 +764,7 @@ describe('sales (Postgres)', () => {
               currency: 'VND',
               variantId: VARIANT_A,
               skuCode: 'SKU-A',
-              price: '120000.00',
+              price: 120000,
               effectiveFrom: null,
               effectiveTo: null,
               aggregateVersion: 2,
@@ -839,7 +839,7 @@ describe('sales (Postgres)', () => {
         ),
       );
       expect(managerSale.state).toBe('CONFIRMED');
-      expect(managerSale.quote.grandTotal).toBe('90000.00');
+      expect(managerSale.quote.grandTotal).toBe(90000);
 
       // Deactivate PRODUCT_B -> 409 PRODUCT_NOT_SELLABLE
       await as(TENANT_A, () =>
@@ -946,7 +946,7 @@ describe('sales (Postgres)', () => {
           Awaited<ReturnType<typeof returnsService.createReturn>>
         >
       ).value;
-      expect(winReturn.totalRefundAmount).toBe('270000.00');
+      expect(winReturn.totalRefundAmount).toBe(270000);
       expect(winReturn.status).toBe('COMPLETED');
       expect(inventory.receiveReturnedStock).toHaveBeenCalledTimes(1);
 
@@ -960,7 +960,7 @@ describe('sales (Postgres)', () => {
           { method: 'CASH' },
         ),
       );
-      expect(refundReq.amount).toBe('270000.00');
+      expect(refundReq.amount).toBe(270000);
       expect(refundReq.status).toBe('CONFIRMED');
     });
 
@@ -1067,7 +1067,7 @@ describe('sales (Postgres)', () => {
         shiftsService.openShift(ACCOUNT, ALL, {
           branchId: BRANCH_A,
           registerCode: 'POS-01',
-          openingCash: '500000.00',
+          openingCash: 500000,
         }),
       );
       expect(shift.status).toBe('OPEN');
@@ -1088,7 +1088,7 @@ describe('sales (Postgres)', () => {
           },
         ),
       );
-      expect(cashSale.tenders.totalChangeDue).toBe('50000.00');
+      expect(cashSale.tenders.totalChangeDue).toBe(50000);
 
       // Start an in-flight checkout (simulated crash after reserve) on this shift
       const inFlightKey = randomUUID();
@@ -1115,7 +1115,7 @@ describe('sales (Postgres)', () => {
       await expect(
         as(TENANT_A, () =>
           shiftsService.closeShift(shift.id, ACCOUNT, ALL, {
-            actualCash: '700000.00',
+            actualCash: 700000,
           }),
         ),
       ).rejects.toMatchObject({
@@ -1131,17 +1131,17 @@ describe('sales (Postgres)', () => {
         checkoutService.retryCheckout(stuckWf.id, ACCOUNT, ALL),
       );
 
-      // Close shift with actualCash = 795,000 (expected = 500k + 200k + 100k = 800k -> variance = -5,000.00)
+      // Close shift with actualCash = 795,000 (expected = 500k + 200k + 100k = 800k -> variance = -5,000)
       const closedShift = await as(TENANT_A, () =>
         shiftsService.closeShift(shift.id, ACCOUNT, ALL, {
-          actualCash: '795000.00',
+          actualCash: 795000,
           note: 'Short 5k VND',
         }),
       );
       expect(closedShift.status).toBe('CLOSED');
-      expect(closedShift.expectedCash).toBe('800000.00');
-      expect(closedShift.actualCash).toBe('795000.00');
-      expect(closedShift.variance).toBe('-5000.00');
+      expect(closedShift.expectedCash).toBe(800000);
+      expect(closedShift.actualCash).toBe(795000);
+      expect(closedShift.variance).toBe(-5000);
     });
 
     it('Test K, L & M: Fault injection — reserve timeout recovery (K), crash after reserve (L), and crash after commit reconciled by background worker (M)', async () => {
@@ -1298,6 +1298,93 @@ describe('sales (Postgres)', () => {
         posService.listDrafts(ACCOUNT, ALL, BRANCH_A),
       );
       expect(tenantBDrafts).toHaveLength(0);
+    });
+
+    it('Test P: money is bigint integer VND: column types, round trip above 2^31, half-up rounding, totals equal the sum of the lines, fractional input rejected', async () => {
+      const types: Array<{ table_name: string; column_name: string }> =
+        await dataSource.query(
+          `SELECT table_name, column_name FROM information_schema.columns
+           WHERE table_schema = $1 AND data_type <> 'bigint'
+             AND (column_name IN ('subtotal','item_discount_total','order_discount_total','promotion_discount_total',
+               'shipping_fee','tax_total','grand_total','paid_amount','refunded_amount','total_amount','line_total',
+               'unit_price','line_gross','item_discount_amount','allocated_order_discount','line_net','tax_amount',
+               'unit_cost_snapshot','opening_cash','cash_sales_total','cash_refunds_total','expected_cash',
+               'actual_cash','variance','tendered_cash','change_due','total_refund_amount','unit_refund_amount',
+               'refund_amount','min_order_amount','max_discount_amount','discount_amount')
+               OR (column_name = 'amount' AND table_name <> 'outbox_event'))`,
+          [schema],
+        );
+      expect(types).toEqual([]);
+
+      // a shift opened with more than 2^31 VND reads back as the same number
+      const big = await as(TENANT_A, () =>
+        shiftsService.openShift(ACCOUNT, ALL, {
+          branchId: BRANCH_A,
+          registerCode: 'POS-BIG',
+          openingCash: 5_000_000_000,
+        }),
+      );
+      expect(big.openingCash).toBe(5_000_000_000);
+      expect(typeof big.expectedCash).toBe('number');
+
+      // a fractional fixed discount or shipping fee never reaches the database
+      await expect(
+        as(TENANT_A, () =>
+          checkoutService.checkout(ACCOUNT, ['*'], ALL, randomUUID(), {
+            branchId: BRANCH_A,
+            warehouseId: WAREHOUSE_A,
+            lines: [{ variantId: VARIANT_A, qty: 1 }],
+            orderDiscountType: 'FIXED',
+            orderDiscountValue: 100.5,
+            paymentMethod: 'CASH',
+          }),
+        ),
+      ).rejects.toMatchObject({ httpStatus: 422 });
+
+      // 3.333 x 100000 = 333300; 10% = 33330; net 299970; tax 8% = 23997.6 -> 23998
+      const sale = await as(TENANT_A, () =>
+        checkoutService.checkout(ACCOUNT, ['*'], ALL, randomUUID(), {
+          branchId: BRANCH_A,
+          warehouseId: WAREHOUSE_A,
+          lines: [
+            {
+              variantId: VARIANT_A,
+              qty: 3.333,
+              discountType: 'PERCENT',
+              discountValue: 10,
+              taxRatePercent: 8,
+            },
+            { variantId: VARIANT_B, qty: 1, taxRatePercent: 10 },
+          ],
+          paymentMethod: 'CASH',
+        }),
+      );
+      expect(sale.quote.lines[0]).toMatchObject({
+        lineGross: 333300,
+        itemDiscountAmount: 33330,
+        lineNet: 299970,
+        taxAmount: 23998,
+        lineTotal: 323968,
+      });
+      const details = await as(TENANT_A, () =>
+        m3OrdersService.getOrderDetails(sale.orderId!, ALL),
+      );
+      const lineSum = (f: (i: (typeof details.items)[number]) => number) =>
+        details.items.reduce((acc, i) => acc + f(i), 0);
+      expect(typeof details.grandTotal).toBe('number');
+      expect(details.subtotal).toBe(lineSum((i) => i.lineGross!));
+      expect(details.taxTotal).toBe(lineSum((i) => i.taxAmount!));
+      expect(details.grandTotal).toBe(lineSum((i) => i.lineTotal));
+      expect(details.totalAmount).toBe(details.grandTotal);
+      expect(details.paidAmount).toBe(details.grandTotal);
+
+      const events: Array<{ payload: { payload: Record<string, unknown> } }> =
+        await dataSource.query(
+          `SELECT payload FROM "${schema}"."outbox_event"
+           WHERE type = 'sales.order.completed' ORDER BY created_at DESC LIMIT 1`,
+        );
+      expect(events[0].payload.payload.grandTotal).toBe(details.grandTotal);
+      expect(typeof events[0].payload.payload.subtotal).toBe('number');
     });
   });
 });

@@ -153,10 +153,14 @@ export interface OrderCompletedPayload {
   code: string;
   branchId: string;
   customerId?: string | null;
-  subtotal?: string;
-  discountTotal?: string;
-  taxTotal?: string;
-  grandTotal?: string;
+  /** Integer VND */
+  subtotal?: number;
+  /** Integer VND */
+  discountTotal?: number;
+  /** Integer VND */
+  taxTotal?: number;
+  /** Integer VND */
+  grandTotal?: number;
   /** Integer VND */
   totalAmount: number;
   itemCount: number;
@@ -179,10 +183,14 @@ export interface SalesOrderLifecycleEventPayload {
   orderStatus: string;
   paymentStatus: string;
   fulfillmentStatus: string;
-  subtotal: string;
-  discountTotal: string;
-  taxTotal: string;
-  grandTotal: string;
+  /** Integer VND */
+  subtotal: number;
+  /** Integer VND */
+  discountTotal: number;
+  /** Integer VND */
+  taxTotal: number;
+  /** Integer VND */
+  grandTotal: number;
   actorId: string;
   occurredAt: string;
 }
@@ -193,10 +201,14 @@ export interface SalesShiftEventPayload {
   branchId: string;
   staffId: string;
   status: 'OPEN' | 'CLOSED';
-  openingCash: string;
-  expectedCash?: string;
-  actualCash?: string;
-  variance?: string;
+  /** Integer VND */
+  openingCash: number;
+  /** Integer VND */
+  expectedCash?: number;
+  /** Integer VND */
+  actualCash?: number;
+  /** Integer VND, negative when the drawer is short */
+  variance?: number;
   occurredAt: string;
 }
 
@@ -207,7 +219,8 @@ export interface SalesReturnEventPayload {
   branchId: string;
   customerId?: string | null;
   status: string;
-  totalRefundAmount: string;
+  /** Integer VND */
+  totalRefundAmount: number;
   occurredAt: string;
 }
 
@@ -216,7 +229,8 @@ export interface SalesRefundRequestedPayload {
   returnId: string;
   orderId: string;
   branchId: string;
-  amount: string;
+  /** Integer VND */
+  amount: number;
   method: string;
   status: string;
   occurredAt: string;
@@ -343,8 +357,8 @@ export interface StockChangedPayload {
   qtyDelta: string;
   onHandAfter: string;
   reservedAfter: string;
-  unitCost?: string;
-  avgCostAfter?: string;
+  unitCost?: number;
+  avgCostAfter?: number;
   referenceType: string;
   referenceId: string;
   occurredAt: string;
@@ -369,7 +383,7 @@ export interface PurchaseOrderApprovedPayload {
   code: string;
   supplierId: string;
   warehouseId: string;
-  totalAmount: string;
+  totalAmount: number;
   approvedAt: string;
 }
 
@@ -477,7 +491,7 @@ export interface CatalogVariantEventPayload {
   previousSkuCode?: string;
   barcode: string | null;
   name: string;
-  basePrice: string;
+  basePrice: number;
   status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
   isDefault: boolean;
   aggregateVersion: number;
@@ -491,8 +505,8 @@ export interface CatalogPriceChangedPayload {
   currency: string;
   variantId: string;
   skuCode: string;
-  price: string;
-  previousPrice?: string | null;
+  price: number;
+  previousPrice?: number | null;
   effectiveFrom: string | null;
   effectiveTo: string | null;
   aggregateVersion: number;
@@ -695,7 +709,7 @@ export interface FinanceCashbookEntryPostedPayload {
   categoryId: string;
   direction: 'RECEIPT' | 'EXPENSE';
   voucherType: string;
-  amount: string;
+  amount: number;
   currency: string;
   journalId: string;
   sourceType: string | null;
@@ -710,10 +724,10 @@ export interface FinanceReceivableEventPayload {
   customerId: string;
   orderId: string | null;
   branchId: string | null;
-  originalAmount: string;
-  paidAmount: string;
-  outstandingAmount: string;
-  customerTotalDebtAfter: string;
+  originalAmount: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  customerTotalDebtAfter: number;
   status: 'OPEN' | 'PARTIALLY_PAID' | 'PAID' | 'WRITTEN_OFF' | 'REVERSED';
   journalId: string;
   occurredAt: string;
@@ -726,10 +740,10 @@ export interface FinancePayableEventPayload {
   purchaseOrderId: string | null;
   receiptId: string | null;
   warehouseId: string | null;
-  originalAmount: string;
-  paidAmount: string;
-  outstandingAmount: string;
-  supplierTotalDebtAfter: string;
+  originalAmount: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  supplierTotalDebtAfter: number;
   status: 'OPEN' | 'PARTIALLY_PAID' | 'PAID' | 'ADJUSTED' | 'REVERSED';
   journalId: string;
   occurredAt: string;
@@ -740,11 +754,11 @@ export interface FinanceCreditAuthorizationEventPayload {
   code: string;
   customerId: string;
   orderId: string | null;
-  authorizedAmount: string;
+  authorizedAmount: number;
   state: 'HELD' | 'COMMITTED' | 'RELEASED' | 'EXPIRED';
-  postedDebtAfter: string;
-  heldCreditAfter: string;
-  availableCreditAfter: string;
+  postedDebtAfter: number;
+  heldCreditAfter: number;
+  availableCreditAfter: number;
   receivableId?: string | null;
   occurredAt: string;
 }
@@ -757,7 +771,7 @@ export interface FinancePaymentSettlementConfirmedPayload {
   paymentMethod: string;
   provider: string;
   externalTxId: string | null;
-  confirmedAmount: string;
+  confirmedAmount: number;
   settlementStatus: string;
   journalId: string | null;
   occurredAt: string;
@@ -769,7 +783,7 @@ export interface FinanceRefundEventPayload {
   salesRefundRequestId: string | null;
   returnId: string | null;
   orderId: string;
-  amount: string;
+  amount: number;
   method: string;
   status: string;
   journalId: string | null;
@@ -782,11 +796,11 @@ export interface FinanceCodSettlementEventPayload {
   code: string;
   carrierCode: string;
   statementRef: string;
-  totalExpectedCod: string;
-  totalReportedCod: string;
-  totalCarrierFee: string;
-  totalNetPayout: string;
-  totalDiscrepancy: string;
+  totalExpectedCod: number;
+  totalReportedCod: number;
+  totalCarrierFee: number;
+  totalNetPayout: number;
+  totalDiscrepancy: number;
   status: string;
   journalId: string | null;
   occurredAt: string;

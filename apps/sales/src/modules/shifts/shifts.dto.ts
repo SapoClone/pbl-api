@@ -5,13 +5,10 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
-
-const MONEY_REGEX = /^\d+(\.\d{1,2})?$/;
 
 export class OpenShiftReqDto {
   @ApiProperty({ format: 'uuid' })
@@ -24,11 +21,10 @@ export class OpenShiftReqDto {
   @MaxLength(32)
   registerCode?: string;
 
-  @ApiProperty({ example: '1000000.00' })
-  @Matches(MONEY_REGEX, {
-    message: 'openingCash must be a non-negative VND amount',
-  })
-  openingCash!: string;
+  @ApiProperty({ example: 1000000, description: 'Integer VND' })
+  @IsInt()
+  @Min(0)
+  openingCash!: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -38,11 +34,10 @@ export class OpenShiftReqDto {
 }
 
 export class CloseShiftReqDto {
-  @ApiProperty({ example: '3750000.00' })
-  @Matches(MONEY_REGEX, {
-    message: 'actualCash must be a non-negative VND amount',
-  })
-  actualCash!: string;
+  @ApiProperty({ example: 3750000, description: 'Integer VND' })
+  @IsInt()
+  @Min(0)
+  actualCash!: number;
 
   @ApiPropertyOptional()
   @IsOptional()

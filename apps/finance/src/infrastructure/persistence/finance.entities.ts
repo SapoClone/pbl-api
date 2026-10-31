@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { moneyTransformer } from '../../common/money';
 
 @Entity('finance_code_sequence')
 export class FinanceCodeSequenceEntity {
@@ -95,11 +96,19 @@ export class FinancialJournalEntity {
   @Column({ type: 'varchar', length: 8, default: 'VND' })
   currency!: string;
 
-  @Column({ name: 'total_debit', type: 'numeric', precision: 18, scale: 2 })
-  totalDebit!: string;
+  @Column({
+    name: 'total_debit',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  totalDebit!: number;
 
-  @Column({ name: 'total_credit', type: 'numeric', precision: 18, scale: 2 })
-  totalCredit!: string;
+  @Column({
+    name: 'total_credit',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  totalCredit!: number;
 
   @Column({ type: 'varchar', length: 16, default: 'POSTED' })
   status!: 'POSTED' | 'REVERSED';
@@ -156,21 +165,19 @@ export class FinancialJournalLineEntity {
 
   @Column({
     name: 'debit_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  debitAmount!: string;
+  debitAmount!: number;
 
   @Column({
     name: 'credit_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  creditAmount!: string;
+  creditAmount!: number;
 
   @Column({ name: 'branch_id', type: 'uuid', nullable: true })
   branchId!: string | null;
@@ -242,12 +249,11 @@ export class CashAccountEntity {
 
   @Column({
     name: 'current_balance',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  currentBalance!: string;
+  currentBalance!: number;
 
   @Column({ type: 'varchar', length: 16, default: 'ACTIVE' })
   status!: 'ACTIVE' | 'INACTIVE' | 'CLOSED';
@@ -337,8 +343,8 @@ export class CashbookEntryEntity {
   })
   voucherType!: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2 })
-  amount!: string;
+  @Column({ type: 'bigint', transformer: moneyTransformer })
+  amount!: number;
 
   @Column({ type: 'varchar', length: 8, default: 'VND' })
   currency!: string;
@@ -441,39 +447,35 @@ export class CustomerCreditProfileEntity {
 
   @Column({
     name: 'credit_limit',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 2000000,
   })
-  creditLimit!: string;
+  creditLimit!: number;
 
   @Column({
     name: 'posted_debt',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  postedDebt!: string;
+  postedDebt!: number;
 
   @Column({
     name: 'held_credit',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  heldCredit!: string;
+  heldCredit!: number;
 
   @Column({
     name: 'prepayment_balance',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  prepaymentBalance!: string;
+  prepaymentBalance!: number;
 
   @Column({ type: 'varchar', length: 16, default: 'ACTIVE' })
   status!: string;
@@ -507,11 +509,10 @@ export class CustomerCreditAuthorizationEntity {
 
   @Column({
     name: 'authorized_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  authorizedAmount!: string;
+  authorizedAmount!: number;
 
   @Column({ type: 'varchar', length: 16, default: 'HELD' })
   state!: 'HELD' | 'COMMITTED' | 'RELEASED' | 'EXPIRED';
@@ -589,34 +590,35 @@ export class CustomerReceivableEntity {
   @Column({ name: 'credit_authorization_id', type: 'uuid', nullable: true })
   creditAuthorizationId!: string | null;
 
-  @Column({ name: 'original_amount', type: 'numeric', precision: 18, scale: 2 })
-  originalAmount!: string;
+  @Column({
+    name: 'original_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  originalAmount!: number;
 
   @Column({
     name: 'paid_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  paidAmount!: string;
+  paidAmount!: number;
 
   @Column({
     name: 'adjusted_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  adjustedAmount!: string;
+  adjustedAmount!: number;
 
   @Column({
     name: 'outstanding_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  outstandingAmount!: string;
+  outstandingAmount!: number;
 
   @Column({ type: 'varchar', length: 8, default: 'VND' })
   currency!: string;
@@ -671,14 +673,26 @@ export class CustomerDebtLedgerEntity {
     | 'ADJUSTMENT'
     | 'REVERSAL';
 
-  @Column({ name: 'amount_delta', type: 'numeric', precision: 18, scale: 2 })
-  amountDelta!: string;
+  @Column({
+    name: 'amount_delta',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  amountDelta!: number;
 
-  @Column({ name: 'balance_before', type: 'numeric', precision: 18, scale: 2 })
-  balanceBefore!: string;
+  @Column({
+    name: 'balance_before',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  balanceBefore!: number;
 
-  @Column({ name: 'balance_after', type: 'numeric', precision: 18, scale: 2 })
-  balanceAfter!: string;
+  @Column({
+    name: 'balance_after',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  balanceAfter!: number;
 
   @Column({
     name: 'payment_method',
@@ -736,34 +750,35 @@ export class SupplierPayableEntity {
   @Column({ name: 'warehouse_id', type: 'uuid', nullable: true })
   warehouseId!: string | null;
 
-  @Column({ name: 'original_amount', type: 'numeric', precision: 18, scale: 2 })
-  originalAmount!: string;
+  @Column({
+    name: 'original_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  originalAmount!: number;
 
   @Column({
     name: 'paid_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  paidAmount!: string;
+  paidAmount!: number;
 
   @Column({
     name: 'adjusted_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  adjustedAmount!: string;
+  adjustedAmount!: number;
 
   @Column({
     name: 'outstanding_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  outstandingAmount!: string;
+  outstandingAmount!: number;
 
   @Column({ type: 'varchar', length: 8, default: 'VND' })
   currency!: string;
@@ -818,14 +833,26 @@ export class SupplierDebtLedgerEntity {
     | 'ADJUSTMENT'
     | 'REVERSAL';
 
-  @Column({ name: 'amount_delta', type: 'numeric', precision: 18, scale: 2 })
-  amountDelta!: string;
+  @Column({
+    name: 'amount_delta',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  amountDelta!: number;
 
-  @Column({ name: 'balance_before', type: 'numeric', precision: 18, scale: 2 })
-  balanceBefore!: string;
+  @Column({
+    name: 'balance_before',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  balanceBefore!: number;
 
-  @Column({ name: 'balance_after', type: 'numeric', precision: 18, scale: 2 })
-  balanceAfter!: string;
+  @Column({
+    name: 'balance_after',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  balanceAfter!: number;
 
   @Column({
     name: 'payment_method',
@@ -902,38 +929,34 @@ export class PaymentSettlementEntity {
 
   @Column({
     name: 'requested_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  requestedAmount!: string;
+  requestedAmount!: number;
 
   @Column({
     name: 'confirmed_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  confirmedAmount!: string;
+  confirmedAmount!: number;
 
   @Column({
     name: 'settled_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  settledAmount!: string;
+  settledAmount!: number;
 
   @Column({
     name: 'refunded_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  refundedAmount!: string;
+  refundedAmount!: number;
 
   @Column({ type: 'varchar', length: 8, default: 'VND' })
   currency!: string;
@@ -1016,8 +1039,8 @@ export class RefundOperationEntity {
   @Column({ name: 'cash_account_id', type: 'uuid', nullable: true })
   cashAccountId!: string | null;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2 })
-  amount!: string;
+  @Column({ type: 'bigint', transformer: moneyTransformer })
+  amount!: number;
 
   @Column({ type: 'varchar', length: 8, default: 'VND' })
   currency!: string;
@@ -1121,65 +1144,58 @@ export class CodReceivableEntity {
 
   @Column({
     name: 'expected_cod_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  expectedCodAmount!: string;
+  expectedCodAmount!: number;
 
   @Column({
     name: 'reported_collected_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  reportedCollectedAmount!: string;
+  reportedCollectedAmount!: number;
 
   @Column({
     name: 'carrier_fee_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  carrierFeeAmount!: string;
+  carrierFeeAmount!: number;
 
   @Column({
     name: 'adjustment_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  adjustmentAmount!: string;
+  adjustmentAmount!: number;
 
   @Column({
     name: 'expected_net_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  expectedNetAmount!: string;
+  expectedNetAmount!: number;
 
   @Column({
     name: 'actual_remitted_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  actualRemittedAmount!: string;
+  actualRemittedAmount!: number;
 
   @Column({
     name: 'discrepancy_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  discrepancyAmount!: string;
+  discrepancyAmount!: number;
 
   @Column({
     type: 'varchar',
@@ -1246,48 +1262,43 @@ export class CodSettlementBatchEntity {
 
   @Column({
     name: 'total_expected_cod',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  totalExpectedCod!: string;
+  totalExpectedCod!: number;
 
   @Column({
     name: 'total_reported_cod',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  totalReportedCod!: string;
+  totalReportedCod!: number;
 
   @Column({
     name: 'total_carrier_fee',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  totalCarrierFee!: string;
+  totalCarrierFee!: number;
 
   @Column({
     name: 'total_net_payout',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  totalNetPayout!: string;
+  totalNetPayout!: number;
 
   @Column({
     name: 'total_discrepancy',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  totalDiscrepancy!: string;
+  totalDiscrepancy!: number;
 
   @Column({ name: 'line_count', type: 'int', default: 0 })
   lineCount!: number;
@@ -1359,48 +1370,43 @@ export class CodSettlementLineEntity {
 
   @Column({
     name: 'expected_cod_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  expectedCodAmount!: string;
+  expectedCodAmount!: number;
 
   @Column({
     name: 'reported_cod_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  reportedCodAmount!: string;
+  reportedCodAmount!: number;
 
   @Column({
     name: 'carrier_fee_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  carrierFeeAmount!: string;
+  carrierFeeAmount!: number;
 
   @Column({
     name: 'net_payout_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  netPayoutAmount!: string;
+  netPayoutAmount!: number;
 
   @Column({
     name: 'discrepancy_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  discrepancyAmount!: string;
+  discrepancyAmount!: number;
 
   @Column({
     name: 'line_status',
@@ -1445,61 +1451,63 @@ export class ShiftCashReconciliationEntity {
   @Column({ name: 'staff_id', type: 'varchar', length: 64 })
   staffId!: string;
 
-  @Column({ name: 'opening_cash', type: 'numeric', precision: 18, scale: 2 })
-  openingCash!: string;
+  @Column({
+    name: 'opening_cash',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  openingCash!: number;
 
   @Column({
     name: 'confirmed_cash_sales',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  confirmedCashSales!: string;
+  confirmedCashSales!: number;
 
   @Column({
     name: 'confirmed_cash_refunds',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  confirmedCashRefunds!: string;
+  confirmedCashRefunds!: number;
 
   @Column({
     name: 'other_cash_receipts',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  otherCashReceipts!: string;
+  otherCashReceipts!: number;
 
   @Column({
     name: 'other_cash_expenses',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  otherCashExpenses!: string;
+  otherCashExpenses!: number;
 
   @Column({
     name: 'expected_closing_cash',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  expectedClosingCash!: string;
+  expectedClosingCash!: number;
 
   @Column({
     name: 'actual_counted_cash',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  actualCountedCash!: string;
+  actualCountedCash!: number;
 
-  @Column({ name: 'variance_amount', type: 'numeric', precision: 18, scale: 2 })
-  varianceAmount!: string;
+  @Column({
+    name: 'variance_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  varianceAmount!: number;
 
   @Column({ type: 'varchar', length: 24, default: 'RECONCILED' })
   status!: 'RECONCILED' | 'VARIANCE_DETECTED';
@@ -1540,8 +1548,8 @@ export class FinancialAdjustmentEntity {
   @Column({ name: 'target_id', type: 'uuid' })
   targetId!: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2 })
-  amount!: string;
+  @Column({ type: 'bigint', transformer: moneyTransformer })
+  amount!: number;
 
   @Column({ type: 'varchar', length: 16 })
   direction!: 'DECREASE' | 'INCREASE';
@@ -1610,21 +1618,19 @@ export class ReconciliationRunEntity {
 
   @Column({
     name: 'matched_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  matchedAmount!: string;
+  matchedAmount!: number;
 
   @Column({
     name: 'mismatched_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  mismatchedAmount!: string;
+  mismatchedAmount!: number;
 
   @Column({ name: 'issue_count', type: 'int', default: 0 })
   issueCount!: number;
@@ -1664,30 +1670,27 @@ export class ReconciliationIssueEntity {
 
   @Column({
     name: 'expected_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  expectedAmount!: string;
+  expectedAmount!: number;
 
   @Column({
     name: 'actual_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  actualAmount!: string;
+  actualAmount!: number;
 
   @Column({
     name: 'difference_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
     default: 0,
   })
-  differenceAmount!: string;
+  differenceAmount!: number;
 
   @Column({ type: 'varchar', length: 24, default: 'OPEN' })
   status!: 'OPEN' | 'INVESTIGATING' | 'RESOLVED' | 'IGNORED';

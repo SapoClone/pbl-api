@@ -104,7 +104,7 @@ export class SalesOrderClient {
           lines: cmd.lines.map((l) => ({
             variantId: l.variantId,
             qty: String(l.quantity),
-            unitPriceOverride: String(l.unitPrice),
+            unitPriceOverride: l.unitPrice,
           })),
         },
         {

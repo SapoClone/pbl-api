@@ -36,8 +36,8 @@ import { DataSource, EntityManager } from 'typeorm';
 import { RESERVATION_TTL_MINUTES } from '../config/inventory.config';
 import {
   computeValuationAfterDeduction,
-  formatCentsToMoney,
-  parseMoneyToCents,
+  parseMoneyToVnd,
+  vndToNumber,
 } from '../domain/inventory-domain';
 import { assertCatalogSkuEligible } from '../infrastructure/catalog-reference/catalog-sku-projection.handler';
 import { assertActiveWarehouse } from '../modules/warehouses/warehouses.service';
@@ -980,8 +980,8 @@ export class ReservationsService {
         const oldOnHandQty = formatMilliToDecimal(
           parseDecimalToMilli(String(existingRows[0]?.onHandQty ?? '0')),
         );
-        const avgCostStr = formatCentsToMoney(
-          parseMoneyToCents(String(existingRows[0]?.avgUnitCost ?? '0')),
+        const avgCostStr = vndToNumber(
+          parseMoneyToVnd(String(existingRows[0]?.avgUnitCost ?? '0')),
         );
         const valuation = computeValuationAfterDeduction({
           currentOnHandQty: oldOnHandQty,
@@ -995,7 +995,7 @@ export class ReservationsService {
           SET
             on_hand_qty = on_hand_qty - $4::numeric(18,3),
             reserved_qty = reserved_qty - $4::numeric(18,3),
-            valuation_amount = $5::numeric(18,2),
+            valuation_amount = $5::bigint,
             version = version + 1,
             updated_at = now()
           WHERE tenant_id = $1
@@ -1045,7 +1045,7 @@ export class ReservationsService {
           ) VALUES (
             $1, $2, $3, $4, 'SALE_COMMIT',
             $5::numeric(18,3), $6::numeric(18,3), $7::numeric(18,3), $8::numeric(18,3),
-            $9::numeric(18,2), $10::numeric(18,2), $11, $12, $13, $14
+            $9::bigint, $10::bigint, $11, $12, $13, $14
           )
           `,
           [

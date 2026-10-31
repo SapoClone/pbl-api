@@ -14,9 +14,8 @@ import {
   computePayloadHash,
   FinanceDomainError,
   FinanceDomainErrorCode,
-  formatMoneyCents,
   GL_ACCOUNT_CODES,
-  parseMoneyCents,
+  parseVnd,
   validateRefundAllocation,
 } from '../../domain/finance-domain';
 import { nextFinanceDocumentCode } from '../../infrastructure/persistence/finance-code.generator';
@@ -81,11 +80,10 @@ export class RefundsService {
       `refund:${tenantId}:${dto.orderId}`,
     ]);
 
-    const reqCents = parseMoneyCents(dto.amount, {
+    const reqVnd = parseVnd(dto.amount, {
       allowZero: false,
       field: 'amount',
     });
-    const reqStr = formatMoneyCents(reqCents);
     const cleanKey = (
       idempotencyKeyHeader ??
       dto.idempotencyKey ??
@@ -100,7 +98,7 @@ export class RefundsService {
       orderId: dto.orderId,
       returnId: dto.returnId ?? null,
       method: dto.method,
-      amount: reqStr,
+      amount: reqVnd,
     });
 
     const refundRepo = em.getRepository(RefundOperationEntity);
@@ -130,19 +128,19 @@ export class RefundsService {
       dto.settlementId,
     );
 
-    const totalPaidCents = settlements.reduce(
+    const totalPaidVnd = settlements.reduce(
       (sum, s) =>
         s.settlementStatus === 'SETTLED'
           ? sum +
-            parseMoneyCents(s.settledAmount, {
+            parseVnd(s.settledAmount, {
               allowZero: true,
               field: 'settledAmount',
             })
           : sum,
-      0n,
+      0,
     );
 
-    if (totalPaidCents <= 0n) {
+    if (totalPaidVnd <= 0) {
       throw new FinanceDomainError(
         FinanceDomainErrorCode.REFUND_NOT_ELIGIBLE,
         `Order ${dto.orderId} has no settled payments eligible for refund`,
@@ -157,19 +155,18 @@ export class RefundsService {
       .andWhere('r.order_id = :orderId', { orderId: dto.orderId })
       .getMany();
 
-    const activeRefundCents = existingRefunds.reduce(
+    const activeRefundVnd = existingRefunds.reduce(
       (sum, r) =>
         r.status !== 'FAILED' && r.status !== 'REJECTED'
-          ? sum +
-            parseMoneyCents(r.amount, { allowZero: true, field: 'amount' })
+          ? sum + parseVnd(r.amount, { allowZero: true, field: 'amount' })
           : sum,
-      0n,
+      0,
     );
 
     validateRefundAllocation({
-      originalPaidAmount: formatMoneyCents(totalPaidCents),
-      alreadyRefundedAmount: formatMoneyCents(activeRefundCents),
-      requestedRefundAmount: reqStr,
+      originalPaidAmount: totalPaidVnd,
+      alreadyRefundedAmount: activeRefundVnd,
+      requestedRefundAmount: reqVnd,
     });
 
     const code = await nextFinanceDocumentCode(em, tenantId, 'RFD');
@@ -190,7 +187,7 @@ export class RefundsService {
       branchId: dto.branchId ?? targetSettlement?.branchId ?? null,
       shiftId: dto.shiftId ?? targetSettlement?.shiftId ?? null,
       cashAccountId: dto.cashAccountId ?? null,
-      amount: reqStr,
+      amount: reqVnd,
       currency: 'VND',
       method: dto.method,
       status: initialStatus,
@@ -336,7 +333,7 @@ export class RefundsService {
           sourceType: 'REFUND_OPERATION',
           sourceId: savedTimeout.id,
           expectedAmount: savedTimeout.amount,
-          actualAmount: '0.00',
+          actualAmount: 0,
           differenceAmount: savedTimeout.amount,
           status: 'OPEN',
           description: `Refund ${savedTimeout.code} timed out with provider ${savedTimeout.provider} (providerIdempotencyKey=${savedTimeout.providerIdempotencyKey})`,
@@ -550,57 +547,57 @@ export class RefundsService {
       refund.settlementId ?? undefined,
     );
 
-    const refundCents = parseMoneyCents(refund.amount, {
+    const refundVnd = parseVnd(refund.amount, {
       allowZero: false,
       field: 'amount',
     });
-    const totalPaidCents = settlements.reduce(
+    const totalPaidVnd = settlements.reduce(
       (sum, s) =>
         sum +
-        parseMoneyCents(s.settledAmount, {
+        parseVnd(s.settledAmount, {
           allowZero: true,
           field: 'settledAmount',
         }),
-      0n,
+      0,
     );
-    const alreadySettledRefundCents = settlements.reduce(
+    const alreadySettledRefundVnd = settlements.reduce(
       (sum, s) =>
         sum +
-        parseMoneyCents(s.refundedAmount, {
+        parseVnd(s.refundedAmount, {
           allowZero: true,
           field: 'refundedAmount',
         }),
-      0n,
+      0,
     );
 
     validateRefundAllocation({
-      originalPaidAmount: formatMoneyCents(totalPaidCents),
-      alreadyRefundedAmount: formatMoneyCents(alreadySettledRefundCents),
+      originalPaidAmount: totalPaidVnd,
+      alreadyRefundedAmount: alreadySettledRefundVnd,
       requestedRefundAmount: refund.amount,
     });
 
     const stlRepo = em.getRepository(PaymentSettlementEntity);
-    let remainingToApply = refundCents;
+    let remainingToApply = refundVnd;
     for (const settlement of settlements) {
-      if (remainingToApply <= 0n) {
+      if (remainingToApply <= 0) {
         break;
       }
-      const settled = parseMoneyCents(settlement.settledAmount, {
+      const settled = parseVnd(settlement.settledAmount, {
         allowZero: true,
         field: 'settledAmount',
       });
-      const refunded = parseMoneyCents(settlement.refundedAmount, {
+      const refunded = parseVnd(settlement.refundedAmount, {
         allowZero: true,
         field: 'refundedAmount',
       });
       const available = settled - refunded;
-      if (available <= 0n) {
+      if (available <= 0) {
         continue;
       }
 
       const delta =
         remainingToApply <= available ? remainingToApply : available;
-      settlement.refundedAmount = formatMoneyCents(refunded + delta);
+      settlement.refundedAmount = refunded + delta;
       settlement.version += 1;
       await stlRepo.save(settlement);
       remainingToApply -= delta;

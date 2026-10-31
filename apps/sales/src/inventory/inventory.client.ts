@@ -250,7 +250,7 @@ export class InventoryClient {
     warehouseId: string;
     returnId: string;
     code?: string;
-    items: { skuId: string; qty: string; unitCost?: string }[];
+    items: { skuId: string; qty: string; unitCost?: number }[];
   }): Promise<{ receiptId: string }> {
     this.assertClosed();
     let response;
@@ -266,7 +266,7 @@ export class InventoryClient {
           items: req.items.map((item) => ({
             skuId: item.skuId,
             qty: item.qty,
-            unitCost: item.unitCost ?? '0.00',
+            unitCost: item.unitCost ?? 0,
           })),
         },
         {

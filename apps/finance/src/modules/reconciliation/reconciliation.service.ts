@@ -9,9 +9,8 @@ import {
   evaluateShiftCashReconciliation,
   FinanceDomainError,
   FinanceDomainErrorCode,
-  formatMoneyCents,
   GL_ACCOUNT_CODES,
-  parseMoneyCents,
+  parseVnd,
 } from '../../domain/finance-domain';
 import { nextFinanceDocumentCode } from '../../infrastructure/persistence/finance-code.generator';
 import {
@@ -99,16 +98,16 @@ export class ReconciliationService {
     const evalResult = evaluateShiftCashReconciliation({
       openingCash: dto.openingCash,
       confirmedCashSales: dto.confirmedCashSales,
-      confirmedCashRefunds: dto.confirmedCashRefunds ?? '0.00',
-      otherCashReceipts: dto.otherCashReceipts ?? '0.00',
-      otherCashExpenses: dto.otherCashExpenses ?? '0.00',
+      confirmedCashRefunds: dto.confirmedCashRefunds ?? 0,
+      otherCashReceipts: dto.otherCashReceipts ?? 0,
+      otherCashExpenses: dto.otherCashExpenses ?? 0,
       actualCountedCash: dto.actualCountedCash,
     });
 
     const reconId = randomUUID();
     const shiftCode =
       dto.shiftCode ?? (await nextFinanceDocumentCode(em, tenantId, 'REC'));
-    const varianceCents = parseMoneyCents(evalResult.varianceAmount, {
+    const varianceVnd = parseVnd(evalResult.varianceAmount, {
       allowZero: true,
       allowNegative: true,
       field: 'varianceAmount',
@@ -131,10 +130,10 @@ export class ReconciliationService {
       );
     }
 
-    if (varianceCents !== 0n) {
-      const absVariance = varianceCents < 0n ? -varianceCents : varianceCents;
-      const absVarianceStr = formatMoneyCents(absVariance);
-      const isShortage = varianceCents < 0n;
+    if (varianceVnd !== 0) {
+      const absVariance = varianceVnd < 0 ? -varianceVnd : varianceVnd;
+      const absVarianceStr = absVariance;
+      const isShortage = varianceVnd < 0;
       const cashGl =
         cashAccount?.glAccountCode ?? GL_ACCOUNT_CODES.CASH_ON_HAND;
 
@@ -283,15 +282,14 @@ export class ReconciliationService {
     dto: CreateFinancialAdjustmentDto,
     tenantId = TenantContext.require(),
   ): Promise<{ adjustment: FinancialAdjustmentEntity; replayed: boolean }> {
-    const amountCents = parseMoneyCents(dto.amount, {
+    const amountVnd = parseVnd(dto.amount, {
       allowZero: false,
       field: 'amount',
     });
-    const amountStr = formatMoneyCents(amountCents);
     const cleanKey = (
       idempotencyKeyHeader ??
       dto.idempotencyKey ??
-      `adj:${dto.targetType}:${dto.targetId}:${amountStr}:${randomUUID()}`
+      `adj:${dto.targetType}:${dto.targetId}:${amountVnd}:${randomUUID()}`
     )
       .trim()
       .toLowerCase();
@@ -313,7 +311,7 @@ export class ReconciliationService {
         adjustmentType: dto.adjustmentType.trim().toUpperCase(),
         targetType: dto.targetType,
         targetId: dto.targetId,
-        amount: amountStr,
+        amount: amountVnd,
         direction: dto.direction,
         reasonCode: dto.reasonCode.trim().toUpperCase(),
         explanation: dto.explanation.trim(),
@@ -434,8 +432,8 @@ export class ReconciliationService {
       const startedAt = new Date();
 
       let processedCount = 0;
-      let matchedCents = 0n;
-      let mismatchedCents = 0n;
+      let matchedVnd = 0;
+      let mismatchedVnd = 0;
       let issueCount = 0;
 
       // 1. Check all journals are balanced
@@ -444,19 +442,18 @@ export class ReconciliationService {
         .find({ where: { tenantId } });
       for (const jnl of journals) {
         processedCount += 1;
-        const dCents = parseMoneyCents(jnl.totalDebit, {
+        const dVnd = parseVnd(jnl.totalDebit, {
           allowZero: true,
           field: 'totalDebit',
         });
-        const cCents = parseMoneyCents(jnl.totalCredit, {
+        const cVnd = parseVnd(jnl.totalCredit, {
           allowZero: true,
           field: 'totalCredit',
         });
-        if (dCents === cCents) {
-          matchedCents += dCents;
+        if (dVnd === cVnd) {
+          matchedVnd += dVnd;
         } else {
-          mismatchedCents +=
-            dCents > cCents ? dCents - cCents : cCents - dCents;
+          mismatchedVnd += dVnd > cVnd ? dVnd - cVnd : cVnd - dVnd;
           issueCount += 1;
         }
       }
@@ -467,12 +464,12 @@ export class ReconciliationService {
         .find({ where: { tenantId } });
       for (const stl of settlements) {
         processedCount += 1;
-        const reqCents = parseMoneyCents(stl.requestedAmount, {
+        const reqVnd = parseVnd(stl.requestedAmount, {
           allowZero: true,
           field: 'requestedAmount',
         });
         if (stl.settlementStatus === 'RECONCILIATION_REQUIRED') {
-          mismatchedCents += reqCents;
+          mismatchedVnd += reqVnd;
           issueCount += 1;
           await this.ensureIssueTrackedByRunInTx(em, tenantId, runId, {
             sourceType: 'PAYMENT_SETTLEMENT',
@@ -480,14 +477,12 @@ export class ReconciliationService {
             issueType: 'AMBIGUOUS_SETTLEMENT',
             expectedAmount: stl.requestedAmount,
             actualAmount: stl.confirmedAmount,
-            differenceAmount: formatMoneyCents(
-              parseMoneyCents(stl.confirmedAmount, { allowZero: true }) -
-                reqCents,
-            ),
+            differenceAmount:
+              parseVnd(stl.confirmedAmount, { allowZero: true }) - reqVnd,
             description: `Payment settlement ${stl.code} for order ${stl.orderId} requires reconciliation`,
           });
         } else {
-          matchedCents += reqCents;
+          matchedVnd += reqVnd;
         }
       }
 
@@ -497,7 +492,7 @@ export class ReconciliationService {
         .find({ where: { tenantId } });
       for (const rf of refunds) {
         processedCount += 1;
-        const amtCents = parseMoneyCents(rf.amount, {
+        const amtVnd = parseVnd(rf.amount, {
           allowZero: true,
           field: 'amount',
         });
@@ -505,19 +500,19 @@ export class ReconciliationService {
           rf.status === 'PENDING_CONFIRMATION' ||
           rf.status === 'RECONCILIATION_REQUIRED'
         ) {
-          mismatchedCents += amtCents;
+          mismatchedVnd += amtVnd;
           issueCount += 1;
           await this.ensureIssueTrackedByRunInTx(em, tenantId, runId, {
             sourceType: 'REFUND_OPERATION',
             sourceId: rf.id,
             issueType: 'REFUND_PROVIDER_TIMEOUT',
             expectedAmount: rf.amount,
-            actualAmount: '0.00',
+            actualAmount: 0,
             differenceAmount: rf.amount,
             description: `Refund ${rf.code} is in ${rf.status}`,
           });
         } else {
-          matchedCents += amtCents;
+          matchedVnd += amtVnd;
         }
       }
 
@@ -527,12 +522,12 @@ export class ReconciliationService {
         .find({ where: { tenantId } });
       for (const cod of cods) {
         processedCount += 1;
-        const expCents = parseMoneyCents(cod.expectedCodAmount, {
+        const expVnd = parseVnd(cod.expectedCodAmount, {
           allowZero: true,
           field: 'expectedCodAmount',
         });
         if (cod.status === 'DISCREPANCY') {
-          mismatchedCents += expCents;
+          mismatchedVnd += expVnd;
           issueCount += 1;
           await this.ensureIssueTrackedByRunInTx(em, tenantId, runId, {
             sourceType: 'COD_RECEIVABLE',
@@ -544,7 +539,7 @@ export class ReconciliationService {
             description: `COD receivable ${cod.trackingNumber} has discrepancy ${cod.discrepancyAmount}`,
           });
         } else {
-          matchedCents += expCents;
+          matchedVnd += expVnd;
         }
       }
 
@@ -557,37 +552,37 @@ export class ReconciliationService {
         const openAr = await em
           .getRepository(CustomerReceivableEntity)
           .find({ where: { tenantId, customerId: profile.customerId } });
-        const sumOpenCents = openAr.reduce(
+        const sumOpenVnd = openAr.reduce(
           (sum, r) =>
             r.status === 'OPEN' || r.status === 'PARTIALLY_PAID'
               ? sum +
-                parseMoneyCents(r.outstandingAmount, {
+                parseVnd(r.outstandingAmount, {
                   allowZero: true,
                   field: 'outstandingAmount',
                 })
               : sum,
-          0n,
+          0,
         );
-        const postedDebtCents = parseMoneyCents(profile.postedDebt, {
+        const postedDebtVnd = parseVnd(profile.postedDebt, {
           allowZero: true,
           field: 'postedDebt',
         });
-        if (sumOpenCents === postedDebtCents) {
-          matchedCents += sumOpenCents;
+        if (sumOpenVnd === postedDebtVnd) {
+          matchedVnd += sumOpenVnd;
         } else {
-          mismatchedCents +=
-            sumOpenCents > postedDebtCents
-              ? sumOpenCents - postedDebtCents
-              : postedDebtCents - sumOpenCents;
+          mismatchedVnd +=
+            sumOpenVnd > postedDebtVnd
+              ? sumOpenVnd - postedDebtVnd
+              : postedDebtVnd - sumOpenVnd;
           issueCount += 1;
           await this.ensureIssueTrackedByRunInTx(em, tenantId, runId, {
             sourceType: 'CUSTOMER_CREDIT_PROFILE',
             sourceId: profile.id,
             issueType: 'SUBLEDGER_AR_MISMATCH',
-            expectedAmount: formatMoneyCents(sumOpenCents),
+            expectedAmount: sumOpenVnd,
             actualAmount: profile.postedDebt,
-            differenceAmount: formatMoneyCents(postedDebtCents - sumOpenCents),
-            description: `Customer ${profile.customerId} credit profile postedDebt (${profile.postedDebt}) differs from open receivables (${formatMoneyCents(sumOpenCents)})`,
+            differenceAmount: postedDebtVnd - sumOpenVnd,
+            description: `Customer ${profile.customerId} credit profile postedDebt (${profile.postedDebt}) differs from open receivables (${sumOpenVnd})`,
           });
         }
       }
@@ -600,8 +595,8 @@ export class ReconciliationService {
           reconciliationType,
           status: issueCount === 0 ? 'COMPLETED' : 'COMPLETED_WITH_ISSUES',
           processedCount,
-          matchedAmount: formatMoneyCents(matchedCents),
-          mismatchedAmount: formatMoneyCents(mismatchedCents),
+          matchedAmount: matchedVnd,
+          mismatchedAmount: mismatchedVnd,
           issueCount,
           startedBy: actorId,
           startedAt,
@@ -714,42 +709,42 @@ export class ReconciliationService {
       const cashAccounts = await em
         .getRepository(CashAccountEntity)
         .find({ where: scoped({ status: 'ACTIVE' }) });
-      const totalCashCents = cashAccounts.reduce(
+      const totalCashVnd = cashAccounts.reduce(
         (sum, acc) =>
           sum +
-          parseMoneyCents(acc.currentBalance, {
+          parseVnd(acc.currentBalance, {
             allowZero: true,
             allowNegative: true,
             field: 'currentBalance',
           }),
-        0n,
+        0,
       );
 
       const cashbookEntries = await em
         .getRepository(CashbookEntryEntity)
         .find({ where: scoped({ status: 'POSTED' }) });
-      let totalReceiptsCents = 0n;
-      let totalExpensesCents = 0n;
+      let totalReceiptsVnd = 0;
+      let totalExpensesVnd = 0;
       for (const entry of cashbookEntries) {
-        const amt = parseMoneyCents(entry.amount, {
+        const amt = parseVnd(entry.amount, {
           allowZero: true,
           field: 'amount',
         });
         if (entry.direction === 'RECEIPT') {
-          totalReceiptsCents += amt;
+          totalReceiptsVnd += amt;
         } else {
-          totalExpensesCents += amt;
+          totalExpensesVnd += amt;
         }
       }
 
       const receivables = await em
         .getRepository(CustomerReceivableEntity)
         .find({ where: scoped() });
-      let openArCents = 0n;
+      let openArVnd = 0;
       let openArCount = 0;
       for (const r of receivables) {
         if (r.status === 'OPEN' || r.status === 'PARTIALLY_PAID') {
-          openArCents += parseMoneyCents(r.outstandingAmount, {
+          openArVnd += parseVnd(r.outstandingAmount, {
             allowZero: true,
             field: 'outstandingAmount',
           });
@@ -760,11 +755,11 @@ export class ReconciliationService {
       const payables = await em
         .getRepository(SupplierPayableEntity)
         .find({ where: { tenantId } });
-      let openApCents = 0n;
+      let openApVnd = 0;
       let openApCount = 0;
       for (const p of payables) {
         if (p.status === 'OPEN' || p.status === 'PARTIALLY_PAID') {
-          openApCents += parseMoneyCents(p.outstandingAmount, {
+          openApVnd += parseVnd(p.outstandingAmount, {
             allowZero: true,
             field: 'outstandingAmount',
           });
@@ -775,20 +770,20 @@ export class ReconciliationService {
       const cods = await em
         .getRepository(CodReceivableEntity)
         .find({ where: scoped() });
-      let pendingCodCents = 0n;
-      let reconciledCodNetCents = 0n;
+      let pendingCodVnd = 0;
+      let reconciledCodNetVnd = 0;
       let codDiscrepancyCount = 0;
       for (const c of cods) {
         if (
           c.status === 'COD_RECEIVABLE_RECOGNIZED' ||
           c.status === 'SETTLEMENT_EXPECTED'
         ) {
-          pendingCodCents += parseMoneyCents(c.expectedCodAmount, {
+          pendingCodVnd += parseVnd(c.expectedCodAmount, {
             allowZero: true,
             field: 'expectedCodAmount',
           });
         } else if (c.status === 'RECONCILED') {
-          reconciledCodNetCents += parseMoneyCents(c.actualRemittedAmount, {
+          reconciledCodNetVnd += parseVnd(c.actualRemittedAmount, {
             allowZero: true,
             allowNegative: true,
             field: 'actualRemittedAmount',
@@ -801,11 +796,11 @@ export class ReconciliationService {
       const refunds = await em
         .getRepository(RefundOperationEntity)
         .find({ where: scoped() });
-      let completedRefundCents = 0n;
+      let completedRefundVnd = 0;
       let pendingReconRefundCount = 0;
       for (const rf of refunds) {
         if (rf.status === 'COMPLETED') {
-          completedRefundCents += parseMoneyCents(rf.amount, {
+          completedRefundVnd += parseVnd(rf.amount, {
             allowZero: true,
             field: 'amount',
           });
@@ -825,31 +820,29 @@ export class ReconciliationService {
         tenantId,
         currency: 'VND',
         cashBalances: {
-          totalCashBalance: formatMoneyCents(totalCashCents),
+          totalCashBalance: totalCashVnd,
           activeAccountCount: cashAccounts.length,
         },
         cashbook: {
-          totalReceipts: formatMoneyCents(totalReceiptsCents),
-          totalExpenses: formatMoneyCents(totalExpensesCents),
-          netCashFlow: formatMoneyCents(
-            totalReceiptsCents - totalExpensesCents,
-          ),
+          totalReceipts: totalReceiptsVnd,
+          totalExpenses: totalExpensesVnd,
+          netCashFlow: totalReceiptsVnd - totalExpensesVnd,
         },
         receivables: {
-          totalOpenCustomerDebt: formatMoneyCents(openArCents),
+          totalOpenCustomerDebt: openArVnd,
           openReceivableCount: openArCount,
         },
         payables: {
-          totalOpenSupplierPayable: formatMoneyCents(openApCents),
+          totalOpenSupplierPayable: openApVnd,
           openPayableCount: openApCount,
         },
         cod: {
-          pendingCodReceivableAmount: formatMoneyCents(pendingCodCents),
-          reconciledCodNetAmount: formatMoneyCents(reconciledCodNetCents),
+          pendingCodReceivableAmount: pendingCodVnd,
+          reconciledCodNetAmount: reconciledCodNetVnd,
           codDiscrepancyCount,
         },
         refunds: {
-          completedRefundAmount: formatMoneyCents(completedRefundCents),
+          completedRefundAmount: completedRefundVnd,
           pendingReconciliationRefundCount: pendingReconRefundCount,
         },
         reconciliation: {
@@ -867,21 +860,20 @@ export class ReconciliationService {
     if (!tenantId || !payload?.shiftId || !payload?.branchId) {
       return;
     }
-    const openingCents = parseMoneyCents(payload.openingCash ?? '0.00', {
+    const openingVnd = parseVnd(payload.openingCash ?? 0, {
       allowZero: true,
       field: 'openingCash',
     });
-    const expectedCents = parseMoneyCents(
-      payload.expectedCash ?? payload.openingCash ?? '0.00',
+    const expectedVnd = parseVnd(
+      payload.expectedCash ?? payload.openingCash ?? 0,
       {
         allowZero: true,
         field: 'expectedCash',
       },
     );
-    const salesCents =
-      expectedCents >= openingCents ? expectedCents - openingCents : 0n;
-    const actualCents = parseMoneyCents(
-      payload.actualCash ?? payload.expectedCash ?? '0.00',
+    const salesVnd = expectedVnd >= openingVnd ? expectedVnd - openingVnd : 0;
+    const actualVnd = parseVnd(
+      payload.actualCash ?? payload.expectedCash ?? 0,
       {
         allowZero: true,
         field: 'actualCash',
@@ -895,10 +887,10 @@ export class ReconciliationService {
         shiftCode: payload.code,
         branchId: payload.branchId,
         staffId: payload.staffId,
-        openingCash: formatMoneyCents(openingCents),
-        confirmedCashSales: formatMoneyCents(salesCents),
-        confirmedCashRefunds: '0.00',
-        actualCountedCash: formatMoneyCents(actualCents),
+        openingCash: openingVnd,
+        confirmedCashSales: salesVnd,
+        confirmedCashRefunds: 0,
+        actualCountedCash: actualVnd,
       },
       tenantId,
     );
@@ -949,9 +941,9 @@ export class ReconciliationService {
       sourceType: string;
       sourceId: string;
       issueType: string;
-      expectedAmount: string;
-      actualAmount: string;
-      differenceAmount: string;
+      expectedAmount: number;
+      actualAmount: number;
+      differenceAmount: number;
       description: string;
     },
   ): Promise<void> {

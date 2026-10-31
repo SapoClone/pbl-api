@@ -17,9 +17,7 @@ import {
   SalesDomainErrorCode,
   assertCanCancelOrder,
   formatQtyMillis,
-  formatVnd,
   parseQtyMillis,
-  parseVndAmount,
   validateOrderStateCombination,
 } from '../../domain/sales-domain';
 import {
@@ -141,19 +139,15 @@ export class M3OrdersService {
         const orderId = randomUUID();
         const code = await nextTenantDocumentCode(em, tenantId, 'HD');
         const now = new Date();
-        const grandTotalInt = Number(parseVndAmount(quote.grandTotal, true));
+        const grandTotalInt = quote.grandTotal;
         const itemCount = quote.lines.reduce(
           (sum, l) => sum + Math.max(1, Math.round(Number(l.qty))),
           0,
         );
 
         if (quote.couponCode) {
-          const subtotalVnd = parseVndAmount(quote.subtotal, true);
-          const itemDiscVnd = parseVndAmount(quote.itemDiscountTotal, true);
-          const orderDiscVnd = parseVndAmount(quote.orderDiscountTotal, true);
-          const afterOrderDisc = formatVnd(
-            subtotalVnd - itemDiscVnd - orderDiscVnd,
-          );
+          const afterOrderDisc =
+            quote.subtotal - quote.itemDiscountTotal - quote.orderDiscountTotal;
           await this.promotionsService.redeemCouponWithinTransaction(
             em,
             tenantId,
@@ -192,8 +186,8 @@ export class M3OrdersService {
           shippingFee: quote.shippingFee,
           taxTotal: quote.taxTotal,
           grandTotal: quote.grandTotal,
-          paidAmount: '0.00',
-          refundedAmount: '0.00',
+          paidAmount: 0,
+          refundedAmount: 0,
           totalAmount: grandTotalInt,
           itemCount,
           note: dto.note ?? null,
@@ -219,7 +213,7 @@ export class M3OrdersService {
             quantity: Math.max(1, Math.round(Number(line.qty))),
             qty: line.qty,
             baseQty: line.baseQty,
-            unitPrice: Number(parseVndAmount(line.unitPrice, true)),
+            unitPrice: line.unitPrice,
             lineGross: line.lineGross,
             itemDiscountType: line.itemDiscountType,
             itemDiscountValue: line.itemDiscountValue,
@@ -228,10 +222,10 @@ export class M3OrdersService {
             lineNet: line.lineNet,
             taxRate: line.taxRate,
             taxAmount: line.taxAmount,
-            lineTotal: Number(parseVndAmount(line.lineTotal, true)),
+            lineTotal: line.lineTotal,
             unitCostSnapshot: line.unitCostSnapshot,
             returnedQty: '0.000',
-            refundedAmount: '0.00',
+            refundedAmount: 0,
           }),
         );
         await em.save(OrderItemEntity, items);
@@ -422,7 +416,7 @@ export class M3OrdersService {
             quantity: Math.max(1, Math.round(Number(line.qty))),
             qty: line.qty,
             baseQty: line.baseQty,
-            unitPrice: Number(parseVndAmount(line.unitPrice, true)),
+            unitPrice: line.unitPrice,
             lineGross: line.lineGross,
             itemDiscountType: line.itemDiscountType,
             itemDiscountValue: line.itemDiscountValue,
@@ -431,10 +425,10 @@ export class M3OrdersService {
             lineNet: line.lineNet,
             taxRate: line.taxRate,
             taxAmount: line.taxAmount,
-            lineTotal: Number(parseVndAmount(line.lineTotal, true)),
+            lineTotal: line.lineTotal,
             unitCostSnapshot: line.unitCostSnapshot,
             returnedQty: '0.000',
-            refundedAmount: '0.00',
+            refundedAmount: 0,
           }),
         );
         await em.save(OrderItemEntity, newItems);
@@ -448,7 +442,7 @@ export class M3OrdersService {
         order.shippingFee = nextQuote.shippingFee;
         order.taxTotal = nextQuote.taxTotal;
         order.grandTotal = nextQuote.grandTotal;
-        order.totalAmount = Number(parseVndAmount(nextQuote.grandTotal, true));
+        order.totalAmount = nextQuote.grandTotal;
         order.itemCount = nextQuote.lines.reduce(
           (sum, l) => sum + Math.max(1, Math.round(Number(l.qty))),
           0,
@@ -595,11 +589,10 @@ export class M3OrdersService {
       });
       await em.save(OrderStatusHistoryEntity, history);
 
-      const totalDiscountVnd = formatVnd(
-        parseVndAmount(locked.itemDiscountTotal, true) +
-          parseVndAmount(locked.orderDiscountTotal, true) +
-          parseVndAmount(locked.promotionDiscountTotal, true),
-      );
+      const totalDiscountVnd =
+        (locked.itemDiscountTotal ?? 0) +
+        (locked.orderDiscountTotal ?? 0) +
+        (locked.promotionDiscountTotal ?? 0);
       await this.outbox.add(em, SALES_ORDER_CONFIRMED, {
         orderId,
         code: locked.code,
@@ -608,10 +601,10 @@ export class M3OrdersService {
         orderStatus: 'CONFIRMED',
         paymentStatus: locked.paymentStatus ?? 'UNPAID',
         fulfillmentStatus: 'RESERVED',
-        subtotal: locked.subtotal ?? '0.00',
+        subtotal: locked.subtotal ?? 0,
         discountTotal: totalDiscountVnd,
-        taxTotal: locked.taxTotal ?? '0.00',
-        grandTotal: locked.grandTotal ?? '0.00',
+        taxTotal: locked.taxTotal ?? 0,
+        grandTotal: locked.grandTotal ?? 0,
         actorId,
         occurredAt: new Date().toISOString(),
       } satisfies SalesOrderLifecycleEventPayload);
@@ -717,11 +710,10 @@ export class M3OrdersService {
       });
       await em.save(OrderStatusHistoryEntity, history);
 
-      const totalDiscountVnd = formatVnd(
-        parseVndAmount(locked.itemDiscountTotal, true) +
-          parseVndAmount(locked.orderDiscountTotal, true) +
-          parseVndAmount(locked.promotionDiscountTotal, true),
-      );
+      const totalDiscountVnd =
+        (locked.itemDiscountTotal ?? 0) +
+        (locked.orderDiscountTotal ?? 0) +
+        (locked.promotionDiscountTotal ?? 0);
       await this.outbox.add(em, SALES_ORDER_CANCELLED, {
         orderId,
         code: locked.code,
@@ -730,10 +722,10 @@ export class M3OrdersService {
         orderStatus: 'CANCELLED',
         paymentStatus: locked.paymentStatus ?? 'UNPAID',
         fulfillmentStatus: 'UNFULFILLED',
-        subtotal: locked.subtotal ?? '0.00',
+        subtotal: locked.subtotal ?? 0,
         discountTotal: totalDiscountVnd,
-        taxTotal: locked.taxTotal ?? '0.00',
-        grandTotal: locked.grandTotal ?? '0.00',
+        taxTotal: locked.taxTotal ?? 0,
+        grandTotal: locked.grandTotal ?? 0,
         actorId,
         occurredAt: now.toISOString(),
       } satisfies SalesOrderLifecycleEventPayload);

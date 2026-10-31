@@ -177,7 +177,7 @@ async function runBenchmark() {
         skuCode: `PERF-SKU-${i}`,
         barcode: null,
         name: `Performance Product ${i}`,
-        basePrice: '199000.00',
+        basePrice: 199000,
         status: 'ACTIVE',
         aggregateVersion: 1,
       });
@@ -207,7 +207,7 @@ async function runBenchmark() {
         mappingVersion: 1,
         status: 'ACTIVE',
         listingSyncStatus: 'SYNCED',
-        externalPrice: '199000.00',
+        externalPrice: 199000,
         createdBy: ACTOR_ID,
         updatedBy: ACTOR_ID,
       });
@@ -290,8 +290,8 @@ async function runBenchmark() {
           externalUpdatedAt: new Date(),
           buyerName: `buyer.${i}`,
           currency: 'VND',
-          totalAmount: '199000.00',
-          shippingFee: '0.00',
+          totalAmount: 199000,
+          shippingFee: 0,
           paymentMethod: 'SHOPEEPAY',
           rawOrderSnapshot: {},
           mappingSnapshot: {},

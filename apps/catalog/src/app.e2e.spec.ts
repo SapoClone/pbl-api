@@ -102,7 +102,7 @@ const pricingStub = {
     variantId: SAMPLE_UUID,
     skuCode: 'TSHIRT-BLK-M',
     currency: 'VND',
-    amount: '199000.00',
+    amount: 199000,
     source: 'DEFAULT_PRICE_LIST',
   })),
 };
@@ -317,6 +317,21 @@ describe('Catalog service HTTP & RBAC contract', () => {
         .send({ name: 'Holiday', startDate: '29-10-2026' })
         .expect(422);
       expect(res.body.statusCode).toBe(422);
+    });
+
+    it('rejects fractional or string money with 422', async () => {
+      for (const price of [199000.5, '199000']) {
+        await request(url())
+          .put(`/api/v1/price-lists/${SAMPLE_UUID}/items`)
+          .set('Authorization', as(['owner']))
+          .send({ items: [{ variantId: SAMPLE_UUID, price }] })
+          .expect(422);
+      }
+      await request(url())
+        .put(`/api/v1/price-lists/${SAMPLE_UUID}/items`)
+        .set('Authorization', as(['owner']))
+        .send({ items: [{ variantId: SAMPLE_UUID, price: -1 }] })
+        .expect(422);
     });
   });
 });

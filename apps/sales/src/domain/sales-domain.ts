@@ -1,6 +1,6 @@
 /**
  * Pure TypeScript Domain Layer for SapoClone M3 Sales & POS Microservice.
- * Zero NestJS or TypeORM imports — enforces decimal-safe retail pricing,
+ * Zero NestJS or TypeORM imports — enforces integer-VND retail pricing,
  * pro-rated discount waterfall, RBAC discount ceilings, 3D order state machines,
  * tender validation, shift cash reconciliation, and pro-rated return refunds.
  */
@@ -113,7 +113,7 @@ export type ReturnDisposition =
 
 // ---- Decimal-Safe Arithmetic Helpers ----
 // Quantities: NUMERIC(18,3) -> scaled by 1,000 (milli-units)
-// Money (VND): Integer VND (or NUMERIC(18,2) rounded to integer VND for commercial totals)
+// Money (VND): a whole number. Computed as bigint inside this file, exchanged as a safe-integer number.
 
 const QTY_SCALE = 1000n;
 const FACTOR_SCALE = 10000n;
@@ -181,11 +181,12 @@ export function computeBaseQtyMillis(
   return num / FACTOR_SCALE;
 }
 
+/** Money in is a safe integer number (or bigint): a fraction or a string is a 422 */
 export function parseVndAmount(
-  value: string | number | bigint | undefined | null,
+  value: number | bigint | undefined | null,
   allowZero = true,
 ): bigint {
-  if (value === undefined || value === null || value === '') {
+  if (value === undefined || value === null) {
     if (allowZero) return 0n;
     throw new SalesDomainError(
       SalesDomainErrorCode.VALIDATION_ERROR,
@@ -193,40 +194,39 @@ export function parseVndAmount(
       422,
     );
   }
+  let vnd: bigint;
   if (typeof value === 'bigint') {
-    if (value < 0n || (!allowZero && value === 0n)) {
-      throw new SalesDomainError(
-        SalesDomainErrorCode.VALIDATION_ERROR,
-        `Invalid monetary amount: ${value.toString()}`,
-        422,
-      );
-    }
-    return value;
-  }
-  const raw = String(value).trim();
-  if (!/^\d+(\.\d{1,2})?$/.test(raw)) {
+    vnd = value;
+  } else if (typeof value === 'number' && Number.isSafeInteger(value)) {
+    vnd = BigInt(value);
+  } else {
     throw new SalesDomainError(
       SalesDomainErrorCode.VALIDATION_ERROR,
-      `Invalid VND monetary amount: ${raw}`,
+      `Invalid VND monetary amount (a whole number is required): ${String(value)}`,
       422,
     );
   }
-  const [intPart, fracPart = ''] = raw.split('.');
-  const cents = BigInt((fracPart + '00').slice(0, 2));
-  // Round half up to integer VND
-  const vnd = BigInt(intPart) + (cents >= 50n ? 1n : 0n);
   if (vnd < 0n || (!allowZero && vnd === 0n)) {
     throw new SalesDomainError(
       SalesDomainErrorCode.VALIDATION_ERROR,
-      `Monetary amount must be ${allowZero ? 'non-negative' : 'positive'}: ${raw}`,
+      `Monetary amount must be ${allowZero ? 'non-negative' : 'positive'}: ${vnd.toString()}`,
       422,
     );
   }
   return vnd;
 }
 
-export function formatVnd(amount: bigint): string {
-  return `${amount.toString()}.00`;
+/** bigint VND to the number carried in JSON and events; refuses what is not a safe integer */
+export function vndNumber(amount: bigint): number {
+  const n = Number(amount);
+  if (!Number.isSafeInteger(n)) {
+    throw new SalesDomainError(
+      SalesDomainErrorCode.VALIDATION_ERROR,
+      `Monetary amount out of range: ${amount.toString()}`,
+      422,
+    );
+  }
+  return n;
 }
 
 export function roundDivHalfUp(numerator: bigint, denominator: bigint): bigint {
@@ -250,26 +250,27 @@ export interface AuthoritativeCatalogVariant {
   variantName: string;
   unitCode: string;
   conversionFactor: string;
-  unitPrice: string;
+  unitPrice: number;
   status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | 'DRAFT';
-  unitCostSnapshot?: string;
+  unitCostSnapshot?: number;
 }
 
 export interface QuoteLineInput {
   variantId: string;
   qty: string | number;
-  expectedUnitPrice?: string | number;
+  expectedUnitPrice?: number;
   discountType?: DiscountType;
-  discountValue?: string | number;
+  /** FIXED: a whole number of VND; PERCENT: a percentage 0-100 */
+  discountValue?: number;
   taxRatePercent?: string | number;
 }
 
 export interface QuoteOrderInput {
   lines: QuoteLineInput[];
   orderDiscountType?: DiscountType;
-  orderDiscountValue?: string | number;
-  promotionDiscountAmount?: string | number;
-  shippingFee?: string | number;
+  orderDiscountValue?: number;
+  promotionDiscountAmount?: number;
+  shippingFee?: number;
 }
 
 export interface CalculatedOrderLine {
@@ -283,40 +284,40 @@ export interface CalculatedOrderLine {
   conversionFactor: string;
   qty: string;
   baseQty: string;
-  unitPrice: string;
-  lineGross: string;
+  unitPrice: number;
+  lineGross: number;
   itemDiscountType: DiscountType;
-  itemDiscountValue: string;
-  itemDiscountAmount: string;
-  lineAfterItemDiscount: string;
-  allocatedOrderDiscount: string;
-  lineNet: string;
+  itemDiscountValue: number;
+  itemDiscountAmount: number;
+  lineAfterItemDiscount: number;
+  allocatedOrderDiscount: number;
+  lineNet: number;
   taxRate: string;
-  taxAmount: string;
-  lineTotal: string;
-  unitCostSnapshot: string;
+  taxAmount: number;
+  lineTotal: number;
+  unitCostSnapshot: number;
 }
 
 export interface CalculatedOrderQuote {
   lines: CalculatedOrderLine[];
-  subtotal: string;
-  itemDiscountTotal: string;
+  subtotal: number;
+  itemDiscountTotal: number;
   orderDiscountType: DiscountType;
-  orderDiscountValue: string;
-  orderDiscountTotal: string;
-  promotionDiscountTotal: string;
-  totalDiscount: string;
+  orderDiscountValue: number;
+  orderDiscountTotal: number;
+  promotionDiscountTotal: number;
+  totalDiscount: number;
   effectiveDiscountPercent: number;
-  shippingFee: string;
-  taxTotal: string;
-  grandTotal: string;
+  shippingFee: number;
+  taxTotal: number;
+  grandTotal: number;
   totalBaseQty: string;
 }
 
 export function calculateItemDiscount(
   lineGross: bigint,
   discountType: DiscountType = 'NONE',
-  discountValue?: string | number,
+  discountValue?: number,
 ): bigint {
   if (
     discountType === 'NONE' ||
@@ -337,8 +338,13 @@ export function calculateItemDiscount(
     return fixed;
   }
   if (discountType === 'PERCENT') {
-    const num = Number(discountValue);
-    if (!Number.isFinite(num) || num < 0 || num > 100) {
+    const num = discountValue;
+    if (
+      typeof num !== 'number' ||
+      !Number.isFinite(num) ||
+      num < 0 ||
+      num > 100
+    ) {
       throw new SalesDomainError(
         SalesDomainErrorCode.INVALID_DISCOUNT,
         `Item percentage discount must be between 0 and 100, got ${discountValue}`,
@@ -375,7 +381,7 @@ export function calculateOrderQuote(
     unitPriceVnd: bigint;
     lineGrossVnd: bigint;
     itemDiscountType: DiscountType;
-    itemDiscountValueStr: string;
+    itemDiscountValue: number;
     itemDiscountVnd: bigint;
     lineAfterItemDiscountVnd: bigint;
     allocatedOrderDiscountVnd: bigint;
@@ -409,20 +415,19 @@ export function calculateOrderQuote(
     const unitPriceVnd = parseVndAmount(catalog.unitPrice, false);
     if (
       reqLine.expectedUnitPrice !== undefined &&
-      reqLine.expectedUnitPrice !== null &&
-      String(reqLine.expectedUnitPrice).trim() !== ''
+      reqLine.expectedUnitPrice !== null
     ) {
       const expectedVnd = parseVndAmount(reqLine.expectedUnitPrice, false);
       if (expectedVnd !== unitPriceVnd) {
         throw new SalesDomainError(
           SalesDomainErrorCode.PRICE_CHANGED,
-          `Catalog price for ${catalog.skuCode} changed from ${formatVnd(expectedVnd)} to ${formatVnd(unitPriceVnd)}`,
+          `Catalog price for ${catalog.skuCode} changed from ${expectedVnd} to ${unitPriceVnd}`,
           409,
           {
             variantId: catalog.variantId,
             skuCode: catalog.skuCode,
-            expectedUnitPrice: formatVnd(expectedVnd),
-            actualUnitPrice: formatVnd(unitPriceVnd),
+            expectedUnitPrice: vndNumber(expectedVnd),
+            actualUnitPrice: vndNumber(unitPriceVnd),
           },
         );
       }
@@ -464,10 +469,7 @@ export function calculateOrderQuote(
       unitPriceVnd,
       lineGrossVnd,
       itemDiscountType,
-      itemDiscountValueStr:
-        reqLine.discountValue !== undefined
-          ? String(reqLine.discountValue)
-          : '0.00',
+      itemDiscountValue: reqLine.discountValue ?? 0,
       itemDiscountVnd,
       lineAfterItemDiscountVnd,
       allocatedOrderDiscountVnd: 0n,
@@ -533,20 +535,20 @@ export function calculateOrderQuote(
       conversionFactor: line.catalog.conversionFactor || '1.0000',
       qty: formatQtyMillis(line.qtyMillis),
       baseQty: formatQtyMillis(line.baseQtyMillis),
-      unitPrice: formatVnd(line.unitPriceVnd),
-      lineGross: formatVnd(line.lineGrossVnd),
+      unitPrice: vndNumber(line.unitPriceVnd),
+      lineGross: vndNumber(line.lineGrossVnd),
       itemDiscountType: line.itemDiscountType,
-      itemDiscountValue: line.itemDiscountValueStr,
-      itemDiscountAmount: formatVnd(line.itemDiscountVnd),
-      lineAfterItemDiscount: formatVnd(line.lineAfterItemDiscountVnd),
-      allocatedOrderDiscount: formatVnd(line.allocatedOrderDiscountVnd),
-      lineNet: formatVnd(lineNetVnd),
+      itemDiscountValue: line.itemDiscountValue,
+      itemDiscountAmount: vndNumber(line.itemDiscountVnd),
+      lineAfterItemDiscount: vndNumber(line.lineAfterItemDiscountVnd),
+      allocatedOrderDiscount: vndNumber(line.allocatedOrderDiscountVnd),
+      lineNet: vndNumber(lineNetVnd),
       taxRate: line.taxRateStr,
-      taxAmount: formatVnd(taxAmountVnd),
-      lineTotal: formatVnd(lineTotalVnd),
-      unitCostSnapshot: line.catalog.unitCostSnapshot
-        ? formatVnd(parseVndAmount(line.catalog.unitCostSnapshot, true))
-        : '0.00',
+      taxAmount: vndNumber(taxAmountVnd),
+      lineTotal: vndNumber(lineTotalVnd),
+      unitCostSnapshot: vndNumber(
+        parseVndAmount(line.catalog.unitCostSnapshot, true),
+      ),
     };
   });
 
@@ -562,20 +564,17 @@ export function calculateOrderQuote(
 
   return {
     lines: calculatedLines,
-    subtotal: formatVnd(subtotalVnd),
-    itemDiscountTotal: formatVnd(itemDiscountTotalVnd),
+    subtotal: vndNumber(subtotalVnd),
+    itemDiscountTotal: vndNumber(itemDiscountTotalVnd),
     orderDiscountType,
-    orderDiscountValue:
-      input.orderDiscountValue !== undefined
-        ? String(input.orderDiscountValue)
-        : '0.00',
-    orderDiscountTotal: formatVnd(rawOrderDiscountVnd),
-    promotionDiscountTotal: formatVnd(promoDiscountVnd),
-    totalDiscount: formatVnd(totalDiscountVnd),
+    orderDiscountValue: input.orderDiscountValue ?? 0,
+    orderDiscountTotal: vndNumber(rawOrderDiscountVnd),
+    promotionDiscountTotal: vndNumber(promoDiscountVnd),
+    totalDiscount: vndNumber(totalDiscountVnd),
     effectiveDiscountPercent,
-    shippingFee: formatVnd(shippingFeeVnd),
-    taxTotal: formatVnd(taxTotalVnd),
-    grandTotal: formatVnd(grandTotalVnd),
+    shippingFee: vndNumber(shippingFeeVnd),
+    taxTotal: vndNumber(taxTotalVnd),
+    grandTotal: vndNumber(grandTotalVnd),
     totalBaseQty: formatQtyMillis(totalBaseQtyMillis),
   };
 }
@@ -700,36 +699,36 @@ export function assertCanCancelOrder(state: {
 
 export interface TenderInputLine {
   method: Exclude<TenderMethod, 'COMBINED'>;
-  amount: string | number;
-  tenderedCash?: string | number;
+  amount: number;
+  tenderedCash?: number;
   externalRef?: string;
   verified?: boolean;
 }
 
 export interface ValidatedTenderLine {
   method: Exclude<TenderMethod, 'COMBINED'>;
-  amount: string;
-  tenderedCash: string;
-  changeDue: string;
+  amount: number;
+  tenderedCash: number;
+  changeDue: number;
   status: 'CONFIRMED' | 'PENDING';
   externalRef: string | null;
 }
 
 export interface ValidatedTenderSummary {
   tenders: ValidatedTenderLine[];
-  totalAllocated: string;
-  totalConfirmed: string;
-  totalCashSales: string;
-  totalChangeDue: string;
+  totalAllocated: number;
+  totalConfirmed: number;
+  totalCashSales: number;
+  totalChangeDue: number;
   allConfirmed: boolean;
   paymentStatus: OrderPaymentStatus;
 }
 
 export function validateOrderTenders(
-  grandTotalStr: string,
+  grandTotalVnd: number,
   tendersInput: TenderInputLine[],
 ): ValidatedTenderSummary {
-  const grandTotal = parseVndAmount(grandTotalStr, true);
+  const grandTotal = parseVndAmount(grandTotalVnd, true);
   if (!tendersInput || tendersInput.length === 0) {
     throw new SalesDomainError(
       SalesDomainErrorCode.PAYMENT_AMOUNT_MISMATCH,
@@ -756,7 +755,7 @@ export function validateOrderTenders(
       if (tendered < amount) {
         throw new SalesDomainError(
           SalesDomainErrorCode.PAYMENT_AMOUNT_MISMATCH,
-          `Cash tendered (${formatVnd(tendered)}) is less than cash allocation (${formatVnd(amount)})`,
+          `Cash tendered (${tendered}) is less than cash allocation (${amount})`,
           422,
         );
       }
@@ -766,18 +765,18 @@ export function validateOrderTenders(
       totalChangeDue += changeDue;
       validated.push({
         method: 'CASH',
-        amount: formatVnd(amount),
-        tenderedCash: formatVnd(tendered),
-        changeDue: formatVnd(changeDue),
+        amount: vndNumber(amount),
+        tenderedCash: vndNumber(tendered),
+        changeDue: vndNumber(changeDue),
         status: 'CONFIRMED',
         externalRef: t.externalRef ?? null,
       });
     } else if (t.method === 'COD') {
       validated.push({
         method: 'COD',
-        amount: formatVnd(amount),
-        tenderedCash: '0.00',
-        changeDue: '0.00',
+        amount: vndNumber(amount),
+        tenderedCash: 0,
+        changeDue: 0,
         status: 'PENDING',
         externalRef: t.externalRef ?? null,
       });
@@ -789,9 +788,9 @@ export function validateOrderTenders(
       }
       validated.push({
         method: t.method,
-        amount: formatVnd(amount),
-        tenderedCash: '0.00',
-        changeDue: '0.00',
+        amount: vndNumber(amount),
+        tenderedCash: 0,
+        changeDue: 0,
         status: isConfirmed ? 'CONFIRMED' : 'PENDING',
         externalRef: t.externalRef ?? null,
       });
@@ -801,7 +800,7 @@ export function validateOrderTenders(
   if (totalAllocated !== grandTotal) {
     throw new SalesDomainError(
       SalesDomainErrorCode.PAYMENT_AMOUNT_MISMATCH,
-      `Allocated tender sum (${formatVnd(totalAllocated)}) does not equal order grand total (${formatVnd(grandTotal)})`,
+      `Allocated tender sum (${totalAllocated}) does not equal order grand total (${grandTotal})`,
       422,
     );
   }
@@ -815,10 +814,10 @@ export function validateOrderTenders(
 
   return {
     tenders: validated,
-    totalAllocated: formatVnd(totalAllocated),
-    totalConfirmed: formatVnd(totalConfirmed),
-    totalCashSales: formatVnd(totalCashSales),
-    totalChangeDue: formatVnd(totalChangeDue),
+    totalAllocated: vndNumber(totalAllocated),
+    totalConfirmed: vndNumber(totalConfirmed),
+    totalCashSales: vndNumber(totalCashSales),
+    totalChangeDue: vndNumber(totalChangeDue),
     allConfirmed,
     paymentStatus,
   };
@@ -827,19 +826,19 @@ export function validateOrderTenders(
 // ---- Shift Cash Reconciliation ----
 
 export interface ShiftCashReconciliation {
-  openingCash: string;
-  cashSalesTotal: string;
-  cashRefundsTotal: string;
-  expectedCash: string;
-  actualCash: string;
-  variance: string;
+  openingCash: number;
+  cashSalesTotal: number;
+  cashRefundsTotal: number;
+  expectedCash: number;
+  actualCash: number;
+  variance: number;
 }
 
 export function calculateShiftCloseSummary(params: {
-  openingCash: string | number;
-  cashSalesTotal: string | number;
-  cashRefundsTotal: string | number;
-  actualCash: string | number;
+  openingCash: number;
+  cashSalesTotal: number;
+  cashRefundsTotal: number;
+  actualCash: number;
 }): ShiftCashReconciliation {
   const opening = parseVndAmount(params.openingCash, true);
   const sales = parseVndAmount(params.cashSalesTotal, true);
@@ -850,12 +849,12 @@ export function calculateShiftCloseSummary(params: {
   const variance = actual - expected;
 
   return {
-    openingCash: formatVnd(opening),
-    cashSalesTotal: formatVnd(sales),
-    cashRefundsTotal: formatVnd(refunds),
-    expectedCash: formatVnd(expected),
-    actualCash: formatVnd(actual),
-    variance: `${variance < 0n ? '-' : ''}${formatVnd(variance < 0n ? -variance : variance)}`,
+    openingCash: vndNumber(opening),
+    cashSalesTotal: vndNumber(sales),
+    cashRefundsTotal: vndNumber(refunds),
+    expectedCash: vndNumber(expected),
+    actualCash: vndNumber(actual),
+    variance: vndNumber(variance),
   };
 }
 
@@ -868,11 +867,11 @@ export interface OriginalOrderLineSnapshot {
   productName: string;
   soldQty: string;
   alreadyReturnedQty: string;
-  unitPrice: string;
-  lineNet: string;
-  taxAmount: string;
-  lineTotal: string;
-  alreadyRefundedAmount: string;
+  unitPrice: number;
+  lineNet: number;
+  taxAmount: number;
+  lineTotal: number;
+  alreadyRefundedAmount: number;
 }
 
 export interface ReturnLineRequest {
@@ -889,15 +888,15 @@ export interface CalculatedReturnLine {
   productName: string;
   returnQty: string;
   remainingReturnableAfter: string;
-  unitRefundAmount: string;
-  refundAmount: string;
+  unitRefundAmount: number;
+  refundAmount: number;
   disposition: ReturnDisposition;
   reason: string | null;
 }
 
 export interface CalculatedReturnResult {
   lines: CalculatedReturnLine[];
-  totalRefundAmount: string;
+  totalRefundAmount: number;
   isFullOrderReturn: boolean;
 }
 
@@ -1012,8 +1011,8 @@ export function calculateReturnRefund(
       productName: orig.productName,
       returnQty: formatQtyMillis(reqMillis),
       remainingReturnableAfter: formatQtyMillis(remainingAfterMillis),
-      unitRefundAmount: formatVnd(unitRefundVnd),
-      refundAmount: formatVnd(refundVnd),
+      unitRefundAmount: vndNumber(unitRefundVnd),
+      refundAmount: vndNumber(refundVnd),
       disposition: req.disposition,
       reason: req.reason ?? null,
     };
@@ -1027,7 +1026,7 @@ export function calculateReturnRefund(
 
   return {
     lines: calculatedLines,
-    totalRefundAmount: formatVnd(totalRefundVnd),
+    totalRefundAmount: vndNumber(totalRefundVnd),
     isFullOrderReturn,
   };
 }

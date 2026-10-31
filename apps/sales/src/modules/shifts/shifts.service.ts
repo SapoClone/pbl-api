@@ -8,12 +8,13 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, QueryFailedError } from 'typeorm';
+import { toMoney, toMoneyOrNull } from '../../common/money';
 import {
   SalesDomainError,
   SalesDomainErrorCode,
   calculateShiftCloseSummary,
-  formatVnd,
   parseVndAmount,
+  vndNumber,
 } from '../../domain/sales-domain';
 import {
   getSchemaPrefix,
@@ -39,12 +40,12 @@ export interface PosShiftResponse {
   registerCode: string;
   staffId: string;
   status: 'OPEN' | 'CLOSED';
-  openingCash: string;
-  cashSalesTotal: string;
-  cashRefundsTotal: string;
-  expectedCash: string;
-  actualCash: string | null;
-  variance: string | null;
+  openingCash: number;
+  cashSalesTotal: number;
+  cashRefundsTotal: number;
+  expectedCash: number;
+  actualCash: number | null;
+  variance: number | null;
   openNote: string | null;
   closeNote: string | null;
   closedBy: string | null;
@@ -74,7 +75,7 @@ export class ShiftsService {
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
     const registerCode = (dto.registerCode ?? 'REG-01').trim().toUpperCase();
-    const openingCash = formatVnd(parseVndAmount(dto.openingCash, true));
+    const openingCash = vndNumber(parseVndAmount(dto.openingCash, true));
 
     try {
       return await this.dataSource.transaction(async (em) => {
@@ -126,7 +127,7 @@ export class ShiftsService {
             id, tenant_id, code, branch_id, register_code, staff_id,
             status, opening_cash, cash_sales_total, cash_refunds_total,
             expected_cash, open_note, opened_at, version
-          ) VALUES ($1, $2, $3, $4, $5, $6, 'OPEN', $7, 0.00, 0.00, $7, $8, now(), 1)
+          ) VALUES ($1, $2, $3, $4, $5, $6, 'OPEN', $7::bigint, 0, 0, $7::bigint, $8, now(), 1)
           RETURNING *
           `,
           [
@@ -148,7 +149,7 @@ export class ShiftsService {
           branchId: row.branch_id,
           staffId: row.staff_id,
           status: 'OPEN',
-          openingCash: String(row.opening_cash),
+          openingCash: toMoney(row.opening_cash),
           occurredAt: new Date(row.opened_at).toISOString(),
         } satisfies SalesShiftEventPayload);
 
@@ -227,7 +228,7 @@ export class ShiftsService {
   ): Promise<PosShiftResponse> {
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
-    const actualCash = formatVnd(parseVndAmount(dto.actualCash, true));
+    const actualCash = vndNumber(parseVndAmount(dto.actualCash, true));
 
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
@@ -279,9 +280,9 @@ export class ShiftsService {
       }
 
       const reconciliation = calculateShiftCloseSummary({
-        openingCash: shift.opening_cash,
-        cashSalesTotal: shift.cash_sales_total,
-        cashRefundsTotal: shift.cash_refunds_total,
+        openingCash: toMoney(shift.opening_cash),
+        cashSalesTotal: toMoney(shift.cash_sales_total),
+        cashRefundsTotal: toMoney(shift.cash_refunds_total),
         actualCash,
       });
 
@@ -321,10 +322,10 @@ export class ShiftsService {
         branchId: closed.branch_id,
         staffId: closed.staff_id,
         status: 'CLOSED',
-        openingCash: String(closed.opening_cash),
-        expectedCash: String(closed.expected_cash),
-        actualCash: String(closed.actual_cash),
-        variance: String(closed.variance),
+        openingCash: toMoney(closed.opening_cash),
+        expectedCash: toMoney(closed.expected_cash),
+        actualCash: toMoney(closed.actual_cash),
+        variance: toMoney(closed.variance),
         occurredAt: new Date(closed.closed_at).toISOString(),
       } satisfies SalesShiftEventPayload);
 
@@ -425,12 +426,12 @@ export class ShiftsService {
       registerCode: String(row.register_code),
       staffId: String(row.staff_id),
       status: row.status as 'OPEN' | 'CLOSED',
-      openingCash: String(row.opening_cash),
-      cashSalesTotal: String(row.cash_sales_total),
-      cashRefundsTotal: String(row.cash_refunds_total),
-      expectedCash: String(row.expected_cash),
-      actualCash: row.actual_cash !== null ? String(row.actual_cash) : null,
-      variance: row.variance !== null ? String(row.variance) : null,
+      openingCash: toMoney(row.opening_cash),
+      cashSalesTotal: toMoney(row.cash_sales_total),
+      cashRefundsTotal: toMoney(row.cash_refunds_total),
+      expectedCash: toMoney(row.expected_cash),
+      actualCash: toMoneyOrNull(row.actual_cash),
+      variance: toMoneyOrNull(row.variance),
       openNote: row.open_note ? String(row.open_note) : null,
       closeNote: row.close_note ? String(row.close_note) : null,
       closedBy: row.closed_by ? String(row.closed_by) : null,

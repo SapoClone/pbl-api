@@ -6,14 +6,11 @@ import {
   PrimaryColumn,
   Relation,
 } from 'typeorm';
+import { discountValueTransformer, moneyTransformer } from '../../common/money';
 import { OrderItemEntity } from './order-item.entity';
 
-/** bigint columns come back as strings; money is integer VND (api-conventions §3) */
-export const bigintNumber = {
-  to: (value?: number) => value,
-  from: (value?: string | null) =>
-    value === null || value === undefined ? value : Number(value),
-};
+/** Kept for existing imports: bigint money columns share the service's money transformer */
+export const bigintNumber = moneyTransformer;
 
 @Entity('orders')
 @Index('UQ_orders_tenant_code', ['tenantId', 'code'], { unique: true })
@@ -124,21 +121,19 @@ export class OrderEntity {
 
   @Column({
     name: 'subtotal',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  subtotal?: string;
+  subtotal?: number;
 
   @Column({
     name: 'item_discount_total',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  itemDiscountTotal?: string;
+  itemDiscountTotal?: number;
 
   @Column({
     name: 'order_discount_type',
@@ -148,80 +143,75 @@ export class OrderEntity {
   })
   orderDiscountType?: string;
 
+  /** FIXED: whole VND; PERCENT: a percentage */
   @Column({
     name: 'order_discount_value',
     type: 'numeric',
-    precision: 18,
+    precision: 12,
     scale: 2,
-    default: '0.00',
+    default: 0,
+    transformer: discountValueTransformer,
   })
-  orderDiscountValue?: string;
+  orderDiscountValue?: number;
 
   @Column({
     name: 'order_discount_total',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  orderDiscountTotal?: string;
+  orderDiscountTotal?: number;
 
   @Column({
     name: 'promotion_discount_total',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  promotionDiscountTotal?: string;
+  promotionDiscountTotal?: number;
 
   @Column({ name: 'coupon_code', type: 'varchar', length: 64, nullable: true })
   couponCode?: string | null;
 
   @Column({
     name: 'shipping_fee',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  shippingFee?: string;
+  shippingFee?: number;
 
   @Column({
     name: 'tax_total',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  taxTotal?: string;
+  taxTotal?: number;
 
   @Column({
     name: 'grand_total',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  grandTotal?: string;
+  grandTotal?: number;
 
   @Column({
     name: 'paid_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  paidAmount?: string;
+  paidAmount?: number;
 
   @Column({
     name: 'refunded_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  refundedAmount?: string;
+  refundedAmount?: number;
 
   @Column({ name: 'currency', type: 'varchar', length: 8, default: 'VND' })
   currency?: string;
@@ -324,7 +314,11 @@ export class CheckoutWorkflowEntity {
   @Column({ name: 'lines_json', type: 'jsonb' })
   linesJson!: CheckoutWorkflowLine[];
 
-  @Column({ name: 'total_amount', type: 'int' })
+  @Column({
+    name: 'total_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
   totalAmount!: number;
 
   @Column({ name: 'state', type: 'varchar', length: 32 })

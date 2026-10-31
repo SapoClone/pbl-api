@@ -15,17 +15,18 @@ import {
 } from '@pbl/contracts';
 import { EventOutbox, OnEvent } from '@pbl/events';
 import { DataSource, EntityManager } from 'typeorm';
+import { toMoney } from '../../common/money';
 import {
   computeAvailablePoints,
   CustomerDomainError,
   CustomerDomainErrorCode,
-  formatVnd,
   maskAddressPhones,
   maskPhoneNumber,
   normalizeEmail,
   normalizePhoneNumber,
   parseVndBigInt,
   resolveEligibleMembershipTier,
+  toVndNumber,
 } from '../../domain/customer-domain';
 import {
   getSchemaPrefix,
@@ -187,9 +188,10 @@ export class ProfilesService {
 
     const phoneNormalized = normalizePhoneNumber(dto.phone);
     const emailNormalized = normalizeEmail(dto.email);
-    const debtLimitFormatted = dto.debtLimit
-      ? formatVnd(parseVndBigInt(dto.debtLimit, true))
-      : '2000000.00';
+    const debtLimitVnd =
+      dto.debtLimit !== undefined && dto.debtLimit !== null
+        ? toVndNumber(parseVndBigInt(dto.debtLimit, true))
+        : 2000000;
 
     try {
       return await this.runInTenantTx(tenantId, async (em) => {
@@ -276,8 +278,8 @@ export class ProfilesService {
           status: 'ACTIVE',
           customerGroupId: group?.id ?? null,
           membershipTierId: tier?.id ?? null,
-          debtLimit: debtLimitFormatted,
-          currentDebt: '0.00',
+          debtLimit: debtLimitVnd,
+          currentDebt: 0,
           note: dto.note?.trim() ?? null,
           mergedIntoCustomerId: null,
           version: 1,
@@ -710,7 +712,7 @@ export class ProfilesService {
         }
 
         if (dto.debtLimit !== undefined) {
-          customer.debtLimit = formatVnd(parseVndBigInt(dto.debtLimit, true));
+          customer.debtLimit = toVndNumber(parseVndBigInt(dto.debtLimit, true));
         }
 
         if (dto.note !== undefined) {
@@ -976,9 +978,9 @@ export class ProfilesService {
       }> = await em.query(
         `SELECT
            COUNT(*) FILTER (WHERE "order_status" != 'PENDING_ORDER_EVENT')::text AS "order_count",
-           COALESCE(SUM("original_order_total"), 0)::numeric(18,2)::text AS "gross_spend",
-           COALESCE(SUM("returned_amount"), 0)::numeric(18,2)::text AS "returned_amount",
-           COALESCE(SUM(GREATEST(0, "eligible_net_spend" - "returned_amount")), 0)::numeric(18,2)::text AS "net_spend",
+           COALESCE(SUM("original_order_total"), 0)::bigint::text AS "gross_spend",
+           COALESCE(SUM("returned_amount"), 0)::bigint::text AS "returned_amount",
+           COALESCE(SUM(GREATEST(0, "eligible_net_spend" - "returned_amount")), 0)::bigint::text AS "net_spend",
            COALESCE(SUM("earned_points"), 0)::bigint::text AS "earned_points",
            COALESCE(SUM("reversed_points"), 0)::bigint::text AS "reversed_points",
            MAX("completed_at") AS "last_order_at",
@@ -992,9 +994,9 @@ export class ProfilesService {
       return {
         customerId: customer.id,
         completedOrderCount: Number(agg?.order_count ?? 0),
-        grossSpendVnd: agg?.gross_spend ?? '0.00',
-        returnedAmountVnd: agg?.returned_amount ?? '0.00',
-        netSpendVnd: agg?.net_spend ?? '0.00',
+        grossSpendVnd: toMoney(agg?.gross_spend ?? 0),
+        returnedAmountVnd: toMoney(agg?.returned_amount ?? 0),
+        netSpendVnd: toMoney(agg?.net_spend ?? 0),
         totalEarnedPoints: Number(agg?.earned_points ?? 0),
         totalReversedPoints: Number(agg?.reversed_points ?? 0),
         lastOrderAt: agg?.last_order_at ?? null,
@@ -1082,7 +1084,7 @@ export class ProfilesService {
       financialSummary: {
         debtLimitVnd: profile.debtLimit,
         currentDebtVnd: profile.currentDebt,
-        availableCreditVnd: formatVnd(availableCreditBig),
+        availableCreditVnd: toVndNumber(availableCreditBig),
         authoritativeSource: 'PENDING_M5_FINANCE',
       },
     };
@@ -1184,16 +1186,21 @@ export class ProfilesService {
     envelope: EventEnvelope<FinanceReceivableEventPayload>,
   ): Promise<void> {
     const { tenantId, payload } = envelope;
-    if (!tenantId || !payload?.customerId || !payload?.customerTotalDebtAfter) {
+    if (
+      !tenantId ||
+      !payload?.customerId ||
+      payload?.customerTotalDebtAfter === undefined ||
+      payload.customerTotalDebtAfter === null
+    ) {
       return;
     }
-    const debtVnd = formatVnd(
+    const debtVnd = toVndNumber(
       parseVndBigInt(payload.customerTotalDebtAfter, true),
     );
     await this.runInTenantTx(tenantId, async (em) => {
       await em.query(
         `UPDATE ${this.schemaPrefix}"customers"
-         SET "current_debt" = $3::numeric(18,2), "updated_at" = now()
+         SET "current_debt" = $3::bigint, "updated_at" = now()
          WHERE "tenant_id" = $1 AND "id" = $2`,
         [tenantId, payload.customerId, debtVnd],
       );

@@ -430,39 +430,24 @@ export function validateCategoryReparent(params: {
 }
 
 /**
- * Precision-safe decimal parser/formatter for monetary values (`NUMERIC(18,2)`).
- * Never uses binary floating-point multiplication/addition.
+ * Validates a money value: a non-negative whole number of VND that is a safe
+ * integer (bigint column, JSON number). Fractions and strings are rejected.
  */
-export function parseAndFormatMoney(raw: string | number, scale = 2): string {
-  const str = typeof raw === 'number' ? String(raw) : (raw ?? '').trim();
-  if (!/^\d+(\.\d+)?$/.test(str)) {
+export function parseAndFormatMoney(raw: number | string): number {
+  const n =
+    typeof raw === 'number'
+      ? raw
+      : typeof raw === 'string' && /^\d+$/.test(raw.trim())
+        ? Number(raw)
+        : NaN;
+  if (!Number.isSafeInteger(n) || n < 0) {
     throw new CatalogDomainError(
       CatalogErrorCode.INVALID_PRICE,
-      `Price must be a non-negative decimal number with up to ${scale} decimal places`,
+      'Price must be a non-negative whole number of VND',
       'BAD_REQUEST',
     );
   }
-
-  const [wholePartRaw, fracPartRaw = ''] = str.split('.');
-  if (fracPartRaw.length > scale) {
-    throw new CatalogDomainError(
-      CatalogErrorCode.INVALID_PRICE,
-      `Price cannot have more than ${scale} decimal places`,
-      'BAD_REQUEST',
-    );
-  }
-
-  const wholePart = wholePartRaw.replace(/^0+(?=\d)/, '') || '0';
-  if (wholePart.length > 16) {
-    throw new CatalogDomainError(
-      CatalogErrorCode.INVALID_PRICE,
-      'Price exceeds maximum supported precision NUMERIC(18,2)',
-      'BAD_REQUEST',
-    );
-  }
-
-  const fracPart = fracPartRaw.padEnd(scale, '0');
-  return scale > 0 ? `${wholePart}.${fracPart}` : wholePart;
+  return n;
 }
 
 /**
@@ -545,14 +530,14 @@ export interface PriceListCandidate {
   status: PriceListStatus;
   startDate: string | null;
   endDate: string | null;
-  itemPrice: string | null;
+  itemPrice: number | null;
 }
 
 export interface ResolvedVariantPrice {
   variantId: string;
   skuCode: string;
   currency: string;
-  amount: string;
+  amount: number;
   source: 'PRICE_LIST' | 'DEFAULT_PRICE_LIST' | 'VARIANT_BASE_PRICE';
   priceListId: string | null;
   priceListName: string | null;
@@ -580,7 +565,7 @@ export function resolveVariantPrice(params: {
   variantId: string;
   skuCode: string;
   variantStatus: VariantStatus;
-  basePrice: string;
+  basePrice: number;
   asOfDate: string;
   selectedList?: PriceListCandidate | null;
   defaultList?: PriceListCandidate | null;
@@ -639,9 +624,8 @@ export function resolveVariantPrice(params: {
     };
   }
 
-  const formattedBase = parseAndFormatMoney(params.basePrice || '0.00');
-  const [whole, frac = '00'] = formattedBase.split('.');
-  if (BigInt(whole) > 0n || BigInt(frac) > 0n) {
+  const formattedBase = parseAndFormatMoney(params.basePrice ?? 0);
+  if (formattedBase > 0) {
     return {
       variantId: params.variantId,
       skuCode: params.skuCode,

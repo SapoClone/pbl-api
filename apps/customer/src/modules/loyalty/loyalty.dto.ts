@@ -1,7 +1,6 @@
 import {
   IsBoolean,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -16,12 +15,12 @@ export class UpdateLoyaltySettingsDto {
   isEnabled?: boolean;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(1)
   earnAmountPerPoint?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(1)
   redeemValuePerPoint?: number;
 

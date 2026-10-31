@@ -33,6 +33,12 @@ describe('branch scope of the POS routes (404 outside the scope)', () => {
       branch_id: B1,
       code: 'CA-1',
       status: 'OPEN',
+      opening_cash: '1000000',
+      cash_sales_total: '0',
+      cash_refunds_total: '0',
+      expected_cash: '1000000',
+      actual_cash: null,
+      variance: null,
       opened_at: new Date(),
     };
 
@@ -56,9 +62,7 @@ describe('branch scope of the POS routes (404 outside the scope)', () => {
       const svc = new ShiftsService(ds as never, {} as never);
 
       await expect(
-        run(() =>
-          svc.closeShift(ID, 'acc', [B2], { actualCash: '0' } as never),
-        ),
+        run(() => svc.closeShift(ID, 'acc', [B2], { actualCash: 0 } as never)),
       ).rejects.toMatchObject({ httpStatus: 404 });
       expect(em.query).not.toHaveBeenCalledWith(
         expect.stringMatching(/^\s*UPDATE/),

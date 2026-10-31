@@ -10,13 +10,13 @@ import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import {
-  formatCentsToMoney,
   formatMilliToQty,
   InventoryDomainError,
   InventoryDomainErrorCode,
   normalizeInventoryCode,
-  parseMoneyToCents,
+  parseMoneyToVnd,
   parseQtyToMilli,
+  vndToNumber,
 } from '../../domain/inventory-domain';
 import {
   applyWarehouseScope,
@@ -361,9 +361,9 @@ export class StocktakeService {
             : 0n;
         const currentVersion =
           balRows.length > 0 ? BigInt(String(balRows[0].version)) : 0n;
-        const avgCostCents =
+        const avgCostVnd =
           balRows.length > 0
-            ? parseMoneyToCents(String(balRows[0].avgUnitCost))
+            ? parseMoneyToVnd(String(balRows[0].avgUnitCost))
             : 0n;
 
         const snapVersion = BigInt(String(item.snapshotVersion));
@@ -416,12 +416,10 @@ export class StocktakeService {
           continue;
         }
 
-        const newValuationCents =
-          countedMilli === 0n
-            ? 0n
-            : (countedMilli * avgCostCents + 500n) / 1000n;
-        const avgCostStr = formatCentsToMoney(avgCostCents);
-        const newValuationStr = formatCentsToMoney(newValuationCents);
+        const newValuationVnd =
+          countedMilli === 0n ? 0n : (countedMilli * avgCostVnd + 500n) / 1000n;
+        const avgCostStr = vndToNumber(avgCostVnd);
+        const newValuationStr = vndToNumber(newValuationVnd);
         const oldOnHandStr = formatMilliToQty(currentOnHandMilli);
         const reservedStr = formatMilliToQty(currentReservedMilli);
 
@@ -430,11 +428,11 @@ export class StocktakeService {
           INSERT INTO ${prefix}"stock_balance" (
             id, tenant_id, warehouse_id, sku_id, on_hand_qty, reserved_qty, in_transit_qty,
             avg_unit_cost, valuation_amount, version, updated_at
-          ) VALUES ($1, $2, $3, $4, $5::numeric(18,3), 0, 0, $6::numeric(18,2), $7::numeric(18,2), 1, now())
+          ) VALUES ($1, $2, $3, $4, $5::numeric(18,3), 0, 0, $6::bigint, $7::bigint, 1, now())
           ON CONFLICT (tenant_id, warehouse_id, sku_id) DO UPDATE
           SET
             on_hand_qty = $5::numeric(18,3),
-            valuation_amount = $7::numeric(18,2),
+            valuation_amount = $7::bigint,
             version = ${prefix}"stock_balance".version + 1,
             updated_at = now()
           `,
@@ -459,7 +457,7 @@ export class StocktakeService {
           ) VALUES (
             $1, $2, $3, $4, 'STOCKTAKE_ADJUSTMENT',
             $5::numeric(18,3), $6::numeric(18,3), $7::numeric(18,3), $8::numeric(18,3),
-            $9::numeric(18,2), $10::numeric(18,2), 'STOCK_TAKE', $11,
+            $9::bigint, $10::bigint, 'STOCK_TAKE', $11,
             $12, $13, $14, $15
           )
           `,

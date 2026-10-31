@@ -931,7 +931,7 @@ describe('inventory (Postgres)', () => {
           warehouseId: wh1.id,
           sourceType: 'MANUAL',
           autoPost: true,
-          items: [{ skuId: SKU_A, qty: '5.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_A, qty: '5.000', unitCost: 100000 }],
         }),
       );
       expect(receipt.status).toBe('POSTED');
@@ -969,12 +969,12 @@ describe('inventory (Postgres)', () => {
         }),
       );
 
-      // Batch 1: 10 units @ 100,000.00 -> avg = 100,000.00, valuation = 1,000,000.00
+      // Batch 1: 10 units @ 100,000 -> avg = 100,000, valuation = 1,000,000
       const r1 = await as(TENANT_A, () =>
         receivingService.createReceipt({
           warehouseId: wh.id,
           autoPost: false,
-          items: [{ skuId: SKU_A, qty: '10.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_A, qty: '10.000', unitCost: 100000 }],
         }),
       );
       expect(r1.status).toBe('DRAFT');
@@ -993,7 +993,7 @@ describe('inventory (Postgres)', () => {
               skuId: SKU_A,
               qty: '5.000',
               conversionFactor: '2.0000',
-              unitCost: '200000.00',
+              unitCost: 200000,
             },
           ],
         }),
@@ -1007,11 +1007,11 @@ describe('inventory (Postgres)', () => {
         totalReservedQty: '0.000',
         totalAvailableQty: '20.000',
         totalInTransitQty: '0.000',
-        totalValuationAmount: '3000000.00',
+        totalValuationAmount: 3000000,
       });
-      expect(summaryAfterReceive.warehouses[0].avgUnitCost).toBe('150000.00');
+      expect(summaryAfterReceive.warehouses[0].avgUnitCost).toBe(150000);
 
-      // Issue 4 units -> on_hand = 16.000, avg_unit_cost remains 150000.00, valuation = 2400000.00
+      // Issue 4 units -> on_hand = 16.000, avg_unit_cost remains 150000, valuation = 2400000
       const issue = await as(TENANT_A, () =>
         issuingService.createIssue({
           warehouseId: wh.id,
@@ -1022,13 +1022,13 @@ describe('inventory (Postgres)', () => {
         }),
       );
       expect(issue.status).toBe('POSTED');
-      expect(issue.items[0].unitCost).toBe('150000.00');
+      expect(issue.items[0].unitCost).toBe(150000);
 
       const summaryAfterIssue = await as(TENANT_A, () =>
         stockQueryService.getStockBySku(SKU_A),
       );
       expect(summaryAfterIssue.totalOnHandQty).toBe('16.000');
-      expect(summaryAfterIssue.totalValuationAmount).toBe('2400000.00');
+      expect(summaryAfterIssue.totalValuationAmount).toBe(2400000);
     });
 
     it('executes Multi-Warehouse Stock Transfer with in-transit tracking, partial receive, and discrepancy handling', async () => {
@@ -1051,7 +1051,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId: whSource.id,
           autoPost: true,
-          items: [{ skuId: SKU_A, qty: '10.000', unitCost: '120000.00' }],
+          items: [{ skuId: SKU_A, qty: '10.000', unitCost: 120000 }],
         }),
       );
 
@@ -1068,7 +1068,7 @@ describe('inventory (Postgres)', () => {
         transfersService.dispatchTransfer(draftTransfer.id),
       );
       expect(dispatched.status).toBe('DISPATCHED');
-      expect(dispatched.items[0].unitCost).toBe('120000.00');
+      expect(dispatched.items[0].unitCost).toBe(120000);
 
       // Source on_hand is now 4.000, Destination in_transit is 6.000
       const summaryMid = await as(TENANT_A, () =>
@@ -1129,8 +1129,8 @@ describe('inventory (Postgres)', () => {
           warehouseId: wh.id,
           autoPost: true,
           items: [
-            { skuId: SKU_A, qty: '10.000', unitCost: '50000.00' },
-            { skuId: SKU_B, qty: '5.000', unitCost: '80000.00' },
+            { skuId: SKU_A, qty: '10.000', unitCost: 50000 },
+            { skuId: SKU_B, qty: '5.000', unitCost: 80000 },
           ],
         }),
       );
@@ -1187,7 +1187,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId: wh.id,
           autoPost: true,
-          items: [{ skuId: SKU_B, qty: '1.000', unitCost: '80000.00' }],
+          items: [{ skuId: SKU_B, qty: '1.000', unitCost: 80000 }],
         }),
       );
       await expect(
@@ -1235,7 +1235,7 @@ describe('inventory (Postgres)', () => {
         procurementService.createPurchaseOrder({
           supplierId: supplier.id,
           warehouseId: wh.id,
-          items: [{ skuId: SKU_A, orderedQty: '10.000', unitCost: '90000.00' }],
+          items: [{ skuId: SKU_A, orderedQty: '10.000', unitCost: 90000 }],
         }),
       );
       expect(po.status).toBe('DRAFT');
@@ -1271,6 +1271,25 @@ describe('inventory (Postgres)', () => {
         }),
       );
       expect(fullRes.purchaseOrder.status).toBe('RECEIVED');
+
+      // Integer VND: a fractional-quantity PO rounds each line half up and the total is the sum of the lines
+      const po2 = await as(TENANT_A, () =>
+        procurementService.createPurchaseOrder({
+          supplierId: supplier.id,
+          warehouseId: wh.id,
+          items: [
+            { skuId: SKU_A, orderedQty: '0.500', unitCost: 101 }, // 50.5 -> 51
+            { skuId: SKU_B, orderedQty: '1.500', unitCost: 333 }, // 499.5 -> 500
+          ],
+        }),
+      );
+      expect(po2.totalAmount).toBe(551);
+      expect(typeof po2.totalAmount).toBe('number');
+      expect(po2.items.every((i) => Number.isInteger(i.unitCost))).toBe(true);
+      const po2Read = await as(TENANT_A, () =>
+        procurementService.getPurchaseOrderById(po2.id),
+      );
+      expect(po2Read.totalAmount).toBe(551);
 
       // Configure Stock Threshold where minQty = 15.000 (current available = 10.000 -> isAlert = true)
       await as(TENANT_A, () =>
@@ -1327,7 +1346,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId: wh.id,
           autoPost: true,
-          items: [{ skuId: SKU_C, qty: '5.000', unitCost: '50000.00' }],
+          items: [{ skuId: SKU_C, qty: '5.000', unitCost: 50000 }],
         }),
       );
 
@@ -1396,7 +1415,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId,
           autoPost: true,
-          items: [{ skuId: SKU_1, qty: '1.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_1, qty: '1.000', unitCost: 100000 }],
         }),
       );
 
@@ -1437,7 +1456,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId,
           autoPost: true,
-          items: [{ skuId: SKU_1, qty: '10.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_1, qty: '10.000', unitCost: 100000 }],
         }),
       );
 
@@ -1482,7 +1501,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId,
           autoPost: true,
-          items: [{ skuId: SKU_1, qty: '50.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_1, qty: '50.000', unitCost: 100000 }],
         }),
       );
 
@@ -1527,7 +1546,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId,
           autoPost: true,
-          items: [{ skuId: SKU_1, qty: '2.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_1, qty: '2.000', unitCost: 100000 }],
         }),
       );
 
@@ -1558,7 +1577,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId,
           autoPost: true,
-          items: [{ skuId: SKU_1, qty: '5.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_1, qty: '5.000', unitCost: 100000 }],
         }),
       );
 
@@ -1594,7 +1613,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId,
           autoPost: true,
-          items: [{ skuId: SKU_1, qty: '5.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_1, qty: '5.000', unitCost: 100000 }],
         }),
       );
 
@@ -1638,7 +1657,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId,
           autoPost: false,
-          items: [{ skuId: SKU_1, qty: '10.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_1, qty: '10.000', unitCost: 100000 }],
         }),
       );
 
@@ -1670,7 +1689,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId,
           autoPost: true,
-          items: [{ skuId: SKU_1, qty: '10.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_1, qty: '10.000', unitCost: 100000 }],
         }),
       );
 
@@ -1734,9 +1753,9 @@ describe('inventory (Postgres)', () => {
           warehouseId,
           autoPost: true,
           items: [
-            { skuId: SKU_1, qty: '100.000', unitCost: '50000.00' },
-            { skuId: SKU_2, qty: '100.000', unitCost: '60000.00' },
-            { skuId: SKU_3, qty: '100.000', unitCost: '70000.00' },
+            { skuId: SKU_1, qty: '100.000', unitCost: 50000 },
+            { skuId: SKU_2, qty: '100.000', unitCost: 60000 },
+            { skuId: SKU_3, qty: '100.000', unitCost: 70000 },
           ],
         }),
       );
@@ -1778,7 +1797,7 @@ describe('inventory (Postgres)', () => {
         receivingService.createReceipt({
           warehouseId,
           autoPost: true,
-          items: [{ skuId: SKU_1, qty: '25.000', unitCost: '100000.00' }],
+          items: [{ skuId: SKU_1, qty: '25.000', unitCost: 100000 }],
         }),
       );
 

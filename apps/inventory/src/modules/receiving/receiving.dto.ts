@@ -6,11 +6,13 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -28,13 +30,13 @@ export class CreateStockReceiptItemDto {
   qty!: string;
 
   @ApiPropertyOptional({
-    example: '100000.00',
-    description: 'Unit cost per base unit (NUMERIC(18,2))',
+    example: 100000,
+    description: 'Unit cost per base unit (integer VND)',
   })
   @IsOptional()
-  @IsString()
-  @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/)
-  unitCost?: string;
+  @IsInt()
+  @Min(0)
+  unitCost?: number;
 
   @ApiPropertyOptional({ default: 'PCS', maxLength: 32 })
   @IsOptional()

@@ -3,7 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsIn,
-  IsNumberString,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -46,12 +46,12 @@ export class PostJournalLineDto {
   accountCode!: string;
 
   @IsOptional()
-  @IsNumberString()
-  debitAmount?: string;
+  @IsInt()
+  debitAmount?: number;
 
   @IsOptional()
-  @IsNumberString()
-  creditAmount?: string;
+  @IsInt()
+  creditAmount?: number;
 
   @IsOptional()
   @IsUUID()

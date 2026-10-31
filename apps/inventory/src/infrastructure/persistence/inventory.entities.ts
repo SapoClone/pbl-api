@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { moneyTransformer } from '../../common/money';
 
 @Entity('catalog_sku_projection')
 export class CatalogSkuProjectionEntity {
@@ -138,12 +139,11 @@ export class PurchaseOrderEntity {
 
   @Column({
     name: 'total_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  totalAmount!: string;
+  totalAmount!: number;
 
   @Column({ type: 'text', nullable: true })
   note!: string | null;
@@ -195,12 +195,11 @@ export class PurchaseOrderItemEntity {
 
   @Column({
     name: 'unit_cost',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  unitCost!: string;
+  unitCost!: number;
 
   @Column({ name: 'unit_name', type: 'varchar', length: 32, default: 'PCS' })
   unitName!: string;
@@ -295,12 +294,11 @@ export class StockReceiptItemEntity {
 
   @Column({
     name: 'unit_cost',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  unitCost!: string;
+  unitCost!: number;
 
   @Column({ name: 'unit_name', type: 'varchar', length: 32, default: 'PCS' })
   unitName!: string;
@@ -394,12 +392,11 @@ export class StockIssueItemEntity {
 
   @Column({
     name: 'unit_cost',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  unitCost!: string;
+  unitCost!: number;
 }
 
 @Entity('stock_transfer')
@@ -507,12 +504,11 @@ export class StockTransferItemEntity {
 
   @Column({
     name: 'unit_cost',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  unitCost!: string;
+  unitCost!: number;
 
   @Column({ name: 'discrepancy_reason', type: 'text', nullable: true })
   discrepancyReason!: string | null;

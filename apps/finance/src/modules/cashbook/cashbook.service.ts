@@ -12,10 +12,9 @@ import {
   DEFAULT_CASHBOOK_CATEGORIES,
   FinanceDomainError,
   FinanceDomainErrorCode,
-  formatMoneyCents,
   GL_ACCOUNT_CODES,
   normalizeFinanceCode,
-  parseMoneyCents,
+  parseVnd,
 } from '../../domain/finance-domain';
 import {
   getSchemaPrefix,
@@ -179,12 +178,11 @@ export class CashbookService {
     dto: CreateCashbookVoucherDto,
     scope: BranchScope = null,
   ) {
-    const amountCents = parseMoneyCents(dto.amount, {
+    const amountVnd = parseVnd(dto.amount, {
       allowZero: false,
       allowNegative: false,
       field: 'amount',
     });
-    const amountStr = formatMoneyCents(amountCents);
     const cleanKey =
       (idempotencyKeyHeader ?? dto.idempotencyKey ?? '').trim().toLowerCase() ||
       null;
@@ -193,7 +191,7 @@ export class CashbookService {
       cashAccountId: dto.cashAccountId,
       categoryId: dto.categoryId ?? null,
       categoryCode: dto.categoryCode ?? null,
-      amount: amountStr,
+      amount: amountVnd,
       branchId: dto.branchId ?? null,
       sourceType: dto.sourceType ?? null,
       sourceId: dto.sourceId ?? null,
@@ -222,7 +220,7 @@ export class CashbookService {
         cashAccountId: dto.cashAccountId,
         categoryId: dto.categoryId,
         categoryCode: dto.categoryCode,
-        amount: amountStr,
+        amount: amountVnd,
         branchId: dto.branchId ?? null,
         shiftId: dto.shiftId ?? null,
         voucherType: dto.voucherType ?? 'MANUAL',
@@ -248,7 +246,7 @@ export class CashbookService {
       cashAccountId: string;
       categoryId?: string;
       categoryCode?: string;
-      amount: string;
+      amount: number;
       branchId?: string | null;
       shiftId?: string | null;
       voucherType?: string;
@@ -605,21 +603,19 @@ export class CashbookService {
       journalId = postedJournal.journal.id;
     }
 
-    const curBalCents = parseMoneyCents(account.currentBalance, {
+    const curBalVnd = parseVnd(account.currentBalance, {
       allowZero: true,
       allowNegative: true,
       field: 'currentBalance',
     });
-    const amtCents = parseMoneyCents(entry.amount, {
+    const amtVnd = parseVnd(entry.amount, {
       allowZero: false,
       field: 'amount',
     });
-    const newBalCents =
-      entry.direction === 'RECEIPT'
-        ? curBalCents + amtCents
-        : curBalCents - amtCents;
+    const newBalVnd =
+      entry.direction === 'RECEIPT' ? curBalVnd + amtVnd : curBalVnd - amtVnd;
 
-    account.currentBalance = formatMoneyCents(newBalCents);
+    account.currentBalance = newBalVnd;
     account.version += 1;
     account.updatedAt = new Date();
     await accountRepo.save(account);
@@ -791,21 +787,19 @@ export class CashbookService {
       orig.updatedAt = now;
       await entryRepo.save(orig);
 
-      const curBalCents = parseMoneyCents(account.currentBalance, {
+      const curBalVnd = parseVnd(account.currentBalance, {
         allowZero: true,
         allowNegative: true,
         field: 'currentBalance',
       });
-      const amtCents = parseMoneyCents(orig.amount, {
+      const amtVnd = parseVnd(orig.amount, {
         allowZero: false,
         field: 'amount',
       });
-      const restoredBalCents =
-        orig.direction === 'RECEIPT'
-          ? curBalCents - amtCents
-          : curBalCents + amtCents;
+      const restoredBalVnd =
+        orig.direction === 'RECEIPT' ? curBalVnd - amtVnd : curBalVnd + amtVnd;
 
-      account.currentBalance = formatMoneyCents(restoredBalCents);
+      account.currentBalance = restoredBalVnd;
       account.version += 1;
       account.updatedAt = now;
       await accountRepo.save(account);

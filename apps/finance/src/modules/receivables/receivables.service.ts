@@ -13,9 +13,8 @@ import {
   evaluateCreditAuthorization,
   FinanceDomainError,
   FinanceDomainErrorCode,
-  formatMoneyCents,
   GL_ACCOUNT_CODES,
-  parseMoneyCents,
+  parseVnd,
 } from '../../domain/finance-domain';
 import {
   getSchemaPrefix,
@@ -71,16 +70,15 @@ export class ReceivablesService {
     dto: RecognizeReceivableDto,
     tenantId = TenantContext.require(),
   ) {
-    const amountCents = parseMoneyCents(dto.amount, {
+    const amountVnd = parseVnd(dto.amount, {
       allowZero: false,
       field: 'amount',
     });
-    const amountStr = formatMoneyCents(amountCents);
     const sourceType = (dto.sourceType ?? 'SALES_ORDER').trim().toUpperCase();
     const sourceId = (
       dto.sourceId ??
       dto.orderId ??
-      `manual:${dto.customerId}:${amountStr}`
+      `manual:${dto.customerId}:${amountVnd}`
     ).trim();
     const idempotencyKey = (
       idempotencyKeyHeader ??
@@ -112,7 +110,7 @@ export class ReceivablesService {
       if (existing) {
         if (
           existing.customerId !== dto.customerId ||
-          existing.originalAmount !== amountStr
+          existing.originalAmount !== amountVnd
         ) {
           throw new FinanceDomainError(
             FinanceDomainErrorCode.IDEMPOTENCY_CONFLICT,
@@ -132,16 +130,16 @@ export class ReceivablesService {
         creditLimit: profile.creditLimit,
         postedDebt: profile.postedDebt,
         heldCredit: profile.heldCredit,
-        requestedAmount: amountStr,
+        requestedAmount: amountVnd,
         overrideApprovedBy: dto.overrideApprovedBy,
         overrideReason: dto.note,
       });
 
-      const postedBeforeCents = parseMoneyCents(profile.postedDebt, {
+      const postedBeforeVnd = parseVnd(profile.postedDebt, {
         allowZero: true,
         field: 'postedDebt',
       });
-      const postedAfterCents = postedBeforeCents + amountCents;
+      const postedAfterVnd = postedBeforeVnd + amountVnd;
 
       const postedJournal = await this.journalService.postJournalInTx(
         em,
@@ -159,7 +157,7 @@ export class ReceivablesService {
           lines: [
             {
               accountCode: GL_ACCOUNT_CODES.ACCOUNTS_RECEIVABLE,
-              debitAmount: amountStr,
+              debitAmount: amountVnd,
               branchId: dto.branchId ?? null,
               partyType: 'CUSTOMER',
               partyId: dto.customerId,
@@ -167,7 +165,7 @@ export class ReceivablesService {
             },
             {
               accountCode: GL_ACCOUNT_CODES.SALES_REVENUE_CLEARING,
-              creditAmount: amountStr,
+              creditAmount: amountVnd,
               branchId: dto.branchId ?? null,
               partyType: 'CUSTOMER',
               partyId: dto.customerId,
@@ -187,10 +185,10 @@ export class ReceivablesService {
         orderId: dto.orderId ?? null,
         branchId: dto.branchId ?? null,
         creditAuthorizationId: null,
-        originalAmount: amountStr,
-        paidAmount: '0.00',
-        adjustedAmount: '0.00',
-        outstandingAmount: amountStr,
+        originalAmount: amountVnd,
+        paidAmount: 0,
+        adjustedAmount: 0,
+        outstandingAmount: amountVnd,
         currency: 'VND',
         status: 'OPEN',
         dueDate: new Date(now.getTime() + 30 * 86400 * 1000),
@@ -210,9 +208,9 @@ export class ReceivablesService {
         customerId: dto.customerId,
         receivableId: receivable.id,
         entryType: 'DEBT_RECOGNIZED',
-        amountDelta: amountStr,
-        balanceBefore: formatMoneyCents(postedBeforeCents),
-        balanceAfter: formatMoneyCents(postedAfterCents),
+        amountDelta: amountVnd,
+        balanceBefore: postedBeforeVnd,
+        balanceAfter: postedAfterVnd,
         paymentMethod: 'CREDIT',
         cashbookEntryId: null,
         journalId: postedJournal.journal.id,
@@ -225,7 +223,7 @@ export class ReceivablesService {
       });
       await ledgerRepo.save(ledgerEntry);
 
-      profile.postedDebt = formatMoneyCents(postedAfterCents);
+      profile.postedDebt = postedAfterVnd;
       profile.version += 1;
       profile.updatedAt = now;
       await profileRepo.save(profile);
@@ -400,7 +398,7 @@ export class ReceivablesService {
           );
       }
 
-      const overpayCents = parseMoneyCents(allocationResult.overpaymentAmount, {
+      const overpayVnd = parseVnd(allocationResult.overpaymentAmount, {
         allowZero: true,
         field: 'overpaymentAmount',
       });
@@ -411,8 +409,8 @@ export class ReceivablesService {
       // Credit Customer Prepayment (overpaymentAmount if > 0)
       const journalLines: Array<{
         accountCode: string;
-        debitAmount?: string;
-        creditAmount?: string;
+        debitAmount?: number;
+        creditAmount?: number;
         branchId?: string | null;
         partyType?: 'CUSTOMER' | 'SUPPLIER' | 'CARRIER' | null;
         partyId?: string | null;
@@ -435,7 +433,7 @@ export class ReceivablesService {
           memo: `Allocated to receivable(s): ${allocationResult.allocations.map((a) => a.code).join(', ')}`,
         },
       ];
-      if (overpayCents > 0n) {
+      if (overpayVnd > 0) {
         journalLines.push({
           accountCode: GL_ACCOUNT_CODES.CUSTOMER_PREPAYMENT,
           creditAmount: allocationResult.overpaymentAmount,
@@ -489,7 +487,7 @@ export class ReceivablesService {
           },
         );
 
-      let runningDebtCents = parseMoneyCents(profile.postedDebt, {
+      let runningDebtVnd = parseVnd(profile.postedDebt, {
         allowZero: true,
         field: 'postedDebt',
       });
@@ -500,14 +498,14 @@ export class ReceivablesService {
       for (let i = 0; i < allocationResult.allocations.length; i += 1) {
         const alloc = allocationResult.allocations[i];
         const doc = docMap.get(alloc.documentId)!;
-        const allocCents = parseMoneyCents(alloc.allocatedAmount, {
+        const allocVnd = parseVnd(alloc.allocatedAmount, {
           allowZero: false,
           field: 'allocatedAmount',
         });
-        const debtBeforeCents = runningDebtCents;
-        const debtAfterCents =
-          debtBeforeCents >= allocCents ? debtBeforeCents - allocCents : 0n;
-        runningDebtCents = debtAfterCents;
+        const debtBeforeVnd = runningDebtVnd;
+        const debtAfterVnd =
+          debtBeforeVnd >= allocVnd ? debtBeforeVnd - allocVnd : 0;
+        runningDebtVnd = debtAfterVnd;
 
         doc.paidAmount = alloc.paidAmountAfter;
         doc.outstandingAmount = alloc.outstandingAfter;
@@ -523,9 +521,9 @@ export class ReceivablesService {
           customerId,
           receivableId: doc.id,
           entryType: 'PAYMENT_APPLIED',
-          amountDelta: `-${alloc.allocatedAmount}`,
-          balanceBefore: formatMoneyCents(debtBeforeCents),
-          balanceAfter: formatMoneyCents(debtAfterCents),
+          amountDelta: -alloc.allocatedAmount,
+          balanceBefore: debtBeforeVnd,
+          balanceAfter: debtAfterVnd,
           paymentMethod,
           cashbookEntryId: cashbookEntry.id,
           journalId: postedJournal.journal.id,
@@ -542,13 +540,13 @@ export class ReceivablesService {
         await ledgerRepo.save(ledgerEntry);
       }
 
-      profile.postedDebt = formatMoneyCents(runningDebtCents);
-      if (overpayCents > 0n) {
-        const prevPrep = parseMoneyCents(profile.prepaymentBalance, {
+      profile.postedDebt = runningDebtVnd;
+      if (overpayVnd > 0) {
+        const prevPrep = parseVnd(profile.prepaymentBalance, {
           allowZero: true,
           field: 'prepaymentBalance',
         });
-        profile.prepaymentBalance = formatMoneyCents(prevPrep + overpayCents);
+        profile.prepaymentBalance = prevPrep + overpayVnd;
       }
       profile.version += 1;
       profile.updatedAt = now;
@@ -669,22 +667,20 @@ export class ReceivablesService {
         take: 50,
       });
 
-      const limitCents = parseMoneyCents(profile.creditLimit, {
+      const limitVnd = parseVnd(profile.creditLimit, {
         allowZero: true,
         field: 'creditLimit',
       });
-      const postedCents = parseMoneyCents(profile.postedDebt, {
+      const postedVnd = parseVnd(profile.postedDebt, {
         allowZero: true,
         field: 'postedDebt',
       });
-      const heldCents = parseMoneyCents(profile.heldCredit, {
+      const heldVnd = parseVnd(profile.heldCredit, {
         allowZero: true,
         field: 'heldCredit',
       });
-      const availCents =
-        limitCents > postedCents + heldCents
-          ? limitCents - postedCents - heldCents
-          : 0n;
+      const availVnd =
+        limitVnd > postedVnd + heldVnd ? limitVnd - postedVnd - heldVnd : 0;
 
       return {
         customerId,
@@ -692,7 +688,7 @@ export class ReceivablesService {
         creditLimit: profile.creditLimit,
         postedDebt: profile.postedDebt,
         heldCredit: profile.heldCredit,
-        availableCredit: formatMoneyCents(availCents),
+        availableCredit: availVnd,
         prepaymentBalance: profile.prepaymentBalance,
         openReceivablesCount: receivables.filter(
           (r) => r.status === 'OPEN' || r.status === 'PARTIALLY_PAID',

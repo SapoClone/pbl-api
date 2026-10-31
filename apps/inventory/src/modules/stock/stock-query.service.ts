@@ -4,12 +4,12 @@ import { runInTenantTransaction } from '@pbl/common';
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import {
-  formatCentsToMoney,
   formatMilliToQty,
   InventoryDomainError,
   InventoryDomainErrorCode,
-  parseMoneyToCents,
+  parseMoneyToVnd,
   parseQtyToMilli,
+  vndToNumber,
 } from '../../domain/inventory-domain';
 import {
   applyWarehouseScope,
@@ -176,14 +176,14 @@ export class StockQueryService {
       let totalReservedMilli = 0n;
       let totalAvailableMilli = 0n;
       let totalInTransitMilli = 0n;
-      let totalValuationCents = 0n;
+      let totalValuationVnd = 0n;
 
       for (const wh of warehouses) {
         totalOnHandMilli += parseQtyToMilli(wh.onHandQty, true, false);
         totalReservedMilli += parseQtyToMilli(wh.reservedQty, true, false);
         totalAvailableMilli += parseQtyToMilli(wh.availableQty, true, false);
         totalInTransitMilli += parseQtyToMilli(wh.inTransitQty, true, false);
-        totalValuationCents += parseMoneyToCents(wh.valuationAmount);
+        totalValuationVnd += parseMoneyToVnd(wh.valuationAmount);
       }
 
       return {
@@ -193,7 +193,7 @@ export class StockQueryService {
         totalReservedQty: formatMilliToQty(totalReservedMilli),
         totalAvailableQty: formatMilliToQty(totalAvailableMilli),
         totalInTransitQty: formatMilliToQty(totalInTransitMilli),
-        totalValuationAmount: formatCentsToMoney(totalValuationCents),
+        totalValuationAmount: vndToNumber(totalValuationVnd),
         warehouses,
       };
     });
@@ -289,11 +289,9 @@ export class StockQueryService {
           reservedAfter: formatMilliToQty(
             parseQtyToMilli(String(r.reservedAfter), true, false),
           ),
-          unitCost: formatCentsToMoney(
-            parseMoneyToCents(String(r.unitCost ?? '0')),
-          ),
-          avgCostAfter: formatCentsToMoney(
-            parseMoneyToCents(String(r.avgCostAfter ?? '0')),
+          unitCost: vndToNumber(parseMoneyToVnd(String(r.unitCost ?? '0'))),
+          avgCostAfter: vndToNumber(
+            parseMoneyToVnd(String(r.avgCostAfter ?? '0')),
           ),
         })),
         pagination: {
@@ -635,11 +633,9 @@ export class StockQueryService {
       reservedQty: formatMilliToQty(reservedMilli),
       availableQty: formatMilliToQty(availableMilli),
       inTransitQty: formatMilliToQty(inTransitMilli),
-      avgUnitCost: formatCentsToMoney(
-        parseMoneyToCents(String(r.avgUnitCost ?? '0')),
-      ),
-      valuationAmount: formatCentsToMoney(
-        parseMoneyToCents(String(r.valuationAmount ?? '0')),
+      avgUnitCost: vndToNumber(parseMoneyToVnd(String(r.avgUnitCost ?? '0'))),
+      valuationAmount: vndToNumber(
+        parseMoneyToVnd(String(r.valuationAmount ?? '0')),
       ),
       version: Number(r.version ?? 0),
       minQty: minMilli !== null ? formatMilliToQty(minMilli) : null,

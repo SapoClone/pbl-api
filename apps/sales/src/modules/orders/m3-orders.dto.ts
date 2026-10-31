@@ -71,7 +71,7 @@ export class CreateOmnichannelOrderDto {
   couponCode?: string;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   shippingFee?: number;
 
@@ -117,7 +117,7 @@ export class UpdateDraftOrderDto {
   orderDiscountValue?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   shippingFee?: number;
 

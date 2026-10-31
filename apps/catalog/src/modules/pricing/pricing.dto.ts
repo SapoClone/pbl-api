@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -113,12 +113,10 @@ export class PriceListItemInputDto {
   @IsUUID()
   variantId!: string;
 
-  @ApiProperty({ example: '199000.00' })
-  @Transform(({ value }) =>
-    typeof value === 'number' ? value.toFixed(2) : value,
-  )
-  @IsString()
-  price!: string;
+  @ApiProperty({ example: 199000, description: 'Whole VND' })
+  @IsInt()
+  @Min(0)
+  price!: number;
 }
 
 export class UpsertPriceListItemsReqDto {
@@ -153,7 +151,7 @@ export interface PriceListItemRes {
   priceListId: string;
   variantId: string;
   skuCode?: string;
-  price: string;
+  price: number;
   version: number;
   updatedAt: string;
 }

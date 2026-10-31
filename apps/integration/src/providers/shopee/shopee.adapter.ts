@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
+import { roundVnd } from '../../common/money';
 import {
   IntegrationDomainError,
   IntegrationDomainErrorCode,
@@ -286,7 +287,7 @@ export class ShopeeProviderAdapter implements MarketplaceProviderAdapter {
       const quantity = Number(
         item.model_quantity_purchased ?? item.quantity ?? 0,
       );
-      const unitPrice = Number(
+      const unitPrice = roundVnd(
         item.model_discounted_price ??
           item.model_original_price ??
           item.unitPrice ??
@@ -303,18 +304,18 @@ export class ShopeeProviderAdapter implements MarketplaceProviderAdapter {
         itemName: String(item.item_name ?? item.itemName ?? 'Shopee Item'),
         quantity,
         unitPrice,
-        lineDiscount: Number(item.lineDiscount ?? 0),
+        lineDiscount: roundVnd(item.lineDiscount ?? 0),
       };
     });
 
-    const shippingFee = Number(
+    const shippingFee = roundVnd(
       rawOrder.estimated_shipping_fee ?? rawOrder.shippingFee ?? 0,
     );
     const linesSubtotal = lines.reduce(
-      (acc, l) => acc + l.quantity * l.unitPrice - l.lineDiscount,
+      (acc, l) => acc + Math.round(l.quantity * l.unitPrice) - l.lineDiscount,
       0,
     );
-    const totalAmount = Number(
+    const totalAmount = roundVnd(
       rawOrder.total_amount ?? linesSubtotal + shippingFee,
     );
     const updateTimeSec = Number(

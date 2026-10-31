@@ -14,9 +14,8 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   FinanceDomainError,
   FinanceDomainErrorCode,
-  formatMoneyCents,
   GL_ACCOUNT_CODES,
-  parseMoneyCents,
+  parseVnd,
 } from '../../domain/finance-domain';
 import { nextFinanceDocumentCode } from '../../infrastructure/persistence/finance-code.generator';
 import {
@@ -137,28 +136,24 @@ export class SettlementsService {
       return { settlement: existingByTender, replayed: true };
     }
 
-    const reqCents = parseMoneyCents(dto.requestedAmount, {
+    const reqVnd = parseVnd(dto.requestedAmount, {
       allowZero: false,
       field: 'requestedAmount',
     });
-    const confCents = dto.confirmedAmount
-      ? parseMoneyCents(dto.confirmedAmount, {
+    const confVnd = dto.confirmedAmount
+      ? parseVnd(dto.confirmedAmount, {
           allowZero: true,
           field: 'confirmedAmount',
         })
-      : reqCents;
-    const settledCents = dto.settledAmount
-      ? parseMoneyCents(dto.settledAmount, {
+      : reqVnd;
+    const settledVnd = dto.settledAmount
+      ? parseVnd(dto.settledAmount, {
           allowZero: true,
           field: 'settledAmount',
         })
-      : confCents;
+      : confVnd;
 
-    const reqStr = formatMoneyCents(reqCents);
-    const confStr = formatMoneyCents(confCents);
-    const settledStr = formatMoneyCents(settledCents);
-
-    const hasMismatch = reqCents !== confCents || confCents <= 0n;
+    const hasMismatch = reqVnd !== confVnd || confVnd <= 0;
     const isAmbiguous = Boolean(dto.ambiguousOutcome) || hasMismatch;
 
     const code =
@@ -179,10 +174,10 @@ export class SettlementsService {
         paymentMethod: dto.paymentMethod,
         provider,
         externalTxId: dto.externalTxId?.trim() ?? null,
-        requestedAmount: reqStr,
-        confirmedAmount: confStr,
-        settledAmount: '0.00',
-        refundedAmount: existingByTender?.refundedAmount ?? '0.00',
+        requestedAmount: reqVnd,
+        confirmedAmount: confVnd,
+        settledAmount: 0,
+        refundedAmount: existingByTender?.refundedAmount ?? 0,
         currency: 'VND',
         providerStatus: hasMismatch ? 'AMOUNT_MISMATCH' : 'AMBIGUOUS',
         settlementStatus: 'RECONCILIATION_REQUIRED',
@@ -205,12 +200,12 @@ export class SettlementsService {
           severity: 'HIGH',
           sourceType: 'PAYMENT_SETTLEMENT',
           sourceId: savedPending.id,
-          expectedAmount: reqStr,
-          actualAmount: confStr,
-          differenceAmount: formatMoneyCents(confCents - reqCents),
+          expectedAmount: reqVnd,
+          actualAmount: confVnd,
+          differenceAmount: confVnd - reqVnd,
           status: 'OPEN',
           description: hasMismatch
-            ? `Order ${dto.orderId} tender ${tenderRef} confirmed amount (${confStr}) != requested amount (${reqStr})`
+            ? `Order ${dto.orderId} tender ${tenderRef} confirmed amount (${confVnd}) != requested amount (${reqVnd})`
             : `Order ${dto.orderId} tender ${tenderRef} reported ambiguous settlement outcome`,
           resolutionNote: null,
           resolvedBy: null,
@@ -259,7 +254,7 @@ export class SettlementsService {
         lines: [
           {
             accountCode: debitGl,
-            debitAmount: settledStr,
+            debitAmount: settledVnd,
             branchId: dto.branchId ?? null,
             referenceType: 'SALES_ORDER',
             referenceId: dto.orderId,
@@ -267,7 +262,7 @@ export class SettlementsService {
           },
           {
             accountCode: GL_ACCOUNT_CODES.SALES_REVENUE_CLEARING,
-            creditAmount: settledStr,
+            creditAmount: settledVnd,
             branchId: dto.branchId ?? null,
             referenceType: 'SALES_ORDER',
             referenceId: dto.orderId,
@@ -288,7 +283,7 @@ export class SettlementsService {
             direction: 'RECEIPT',
             cashAccountId: cashAccount.id,
             categoryCode: 'SALES_RECEIPT',
-            amount: settledStr,
+            amount: settledVnd,
             branchId: dto.branchId ?? null,
             shiftId: dto.shiftId ?? null,
             voucherType: 'SALES_SETTLEMENT',
@@ -317,10 +312,10 @@ export class SettlementsService {
       paymentMethod: dto.paymentMethod,
       provider,
       externalTxId: dto.externalTxId?.trim() ?? null,
-      requestedAmount: reqStr,
-      confirmedAmount: confStr,
-      settledAmount: settledStr,
-      refundedAmount: existingByTender?.refundedAmount ?? '0.00',
+      requestedAmount: reqVnd,
+      confirmedAmount: confVnd,
+      settledAmount: settledVnd,
+      refundedAmount: existingByTender?.refundedAmount ?? 0,
       currency: 'VND',
       providerStatus: 'CONFIRMED',
       settlementStatus: 'SETTLED',
@@ -471,12 +466,12 @@ export class SettlementsService {
     if (method === 'ON_ACCOUNT' || method === 'COD') {
       return;
     }
-    const rawAmount = payload.grandTotal ?? String(payload.totalAmount ?? 0);
-    const cents = parseMoneyCents(rawAmount, {
+    const rawAmount = payload.grandTotal ?? payload.totalAmount ?? 0;
+    const cents = parseVnd(rawAmount, {
       allowZero: true,
       field: 'totalAmount',
     });
-    if (cents <= 0n) {
+    if (cents <= 0) {
       return;
     }
     await this.confirmSettlement(
@@ -492,9 +487,9 @@ export class SettlementsService {
           ? method
           : 'CASH') as 'CASH' | 'BANK_TRANSFER' | 'CARD' | 'EWALLET',
         provider: 'INTERNAL_POS',
-        requestedAmount: formatMoneyCents(cents),
-        confirmedAmount: formatMoneyCents(cents),
-        settledAmount: formatMoneyCents(cents),
+        requestedAmount: cents,
+        confirmedAmount: cents,
+        settledAmount: cents,
         idempotencyKey: `evt:stl:order:${payload.orderId}`,
       },
       tenantId,
@@ -511,7 +506,7 @@ export class SettlementsService {
       paymentMethod: string;
       provider?: string;
       externalReference?: string;
-      amount: string;
+      amount: number;
     }>,
   ): Promise<void> {
     const { tenantId, payload } = envelope;
@@ -522,11 +517,11 @@ export class SettlementsService {
     if (method === 'ON_ACCOUNT' || method === 'COD') {
       return;
     }
-    const cents = parseMoneyCents(payload.amount, {
+    const cents = parseVnd(payload.amount, {
       allowZero: true,
       field: 'amount',
     });
-    if (cents <= 0n) {
+    if (cents <= 0) {
       return;
     }
     await this.confirmSettlement(
@@ -544,9 +539,9 @@ export class SettlementsService {
           : 'CASH') as 'CASH' | 'BANK_TRANSFER' | 'CARD' | 'EWALLET',
         provider: payload.provider ?? 'INTERNAL_POS',
         externalTxId: payload.externalReference,
-        requestedAmount: formatMoneyCents(cents),
-        confirmedAmount: formatMoneyCents(cents),
-        settledAmount: formatMoneyCents(cents),
+        requestedAmount: cents,
+        confirmedAmount: cents,
+        settledAmount: cents,
         idempotencyKey: `evt:stl:tender:${payload.tenderId}`,
       },
       tenantId,
@@ -563,18 +558,18 @@ export class SettlementsService {
       paymentMethod?: string;
       provider?: string;
       externalTxId?: string;
-      amount: string;
+      amount: number;
     }>,
   ): Promise<void> {
     const { tenantId, payload } = envelope;
     if (!tenantId || !payload?.orderId || !payload?.paymentId) {
       return;
     }
-    const cents = parseMoneyCents(payload.amount, {
+    const cents = parseVnd(payload.amount, {
       allowZero: true,
       field: 'amount',
     });
-    if (cents <= 0n) {
+    if (cents <= 0) {
       return;
     }
     await this.confirmSettlement(
@@ -592,9 +587,9 @@ export class SettlementsService {
           | 'EWALLET',
         provider: payload.provider ?? 'GATEWAY',
         externalTxId: payload.externalTxId,
-        requestedAmount: formatMoneyCents(cents),
-        confirmedAmount: formatMoneyCents(cents),
-        settledAmount: formatMoneyCents(cents),
+        requestedAmount: cents,
+        confirmedAmount: cents,
+        settledAmount: cents,
         idempotencyKey: `evt:stl:pay:${payload.paymentId}`,
       },
       tenantId,

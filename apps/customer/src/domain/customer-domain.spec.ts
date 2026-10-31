@@ -1,3 +1,4 @@
+import { moneyTransformer } from '../common/money';
 import {
   CustomerDomainErrorCode,
   calculateEarnedPoints,
@@ -11,6 +12,7 @@ import {
   parseVndBigInt,
   resolveEligibleMembershipTier,
   sanitizeCsvCell,
+  toVndNumber,
   validatePointRedemption,
 } from './customer-domain';
 
@@ -82,36 +84,61 @@ describe('M4 Customer & Loyalty Pure Domain Logic (customer-domain.ts)', () => {
   describe('Loyalty Point Earning & Redemption Accounting', () => {
     const defaultSettings = {
       isEnabled: true,
-      earnAmountPerPoint: '10000.00',
-      redeemValuePerPoint: '1000.00',
+      earnAmountPerPoint: 10000,
+      redeemValuePerPoint: 1000,
       minRedeemPoints: 10,
       maxRedeemPointsPerOrder: 500,
       holdTtlSeconds: 900,
     };
 
     it('awards integer floor points based on eligible spend and earnAmountPerPoint', () => {
-      const res1 = calculateEarnedPoints('500000.00', defaultSettings);
+      const res1 = calculateEarnedPoints(500000, defaultSettings);
       expect(res1.earnedPoints).toBe(50);
-      expect(res1.eligibleSpendFormatted).toBe('500000.00');
-      expect(res1.appliedRateFormatted).toBe('10000.00');
+      expect(res1.eligibleSpendVnd).toBe(500000);
+      expect(res1.appliedRateVnd).toBe(10000);
 
-      const res2 = calculateEarnedPoints('509999.00', defaultSettings);
+      const res2 = calculateEarnedPoints(509999, defaultSettings);
       expect(res2.earnedPoints).toBe(50);
 
-      const disabled = calculateEarnedPoints('500000.00', {
+      const disabled = calculateEarnedPoints(500000, {
         ...defaultSettings,
         isEnabled: false,
       });
       expect(disabled.earnedPoints).toBe(0);
     });
 
-    it('rejects fractional VND cents in monetary inputs', () => {
-      expect(() => parseVndBigInt('10000.50')).toThrow(
-        expect.objectContaining({
-          code: CustomerDomainErrorCode.VALIDATION_ERROR,
-          httpStatus: 422,
-        }),
-      );
+    it('rejects fractional, string, negative and unsafe VND amounts', () => {
+      for (const bad of [10000.5, '10000', '10000.00', -1, 2 ** 60]) {
+        expect(() => parseVndBigInt(bad as number)).toThrow(
+          expect.objectContaining({
+            code: CustomerDomainErrorCode.VALIDATION_ERROR,
+            httpStatus: 422,
+          }),
+        );
+      }
+      expect(parseVndBigInt(10000)).toBe(10000n);
+    });
+
+    it('converts bigint VND to number and fails beyond the safe range', () => {
+      expect(toVndNumber(5500000n)).toBe(5500000);
+      expect(() => toVndNumber(2n ** 60n)).toThrow();
+    });
+
+    it('computes redeem value as points x whole VND per point and refund-based reversal proportionally', () => {
+      const r = validatePointRedemption({
+        requestedPoints: 33,
+        postedPointsBalance: 100,
+        heldPoints: 0,
+        settings: { ...defaultSettings, redeemValuePerPoint: 1250 },
+      });
+      expect(r.discountValueVnd).toBe(41250);
+      expect(Number.isInteger(r.discountValueVnd)).toBe(true);
+    });
+
+    it('round-trips bigint strings through the column transformer', () => {
+      expect(moneyTransformer.from('2000000')).toBe(2000000);
+      expect(moneyTransformer.from(null)).toBeNull();
+      expect(() => moneyTransformer.from('1.5')).toThrow();
     });
 
     it('computes available points as GREATEST(0, posted - held) and validates redemptions', () => {
@@ -128,7 +155,7 @@ describe('M4 Customer & Loyalty Pure Domain Logic (customer-domain.ts)', () => {
         requestedPoints: 80,
         availableBefore: 100,
         availableAfter: 20,
-        discountValueVnd: '80000.00',
+        discountValueVnd: 80000,
       });
 
       // Insufficient available points due to existing hold
@@ -185,9 +212,9 @@ describe('M4 Customer & Loyalty Pure Domain Logic (customer-domain.ts)', () => {
       const r1 = calculateReturnPointReversal({
         originalEarnedPoints: 50,
         alreadyReversedPoints: 0,
-        originalEligibleSpendVnd: '500000.00',
-        returnRefundAmountVnd: '200000.00',
-        cumulativeRefundedAmountVnd: '200000.00',
+        originalEligibleSpendVnd: 500000,
+        returnRefundAmountVnd: 200000,
+        cumulativeRefundedAmountVnd: 200000,
       });
       expect(r1.pointsToReverse).toBe(20);
       expect(r1.remainingReversibleAfter).toBe(30);
@@ -196,9 +223,9 @@ describe('M4 Customer & Loyalty Pure Domain Logic (customer-domain.ts)', () => {
       const r2 = calculateReturnPointReversal({
         originalEarnedPoints: 50,
         alreadyReversedPoints: 20,
-        originalEligibleSpendVnd: '500000.00',
-        returnRefundAmountVnd: '300000.00',
-        cumulativeRefundedAmountVnd: '500000.00',
+        originalEligibleSpendVnd: 500000,
+        returnRefundAmountVnd: 300000,
+        cumulativeRefundedAmountVnd: 500000,
       });
       expect(r2.pointsToReverse).toBe(30);
       expect(r2.remainingReversibleAfter).toBe(0);

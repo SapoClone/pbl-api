@@ -58,8 +58,9 @@ export class FinanceDomainError extends Error {
   }
 }
 
-export const DEFAULT_CUSTOMER_CREDIT_LIMIT_VND = '2000000.00';
-export const MAX_MONETARY_CENTS = 99_999_999_999_999_99n; // NUMERIC(18,2) safe bound
+export const DEFAULT_CUSTOMER_CREDIT_LIMIT_VND = 2_000_000;
+/** Largest money value accepted (JS safe integer, fits a bigint column). */
+export const MAX_MONETARY_VND = Number.MAX_SAFE_INTEGER;
 
 export interface ParseMoneyOptions {
   allowZero?: boolean;
@@ -68,74 +69,47 @@ export interface ParseMoneyOptions {
 }
 
 /**
- * Parses a decimal string or number into exact integer cents (1 VND = 100 cents)
- * using string-based parsing (zero floating-point precision loss).
+ * Validates money: a whole number of VND that is a safe integer. A fractional
+ * value or a string is rejected with a 422 validation error.
  */
-export function parseMoneyCents(
-  raw: string | number | bigint | null | undefined,
+export function parseVnd(
+  raw: number | null | undefined,
   options: ParseMoneyOptions = {},
-): bigint {
+): number {
   const {
     allowZero = false,
     allowNegative = false,
     field = 'amount',
   } = options;
-  if (raw === null || raw === undefined || raw === '') {
+  if (raw === null || raw === undefined) {
     throw new FinanceDomainError(
       FinanceDomainErrorCode.VALIDATION_ERROR,
       `${field} is required`,
       422,
     );
   }
-  const str = String(raw).trim();
-  const match = /^([+-])?(\d+)(?:\.(\d{1,2}))?$/.exec(str);
-  if (!match) {
+  if (typeof raw !== 'number' || !Number.isSafeInteger(raw)) {
     throw new FinanceDomainError(
       FinanceDomainErrorCode.VALIDATION_ERROR,
-      `${field} must be a valid monetary value with at most 2 decimal places (received "${str}")`,
+      `${field} must be a whole number of VND (received "${String(raw)}")`,
       422,
     );
   }
-
-  const sign = match[1] === '-' ? -1n : 1n;
-  const whole = BigInt(match[2]);
-  const fracRaw = match[3] ?? '';
-  const fracPadded = fracRaw.padEnd(2, '0');
-  const frac = BigInt(fracPadded);
-
-  const cents = sign * (whole * 100n + frac);
-
-  if (cents < 0n && !allowNegative) {
+  if (raw < 0 && !allowNegative) {
     throw new FinanceDomainError(
       FinanceDomainErrorCode.VALIDATION_ERROR,
       `${field} cannot be negative`,
       422,
     );
   }
-  if (cents === 0n && !allowZero) {
+  if (raw === 0 && !allowZero) {
     throw new FinanceDomainError(
       FinanceDomainErrorCode.VALIDATION_ERROR,
       `${field} must be greater than zero`,
       422,
     );
   }
-  const absCents = cents < 0n ? -cents : cents;
-  if (absCents > MAX_MONETARY_CENTS) {
-    throw new FinanceDomainError(
-      FinanceDomainErrorCode.VALIDATION_ERROR,
-      `${field} exceeds maximum supported precision NUMERIC(18,2)`,
-      422,
-    );
-  }
-  return cents;
-}
-
-export function formatMoneyCents(cents: bigint): string {
-  const isNeg = cents < 0n;
-  const abs = isNeg ? -cents : cents;
-  const whole = abs / 100n;
-  const frac = abs % 100n;
-  return `${isNeg ? '-' : ''}${whole.toString()}.${frac.toString().padStart(2, '0')}`;
+  return raw;
 }
 
 export function normalizeFinanceCode(raw: string, field = 'code'): string {
@@ -342,8 +316,8 @@ export const DEFAULT_CASHBOOK_CATEGORIES: readonly StandardCashbookCategorySpec[
 
 export interface JournalLineInput {
   accountCode: string;
-  debitAmount?: string | number;
-  creditAmount?: string | number;
+  debitAmount?: number;
+  creditAmount?: number;
   branchId?: string | null;
   partyType?: 'CUSTOMER' | 'SUPPLIER' | 'CARRIER' | null;
   partyId?: string | null;
@@ -355,10 +329,10 @@ export interface JournalLineInput {
 export interface ValidatedJournalLine {
   lineNo: number;
   accountCode: string;
-  debitAmount: string;
-  creditAmount: string;
-  debitCents: bigint;
-  creditCents: bigint;
+  debitAmount: number;
+  creditAmount: number;
+  debitVnd: number;
+  creditVnd: number;
   branchId: string | null;
   partyType: 'CUSTOMER' | 'SUPPLIER' | 'CARRIER' | null;
   partyId: string | null;
@@ -368,10 +342,10 @@ export interface ValidatedJournalLine {
 }
 
 export interface ValidatedJournalResult {
-  totalDebit: string;
-  totalCredit: string;
-  totalDebitCents: bigint;
-  totalCreditCents: bigint;
+  totalDebit: number;
+  totalCredit: number;
+  totalDebitVnd: number;
+  totalCreditVnd: number;
   lines: ValidatedJournalLine[];
 }
 
@@ -386,8 +360,8 @@ export function validateBalancedJournalLines(
     );
   }
 
-  let totalDebitCents = 0n;
-  let totalCreditCents = 0n;
+  let totalDebitVnd = 0;
+  let totalCreditVnd = 0;
   const validatedLines: ValidatedJournalLine[] = [];
 
   for (let i = 0; i < lines.length; i += 1) {
@@ -401,20 +375,20 @@ export function validateBalancedJournalLines(
       );
     }
 
-    const debitCents = parseMoneyCents(line.debitAmount ?? '0.00', {
+    const debitVnd = parseVnd(line.debitAmount ?? 0, {
       allowZero: true,
       allowNegative: false,
       field: `lines[${i}].debitAmount`,
     });
-    const creditCents = parseMoneyCents(line.creditAmount ?? '0.00', {
+    const creditVnd = parseVnd(line.creditAmount ?? 0, {
       allowZero: true,
       allowNegative: false,
       field: `lines[${i}].creditAmount`,
     });
 
     if (
-      (debitCents === 0n && creditCents === 0n) ||
-      (debitCents > 0n && creditCents > 0n)
+      (debitVnd === 0 && creditVnd === 0) ||
+      (debitVnd > 0 && creditVnd > 0)
     ) {
       throw new FinanceDomainError(
         FinanceDomainErrorCode.JOURNAL_NOT_BALANCED,
@@ -423,16 +397,16 @@ export function validateBalancedJournalLines(
       );
     }
 
-    totalDebitCents += debitCents;
-    totalCreditCents += creditCents;
+    totalDebitVnd += debitVnd;
+    totalCreditVnd += creditVnd;
 
     validatedLines.push({
       lineNo: i + 1,
       accountCode,
-      debitAmount: formatMoneyCents(debitCents),
-      creditAmount: formatMoneyCents(creditCents),
-      debitCents,
-      creditCents,
+      debitAmount: debitVnd,
+      creditAmount: creditVnd,
+      debitVnd,
+      creditVnd,
       branchId: line.branchId ?? null,
       partyType: line.partyType ?? null,
       partyId: line.partyId ?? null,
@@ -442,23 +416,23 @@ export function validateBalancedJournalLines(
     });
   }
 
-  if (totalDebitCents <= 0n || totalDebitCents !== totalCreditCents) {
+  if (totalDebitVnd <= 0 || totalDebitVnd !== totalCreditVnd) {
     throw new FinanceDomainError(
       FinanceDomainErrorCode.JOURNAL_NOT_BALANCED,
-      `Journal is not balanced: totalDebit (${formatMoneyCents(totalDebitCents)}) != totalCredit (${formatMoneyCents(totalCreditCents)})`,
+      `Journal is not balanced: totalDebit (${totalDebitVnd}) != totalCredit (${totalCreditVnd})`,
       422,
       {
-        totalDebit: formatMoneyCents(totalDebitCents),
-        totalCredit: formatMoneyCents(totalCreditCents),
+        totalDebit: totalDebitVnd,
+        totalCredit: totalCreditVnd,
       },
     );
   }
 
   return {
-    totalDebit: formatMoneyCents(totalDebitCents),
-    totalCredit: formatMoneyCents(totalCreditCents),
-    totalDebitCents,
-    totalCreditCents,
+    totalDebit: totalDebitVnd,
+    totalCredit: totalCreditVnd,
+    totalDebitVnd,
+    totalCreditVnd,
     lines: validatedLines,
   };
 }
@@ -466,83 +440,79 @@ export function validateBalancedJournalLines(
 // ---- Customer Credit Authorization
 
 export interface CreditAuthorizationEvaluationInput {
-  creditLimit: string | number;
-  postedDebt: string | number;
-  heldCredit: string | number;
-  requestedAmount: string | number;
+  creditLimit: number;
+  postedDebt: number;
+  heldCredit: number;
+  requestedAmount: number;
   overrideApprovedBy?: string | null;
   overrideReason?: string | null;
 }
 
 export interface CreditAuthorizationEvaluationResult {
-  creditLimit: string;
-  postedDebt: string;
-  heldCreditBefore: string;
-  availableCreditBefore: string;
-  requestedAmount: string;
-  heldCreditAfter: string;
-  availableCreditAfter: string;
+  creditLimit: number;
+  postedDebt: number;
+  heldCreditBefore: number;
+  availableCreditBefore: number;
+  requestedAmount: number;
+  heldCreditAfter: number;
+  availableCreditAfter: number;
   isOverride: boolean;
 }
 
 export function evaluateCreditAuthorization(
   input: CreditAuthorizationEvaluationInput,
 ): CreditAuthorizationEvaluationResult {
-  const limitCents = parseMoneyCents(input.creditLimit, {
+  const limitVnd = parseVnd(input.creditLimit, {
     allowZero: true,
     field: 'creditLimit',
   });
-  const postedCents = parseMoneyCents(input.postedDebt, {
+  const postedVnd = parseVnd(input.postedDebt, {
     allowZero: true,
     field: 'postedDebt',
   });
-  const heldCents = parseMoneyCents(input.heldCredit, {
+  const heldVnd = parseVnd(input.heldCredit, {
     allowZero: true,
     field: 'heldCredit',
   });
-  const reqCents = parseMoneyCents(input.requestedAmount, {
+  const reqVnd = parseVnd(input.requestedAmount, {
     allowZero: false,
     field: 'requestedAmount',
   });
 
   const availableBefore =
-    limitCents > postedCents + heldCents
-      ? limitCents - postedCents - heldCents
-      : 0n;
+    limitVnd > postedVnd + heldVnd ? limitVnd - postedVnd - heldVnd : 0;
 
   const isOverride = Boolean(
     input.overrideApprovedBy && input.overrideApprovedBy.trim().length > 0,
   );
 
-  if (reqCents > availableBefore && !isOverride) {
+  if (reqVnd > availableBefore && !isOverride) {
     throw new FinanceDomainError(
       FinanceDomainErrorCode.CUSTOMER_CREDIT_LIMIT_EXCEEDED,
-      `Requested credit (${formatMoneyCents(reqCents)} VND) exceeds available credit (${formatMoneyCents(availableBefore)} VND; limit=${formatMoneyCents(limitCents)}, postedDebt=${formatMoneyCents(postedCents)}, heldCredit=${formatMoneyCents(heldCents)})`,
+      `Requested credit (${reqVnd} VND) exceeds available credit (${availableBefore} VND; limit=${limitVnd}, postedDebt=${postedVnd}, heldCredit=${heldVnd})`,
       409,
       {
-        creditLimit: formatMoneyCents(limitCents),
-        postedDebt: formatMoneyCents(postedCents),
-        heldCredit: formatMoneyCents(heldCents),
-        availableCredit: formatMoneyCents(availableBefore),
-        requestedAmount: formatMoneyCents(reqCents),
+        creditLimit: limitVnd,
+        postedDebt: postedVnd,
+        heldCredit: heldVnd,
+        availableCredit: availableBefore,
+        requestedAmount: reqVnd,
       },
     );
   }
 
-  const heldAfter = heldCents + reqCents;
+  const heldAfter = heldVnd + reqVnd;
   const availableAfter =
-    limitCents > postedCents + heldAfter
-      ? limitCents - postedCents - heldAfter
-      : 0n;
+    limitVnd > postedVnd + heldAfter ? limitVnd - postedVnd - heldAfter : 0;
 
   return {
-    creditLimit: formatMoneyCents(limitCents),
-    postedDebt: formatMoneyCents(postedCents),
-    heldCreditBefore: formatMoneyCents(heldCents),
-    availableCreditBefore: formatMoneyCents(availableBefore),
-    requestedAmount: formatMoneyCents(reqCents),
-    heldCreditAfter: formatMoneyCents(heldAfter),
-    availableCreditAfter: formatMoneyCents(availableAfter),
+    creditLimit: limitVnd,
+    postedDebt: postedVnd,
+    heldCreditBefore: heldVnd,
+    availableCreditBefore: availableBefore,
+    requestedAmount: reqVnd,
+    heldCreditAfter: heldAfter,
+    availableCreditAfter: availableAfter,
     isOverride,
   };
 }
@@ -552,36 +522,36 @@ export function evaluateCreditAuthorization(
 export interface OpenObligationSnapshot {
   id: string;
   code: string;
-  originalAmount: string;
-  paidAmount: string;
-  adjustedAmount: string;
-  outstandingAmount: string;
+  originalAmount: number;
+  paidAmount: number;
+  adjustedAmount: number;
+  outstandingAmount: number;
 }
 
 export interface RequestedAllocationLine {
   documentId: string;
-  amount: string | number;
+  amount: number;
 }
 
 export interface CalculatedAllocationLine {
   documentId: string;
   code: string;
-  allocatedAmount: string;
-  paidAmountAfter: string;
-  outstandingBefore: string;
-  outstandingAfter: string;
+  allocatedAmount: number;
+  paidAmountAfter: number;
+  outstandingBefore: number;
+  outstandingAfter: number;
   statusAfter: 'PARTIALLY_PAID' | 'PAID';
 }
 
 export interface CalculatedPaymentAllocationResult {
-  paymentAmount: string;
-  totalAllocated: string;
-  overpaymentAmount: string;
+  paymentAmount: number;
+  totalAllocated: number;
+  overpaymentAmount: number;
   allocations: CalculatedAllocationLine[];
 }
 
 export function calculateDocumentAllocations(
-  paymentAmountRaw: string | number,
+  paymentAmountRaw: number,
   openDocuments: OpenObligationSnapshot[],
   explicitAllocations?: RequestedAllocationLine[],
   options: {
@@ -595,14 +565,14 @@ export function calculateDocumentAllocations(
       ? FinanceDomainErrorCode.PAYMENT_ALLOCATION_EXCEEDED
       : FinanceDomainErrorCode.SUPPLIER_PAYMENT_EXCEEDED;
 
-  const paymentCents = parseMoneyCents(paymentAmountRaw, {
+  const paymentVnd = parseVnd(paymentAmountRaw, {
     allowZero: false,
     field: 'paymentAmount',
   });
 
   const docMap = new Map(openDocuments.map((d) => [d.id, d]));
   const allocations: CalculatedAllocationLine[] = [];
-  let totalAllocatedCents = 0n;
+  let totalAllocatedVnd = 0;
 
   if (explicitAllocations && explicitAllocations.length > 0) {
     const seen = new Set<string>();
@@ -627,114 +597,114 @@ export function calculateDocumentAllocations(
         );
       }
 
-      const allocCents = parseMoneyCents(req.amount, {
+      const allocVnd = parseVnd(req.amount, {
         allowZero: false,
         field: `allocation[${req.documentId}]`,
       });
-      const outBeforeCents = parseMoneyCents(doc.outstandingAmount, {
+      const outBeforeVnd = parseVnd(doc.outstandingAmount, {
         allowZero: true,
         field: 'outstandingAmount',
       });
-      const paidBeforeCents = parseMoneyCents(doc.paidAmount, {
+      const paidBeforeVnd = parseVnd(doc.paidAmount, {
         allowZero: true,
         field: 'paidAmount',
       });
 
-      if (allocCents > outBeforeCents) {
+      if (allocVnd > outBeforeVnd) {
         throw new FinanceDomainError(
           errorCode,
-          `Allocation (${formatMoneyCents(allocCents)}) exceeds outstanding balance (${formatMoneyCents(outBeforeCents)}) on ${doc.code}`,
+          `Allocation (${allocVnd}) exceeds outstanding balance (${outBeforeVnd}) on ${doc.code}`,
           409,
           {
             documentId: doc.id,
             code: doc.code,
-            requestedAllocation: formatMoneyCents(allocCents),
-            outstandingAmount: formatMoneyCents(outBeforeCents),
+            requestedAllocation: allocVnd,
+            outstandingAmount: outBeforeVnd,
           },
         );
       }
 
-      const outAfterCents = outBeforeCents - allocCents;
-      const paidAfterCents = paidBeforeCents + allocCents;
-      totalAllocatedCents += allocCents;
+      const outAfterVnd = outBeforeVnd - allocVnd;
+      const paidAfterVnd = paidBeforeVnd + allocVnd;
+      totalAllocatedVnd += allocVnd;
 
       allocations.push({
         documentId: doc.id,
         code: doc.code,
-        allocatedAmount: formatMoneyCents(allocCents),
-        paidAmountAfter: formatMoneyCents(paidAfterCents),
-        outstandingBefore: formatMoneyCents(outBeforeCents),
-        outstandingAfter: formatMoneyCents(outAfterCents),
-        statusAfter: outAfterCents === 0n ? 'PAID' : 'PARTIALLY_PAID',
+        allocatedAmount: allocVnd,
+        paidAmountAfter: paidAfterVnd,
+        outstandingBefore: outBeforeVnd,
+        outstandingAfter: outAfterVnd,
+        statusAfter: outAfterVnd === 0 ? 'PAID' : 'PARTIALLY_PAID',
       });
     }
   } else {
     // FIFO allocation across open documents provided
-    let remainingToAllocate = paymentCents;
+    let remainingToAllocate = paymentVnd;
     for (const doc of openDocuments) {
-      if (remainingToAllocate <= 0n) {
+      if (remainingToAllocate <= 0) {
         break;
       }
-      const outBeforeCents = parseMoneyCents(doc.outstandingAmount, {
+      const outBeforeVnd = parseVnd(doc.outstandingAmount, {
         allowZero: true,
         field: 'outstandingAmount',
       });
-      if (outBeforeCents <= 0n) {
+      if (outBeforeVnd <= 0) {
         continue;
       }
-      const paidBeforeCents = parseMoneyCents(doc.paidAmount, {
+      const paidBeforeVnd = parseVnd(doc.paidAmount, {
         allowZero: true,
         field: 'paidAmount',
       });
 
-      const allocCents =
-        remainingToAllocate <= outBeforeCents
+      const allocVnd =
+        remainingToAllocate <= outBeforeVnd
           ? remainingToAllocate
-          : outBeforeCents;
-      const outAfterCents = outBeforeCents - allocCents;
-      const paidAfterCents = paidBeforeCents + allocCents;
+          : outBeforeVnd;
+      const outAfterVnd = outBeforeVnd - allocVnd;
+      const paidAfterVnd = paidBeforeVnd + allocVnd;
 
-      remainingToAllocate -= allocCents;
-      totalAllocatedCents += allocCents;
+      remainingToAllocate -= allocVnd;
+      totalAllocatedVnd += allocVnd;
 
       allocations.push({
         documentId: doc.id,
         code: doc.code,
-        allocatedAmount: formatMoneyCents(allocCents),
-        paidAmountAfter: formatMoneyCents(paidAfterCents),
-        outstandingBefore: formatMoneyCents(outBeforeCents),
-        outstandingAfter: formatMoneyCents(outAfterCents),
-        statusAfter: outAfterCents === 0n ? 'PAID' : 'PARTIALLY_PAID',
+        allocatedAmount: allocVnd,
+        paidAmountAfter: paidAfterVnd,
+        outstandingBefore: outBeforeVnd,
+        outstandingAfter: outAfterVnd,
+        statusAfter: outAfterVnd === 0 ? 'PAID' : 'PARTIALLY_PAID',
       });
     }
   }
 
-  if (totalAllocatedCents > paymentCents) {
+  if (totalAllocatedVnd > paymentVnd) {
     throw new FinanceDomainError(
       errorCode,
-      `Total allocations (${formatMoneyCents(totalAllocatedCents)}) exceed confirmed payment amount (${formatMoneyCents(paymentCents)})`,
+      `Total allocations (${totalAllocatedVnd}) exceed confirmed payment amount (${paymentVnd})`,
       409,
     );
   }
 
-  const overpaymentCents = paymentCents - totalAllocatedCents;
-  if (overpaymentCents > 0n && overpaymentPolicy === 'REJECT') {
+  const overpaymentVnd = paymentVnd - totalAllocatedVnd;
+  if (overpaymentVnd > 0 && overpaymentPolicy === 'REJECT') {
     throw new FinanceDomainError(
       errorCode,
-      `Payment amount (${formatMoneyCents(paymentCents)}) exceeds total allocated outstanding balance (${formatMoneyCents(totalAllocatedCents)}) by ${formatMoneyCents(overpaymentCents)}`,
+      `Payment amount (${paymentVnd}) exceeds total allocated outstanding balance (${totalAllocatedVnd}) by ${overpaymentVnd}`,
       409,
       {
-        paymentAmount: formatMoneyCents(paymentCents),
-        totalAllocated: formatMoneyCents(totalAllocatedCents),
-        overpaymentAmount: formatMoneyCents(overpaymentCents),
+        paymentAmount: paymentVnd,
+        totalAllocated: totalAllocatedVnd,
+        overpaymentAmount: overpaymentVnd,
       },
     );
   }
 
   return {
-    paymentAmount: formatMoneyCents(paymentCents),
-    totalAllocated: formatMoneyCents(totalAllocatedCents),
-    overpaymentAmount: formatMoneyCents(overpaymentCents),
+    paymentAmount: paymentVnd,
+    totalAllocated: totalAllocatedVnd,
+    overpaymentAmount: overpaymentVnd,
     allocations,
   };
 }
@@ -742,76 +712,75 @@ export function calculateDocumentAllocations(
 // ---- Refund Eligibility
 
 export interface RefundEligibilityInput {
-  originalPaidAmount: string | number;
-  alreadyRefundedAmount: string | number;
-  requestedRefundAmount: string | number;
+  originalPaidAmount: number;
+  alreadyRefundedAmount: number;
+  requestedRefundAmount: number;
 }
 
 export interface RefundEligibilityResult {
-  originalPaidAmount: string;
-  alreadyRefundedAmount: string;
-  remainingRefundableBefore: string;
-  requestedRefundAmount: string;
-  remainingRefundableAfter: string;
+  originalPaidAmount: number;
+  alreadyRefundedAmount: number;
+  remainingRefundableBefore: number;
+  requestedRefundAmount: number;
+  remainingRefundableAfter: number;
 }
 
 export function validateRefundAllocation(
   input: RefundEligibilityInput,
 ): RefundEligibilityResult {
-  const paidCents = parseMoneyCents(input.originalPaidAmount, {
+  const paidVnd = parseVnd(input.originalPaidAmount, {
     allowZero: false,
     field: 'originalPaidAmount',
   });
-  const refundedCents = parseMoneyCents(input.alreadyRefundedAmount, {
+  const refundedVnd = parseVnd(input.alreadyRefundedAmount, {
     allowZero: true,
     field: 'alreadyRefundedAmount',
   });
-  const reqCents = parseMoneyCents(input.requestedRefundAmount, {
+  const reqVnd = parseVnd(input.requestedRefundAmount, {
     allowZero: false,
     field: 'requestedRefundAmount',
   });
 
-  const remainingBefore =
-    paidCents > refundedCents ? paidCents - refundedCents : 0n;
-  if (reqCents > remainingBefore) {
+  const remainingBefore = paidVnd > refundedVnd ? paidVnd - refundedVnd : 0;
+  if (reqVnd > remainingBefore) {
     throw new FinanceDomainError(
       FinanceDomainErrorCode.REFUND_AMOUNT_EXCEEDED,
-      `Requested refund (${formatMoneyCents(reqCents)}) exceeds remaining refundable amount (${formatMoneyCents(remainingBefore)})`,
+      `Requested refund (${reqVnd}) exceeds remaining refundable amount (${remainingBefore})`,
       409,
       {
-        originalPaidAmount: formatMoneyCents(paidCents),
-        alreadyRefundedAmount: formatMoneyCents(refundedCents),
-        remainingRefundable: formatMoneyCents(remainingBefore),
-        requestedRefundAmount: formatMoneyCents(reqCents),
+        originalPaidAmount: paidVnd,
+        alreadyRefundedAmount: refundedVnd,
+        remainingRefundable: remainingBefore,
+        requestedRefundAmount: reqVnd,
       },
     );
   }
 
   return {
-    originalPaidAmount: formatMoneyCents(paidCents),
-    alreadyRefundedAmount: formatMoneyCents(refundedCents),
-    remainingRefundableBefore: formatMoneyCents(remainingBefore),
-    requestedRefundAmount: formatMoneyCents(reqCents),
-    remainingRefundableAfter: formatMoneyCents(remainingBefore - reqCents),
+    originalPaidAmount: paidVnd,
+    alreadyRefundedAmount: refundedVnd,
+    remainingRefundableBefore: remainingBefore,
+    requestedRefundAmount: reqVnd,
+    remainingRefundableAfter: remainingBefore - reqVnd,
   };
 }
 
 // ---- COD Settlement Line Evaluation
 
 export interface CodSettlementLineEvaluationInput {
-  expectedGrossCod: string | number;
-  reportedGrossCod: string | number;
-  carrierFee: string | number;
-  reportedNetPayout: string | number;
+  expectedGrossCod: number;
+  reportedGrossCod: number;
+  carrierFee: number;
+  reportedNetPayout: number;
 }
 
 export interface CodSettlementLineEvaluationResult {
-  expectedGrossCod: string;
-  reportedGrossCod: string;
-  carrierFee: string;
-  expectedNetPayout: string;
-  reportedNetPayout: string;
-  discrepancyAmount: string;
+  expectedGrossCod: number;
+  reportedGrossCod: number;
+  carrierFee: number;
+  expectedNetPayout: number;
+  reportedNetPayout: number;
+  discrepancyAmount: number;
   status: 'MATCHED' | 'DISCREPANCY';
   discrepancyReason: string | null;
 }
@@ -819,51 +788,49 @@ export interface CodSettlementLineEvaluationResult {
 export function evaluateCodSettlementLine(
   input: CodSettlementLineEvaluationInput,
 ): CodSettlementLineEvaluationResult {
-  const expectedGrossCents = parseMoneyCents(input.expectedGrossCod, {
+  const expectedGrossVnd = parseVnd(input.expectedGrossCod, {
     allowZero: false,
     field: 'expectedGrossCod',
   });
-  const reportedGrossCents = parseMoneyCents(input.reportedGrossCod, {
+  const reportedGrossVnd = parseVnd(input.reportedGrossCod, {
     allowZero: true,
     field: 'reportedGrossCod',
   });
-  const feeCents = parseMoneyCents(input.carrierFee, {
+  const feeVnd = parseVnd(input.carrierFee, {
     allowZero: true,
     field: 'carrierFee',
   });
-  const reportedNetCents = parseMoneyCents(input.reportedNetPayout, {
+  const reportedNetVnd = parseVnd(input.reportedNetPayout, {
     allowZero: true,
     allowNegative: true,
     field: 'reportedNetPayout',
   });
 
-  const expectedNetCents = expectedGrossCents - feeCents;
-  const discrepancyCents = reportedNetCents - expectedNetCents;
+  const expectedNetVnd = expectedGrossVnd - feeVnd;
+  const discrepancyVnd = reportedNetVnd - expectedNetVnd;
   const reasons: string[] = [];
 
-  if (reportedGrossCents !== expectedGrossCents) {
+  if (reportedGrossVnd !== expectedGrossVnd) {
     reasons.push(
-      `Reported COD (${formatMoneyCents(reportedGrossCents)}) != expected COD (${formatMoneyCents(expectedGrossCents)})`,
+      `Reported COD (${reportedGrossVnd}) != expected COD (${expectedGrossVnd})`,
     );
   }
-  if (reportedGrossCents - feeCents !== reportedNetCents) {
+  if (reportedGrossVnd - feeVnd !== reportedNetVnd) {
     reasons.push(
-      `Carrier statement math mismatch: reportedGross (${formatMoneyCents(reportedGrossCents)}) - fee (${formatMoneyCents(feeCents)}) != netPayout (${formatMoneyCents(reportedNetCents)})`,
+      `Carrier statement math mismatch: reportedGross (${reportedGrossVnd}) - fee (${feeVnd}) != netPayout (${reportedNetVnd})`,
     );
   }
-  if (discrepancyCents !== 0n && reasons.length === 0) {
-    reasons.push(
-      `Net payout discrepancy of ${formatMoneyCents(discrepancyCents)} VND`,
-    );
+  if (discrepancyVnd !== 0 && reasons.length === 0) {
+    reasons.push(`Net payout discrepancy of ${discrepancyVnd} VND`);
   }
 
   return {
-    expectedGrossCod: formatMoneyCents(expectedGrossCents),
-    reportedGrossCod: formatMoneyCents(reportedGrossCents),
-    carrierFee: formatMoneyCents(feeCents),
-    expectedNetPayout: formatMoneyCents(expectedNetCents),
-    reportedNetPayout: formatMoneyCents(reportedNetCents),
-    discrepancyAmount: formatMoneyCents(discrepancyCents),
+    expectedGrossCod: expectedGrossVnd,
+    reportedGrossCod: reportedGrossVnd,
+    carrierFee: feeVnd,
+    expectedNetPayout: expectedNetVnd,
+    reportedNetPayout: reportedNetVnd,
+    discrepancyAmount: discrepancyVnd,
     status: reasons.length === 0 ? 'MATCHED' : 'DISCREPANCY',
     discrepancyReason: reasons.length > 0 ? reasons.join('; ') : null,
   };
@@ -872,50 +839,50 @@ export function evaluateCodSettlementLine(
 // ---- Shift Cash Reconciliation
 
 export interface ShiftCashEvaluationInput {
-  openingCash: string | number;
-  confirmedCashSales: string | number;
-  confirmedCashRefunds: string | number;
-  otherCashReceipts?: string | number;
-  otherCashExpenses?: string | number;
-  actualCountedCash: string | number;
+  openingCash: number;
+  confirmedCashSales: number;
+  confirmedCashRefunds: number;
+  otherCashReceipts?: number;
+  otherCashExpenses?: number;
+  actualCountedCash: number;
 }
 
 export interface ShiftCashEvaluationResult {
-  openingCash: string;
-  confirmedCashSales: string;
-  confirmedCashRefunds: string;
-  otherCashReceipts: string;
-  otherCashExpenses: string;
-  expectedClosingCash: string;
-  actualCountedCash: string;
-  varianceAmount: string;
+  openingCash: number;
+  confirmedCashSales: number;
+  confirmedCashRefunds: number;
+  otherCashReceipts: number;
+  otherCashExpenses: number;
+  expectedClosingCash: number;
+  actualCountedCash: number;
+  varianceAmount: number;
   status: 'RECONCILED' | 'VARIANCE_DETECTED';
 }
 
 export function evaluateShiftCashReconciliation(
   input: ShiftCashEvaluationInput,
 ): ShiftCashEvaluationResult {
-  const opening = parseMoneyCents(input.openingCash, {
+  const opening = parseVnd(input.openingCash, {
     allowZero: true,
     field: 'openingCash',
   });
-  const sales = parseMoneyCents(input.confirmedCashSales, {
+  const sales = parseVnd(input.confirmedCashSales, {
     allowZero: true,
     field: 'confirmedCashSales',
   });
-  const refunds = parseMoneyCents(input.confirmedCashRefunds, {
+  const refunds = parseVnd(input.confirmedCashRefunds, {
     allowZero: true,
     field: 'confirmedCashRefunds',
   });
-  const otherIn = parseMoneyCents(input.otherCashReceipts ?? '0.00', {
+  const otherIn = parseVnd(input.otherCashReceipts ?? 0, {
     allowZero: true,
     field: 'otherCashReceipts',
   });
-  const otherOut = parseMoneyCents(input.otherCashExpenses ?? '0.00', {
+  const otherOut = parseVnd(input.otherCashExpenses ?? 0, {
     allowZero: true,
     field: 'otherCashExpenses',
   });
-  const actual = parseMoneyCents(input.actualCountedCash, {
+  const actual = parseVnd(input.actualCountedCash, {
     allowZero: true,
     field: 'actualCountedCash',
   });
@@ -924,15 +891,15 @@ export function evaluateShiftCashReconciliation(
   const variance = actual - expected;
 
   return {
-    openingCash: formatMoneyCents(opening),
-    confirmedCashSales: formatMoneyCents(sales),
-    confirmedCashRefunds: formatMoneyCents(refunds),
-    otherCashReceipts: formatMoneyCents(otherIn),
-    otherCashExpenses: formatMoneyCents(otherOut),
-    expectedClosingCash: formatMoneyCents(expected),
-    actualCountedCash: formatMoneyCents(actual),
-    varianceAmount: formatMoneyCents(variance),
-    status: variance === 0n ? 'RECONCILED' : 'VARIANCE_DETECTED',
+    openingCash: opening,
+    confirmedCashSales: sales,
+    confirmedCashRefunds: refunds,
+    otherCashReceipts: otherIn,
+    otherCashExpenses: otherOut,
+    expectedClosingCash: expected,
+    actualCountedCash: actual,
+    varianceAmount: variance,
+    status: variance === 0 ? 'RECONCILED' : 'VARIANCE_DETECTED',
   };
 }
 

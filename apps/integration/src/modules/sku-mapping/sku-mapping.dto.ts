@@ -1,7 +1,7 @@
 import {
   IsIn,
+  IsInt,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -38,7 +38,7 @@ export class CreateSkuMappingDto {
   internalVariantId!: string;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   externalPrice?: number;
 
@@ -67,7 +67,7 @@ export class UpdateSkuMappingDto {
   status?: SkuMappingStatus;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
   externalPrice?: number;
 }

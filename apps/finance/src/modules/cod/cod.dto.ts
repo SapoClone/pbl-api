@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -31,8 +32,8 @@ export class CreateCodReceivableDto {
   @MaxLength(64)
   trackingNumber!: string;
 
-  @IsString()
-  expectedCodAmount!: string;
+  @IsInt()
+  expectedCodAmount!: number;
 
   @IsOptional()
   @IsString()
@@ -53,15 +54,15 @@ export class CodSettlementBatchLineDto {
   @IsUUID()
   fulfillmentId?: string;
 
-  @IsString()
-  reportedCodAmount!: string;
+  @IsInt()
+  reportedCodAmount!: number;
 
   @IsOptional()
-  @IsString()
-  carrierFeeAmount?: string;
+  @IsInt()
+  carrierFeeAmount?: number;
 
-  @IsString()
-  netPayoutAmount!: string;
+  @IsInt()
+  netPayoutAmount!: number;
 }
 
 export class ImportCodSettlementBatchDto {

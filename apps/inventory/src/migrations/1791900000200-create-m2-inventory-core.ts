@@ -39,8 +39,8 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
     // 2. Extend stock_balance with weighted-average cost & valuation columns + composite FK to warehouse
     await queryRunner.query(`
       ALTER TABLE ${balance}
-        ADD COLUMN IF NOT EXISTS "avg_unit_cost" numeric(18,2) NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS "valuation_amount" numeric(18,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS "avg_unit_cost" bigint NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS "valuation_amount" bigint NOT NULL DEFAULT 0,
         ADD CONSTRAINT "CHK_stock_balance_valuation_non_negative" CHECK (
           "avg_unit_cost" >= 0 AND "valuation_amount" >= 0
         ),
@@ -65,8 +65,8 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
     await queryRunner.query(`
       ALTER TABLE ${ledger}
         ADD COLUMN IF NOT EXISTS "qty_before" numeric(18,3) NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS "unit_cost" numeric(18,2) NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS "avg_cost_after" numeric(18,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS "unit_cost" bigint NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS "avg_cost_after" bigint NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS "actor_id" character varying(64) NULL,
         ADD COLUMN IF NOT EXISTS "correlation_id" character varying(64) NULL,
         ADD COLUMN IF NOT EXISTS "reason" character varying(255) NULL,
@@ -150,7 +150,7 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
         "supplier_id" uuid NOT NULL,
         "warehouse_id" uuid NOT NULL,
         "status" character varying(24) NOT NULL DEFAULT 'DRAFT',
-        "total_amount" numeric(18,2) NOT NULL DEFAULT 0,
+        "total_amount" bigint NOT NULL DEFAULT 0,
         "note" text NULL,
         "approved_by" character varying(64) NULL,
         "approved_at" TIMESTAMPTZ NULL,
@@ -185,7 +185,7 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
         "sku_id" uuid NOT NULL,
         "ordered_qty" numeric(18,3) NOT NULL,
         "received_qty" numeric(18,3) NOT NULL DEFAULT 0,
-        "unit_cost" numeric(18,2) NOT NULL DEFAULT 0,
+        "unit_cost" bigint NOT NULL DEFAULT 0,
         "unit_name" character varying(32) NOT NULL DEFAULT 'PCS',
         "conversion_factor" numeric(18,4) NOT NULL DEFAULT 1,
         CONSTRAINT "PK_purchase_order_item_id" PRIMARY KEY ("id"),
@@ -244,7 +244,7 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
         "line_no" integer NOT NULL,
         "sku_id" uuid NOT NULL,
         "qty" numeric(18,3) NOT NULL,
-        "unit_cost" numeric(18,2) NOT NULL DEFAULT 0,
+        "unit_cost" bigint NOT NULL DEFAULT 0,
         "unit_name" character varying(32) NOT NULL DEFAULT 'PCS',
         "conversion_factor" numeric(18,4) NOT NULL DEFAULT 1,
         CONSTRAINT "PK_stock_receipt_item_id" PRIMARY KEY ("id"),
@@ -300,7 +300,7 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
         "line_no" integer NOT NULL,
         "sku_id" uuid NOT NULL,
         "qty" numeric(18,3) NOT NULL,
-        "unit_cost" numeric(18,2) NOT NULL DEFAULT 0,
+        "unit_cost" bigint NOT NULL DEFAULT 0,
         CONSTRAINT "PK_stock_issue_item_id" PRIMARY KEY ("id"),
         CONSTRAINT "UQ_stock_issue_item_line" UNIQUE ("tenant_id", "issue_id", "line_no"),
         CONSTRAINT "CHK_stock_issue_item_qty" CHECK ("qty" > 0 AND "unit_cost" >= 0),
@@ -358,7 +358,7 @@ export class CreateM2InventoryCore1791900000200 implements MigrationInterface {
         "dispatched_qty" numeric(18,3) NOT NULL DEFAULT 0,
         "received_qty" numeric(18,3) NOT NULL DEFAULT 0,
         "discrepancy_qty" numeric(18,3) NOT NULL DEFAULT 0,
-        "unit_cost" numeric(18,2) NOT NULL DEFAULT 0,
+        "unit_cost" bigint NOT NULL DEFAULT 0,
         "discrepancy_reason" text NULL,
         CONSTRAINT "PK_stock_transfer_item_id" PRIMARY KEY ("id"),
         CONSTRAINT "UQ_stock_transfer_item_sku" UNIQUE ("tenant_id", "transfer_id", "sku_id"),

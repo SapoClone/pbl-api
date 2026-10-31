@@ -211,8 +211,12 @@ export function sanitizeCsvCell(value: unknown): string {
   return safe;
 }
 
+/**
+ * Money is a whole number of VND. Accepts only a safe-integer `number` or a
+ * `bigint`; strings and fractions are rejected (422).
+ */
 export function parseVndBigInt(
-  raw: string | number | bigint | null | undefined,
+  raw: number | bigint | null | undefined,
   allowZero = true,
 ): bigint {
   if (raw === null || raw === undefined) {
@@ -223,34 +227,28 @@ export function parseVndBigInt(
       422,
     );
   }
-  if (typeof raw === 'bigint') {
-    if (raw < 0n || (!allowZero && raw === 0n)) {
-      throw new CustomerDomainError(
-        CustomerDomainErrorCode.VALIDATION_ERROR,
-        `Invalid VND amount: ${raw.toString()}`,
-        422,
-      );
-    }
-    return raw;
-  }
-  const str = String(raw).trim();
-  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(str);
-  if (!match) {
+  if (typeof raw !== 'bigint' && typeof raw !== 'number') {
     throw new CustomerDomainError(
       CustomerDomainErrorCode.VALIDATION_ERROR,
-      `Invalid VND amount format: ${str}`,
+      `Invalid VND amount: money must be a whole number, got ${typeof raw}`,
       422,
     );
   }
-  const frac = (match[2] ?? '').padEnd(2, '0');
-  if (frac !== '00') {
+  if (typeof raw === 'number' && !Number.isSafeInteger(raw)) {
     throw new CustomerDomainError(
       CustomerDomainErrorCode.VALIDATION_ERROR,
-      `VND amount cannot contain fractional cents: ${str}`,
+      `Invalid VND amount: ${String(raw)} is not a whole number`,
       422,
     );
   }
-  const val = BigInt(match[1]);
+  const val = BigInt(raw);
+  if (val < 0n) {
+    throw new CustomerDomainError(
+      CustomerDomainErrorCode.VALIDATION_ERROR,
+      `Invalid VND amount: ${val.toString()}`,
+      422,
+    );
+  }
   if (!allowZero && val === 0n) {
     throw new CustomerDomainError(
       CustomerDomainErrorCode.VALIDATION_ERROR,
@@ -261,26 +259,35 @@ export function parseVndBigInt(
   return val;
 }
 
-export function formatVnd(amount: bigint): string {
-  return `${amount.toString()}.00`;
+/** bigint VND -> JSON/DB number; fails loudly beyond the safe integer range. */
+export function toVndNumber(amount: bigint): number {
+  const n = Number(amount);
+  if (!Number.isSafeInteger(n)) {
+    throw new CustomerDomainError(
+      CustomerDomainErrorCode.VALIDATION_ERROR,
+      `VND amount exceeds the safe integer range: ${amount.toString()}`,
+      422,
+    );
+  }
+  return n;
 }
 
 export interface LoyaltySettingConfig {
   isEnabled: boolean;
-  earnAmountPerPoint: string | number;
-  redeemValuePerPoint: string | number;
+  earnAmountPerPoint: number;
+  redeemValuePerPoint: number;
   minRedeemPoints: number;
   maxRedeemPointsPerOrder?: number | null;
   holdTtlSeconds: number;
 }
 
 export function calculateEarnedPoints(
-  eligibleSpendVnd: string | number | bigint,
+  eligibleSpendVnd: number | bigint,
   settings: Pick<LoyaltySettingConfig, 'isEnabled' | 'earnAmountPerPoint'>,
 ): {
   earnedPoints: number;
-  eligibleSpendFormatted: string;
-  appliedRateFormatted: string;
+  eligibleSpendVnd: number;
+  appliedRateVnd: number;
 } {
   const spend = parseVndBigInt(eligibleSpendVnd, true);
   const rate = parseVndBigInt(settings.earnAmountPerPoint, false);
@@ -288,16 +295,16 @@ export function calculateEarnedPoints(
   if (!settings.isEnabled || spend <= 0n) {
     return {
       earnedPoints: 0,
-      eligibleSpendFormatted: formatVnd(spend),
-      appliedRateFormatted: formatVnd(rate),
+      eligibleSpendVnd: toVndNumber(spend),
+      appliedRateVnd: toVndNumber(rate),
     };
   }
 
   const points = Number(spend / rate);
   return {
     earnedPoints: Math.max(0, points),
-    eligibleSpendFormatted: formatVnd(spend),
-    appliedRateFormatted: formatVnd(rate),
+    eligibleSpendVnd: toVndNumber(spend),
+    appliedRateVnd: toVndNumber(rate),
   };
 }
 
@@ -317,7 +324,7 @@ export function validatePointRedemption(params: {
   requestedPoints: number;
   availableBefore: number;
   availableAfter: number;
-  discountValueVnd: string;
+  discountValueVnd: number;
 } {
   const { requestedPoints, postedPointsBalance, heldPoints, settings } = params;
 
@@ -390,7 +397,7 @@ export function validatePointRedemption(params: {
     requestedPoints,
     availableBefore,
     availableAfter: availableBefore - requestedPoints,
-    discountValueVnd: formatVnd(discountVnd),
+    discountValueVnd: toVndNumber(discountVnd),
   };
 }
 
@@ -401,9 +408,9 @@ export function validatePointRedemption(params: {
 export function calculateReturnPointReversal(params: {
   originalEarnedPoints: number;
   alreadyReversedPoints: number;
-  originalEligibleSpendVnd: string | number;
-  returnRefundAmountVnd: string | number;
-  cumulativeRefundedAmountVnd?: string | number;
+  originalEligibleSpendVnd: number;
+  returnRefundAmountVnd: number;
+  cumulativeRefundedAmountVnd?: number;
 }): {
   pointsToReverse: number;
   remainingReversibleAfter: number;

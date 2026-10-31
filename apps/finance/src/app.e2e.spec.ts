@@ -69,7 +69,7 @@ const cashAccountsService = {
   createCashAccount: jest.fn(async (dto: any) => ({
     id: CASH_ACC_ID,
     code: dto.code,
-    currentBalance: '0.00',
+    currentBalance: 0,
   })),
   listCashAccounts: jest.fn(async () => [
     { id: CASH_ACC_ID, code: 'CASH-MAIN' },
@@ -77,7 +77,7 @@ const cashAccountsService = {
   getCashAccountById: jest.fn(async () => ({
     id: CASH_ACC_ID,
     code: 'CASH-MAIN',
-    currentBalance: '1000000.00',
+    currentBalance: 1000000,
   })),
   updateCashAccount: jest.fn(async () => ({
     id: CASH_ACC_ID,
@@ -112,10 +112,10 @@ const cashbookService = {
   })),
   getEntryById: jest.fn(async () => ({ id: DOC_ID, code: 'PT000001' })),
   getCashbookSummary: jest.fn(async () => ({
-    openingBalance: '0.00',
-    totalReceipts: '500000.00',
-    totalExpenses: '100000.00',
-    closingBalance: '400000.00',
+    openingBalance: 0,
+    totalReceipts: 500000,
+    totalExpenses: 100000,
+    closingBalance: 400000,
   })),
   exportEntriesCsv: jest.fn(async () => ({
     filename: 'cashbook.csv',
@@ -127,17 +127,17 @@ const cashbookService = {
 const creditAuthService = {
   getCreditProfile: jest.fn(async () => ({
     customerId: CUSTOMER_ID,
-    creditLimit: '2000000.00',
-    postedDebt: '0.00',
-    heldCredit: '0.00',
-    availableCredit: '2000000.00',
+    creditLimit: 2000000,
+    postedDebt: 0,
+    heldCredit: 0,
+    availableCredit: 2000000,
   })),
   updateCreditPolicy: jest.fn(async () => ({
     customerId: CUSTOMER_ID,
-    creditLimit: '5000000.00',
+    creditLimit: 5000000,
   })),
   authorizeCredit: jest.fn(async () => ({
-    authorization: { id: DOC_ID, state: 'HELD', authorizedAmount: '500000.00' },
+    authorization: { id: DOC_ID, state: 'HELD', authorizedAmount: 500000 },
     replayed: false,
   })),
   commitAuthorization: jest.fn(async () => ({
@@ -157,18 +157,18 @@ const receivablesService = {
     receivable: {
       id: DOC_ID,
       code: 'AR000001',
-      outstandingAmount: '500000.00',
+      outstandingAmount: 500000,
     },
     replayed: false,
   })),
   recordPayment: jest.fn(async () => ({
     updatedReceivables: [{ id: DOC_ID, status: 'PAID' }],
-    totalAllocated: '500000.00',
+    totalAllocated: 500000,
     replayed: false,
   })),
   recordReceivablePayment: jest.fn(async () => ({
     updatedReceivables: [{ id: DOC_ID, status: 'PAID' }],
-    totalAllocated: '500000.00',
+    totalAllocated: 500000,
     replayed: false,
   })),
   listReceivables: jest.fn(async () => ({
@@ -178,7 +178,7 @@ const receivablesService = {
   getReceivableById: jest.fn(async () => ({ id: DOC_ID, code: 'AR000001' })),
   getCustomerDebtSummary: jest.fn(async () => ({
     customerId: CUSTOMER_ID,
-    postedDebt: '0.00',
+    postedDebt: 0,
   })),
   listCustomerDebtLedger: jest.fn(async () => ({
     data: [],
@@ -188,12 +188,12 @@ const receivablesService = {
 
 const payablesService = {
   recognizePayable: jest.fn(async () => ({
-    payable: { id: DOC_ID, code: 'AP000001', outstandingAmount: '1000000.00' },
+    payable: { id: DOC_ID, code: 'AP000001', outstandingAmount: 1000000 },
     replayed: false,
   })),
   recordSupplierPayment: jest.fn(async () => ({
     payable: { id: DOC_ID, status: 'PAID' },
-    totalAllocated: '1000000.00',
+    totalAllocated: 1000000,
     replayed: false,
   })),
   applySupplierReturnCredit: jest.fn(async () => ({
@@ -207,7 +207,7 @@ const payablesService = {
   getPayableById: jest.fn(async () => ({ id: DOC_ID, code: 'AP000001' })),
   getSupplierDebtSummary: jest.fn(async () => ({
     supplierId: SUPPLIER_ID,
-    totalOutstandingPayable: '0.00',
+    totalOutstandingPayable: 0,
   })),
 };
 
@@ -282,7 +282,7 @@ const reconciliationService = {
     reconciliation: {
       id: DOC_ID,
       status: 'RECONCILED',
-      varianceAmount: '0.00',
+      varianceAmount: 0,
     },
     replayed: false,
   })),
@@ -321,7 +321,7 @@ const reconciliationService = {
   getFinanceSummary: jest.fn(async () => ({
     tenantId: TENANT,
     currency: 'VND',
-    cashBalances: { totalCashBalance: '1000000.00', activeAccountCount: 1 },
+    cashBalances: { totalCashBalance: 1000000, activeAccountCount: 1 },
   })),
 };
 
@@ -445,7 +445,7 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .set('Authorization', `Bearer ${staffToken()}`)
       .send({
         cashAccountId: CASH_ACC_ID,
-        amount: '100000.00',
+        amount: 100000,
       })
       .expect(403);
 
@@ -453,7 +453,7 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .post(`/v1/finance/payables/${DOC_ID}/payments`)
       .set('Authorization', `Bearer ${staffToken()}`)
       .send({
-        amount: '100000.00',
+        amount: 100000,
       })
       .expect(403);
   });
@@ -464,7 +464,7 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .set('Authorization', `Bearer ${cashierToken()}`)
       .send({
         cashAccountId: CASH_ACC_ID,
-        amount: '150000.00',
+        amount: 150000,
         autoPost: true,
       })
       .expect(201);
@@ -473,7 +473,7 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .post(`/v1/finance/receivables/${DOC_ID}/payments`)
       .set('Authorization', `Bearer ${cashierToken()}`)
       .send({
-        amount: '150000.00',
+        amount: 150000,
       })
       .expect(200);
 
@@ -488,6 +488,21 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .set('Authorization', `Bearer ${cashierToken()}`)
       .send({})
       .expect(403);
+  });
+
+  it('rejects fractional and string money input with 422', async () => {
+    for (const amount of [150000.5, '150000', null]) {
+      await request(url())
+        .post('/v1/finance/cashbook/receipts')
+        .set('Authorization', `Bearer ${cashierToken()}`)
+        .send({ cashAccountId: CASH_ACC_ID, amount })
+        .expect(422);
+      await request(url())
+        .post(`/v1/finance/receivables/${DOC_ID}/payments`)
+        .set('Authorization', `Bearer ${cashierToken()}`)
+        .send({ amount })
+        .expect(422);
+    }
   });
 
   it('enforces Maker-Checker separation of duties on adjustment approval (403 MAKER_CHECKER_VIOLATION)', async () => {
@@ -513,7 +528,7 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .send({
         customerId: CUSTOMER_ID,
         orderId: ORDER_ID,
-        amount: '500000.00',
+        amount: 500000,
       })
       .expect(201);
 
@@ -523,7 +538,7 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .send({
         orderId: ORDER_ID,
         paymentMethod: 'CASH',
-        requestedAmount: '250000.00',
+        requestedAmount: 250000,
       })
       .expect(201);
 
@@ -533,7 +548,7 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .send({
         orderId: ORDER_ID,
         method: 'CASH',
-        amount: '100000.00',
+        amount: 100000,
       })
       .expect(201);
 
@@ -546,9 +561,9 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
         lines: [
           {
             trackingNumber: 'GHN123456',
-            reportedCodAmount: '300000.00',
-            carrierFeeAmount: '15000.00',
-            netPayoutAmount: '285000.00',
+            reportedCodAmount: 300000,
+            carrierFeeAmount: 15000,
+            netPayoutAmount: 285000,
           },
         ],
       })
@@ -558,6 +573,6 @@ describe('finance service HTTP, RBAC, and validation e2e', () => {
       .get('/v1/finance/summary')
       .set('Authorization', `Bearer ${ownerToken()}`)
       .expect(200);
-    expect(summaryRes.body.cashBalances.totalCashBalance).toBe('1000000.00');
+    expect(summaryRes.body.cashBalances.totalCashBalance).toBe(1000000);
   });
 });

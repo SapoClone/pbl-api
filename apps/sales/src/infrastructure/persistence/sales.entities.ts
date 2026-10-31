@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { discountValueTransformer, moneyTransformer } from '../../common/money';
 
 @Entity({ name: 'sales_code_sequence' })
 export class SalesCodeSequenceEntity {
@@ -58,12 +59,11 @@ export class CatalogVariantProjectionEntity {
 
   @Column({
     name: 'unit_price',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  unitPrice!: string;
+  unitPrice!: number;
 
   @Column({ name: 'status', type: 'varchar', length: 20, default: 'ACTIVE' })
   status!: string;
@@ -162,57 +162,51 @@ export class PosShiftEntity {
 
   @Column({
     name: 'opening_cash',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  openingCash!: string;
+  openingCash!: number;
 
   @Column({
     name: 'cash_sales_total',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  cashSalesTotal!: string;
+  cashSalesTotal!: number;
 
   @Column({
     name: 'cash_refunds_total',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  cashRefundsTotal!: string;
+  cashRefundsTotal!: number;
 
   @Column({
     name: 'expected_cash',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  expectedCash!: string;
+  expectedCash!: number;
 
   @Column({
     name: 'actual_cash',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
     nullable: true,
+    transformer: moneyTransformer,
   })
-  actualCash!: string | null;
+  actualCash!: number | null;
 
   @Column({
     name: 'variance',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
     nullable: true,
+    transformer: moneyTransformer,
   })
-  variance!: string | null;
+  variance!: number | null;
 
   @Column({ name: 'open_note', type: 'text', nullable: true })
   openNote!: string | null;
@@ -278,14 +272,16 @@ export class PosDraftEntity {
   })
   orderDiscountType!: string;
 
+  /** FIXED: whole VND; PERCENT: a percentage (see discountValueTransformer) */
   @Column({
     name: 'order_discount_value',
     type: 'numeric',
-    precision: 18,
+    precision: 12,
     scale: 2,
-    default: '0.00',
+    default: 0,
+    transformer: discountValueTransformer,
   })
-  orderDiscountValue!: string;
+  orderDiscountValue!: number;
 
   @Column({ name: 'coupon_code', type: 'varchar', length: 64, nullable: true })
   couponCode!: string | null;
@@ -337,26 +333,28 @@ export class OrderTenderEntity {
   @Column({ name: 'method', type: 'varchar', length: 24 })
   method!: string;
 
-  @Column({ name: 'amount', type: 'numeric', precision: 18, scale: 2 })
-  amount!: string;
+  @Column({
+    name: 'amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  amount!: number;
 
   @Column({
     name: 'tendered_cash',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  tenderedCash!: string;
+  tenderedCash!: number;
 
   @Column({
     name: 'change_due',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  changeDue!: string;
+  changeDue!: number;
 
   @Column({ name: 'status', type: 'varchar', length: 16, default: 'CONFIRMED' })
   status!: string;
@@ -412,12 +410,11 @@ export class SalesReturnEntity {
 
   @Column({
     name: 'total_refund_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  totalRefundAmount!: string;
+  totalRefundAmount!: number;
 
   @Column({ name: 'inventory_receipt_id', type: 'uuid', nullable: true })
   inventoryReceiptId!: string | null;
@@ -469,14 +466,17 @@ export class SalesReturnItemEntity {
 
   @Column({
     name: 'unit_refund_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  unitRefundAmount!: string;
+  unitRefundAmount!: number;
 
-  @Column({ name: 'refund_amount', type: 'numeric', precision: 18, scale: 2 })
-  refundAmount!: string;
+  @Column({
+    name: 'refund_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  refundAmount!: number;
 
   @Column({
     name: 'disposition',
@@ -513,8 +513,12 @@ export class RefundRequestEntity {
   @Column({ name: 'idempotency_key', type: 'varchar', length: 128 })
   idempotencyKey!: string;
 
-  @Column({ name: 'amount', type: 'numeric', precision: 18, scale: 2 })
-  amount!: string;
+  @Column({
+    name: 'amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  amount!: number;
 
   @Column({ name: 'method', type: 'varchar', length: 24, default: 'CASH' })
   method!: string;
@@ -647,26 +651,31 @@ export class PromotionEntity {
   @Column({ name: 'discount_type', type: 'varchar', length: 16 })
   discountType!: string;
 
-  @Column({ name: 'discount_value', type: 'numeric', precision: 18, scale: 2 })
-  discountValue!: string;
+  /** FIXED: whole VND; PERCENT: a percentage (see discountValueTransformer) */
+  @Column({
+    name: 'discount_value',
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    transformer: discountValueTransformer,
+  })
+  discountValue!: number;
 
   @Column({
     name: 'min_order_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  minOrderAmount!: string;
+  minOrderAmount!: number;
 
   @Column({
     name: 'max_discount_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
+    type: 'bigint',
     nullable: true,
+    transformer: moneyTransformer,
   })
-  maxDiscountAmount!: string | null;
+  maxDiscountAmount!: number | null;
 
   @Column({ name: 'branch_id', type: 'uuid', nullable: true })
   branchId!: string | null;
@@ -731,8 +740,12 @@ export class CouponUsageEntity {
   @Column({ name: 'customer_id', type: 'uuid', nullable: true })
   customerId!: string | null;
 
-  @Column({ name: 'discount_amount', type: 'numeric', precision: 18, scale: 2 })
-  discountAmount!: string;
+  @Column({
+    name: 'discount_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  discountAmount!: number;
 
   @Column({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

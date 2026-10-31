@@ -284,7 +284,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
 
         const generated = await productsService.generateVariants(productId, {
           skuPrefix: 'TSHIRT',
-          basePrice: '199000.00',
+          basePrice: 199000,
           axes: [
             {
               attributeId: colorAttrId,
@@ -334,19 +334,19 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
             items: [
               {
                 variantId: variantIdsBySku['TSHIRT-BLK-M'],
-                price: '179000.00',
+                price: 179000,
               },
               {
                 variantId: variantIdsBySku['TSHIRT-BLK-L'],
-                price: '179000.00',
+                price: 179000,
               },
               {
                 variantId: variantIdsBySku['TSHIRT-WHT-M'],
-                price: '179000.00',
+                price: 179000,
               },
               {
                 variantId: variantIdsBySku['TSHIRT-WHT-L'],
-                price: '185000.00',
+                price: 185000,
               },
             ],
           },
@@ -361,7 +361,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           variantId: variantIdsBySku['TSHIRT-BLK-M'],
           skuCode: 'TSHIRT-BLK-M',
           currency: 'VND',
-          amount: '179000.00',
+          amount: 179000,
           source: 'DEFAULT_PRICE_LIST',
           priceListId: defaultPriceListId,
         });
@@ -407,7 +407,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           items: [
             {
               variantId: variantIdsBySku['TSHIRT-BLK-M'],
-              price: '169000.00',
+              price: 169000,
             },
           ],
         });
@@ -415,7 +415,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           variantIdsBySku['TSHIRT-BLK-M'],
           {},
         );
-        expect(newResolved.amount).toBe('169000.00');
+        expect(newResolved.amount).toBe(169000);
 
         // Deactivate variant TSHIRT-WHT-L
         const deactivated = await productsService.updateVariantStatus(
@@ -452,7 +452,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           await productsService.createVariant(productId, {
             skuCode: 'TSHIRT-BLK-M',
             name: 'Duplicate SKU',
-            basePrice: '199000.00',
+            basePrice: 199000,
           });
           fail('Expected SKU_ALREADY_EXISTS');
         } catch (err) {
@@ -556,7 +556,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           createDefaultVariant: true,
           defaultSkuCode: 'TSHIRT-BLK-M',
           defaultBarcode: '8934563123451',
-          defaultBasePrice: '219000.00',
+          defaultBasePrice: 219000,
         });
         expect(tenantBProduct.variants).toHaveLength(1);
         expect(tenantBProduct.variants?.[0].skuCode).toBe('TSHIRT-BLK-M');
@@ -576,12 +576,12 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           productsService.createVariant(p.id, {
             skuCode: 'CONC-SKU-001',
             name: 'Concurrent A',
-            basePrice: '100000.00',
+            basePrice: 100000,
           }),
           productsService.createVariant(p.id, {
             skuCode: 'CONC-SKU-001',
             name: 'Concurrent B',
-            basePrice: '100000.00',
+            basePrice: 100000,
           }),
         ]);
 
@@ -647,13 +647,13 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           productsService.createVariant(prod.id, {
             skuCode: 'LINEN-01',
             name: 'Linen 1',
-            basePrice: '250000.00',
+            basePrice: 250000,
             attributes: [{ attributeId: attr.id, attributeValueId: val.id }],
           }),
           productsService.createVariant(prod.id, {
             skuCode: 'LINEN-02',
             name: 'Linen 2',
-            basePrice: '250000.00',
+            basePrice: 250000,
             attributes: [{ attributeId: attr.id, attributeValueId: val.id }],
           }),
         ]);
@@ -734,7 +734,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
         await expect(
           productsService.generateVariants(targetProd.id, {
             skuPrefix: 'ROLLBACK',
-            basePrice: '150000.00',
+            basePrice: 150000,
             axes: [
               {
                 attributeId: sizeAttr.id,

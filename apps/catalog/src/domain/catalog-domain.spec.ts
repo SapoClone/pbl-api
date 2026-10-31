@@ -1,3 +1,4 @@
+import { moneyTransformer } from '../common/money';
 import {
   CatalogDomainError,
   CatalogErrorCode,
@@ -244,17 +245,24 @@ describe('Catalog Domain Invariants (M1)', () => {
   });
 
   describe('Money & Unit Conversion Precision', () => {
-    it('formats decimal money without binary float drift and rejects negative or >2 decimal places', () => {
-      expect(parseAndFormatMoney('199000')).toBe('199000.00');
-      expect(parseAndFormatMoney('00199000.5')).toBe('199000.50');
-      expect(parseAndFormatMoney(0)).toBe('0.00');
+    it('accepts whole VND and rejects fractions, negatives and non-numeric input', () => {
+      expect(parseAndFormatMoney(199000)).toBe(199000);
+      expect(parseAndFormatMoney('199000')).toBe(199000);
+      expect(parseAndFormatMoney(0)).toBe(0);
 
-      expect(() => parseAndFormatMoney('-10.00')).toThrow(
-        expect.objectContaining({ code: CatalogErrorCode.INVALID_PRICE }),
-      );
-      expect(() => parseAndFormatMoney('19.999')).toThrow(
-        expect.objectContaining({ code: CatalogErrorCode.INVALID_PRICE }),
-      );
+      for (const bad of [-10, 19.5, '19.99', '-1', 'abc', NaN, 2 ** 60]) {
+        expect(() => parseAndFormatMoney(bad as number)).toThrow(
+          expect.objectContaining({ code: CatalogErrorCode.INVALID_PRICE }),
+        );
+      }
+    });
+
+    it('round-trips bigint strings through the column transformer', () => {
+      expect(moneyTransformer.from('199000')).toBe(199000);
+      expect(moneyTransformer.from(null)).toBeNull();
+      expect(moneyTransformer.to(199000)).toBe(199000);
+      expect(() => moneyTransformer.from('9007199254740993')).toThrow();
+      expect(() => moneyTransformer.from('10.5')).toThrow();
     });
 
     it('validates positive unit conversion factors and base unit = 1.0000', () => {
@@ -305,7 +313,7 @@ describe('Catalog Domain Invariants (M1)', () => {
         variantId: 'var-1',
         skuCode: 'TSHIRT-BLK-M',
         variantStatus: 'ACTIVE',
-        basePrice: '199000.00',
+        basePrice: 199000,
         asOfDate: '2026-10-29',
         selectedList: {
           id: 'pl-vip',
@@ -315,18 +323,18 @@ describe('Catalog Domain Invariants (M1)', () => {
           status: 'ACTIVE',
           startDate: '2026-01-01',
           endDate: '2026-12-31',
-          itemPrice: '169000.00',
+          itemPrice: 169000,
         },
       });
       expect(fromSelected.source).toBe('PRICE_LIST');
-      expect(fromSelected.amount).toBe('169000.00');
+      expect(fromSelected.amount).toBe(169000);
 
       // 2. Default price list fallback
       const fromDefault = resolveVariantPrice({
         variantId: 'var-1',
         skuCode: 'TSHIRT-BLK-M',
         variantStatus: 'ACTIVE',
-        basePrice: '199000.00',
+        basePrice: 199000,
         asOfDate: '2026-10-29',
         defaultList: {
           id: 'pl-def',
@@ -336,23 +344,23 @@ describe('Catalog Domain Invariants (M1)', () => {
           status: 'ACTIVE',
           startDate: null,
           endDate: null,
-          itemPrice: '179000.00',
+          itemPrice: 179000,
         },
       });
       expect(fromDefault.source).toBe('DEFAULT_PRICE_LIST');
-      expect(fromDefault.amount).toBe('179000.00');
+      expect(fromDefault.amount).toBe(179000);
 
       // 3. Variant base price fallback when default list has no item
       const fromBase = resolveVariantPrice({
         variantId: 'var-1',
         skuCode: 'TSHIRT-BLK-M',
         variantStatus: 'ACTIVE',
-        basePrice: '199000.00',
+        basePrice: 199000,
         asOfDate: '2026-10-29',
         defaultList: null,
       });
       expect(fromBase.source).toBe('VARIANT_BASE_PRICE');
-      expect(fromBase.amount).toBe('199000.00');
+      expect(fromBase.amount).toBe(199000);
     });
   });
 });

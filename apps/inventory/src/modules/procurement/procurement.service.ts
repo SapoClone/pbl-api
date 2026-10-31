@@ -10,15 +10,15 @@ import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   convertToBaseQtyMilli,
-  formatCentsToMoney,
   formatFactorFromTenThousandths,
   formatMilliToQty,
   InventoryDomainError,
   InventoryDomainErrorCode,
   normalizeInventoryCode,
   parseConversionFactorToTenThousandths,
-  parseMoneyToCents,
+  parseMoneyToVnd,
   parseQtyToMilli,
+  vndToNumber,
 } from '../../domain/inventory-domain';
 import {
   applyWarehouseScope,
@@ -227,7 +227,7 @@ export class ProcurementService {
         {
           skuId: string;
           baseQtyMilli: bigint;
-          unitCostCents: bigint;
+          unitCostVnd: bigint;
           unitName: string;
           conversionFactor: string;
         }
@@ -241,16 +241,16 @@ export class ProcurementService {
           item.orderedQty,
           item.conversionFactor,
         );
-        const unitCostCents = parseMoneyToCents(item.unitCost);
+        const unitCostVnd = parseMoneyToVnd(item.unitCost);
         const existing = merged.get(item.skuId);
         if (existing) {
           existing.baseQtyMilli += baseQtyMilli;
-          existing.unitCostCents = unitCostCents;
+          existing.unitCostVnd = unitCostVnd;
         } else {
           merged.set(item.skuId, {
             skuId: item.skuId,
             baseQtyMilli,
-            unitCostCents,
+            unitCostVnd,
             unitName: (item.unitName ?? 'PCS').trim().toUpperCase(),
             conversionFactor: formatFactorFromTenThousandths(factor),
           });
@@ -261,9 +261,9 @@ export class ProcurementService {
         a.skuId.localeCompare(b.skuId),
       );
 
-      let totalAmountCents = 0n;
+      let totalAmountVnd = 0n;
       for (const l of sortedLines) {
-        totalAmountCents += (l.baseQtyMilli * l.unitCostCents + 500n) / 1000n;
+        totalAmountVnd += (l.baseQtyMilli * l.unitCostVnd + 500n) / 1000n;
       }
 
       const poId = randomUUID();
@@ -276,7 +276,7 @@ export class ProcurementService {
         INSERT INTO ${prefix}"purchase_order" (
           id, tenant_id, code, supplier_id, warehouse_id,
           status, total_amount, note, created_by
-        ) VALUES ($1, $2, $3, $4, $5, 'DRAFT', $6::numeric(18,2), $7, $8)
+        ) VALUES ($1, $2, $3, $4, $5, 'DRAFT', $6::bigint, $7, $8)
         `,
         [
           poId,
@@ -284,7 +284,7 @@ export class ProcurementService {
           code,
           dto.supplierId,
           dto.warehouseId,
-          formatCentsToMoney(totalAmountCents),
+          vndToNumber(totalAmountVnd),
           dto.note ?? null,
           RequestContext.get()?.actor?.id ?? null,
         ],
@@ -297,7 +297,7 @@ export class ProcurementService {
           INSERT INTO ${prefix}"purchase_order_item" (
             id, tenant_id, purchase_order_id, line_no, sku_id,
             ordered_qty, received_qty, unit_cost, unit_name, conversion_factor
-          ) VALUES ($1, $2, $3, $4, $5, $6::numeric(18,3), 0, $7::numeric(18,2), $8, $9::numeric(18,4))
+          ) VALUES ($1, $2, $3, $4, $5, $6::numeric(18,3), 0, $7::bigint, $8, $9::numeric(18,4))
           `,
           [
             randomUUID(),
@@ -306,7 +306,7 @@ export class ProcurementService {
             i + 1,
             line.skuId,
             formatMilliToQty(line.baseQtyMilli),
-            formatCentsToMoney(line.unitCostCents),
+            vndToNumber(line.unitCostVnd),
             line.unitName,
             line.conversionFactor,
           ],
@@ -370,8 +370,8 @@ export class ProcurementService {
           code: header.code,
           supplierId: header.supplier_id,
           warehouseId: header.warehouse_id,
-          totalAmount: formatCentsToMoney(
-            parseMoneyToCents(String(header.total_amount)),
+          totalAmount: vndToNumber(
+            parseMoneyToVnd(String(header.total_amount)),
           ),
           approvedAt,
         } satisfies PurchaseOrderApprovedPayload);
@@ -454,16 +454,14 @@ export class ProcurementService {
               return {
                 skuId: String(row.skuId),
                 qty: formatMilliToQty(remMilli),
-                unitCost: formatCentsToMoney(
-                  parseMoneyToCents(String(row.unitCost)),
-                ),
+                unitCost: vndToNumber(parseMoneyToVnd(String(row.unitCost))),
               };
             });
 
       const receiptItems: {
         skuId: string;
         qty: string;
-        unitCost: string;
+        unitCost: number;
       }[] = [];
 
       for (const reqLine of incomingLines) {
@@ -497,8 +495,8 @@ export class ProcurementService {
           );
         }
 
-        const unitCostStr = formatCentsToMoney(
-          parseMoneyToCents(reqLine.unitCost ?? String(dbItem.unitCost)),
+        const unitCostStr = vndToNumber(
+          parseMoneyToVnd(reqLine.unitCost ?? String(dbItem.unitCost)),
         );
         const receiveNowStr = formatMilliToQty(receiveNowMilli);
 
@@ -689,7 +687,7 @@ export class ProcurementService {
     const h = headers[0];
     return {
       ...h,
-      totalAmount: formatCentsToMoney(parseMoneyToCents(String(h.totalAmount))),
+      totalAmount: vndToNumber(parseMoneyToVnd(String(h.totalAmount))),
       items: items.map((i: Record<string, unknown>) => ({
         id: i.id,
         lineNo: Number(i.lineNo),
@@ -703,9 +701,7 @@ export class ProcurementService {
         remainingQty: formatMilliToQty(
           parseQtyToMilli(String(i.remainingQty), true, false),
         ),
-        unitCost: formatCentsToMoney(
-          parseMoneyToCents(String(i.unitCost ?? '0')),
-        ),
+        unitCost: vndToNumber(parseMoneyToVnd(String(i.unitCost ?? '0'))),
         unitName: i.unitName,
         conversionFactor: formatFactorFromTenThousandths(
           parseConversionFactorToTenThousandths(

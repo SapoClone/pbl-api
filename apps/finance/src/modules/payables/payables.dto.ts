@@ -2,7 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsIn,
-  IsNumberString,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -14,8 +14,8 @@ export class RecognizePayableDto {
   @IsUUID()
   supplierId!: string;
 
-  @IsNumberString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 
   @IsOptional()
   @IsUUID()
@@ -54,13 +54,13 @@ export class PayableAllocationLineDto {
   @IsUUID()
   payableId!: string;
 
-  @IsNumberString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 }
 
 export class RecordSupplierPaymentDto {
-  @IsNumberString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 
   @IsOptional()
   @IsIn(['CASH', 'BANK_TRANSFER'])
@@ -92,8 +92,8 @@ export class RecordSupplierPaymentDto {
 }
 
 export class ApplySupplierReturnCreditDto {
-  @IsNumberString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 
   @IsString()
   @MaxLength(128)

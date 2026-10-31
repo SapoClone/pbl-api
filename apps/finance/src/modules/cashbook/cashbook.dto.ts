@@ -1,7 +1,7 @@
 import {
   IsBoolean,
   IsIn,
-  IsNumberString,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -39,8 +39,8 @@ export class CreateCashbookVoucherDto {
   @MaxLength(32)
   categoryCode?: string;
 
-  @IsNumberString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 
   @IsOptional()
   @IsUUID()

@@ -2,12 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { TenantContext } from '@pbl/common';
 import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager, In, IsNull } from 'typeorm';
+import { toMoney } from '../../common/money';
 import {
   SalesDomainError,
   SalesDomainErrorCode,
   calculateItemDiscount,
-  formatVnd,
   parseVndAmount,
+  vndNumber,
 } from '../../domain/sales-domain';
 import { getSchemaPrefix } from '../../infrastructure/persistence/sales-code.generator';
 import {
@@ -26,7 +27,7 @@ export interface EvaluatedCouponResult {
   couponId: string;
   promotionId: string;
   couponCode: string;
-  discountAmountVnd: string;
+  discountAmountVnd: number;
 }
 
 @Injectable()
@@ -46,6 +47,16 @@ export class PromotionsService {
       );
     }
     const tenantId = TenantContext.require();
+    if (
+      dto.discountType === 'FIXED' &&
+      !Number.isSafeInteger(dto.discountValue)
+    ) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.VALIDATION_ERROR,
+        'A fixed promotion discount must be a whole number of VND',
+        422,
+      );
+    }
     if (dto.discountType === 'PERCENT' && dto.discountValue > 100) {
       throw new SalesDomainError(
         SalesDomainErrorCode.INVALID_DISCOUNT,
@@ -76,12 +87,9 @@ export class PromotionsService {
         code: normalizedCode,
         name: dto.name.trim(),
         discountType: dto.discountType,
-        discountValue: Number(dto.discountValue).toFixed(2),
-        minOrderAmount: Number(dto.minOrderAmount ?? 0).toFixed(2),
-        maxDiscountAmount:
-          dto.maxDiscountAmount !== undefined
-            ? Number(dto.maxDiscountAmount).toFixed(2)
-            : null,
+        discountValue: dto.discountValue,
+        minOrderAmount: dto.minOrderAmount ?? 0,
+        maxDiscountAmount: dto.maxDiscountAmount ?? null,
         branchId: dto.branchId ?? null,
         startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
         endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
@@ -177,7 +185,7 @@ export class PromotionsService {
 
   async previewCouponDiscount(
     couponCode: string,
-    afterOrderDiscountVnd: string | number,
+    afterOrderDiscountVnd: number,
     branchId: string,
     customerId?: string | null,
   ): Promise<EvaluatedCouponResult> {
@@ -202,7 +210,7 @@ export class PromotionsService {
     em: EntityManager,
     tenantId: string,
     couponCode: string,
-    afterOrderDiscountVnd: string | number,
+    afterOrderDiscountVnd: number,
     branchId: string,
     customerId: string | null,
     orderId: string,
@@ -214,7 +222,7 @@ export class PromotionsService {
     const existingClaim: Array<{
       coupon_id: string;
       promotion_id: string;
-      discount_amount: string;
+      discount_amount: string | number;
     }> = await em.query(
       `SELECT cu.coupon_id, c.promotion_id, cu.discount_amount
        FROM ${prefix}"coupon_usages" cu
@@ -228,9 +236,7 @@ export class PromotionsService {
         couponId: existingClaim[0].coupon_id,
         promotionId: existingClaim[0].promotion_id,
         couponCode: normalizedCode,
-        discountAmountVnd: formatVnd(
-          parseVndAmount(existingClaim[0].discount_amount, true),
-        ),
+        discountAmountVnd: toMoney(existingClaim[0].discount_amount),
       };
     }
 
@@ -288,7 +294,7 @@ export class PromotionsService {
     em: EntityManager,
     tenantId: string,
     couponCode: string,
-    afterOrderDiscountVnd: string | number,
+    afterOrderDiscountVnd: number,
     branchId: string,
     customerId: string | null,
     lockForUpdate: boolean,
@@ -395,11 +401,11 @@ export class PromotionsService {
     if (baseVnd < minOrderVnd) {
       throw new SalesDomainError(
         SalesDomainErrorCode.COUPON_INVALID,
-        `Minimum order amount of ${formatVnd(minOrderVnd)} VND not met for coupon ${normalizedCode}`,
+        `Minimum order amount of ${minOrderVnd} VND not met for coupon ${normalizedCode}`,
         409,
         {
-          minOrderAmount: formatVnd(minOrderVnd),
-          currentAmount: formatVnd(baseVnd),
+          minOrderAmount: vndNumber(minOrderVnd),
+          currentAmount: vndNumber(baseVnd),
         },
       );
     }
@@ -425,7 +431,7 @@ export class PromotionsService {
       couponId: coupon.id,
       promotionId: promotion.id,
       couponCode: normalizedCode,
-      discountAmountVnd: formatVnd(discountVnd),
+      discountAmountVnd: vndNumber(discountVnd),
     };
   }
 }

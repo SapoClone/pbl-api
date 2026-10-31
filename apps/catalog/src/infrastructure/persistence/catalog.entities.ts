@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { moneyTransformer } from '../../common/money';
 
 export type CategoryStatus = 'ACTIVE' | 'INACTIVE';
 export type BrandStatus = 'ACTIVE' | 'INACTIVE';
@@ -199,12 +200,11 @@ export class ProductVariantEntity {
 
   @Column({
     name: 'base_price',
-    type: 'numeric',
-    precision: 18,
-    scale: 2,
-    default: '0.00',
+    type: 'bigint',
+    default: 0,
+    transformer: moneyTransformer,
   })
-  basePrice!: string;
+  basePrice!: number;
 
   @Column({ name: 'image_url', type: 'varchar', length: 500, nullable: true })
   imageUrl!: string | null;
@@ -350,8 +350,8 @@ export class PriceListItemEntity {
   @Column({ name: 'variant_id', type: 'uuid' })
   variantId!: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2 })
-  price!: string;
+  @Column({ type: 'bigint', transformer: moneyTransformer })
+  price!: number;
 
   @Column({ type: 'integer', default: 1 })
   version!: number;

@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -47,16 +48,16 @@ export class ConfirmSettlementDto {
   @MaxLength(128)
   externalTxId?: string;
 
-  @IsString()
-  requestedAmount!: string;
+  @IsInt()
+  requestedAmount!: number;
 
   @IsOptional()
-  @IsString()
-  confirmedAmount?: string;
+  @IsInt()
+  confirmedAmount?: number;
 
   @IsOptional()
-  @IsString()
-  settledAmount?: string;
+  @IsInt()
+  settledAmount?: number;
 
   @IsOptional()
   @IsUUID()
@@ -101,12 +102,12 @@ export class ProviderWebhookCallbackDto {
   @IsIn(['BANK_TRANSFER', 'CARD', 'EWALLET'])
   paymentMethod?: 'BANK_TRANSFER' | 'CARD' | 'EWALLET';
 
-  @IsString()
-  confirmedAmount!: string;
+  @IsInt()
+  confirmedAmount!: number;
 
   @IsOptional()
-  @IsString()
-  requestedAmount?: string;
+  @IsInt()
+  requestedAmount?: number;
 
   @IsOptional()
   @IsIn(['CONFIRMED', 'SETTLED', 'FAILED', 'PENDING', 'AMBIGUOUS'])

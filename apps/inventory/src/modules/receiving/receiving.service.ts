@@ -12,15 +12,15 @@ import { DataSource, EntityManager } from 'typeorm';
 import {
   computeWeightedAverageCostOnReceipt,
   convertToBaseQtyMilli,
-  formatCentsToMoney,
   formatFactorFromTenThousandths,
   formatMilliToQty,
   InventoryDomainError,
   InventoryDomainErrorCode,
   normalizeInventoryCode,
   parseConversionFactorToTenThousandths,
-  parseMoneyToCents,
+  parseMoneyToVnd,
   parseQtyToMilli,
+  vndToNumber,
 } from '../../domain/inventory-domain';
 import { assertCatalogSkuEligible } from '../../infrastructure/catalog-reference/catalog-sku-projection.handler';
 import {
@@ -83,7 +83,7 @@ export class ReceivingService {
       {
         skuId: string;
         baseQtyMilli: bigint;
-        unitCostCents: bigint;
+        unitCostVnd: bigint;
         unitName: string;
         conversionFactor: string;
       }
@@ -98,21 +98,21 @@ export class ReceivingService {
         item.qty,
         item.conversionFactor,
       );
-      const unitCostCents = parseMoneyToCents(item.unitCost ?? '0.00');
+      const unitCostVnd = parseMoneyToVnd(item.unitCost ?? 0);
       const existing = mergedMap.get(item.skuId);
       if (existing) {
         // Weighted average unit cost across duplicate lines in the same receipt
         const totalQty = existing.baseQtyMilli + baseQtyMilli;
         const totalVal =
-          existing.baseQtyMilli * existing.unitCostCents +
-          baseQtyMilli * unitCostCents;
-        existing.unitCostCents = (totalVal + totalQty / 2n) / totalQty;
+          existing.baseQtyMilli * existing.unitCostVnd +
+          baseQtyMilli * unitCostVnd;
+        existing.unitCostVnd = (totalVal + totalQty / 2n) / totalQty;
         existing.baseQtyMilli = totalQty;
       } else {
         mergedMap.set(item.skuId, {
           skuId: item.skuId,
           baseQtyMilli,
-          unitCostCents,
+          unitCostVnd,
           unitName: (item.unitName ?? 'PCS').trim().toUpperCase(),
           conversionFactor: formatFactorFromTenThousandths(factor),
         });
@@ -155,7 +155,7 @@ export class ReceivingService {
         `
         INSERT INTO ${prefix}"stock_receipt_item" (
           id, tenant_id, receipt_id, line_no, sku_id, qty, unit_cost, unit_name, conversion_factor
-        ) VALUES ($1, $2, $3, $4, $5, $6::numeric(18,3), $7::numeric(18,2), $8, $9::numeric(18,4))
+        ) VALUES ($1, $2, $3, $4, $5, $6::numeric(18,3), $7::bigint, $8, $9::numeric(18,4))
         `,
         [
           randomUUID(),
@@ -164,7 +164,7 @@ export class ReceivingService {
           i + 1,
           line.skuId,
           formatMilliToQty(line.baseQtyMilli),
-          formatCentsToMoney(line.unitCostCents),
+          vndToNumber(line.unitCostVnd),
           line.unitName,
           line.conversionFactor,
         ],
@@ -306,16 +306,16 @@ export class ReceivingService {
           : '0.000';
       const oldAvgCost =
         existingBalances.length > 0
-          ? formatCentsToMoney(
-              parseMoneyToCents(String(existingBalances[0].avgUnitCost)),
+          ? vndToNumber(
+              parseMoneyToVnd(String(existingBalances[0].avgUnitCost)),
             )
-          : '0.00';
+          : 0;
 
       const qtyStr = formatMilliToQty(
         parseQtyToMilli(String(item.qty), false, false),
       );
-      const unitCostStr = formatCentsToMoney(
-        parseMoneyToCents(String(item.unitCost ?? '0')),
+      const unitCostStr = vndToNumber(
+        parseMoneyToVnd(String(item.unitCost ?? '0')),
       );
 
       const valuation = computeWeightedAverageCostOnReceipt({
@@ -330,12 +330,12 @@ export class ReceivingService {
         INSERT INTO ${prefix}"stock_balance" (
           id, tenant_id, warehouse_id, sku_id, on_hand_qty, reserved_qty, in_transit_qty,
           avg_unit_cost, valuation_amount, version, updated_at
-        ) VALUES ($1, $2, $3, $4, $5::numeric(18,3), 0, 0, $6::numeric(18,2), $7::numeric(18,2), 1, now())
+        ) VALUES ($1, $2, $3, $4, $5::numeric(18,3), 0, 0, $6::bigint, $7::bigint, 1, now())
         ON CONFLICT (tenant_id, warehouse_id, sku_id) DO UPDATE
         SET
           on_hand_qty = $5::numeric(18,3),
-          avg_unit_cost = $6::numeric(18,2),
-          valuation_amount = $7::numeric(18,2),
+          avg_unit_cost = $6::bigint,
+          valuation_amount = $7::bigint,
           version = ${prefix}"stock_balance".version + 1,
           updated_at = now()
         `,
@@ -360,7 +360,7 @@ export class ReceivingService {
         ) VALUES (
           $1, $2, $3, $4, $5,
           $6::numeric(18,3), $7::numeric(18,3), $8::numeric(18,3), $9::numeric(18,3),
-          $10::numeric(18,2), $11::numeric(18,2), 'STOCK_RECEIPT', $12,
+          $10::bigint, $11::bigint, 'STOCK_RECEIPT', $12,
           $13, $14, $15, $16
         )
         `,
@@ -422,11 +422,11 @@ export class ReceivingService {
     );
 
     if (this.outbox) {
-      let receiptTotalCents = 0n;
+      let receiptTotalVnd = 0n;
       for (const item of items) {
         const qtyMilli = parseQtyToMilli(String(item.qty), false, false);
-        const costCents = parseMoneyToCents(String(item.unitCost ?? '0'));
-        receiptTotalCents += (qtyMilli * costCents + 500n) / 1000n;
+        const costVnd = parseMoneyToVnd(String(item.unitCost ?? '0'));
+        receiptTotalVnd += (qtyMilli * costVnd + 500n) / 1000n;
       }
       await this.outbox.add(em, INVENTORY_STOCK_RECEIVED, {
         receiptId,
@@ -435,7 +435,7 @@ export class ReceivingService {
         sourceType: header.source_type,
         purchaseOrderId: header.purchase_order_id,
         supplierId: header.supplier_id ?? null,
-        totalAmount: formatCentsToMoney(receiptTotalCents),
+        totalAmount: vndToNumber(receiptTotalVnd),
         postedAt: occurredAt,
       });
     }
@@ -550,9 +550,7 @@ export class ReceivingService {
         lineNo: Number(i.lineNo),
         skuId: i.skuId,
         qty: formatMilliToQty(parseQtyToMilli(String(i.qty), false, false)),
-        unitCost: formatCentsToMoney(
-          parseMoneyToCents(String(i.unitCost ?? '0')),
-        ),
+        unitCost: vndToNumber(parseMoneyToVnd(String(i.unitCost ?? '0'))),
         unitName: i.unitName,
         conversionFactor: formatFactorFromTenThousandths(
           parseConversionFactorToTenThousandths(

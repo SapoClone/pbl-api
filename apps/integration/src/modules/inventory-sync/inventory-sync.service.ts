@@ -7,6 +7,7 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { roundVnd } from '../../common/money';
 import {
   IntegrationDomainError,
   IntegrationDomainErrorCode,
@@ -506,7 +507,7 @@ export class InventorySyncService {
 
         if (existing) {
           existing.externalProductName = item.externalProductName;
-          existing.externalPrice = item.price.toFixed(2);
+          existing.externalPrice = roundVnd(item.price);
           existing.listingSyncStatus = 'SYNCED';
           existing.lastSyncedAt = now;
           await em.save(SkuMappingEntity, existing);
@@ -542,7 +543,7 @@ export class InventorySyncService {
               mappingVersion: 1,
               status: 'ACTIVE',
               listingSyncStatus: 'SYNCED',
-              externalPrice: item.price.toFixed(2),
+              externalPrice: roundVnd(item.price),
               lastSyncedAt: now,
               createdBy: actorId,
               updatedBy: actorId,

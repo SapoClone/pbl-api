@@ -2,7 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsIn,
-  IsNumberString,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
@@ -14,8 +14,8 @@ export class RecognizeReceivableDto {
   @IsUUID()
   customerId!: string;
 
-  @IsNumberString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 
   @IsOptional()
   @IsUUID()
@@ -55,13 +55,13 @@ export class ReceivableAllocationLineDto {
   @IsUUID()
   receivableId!: string;
 
-  @IsNumberString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 }
 
 export class RecordReceivablePaymentDto {
-  @IsNumberString()
-  amount!: string;
+  @IsInt()
+  amount!: number;
 
   @IsOptional()
   @IsIn(['CASH', 'BANK_TRANSFER', 'CARD', 'E_WALLET'])

@@ -218,10 +218,10 @@ async function main() {
       const unitCost = 10000 + (i % 20) * 500;
       const valAmt = onHand * unitCost;
       balanceValues.push(
-        `('${randomUUID()}', '${tenantA}', '${whId}', '${skuId}', ${onHand}.000, 0.000, 0.000, ${unitCost}.00, ${valAmt}.00, 1)`,
+        `('${randomUUID()}', '${tenantA}', '${whId}', '${skuId}', ${onHand}.000, 0.000, 0.000, ${unitCost}, ${valAmt}, 1)`,
       );
       ledgerValues.push(
-        `('${randomUUID()}', '${tenantA}', '${whId}', '${skuId}', 'RECEIPT_IN', 'STOCK_RECEIPT', '${docId}', 0.000, ${onHand}.000, ${onHand}.000, 0.000, ${unitCost}.00, ${unitCost}.00)`,
+        `('${randomUUID()}', '${tenantA}', '${whId}', '${skuId}', 'RECEIPT_IN', 'STOCK_RECEIPT', '${docId}', 0.000, ${onHand}.000, ${onHand}.000, 0.000, ${unitCost}, ${unitCost})`,
       );
     }
 
@@ -370,7 +370,7 @@ async function main() {
       receivingService.createReceipt({
         warehouseId: whA1.id,
         autoPost: false,
-        items: [{ skuId: skuEven, qty: '5.000', unitCost: '12000.00' }],
+        items: [{ skuId: skuEven, qty: '5.000', unitCost: 12000 }],
       }),
     );
     draftReceiptIds.push(draft.id);
@@ -415,7 +415,7 @@ async function main() {
     receivingService.createReceipt({
       warehouseId: whA1.id,
       autoPost: true,
-      items: [{ skuId: hotSkuId, qty: '10.000', unitCost: '50000.00' }],
+      items: [{ skuId: hotSkuId, qty: '10.000', unitCost: 50000 }],
     }),
   );
 

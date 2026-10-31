@@ -194,7 +194,7 @@ describe('Integration M6 Core (Real PostgreSQL Integration, Concurrency & Fault-
         skuCode: params.skuCode,
         barcode: null,
         name: params.productName,
-        basePrice: '250000.00',
+        basePrice: 250000,
         status: 'ACTIVE',
         aggregateVersion: 1,
       });
@@ -1186,8 +1186,8 @@ describe('Integration M6 Core (Real PostgreSQL Integration, Concurrency & Fault-
         externalUpdatedAt: new Date(),
         buyerName: 'crash.recovery.buyer',
         currency: 'VND',
-        totalAmount: '250000.00',
-        shippingFee: '0.00',
+        totalAmount: 250000,
+        shippingFee: 0,
         paymentMethod: 'SHOPEEPAY',
         rawOrderSnapshot: {
           ordersn: crashedExternalOrderId,

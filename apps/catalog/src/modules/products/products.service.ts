@@ -117,7 +117,7 @@ export class ProductsService {
       skuCode: entity.skuCode,
       barcode: entity.barcode,
       name: entity.name,
-      basePrice: parseAndFormatMoney(entity.basePrice ?? '0.00'),
+      basePrice: parseAndFormatMoney(entity.basePrice ?? 0),
       weight: entity.weight,
       imageUrl: entity.imageUrl,
       combinationSignature: entity.combinationSignature,
@@ -312,7 +312,7 @@ export class ProductsService {
             dto.defaultSkuCode ?? `PRD-${product.id.slice(0, 8)}`,
           );
           const barcode = validateAndNormalizeBarcode(dto.defaultBarcode);
-          const basePrice = parseAndFormatMoney(dto.defaultBasePrice ?? '0.00');
+          const basePrice = parseAndFormatMoney(dto.defaultBasePrice ?? 0);
 
           const variant = await scopedVariants.save({
             productId: product.id,
@@ -823,7 +823,7 @@ export class ProductsService {
     try {
       const skuCode = normalizeSku(dto.skuCode);
       const barcode = validateAndNormalizeBarcode(dto.barcode);
-      const basePrice = parseAndFormatMoney(dto.basePrice ?? '0.00');
+      const basePrice = parseAndFormatMoney(dto.basePrice ?? 0);
       const pairs = dto.attributes ?? [];
       const combinationSignature = buildCombinationSignature(pairs);
 
@@ -910,7 +910,7 @@ export class ProductsService {
     dto: GenerateVariantsReqDto,
   ): Promise<VariantRes[]> {
     try {
-      const basePrice = parseAndFormatMoney(dto.basePrice ?? '0.00');
+      const basePrice = parseAndFormatMoney(dto.basePrice ?? 0);
 
       return await runInTenantTransaction(this.dataSource, async (em) => {
         const product = await TenantScopedRepository.forEntity(

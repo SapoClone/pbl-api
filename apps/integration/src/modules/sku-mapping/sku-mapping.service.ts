@@ -105,7 +105,7 @@ export class SkuMappingService {
           listingSyncStatus: 'MAPPED',
           externalPrice:
             dto.externalPrice !== undefined
-              ? dto.externalPrice.toFixed(2)
+              ? dto.externalPrice
               : variant.basePrice,
           lastSyncedAt: now,
           createdBy: actorId,
@@ -271,7 +271,7 @@ export class SkuMappingService {
         mapping.status = dto.status;
       }
       if (dto.externalPrice !== undefined) {
-        mapping.externalPrice = dto.externalPrice.toFixed(2);
+        mapping.externalPrice = dto.externalPrice;
       }
 
       mapping.mappingVersion += 1;
