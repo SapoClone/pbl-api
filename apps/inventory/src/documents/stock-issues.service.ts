@@ -6,8 +6,11 @@ import { DataSource, EntityManager } from 'typeorm';
 import { BranchGuard } from '../common/branch-guard';
 import {
   Page,
+  Scope,
   Where,
   actorId,
+  assertBranchInScope,
+  assertVisible,
   badRequest,
   iso,
   likePattern,
@@ -72,8 +75,9 @@ export class StockIssuesService extends DocumentBase {
     };
   }
 
-  async create(dto: CreateIssueReqDto): Promise<IssueRes> {
+  async create(dto: CreateIssueReqDto, scope: Scope): Promise<IssueRes> {
     const tenantId = TenantContext.require();
+    assertBranchInScope(scope, dto.branchId);
     await this.branches.assertActive(dto.branchId);
     const id = randomUUID();
     await this.dataSource.transaction(async (em) => {
@@ -126,10 +130,10 @@ export class StockIssuesService extends DocumentBase {
         );
       }
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
-  async get(id: string): Promise<IssueRes> {
+  async get(id: string, scope: Scope): Promise<IssueRes> {
     const tenantId = TenantContext.require();
     const em: EntityManager = this.dataSource.manager;
     const rows = await em.query(
@@ -137,6 +141,7 @@ export class StockIssuesService extends DocumentBase {
       [tenantId, id],
     );
     if (!rows.length) throw notFound('Stock issue');
+    assertVisible(scope, 'Stock issue', rows[0].branch_id);
     const lines = await em.query(
       `SELECT * FROM ${this.t('stock_issue_line')} WHERE "tenant_id" = $1 AND "stock_issue_id" = $2 ORDER BY "sku"`,
       [tenantId, id],
@@ -151,9 +156,17 @@ export class StockIssuesService extends DocumentBase {
     };
   }
 
-  async list(query: ListIssuesReqDto): Promise<Page<IssueRowRes>> {
+  async list(
+    query: ListIssuesReqDto,
+    scope: Scope,
+  ): Promise<Page<IssueRowRes>> {
     const where = new Where().add('x."tenant_id" = ?', TenantContext.require());
-    if (query.branchId) where.add('x."branch_id" = ?', query.branchId);
+    if (query.branchId) {
+      assertBranchInScope(scope, query.branchId);
+      where.add('x."branch_id" = ?', query.branchId);
+    } else {
+      where.branchScope(scope, 'x."branch_id"');
+    }
     if (query.status) where.add('x."status" = ?', query.status);
     if (query.q) where.add('x."code" ILIKE ?', likePattern(query.q));
     where.dateRange('x."created_at"', query.from, query.to);
@@ -175,7 +188,11 @@ export class StockIssuesService extends DocumentBase {
   }
 
   /** Deducts the branch (respecting holds); 409 I002 with the shortages leaves the draft untouched */
-  async approve(id: string, dto: DocumentActionReqDto): Promise<IssueRes> {
+  async approve(
+    id: string,
+    dto: DocumentActionReqDto,
+    scope: Scope,
+  ): Promise<IssueRes> {
     const tenantId = TenantContext.require();
     await this.dataSource.transaction(async (em) => {
       const row = await this.lockHeader(
@@ -185,6 +202,7 @@ export class StockIssuesService extends DocumentBase {
         id,
         'Stock issue',
         dto.version,
+        (row) => assertVisible(scope, 'Stock issue', row.branch_id),
       );
       if (row.status !== 'draft') {
         throw badRequest(
@@ -210,10 +228,14 @@ export class StockIssuesService extends DocumentBase {
       );
       await this.bump(em, 'stock_issue', tenantId, id, `"status" = 'approved'`);
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
-  async cancel(id: string, dto: DocumentActionReqDto): Promise<IssueRes> {
+  async cancel(
+    id: string,
+    dto: DocumentActionReqDto,
+    scope: Scope,
+  ): Promise<IssueRes> {
     const tenantId = TenantContext.require();
     await this.dataSource.transaction(async (em) => {
       const row = await this.lockHeader(
@@ -223,6 +245,7 @@ export class StockIssuesService extends DocumentBase {
         id,
         'Stock issue',
         dto.version,
+        (row) => assertVisible(scope, 'Stock issue', row.branch_id),
       );
       if (row.status !== 'draft') {
         throw badRequest(
@@ -238,6 +261,6 @@ export class StockIssuesService extends DocumentBase {
         `"status" = 'cancelled'`,
       );
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 }

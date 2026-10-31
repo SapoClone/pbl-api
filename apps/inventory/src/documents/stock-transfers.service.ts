@@ -6,8 +6,11 @@ import { DataSource, EntityManager } from 'typeorm';
 import { BranchGuard } from '../common/branch-guard';
 import {
   Page,
+  Scope,
   Where,
   actorId,
+  assertBranchInScope,
+  assertVisible,
   badRequest,
   iso,
   likePattern,
@@ -88,8 +91,10 @@ export class StockTransfersService extends DocumentBase {
     };
   }
 
-  async create(dto: CreateTransferReqDto): Promise<TransferRes> {
+  /** The source branch must be in the caller's scope; the destination may be any branch of the store */
+  async create(dto: CreateTransferReqDto, scope: Scope): Promise<TransferRes> {
     const tenantId = TenantContext.require();
+    assertBranchInScope(scope, dto.fromBranchId);
     if (dto.fromBranchId === dto.toBranchId) {
       throw badRequest(
         InventoryErrorCode.SAME_BRANCH,
@@ -136,23 +141,36 @@ export class StockTransfersService extends DocumentBase {
         );
       }
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
-  async get(id: string): Promise<TransferRes> {
-    return this.load(this.dataSource.manager, TenantContext.require(), id);
+  /** Visible when the source or the destination is in scope */
+  async get(id: string, scope: Scope): Promise<TransferRes> {
+    return this.load(
+      this.dataSource.manager,
+      TenantContext.require(),
+      id,
+      scope,
+    );
   }
 
   private async load(
     em: EntityManager,
     tenantId: string,
     id: string,
+    scope: Scope,
   ): Promise<TransferRes> {
     const rows = await em.query(
       `${this.select()} WHERE x."tenant_id" = $1 AND x."id" = $2`,
       [tenantId, id],
     );
     if (!rows.length) throw notFound('Stock transfer');
+    assertVisible(
+      scope,
+      'Stock transfer',
+      rows[0].from_branch_id,
+      rows[0].to_branch_id,
+    );
     const lines = await em.query(
       `SELECT * FROM ${this.t('stock_transfer_line')} WHERE "tenant_id" = $1 AND "stock_transfer_id" = $2 ORDER BY "sku"`,
       [tenantId, id],
@@ -169,9 +187,14 @@ export class StockTransfersService extends DocumentBase {
     };
   }
 
-  async list(query: ListTransfersReqDto): Promise<Page<TransferRowRes>> {
+  async list(
+    query: ListTransfersReqDto,
+    scope: Scope,
+  ): Promise<Page<TransferRowRes>> {
     const where = new Where().add('x."tenant_id" = ?', TenantContext.require());
+    where.branchScope(scope, 'x."from_branch_id"', 'x."to_branch_id"');
     if (query.branchId) {
+      assertBranchInScope(scope, query.branchId);
       const p = where.param(query.branchId);
       where.add(`(x."from_branch_id" = ${p} OR x."to_branch_id" = ${p})`);
     }
@@ -203,7 +226,12 @@ export class StockTransfersService extends DocumentBase {
   }
 
   /** Deducts the source; 409 I002 with the shortages leaves everything unchanged */
-  async ship(id: string, dto: DocumentActionReqDto): Promise<TransferRes> {
+  /** The source must be in scope */
+  async ship(
+    id: string,
+    dto: DocumentActionReqDto,
+    scope: Scope,
+  ): Promise<TransferRes> {
     const tenantId = TenantContext.require();
     await this.dataSource.transaction(async (em) => {
       const row = await this.lockHeader(
@@ -213,6 +241,7 @@ export class StockTransfersService extends DocumentBase {
         id,
         'Stock transfer',
         dto.version,
+        (row) => assertVisible(scope, 'Stock transfer', row.from_branch_id),
       );
       if (row.status !== 'draft') throw this.invalid(row.status, 'shipped');
       const lines = await em.query(
@@ -239,11 +268,15 @@ export class StockTransfersService extends DocumentBase {
         `"status" = 'in_transit', "shipped_at" = now()`,
       );
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
-  /** Adds what arrived (all of it unless `items` records a shortfall) to the destination */
-  async receive(id: string, dto: ReceiveTransferReqDto): Promise<TransferRes> {
+  /** Adds what arrived (all of it unless `items` records a shortfall) to the destination; the destination must be in scope */
+  async receive(
+    id: string,
+    dto: ReceiveTransferReqDto,
+    scope: Scope,
+  ): Promise<TransferRes> {
     const tenantId = TenantContext.require();
     await this.dataSource.transaction(async (em) => {
       const row = await this.lockHeader(
@@ -253,6 +286,7 @@ export class StockTransfersService extends DocumentBase {
         id,
         'Stock transfer',
         dto.version,
+        (row) => assertVisible(scope, 'Stock transfer', row.to_branch_id),
       );
       if (row.status !== 'in_transit')
         throw this.invalid(row.status, 'received');
@@ -301,11 +335,15 @@ export class StockTransfersService extends DocumentBase {
         `"status" = 'received', "received_at" = now()`,
       );
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 
-  /** From draft nothing moved; from in_transit the goods go back to the source (`transfer_in`) */
-  async cancel(id: string, dto: DocumentActionReqDto): Promise<TransferRes> {
+  /** From draft nothing moved; from in_transit the goods go back to the source (`transfer_in`); the source must be in scope */
+  async cancel(
+    id: string,
+    dto: DocumentActionReqDto,
+    scope: Scope,
+  ): Promise<TransferRes> {
     const tenantId = TenantContext.require();
     await this.dataSource.transaction(async (em) => {
       const row = await this.lockHeader(
@@ -315,6 +353,7 @@ export class StockTransfersService extends DocumentBase {
         id,
         'Stock transfer',
         dto.version,
+        (row) => assertVisible(scope, 'Stock transfer', row.from_branch_id),
       );
       if (row.status !== 'draft' && row.status !== 'in_transit') {
         throw this.invalid(row.status, 'cancelled');
@@ -345,6 +384,6 @@ export class StockTransfersService extends DocumentBase {
         `"status" = 'cancelled'`,
       );
     });
-    return this.get(id);
+    return this.get(id, scope);
   }
 }

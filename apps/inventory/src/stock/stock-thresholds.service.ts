@@ -15,7 +15,9 @@ import { DataSource } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
 import {
   Page,
+  Scope,
   Where,
+  assertBranchInScope,
   iso,
   likePattern,
   numOrNull,
@@ -55,8 +57,12 @@ export class StockThresholdsService {
   ) {}
 
   /** Upsert keyed by (tenant, branch, sku); `variantId` is stored without validation */
-  async upsert(dto: UpsertThresholdReqDto): Promise<ThresholdRes> {
+  async upsert(
+    dto: UpsertThresholdReqDto,
+    scope: Scope,
+  ): Promise<ThresholdRes> {
     const tenantId = TenantContext.require();
+    assertBranchInScope(scope, dto.branchId);
     const min = dto.minQuantity ?? null;
     const max = dto.maxQuantity ?? null;
     if (min !== null && max !== null && max < min) {
@@ -96,9 +102,17 @@ export class StockThresholdsService {
     return toRes(rows[0]);
   }
 
-  async list(query: ListThresholdsReqDto): Promise<Page<ThresholdRes>> {
+  async list(
+    query: ListThresholdsReqDto,
+    scope: Scope,
+  ): Promise<Page<ThresholdRes>> {
     const where = new Where().add('"tenant_id" = ?', TenantContext.require());
-    if (query.branchId) where.add('"branch_id" = ?', query.branchId);
+    if (query.branchId) {
+      assertBranchInScope(scope, query.branchId);
+      where.add('"branch_id" = ?', query.branchId);
+    } else {
+      where.branchScope(scope, '"branch_id"');
+    }
     if (query.q) where.add('"sku" ILIKE ?', likePattern(query.q));
     const table = qualifiedTable(this.dataSource, 'stock_threshold');
     const rows = await this.dataSource.query(

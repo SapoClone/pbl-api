@@ -12,8 +12,7 @@ import {
   Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, RequirePermission } from '@pbl/auth';
 import type { Response } from 'express';
 import { Page } from '../common/sql';
 import {
@@ -32,8 +31,8 @@ import {
 } from './purchase-orders.service';
 
 /**
- * Contract permissions: `purchasing.view` = owner, manager, cashier;
- * `purchasing.create/update/approve` = owner, manager. Fixed paths before `:id`.
+ * Permissions: `purchasing.view/create/update/approve`; branch scope applies (ADR-0012 §8).
+ * Fixed paths before `:id`.
  */
 @ApiTags('purchase-orders')
 @ApiBearerAuth()
@@ -42,23 +41,28 @@ export class PurchaseOrdersController {
   constructor(private readonly orders: PurchaseOrdersService) {}
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('purchasing.view')
   list(
     @Query() query: PurchaseOrderFilterDto,
+    @AllowedBranches() scope: string[] | null,
   ): Promise<Page<PurchaseOrderRowRes>> {
-    return this.orders.list(query);
+    return this.orders.list(query, scope);
   }
 
   @Get('summary')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
-  summary(@Query() query: PurchaseOrderSummaryReqDto) {
-    return this.orders.summary(query);
+  @RequirePermission('purchasing.view')
+  summary(
+    @Query() query: PurchaseOrderSummaryReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ) {
+    return this.orders.summary(query, scope);
   }
 
   @Get('export')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('purchasing.view')
   async export(
     @Query() query: ExportPurchaseOrdersReqDto,
+    @AllowedBranches() scope: string[] | null,
     @Res({ passthrough: true }) res: Response,
   ): Promise<string> {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -66,68 +70,79 @@ export class PurchaseOrdersController {
       'Content-Disposition',
       'attachment; filename="purchase-orders.csv"',
     );
-    return this.orders.exportCsv(query);
+    return this.orders.exportCsv(query, scope);
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
-  create(@Body() dto: CreatePurchaseOrderReqDto): Promise<PurchaseOrderRes> {
-    return this.orders.create(dto);
+  @RequirePermission('purchasing.create')
+  create(
+    @Body() dto: CreatePurchaseOrderReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<PurchaseOrderRes> {
+    return this.orders.create(dto, scope);
   }
 
   @Get(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
-  get(@Param('id', ParseUUIDPipe) id: string): Promise<PurchaseOrderRes> {
-    return this.orders.get(id);
+  @RequirePermission('purchasing.view')
+  get(
+    @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<PurchaseOrderRes> {
+    return this.orders.get(id, scope);
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.update')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePurchaseOrderReqDto,
+    @AllowedBranches() scope: string[] | null,
   ): Promise<PurchaseOrderRes> {
-    return this.orders.update(id, dto);
+    return this.orders.update(id, dto, scope);
   }
 
   @Post(':id/submit')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.update')
   submit(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PurchaseOrderActionReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.orders.act(id, 'submit', dto);
+    return this.orders.act(id, 'submit', dto, scope);
   }
 
   @Post(':id/approve')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.approve')
   approve(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PurchaseOrderActionReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.orders.act(id, 'approve', dto);
+    return this.orders.act(id, 'approve', dto, scope);
   }
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.update')
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PurchaseOrderActionReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.orders.act(id, 'cancel', dto);
+    return this.orders.act(id, 'cancel', dto, scope);
   }
 
   @Post(':id/payments')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('purchasing.update')
   pay(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreatePaymentReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.orders.pay(id, dto);
+    return this.orders.pay(id, dto, scope);
   }
 }

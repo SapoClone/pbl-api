@@ -1,4 +1,13 @@
-import { Where, csvField, formatCode, likePattern, pageOf, toCsv } from './sql';
+import {
+  Where,
+  assertBranchInScope,
+  assertVisible,
+  csvField,
+  formatCode,
+  likePattern,
+  pageOf,
+  toCsv,
+} from './sql';
 
 describe('sql helpers', () => {
   it('formats readable codes (D4)', () => {
@@ -50,5 +59,27 @@ describe('sql helpers', () => {
 
   it('builds CSV with CRLF rows', () => {
     expect(toCsv(['a', 'b'], [[1, 'x,y']])).toBe('a,b\r\n1,"x,y"\r\n');
+  });
+
+  it('adds a branch scope as an ANY filter, nothing for every branch', () => {
+    expect(new Where().branchScope(null, 'x."b"').sql).toBe('');
+    const one = new Where().add('t = ?', 1).branchScope(['a'], 'x."b"');
+    expect(one.sql).toBe('WHERE t = $1 AND x."b" = ANY($2::uuid[])');
+    expect(one.params).toEqual([1, ['a']]);
+    const two = new Where().branchScope(['a'], 'x."f"', 'x."t"');
+    expect(two.sql).toBe(
+      'WHERE (x."f" = ANY($1::uuid[]) OR x."t" = ANY($1::uuid[]))',
+    );
+  });
+
+  it('answers 404 outside the branch scope', () => {
+    expect(() => assertBranchInScope(null, 'a')).not.toThrow();
+    expect(() => assertBranchInScope(['a'], 'a')).not.toThrow();
+    expect(() => assertBranchInScope(['a'], 'b')).toThrow(/not found/);
+    expect(() => assertBranchInScope([], 'a')).toThrow(/not found/);
+    expect(() => assertVisible(['b'], 'Doc', 'a', 'b')).not.toThrow();
+    expect(() => assertVisible(['c'], 'Doc', 'a', 'b')).toThrow(
+      /Doc not found/,
+    );
   });
 });

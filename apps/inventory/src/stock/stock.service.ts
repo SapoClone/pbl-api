@@ -16,7 +16,9 @@ import { BranchProjectionEntity } from '../branches/branch-projection.entity';
 import {
   EXPORT_ROW_CAP,
   Page,
+  Scope,
   Where,
+  assertBranchInScope,
   likePattern,
   num,
   numOrNull,
@@ -139,8 +141,12 @@ export class StockService {
    * Adds goods to a branch, one ledger row per SKU, in one transaction. A branch id
    * from the request is checked against the projection with the tenant.
    */
-  async receive(dto: StockReceiptReqDto): Promise<StockQuantityRes[]> {
+  async receive(
+    dto: StockReceiptReqDto,
+    scope: Scope,
+  ): Promise<StockQuantityRes[]> {
     const tenantId = TenantContext.require();
+    assertBranchInScope(scope, dto.branchId);
     const branch = await this.branches.findOne({
       where: { branchId: dto.branchId },
     });
@@ -197,9 +203,15 @@ export class StockService {
   private filters(
     tenantId: string,
     query: StockFilterDto & { sku?: string },
+    scope: Scope,
   ): { where: Where; join: string } {
     const where = new Where().add('s."tenant_id" = ?', tenantId);
-    if (query.branchId) where.add('s."branch_id" = ?', query.branchId);
+    if (query.branchId) {
+      assertBranchInScope(scope, query.branchId);
+      where.add('s."branch_id" = ?', query.branchId);
+    } else {
+      where.branchScope(scope, 's."branch_id"');
+    }
     if (query.sku) where.add('s."sku" = ?', query.sku);
     if (query.q) where.add('s."sku" ILIKE ?', likePattern(query.q));
     if (query.level) where.add(LEVEL_CONDITION[query.level]);
@@ -229,9 +241,10 @@ export class StockService {
   private async selectRows(
     tenantId: string,
     query: StockFilterDto & { sku?: string },
+    scope: Scope,
     paging?: { limit: number; offset: number },
   ) {
-    const { where, join } = this.filters(tenantId, query);
+    const { where, join } = this.filters(tenantId, query, scope);
     const sort = SORT_COLUMNS[query.sort ?? 'sku'];
     const order = query.order ?? 'ASC';
     const limit = paging
@@ -248,13 +261,13 @@ export class StockService {
     return rows as Record<string, unknown>[];
   }
 
-  async list(query: ListStockReqDto): Promise<Page<StockRes>> {
+  async list(query: ListStockReqDto, scope: Scope): Promise<Page<StockRes>> {
     const tenantId = TenantContext.require();
-    const rows = await this.selectRows(tenantId, query, {
+    const rows = await this.selectRows(tenantId, query, scope, {
       limit: query.limit,
       offset: (query.page - 1) * query.limit,
     });
-    const { where, join } = this.filters(tenantId, query);
+    const { where, join } = this.filters(tenantId, query, scope);
     const [{ count }] = await this.dataSource.query(
       `SELECT count(*) AS count FROM ${this.table('stock_item')} s ${join.replace(/%T/g, this.table('stock_threshold'))} ${where.sql}`,
       where.params,
@@ -268,10 +281,10 @@ export class StockService {
   }
 
   /** CSV of the list's filters, at most 10,000 rows */
-  async exportCsv(query: ExportStockReqDto): Promise<string> {
-    const rows = (await this.selectRows(TenantContext.require(), query)).map(
-      (row) => this.toRow(row),
-    );
+  async exportCsv(query: ExportStockReqDto, scope: Scope): Promise<string> {
+    const rows = (
+      await this.selectRows(TenantContext.require(), query, scope)
+    ).map((row) => this.toRow(row));
     return toCsv(
       [
         'branchId',
@@ -300,9 +313,12 @@ export class StockService {
    * KPI cards. `stockValue` stays null: there is no average cost until receipts carry
    * unit costs (decision logged in the first-wave report).
    */
-  async summary(branchId?: string): Promise<StockSummaryRes> {
+  async summary(
+    branchId: string | undefined,
+    scope: Scope,
+  ): Promise<StockSummaryRes> {
     const tenantId = TenantContext.require();
-    const { where, join } = this.filters(tenantId, { branchId });
+    const { where, join } = this.filters(tenantId, { branchId }, scope);
     const from = `${this.table('stock_item')} s ${join.replace(/%T/g, this.table('stock_threshold'))}`;
     const [row] = await this.dataSource.query(
       `SELECT count(DISTINCT s."sku") AS sku_count,
@@ -351,9 +367,17 @@ export class StockService {
   }
 
   /** Exact SKU match in one branch (barcode lookup belongs to catalog, deferred) */
-  async lookup(branchId: string, code: string): Promise<StockLookupRes> {
+  async lookup(
+    branchId: string,
+    code: string,
+    scope: Scope,
+  ): Promise<StockLookupRes> {
     const tenantId = TenantContext.require();
-    const rows = await this.selectRows(tenantId, { branchId, sku: code });
+    const rows = await this.selectRows(
+      tenantId,
+      { branchId, sku: code },
+      scope,
+    );
     if (!rows.length) {
       throw new NotFoundException('No stock row matches this code');
     }

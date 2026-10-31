@@ -11,8 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { AllowedBranches, RequirePermission } from '@pbl/auth';
 import { Page } from '../common/sql';
 import {
   CreateIssueReqDto,
@@ -37,12 +36,9 @@ import {
   TransferRowRes,
 } from './stock-transfers.service';
 
-const VIEW = [ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER] as const;
-const WRITE = [ROLES.OWNER, ROLES.MANAGER] as const;
-
 /**
- * Contract permissions: `inventory.view` = owner, manager, cashier;
- * `inventory.create/update/approve` = owner, manager.
+ * Permissions: `inventory.view/create/update/approve` (see each route). A document whose
+ * branch is outside the caller's scope answers 404 (ADR-0012 §8).
  */
 @ApiTags('stock-transfers')
 @ApiBearerAuth()
@@ -52,51 +48,63 @@ export class StockTransfersController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(...WRITE)
-  create(@Body() dto: CreateTransferReqDto): Promise<TransferRes> {
-    return this.transfers.create(dto);
+  @RequirePermission('inventory.create')
+  create(
+    @Body() dto: CreateTransferReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<TransferRes> {
+    return this.transfers.create(dto, scope);
   }
 
   @Get()
-  @RequireRoles(...VIEW)
-  list(@Query() query: ListTransfersReqDto): Promise<Page<TransferRowRes>> {
-    return this.transfers.list(query);
+  @RequirePermission('inventory.view')
+  list(
+    @Query() query: ListTransfersReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<Page<TransferRowRes>> {
+    return this.transfers.list(query, scope);
   }
 
   @Get(':id')
-  @RequireRoles(...VIEW)
-  get(@Param('id', ParseUUIDPipe) id: string): Promise<TransferRes> {
-    return this.transfers.get(id);
+  @RequirePermission('inventory.view')
+  get(
+    @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<TransferRes> {
+    return this.transfers.get(id, scope);
   }
 
   @Post(':id/ship')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(...WRITE)
+  @RequirePermission('inventory.update')
   ship(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: DocumentActionReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.transfers.ship(id, dto);
+    return this.transfers.ship(id, dto, scope);
   }
 
   @Post(':id/receive')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(...WRITE)
+  @RequirePermission('inventory.update')
   receive(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReceiveTransferReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.transfers.receive(id, dto);
+    return this.transfers.receive(id, dto, scope);
   }
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(...WRITE)
+  @RequirePermission('inventory.update')
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: DocumentActionReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.transfers.cancel(id, dto);
+    return this.transfers.cancel(id, dto, scope);
   }
 }
 
@@ -108,50 +116,62 @@ export class StockTakesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(...WRITE)
-  create(@Body() dto: CreateStockTakeReqDto): Promise<TakeRes> {
-    return this.takes.create(dto);
+  @RequirePermission('inventory.create')
+  create(
+    @Body() dto: CreateStockTakeReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<TakeRes> {
+    return this.takes.create(dto, scope);
   }
 
   @Get()
-  @RequireRoles(...VIEW)
-  list(@Query() query: ListTakesReqDto): Promise<Page<TakeRowRes>> {
-    return this.takes.list(query);
+  @RequirePermission('inventory.view')
+  list(
+    @Query() query: ListTakesReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<Page<TakeRowRes>> {
+    return this.takes.list(query, scope);
   }
 
   @Get(':id')
-  @RequireRoles(...VIEW)
-  get(@Param('id', ParseUUIDPipe) id: string): Promise<TakeRes> {
-    return this.takes.get(id);
+  @RequirePermission('inventory.view')
+  get(
+    @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<TakeRes> {
+    return this.takes.get(id, scope);
   }
 
   @Patch(':id/items')
-  @RequireRoles(...WRITE)
+  @RequirePermission('inventory.update')
   updateItems(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTakeItemsReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.takes.updateItems(id, dto);
+    return this.takes.updateItems(id, dto, scope);
   }
 
   @Post(':id/complete')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(...WRITE)
+  @RequirePermission('inventory.approve')
   complete(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: DocumentActionReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.takes.complete(id, dto);
+    return this.takes.complete(id, dto, scope);
   }
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(...WRITE)
+  @RequirePermission('inventory.update')
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: DocumentActionReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.takes.cancel(id, dto);
+    return this.takes.cancel(id, dto, scope);
   }
 }
 
@@ -163,40 +183,51 @@ export class StockIssuesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(...WRITE)
-  create(@Body() dto: CreateIssueReqDto): Promise<IssueRes> {
-    return this.issues.create(dto);
+  @RequirePermission('inventory.create')
+  create(
+    @Body() dto: CreateIssueReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<IssueRes> {
+    return this.issues.create(dto, scope);
   }
 
   @Get()
-  @RequireRoles(...VIEW)
-  list(@Query() query: ListIssuesReqDto): Promise<Page<IssueRowRes>> {
-    return this.issues.list(query);
+  @RequirePermission('inventory.view')
+  list(
+    @Query() query: ListIssuesReqDto,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<Page<IssueRowRes>> {
+    return this.issues.list(query, scope);
   }
 
   @Get(':id')
-  @RequireRoles(...VIEW)
-  get(@Param('id', ParseUUIDPipe) id: string): Promise<IssueRes> {
-    return this.issues.get(id);
+  @RequirePermission('inventory.view')
+  get(
+    @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() scope: string[] | null,
+  ): Promise<IssueRes> {
+    return this.issues.get(id, scope);
   }
 
   @Post(':id/approve')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(...WRITE)
+  @RequirePermission('inventory.approve')
   approve(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: DocumentActionReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.issues.approve(id, dto);
+    return this.issues.approve(id, dto, scope);
   }
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  @RequireRoles(...WRITE)
+  @RequirePermission('inventory.update')
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: DocumentActionReqDto,
+    @AllowedBranches() scope: string[] | null,
   ) {
-    return this.issues.cancel(id, dto);
+    return this.issues.cancel(id, dto, scope);
   }
 }
