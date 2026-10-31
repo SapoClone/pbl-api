@@ -142,6 +142,8 @@ services:
       DATABASE_PASSWORD: postgres
       DATABASE_NAME: pbl
       DATABASE_SCHEMA: insight
+      # service-to-service calls (the x-internal-token header): a LOCAL development value; deployments set a real secret
+      INTERNAL_S2S_TOKEN: ${INTERNAL_S2S_TOKEN:-local-dev-internal-token-change-me}
       # events: ElasticMQ locally, the relay and consumer run inside the service
       EVENTS_TRANSPORT: sqs-direct
       AWS_REGION: ap-southeast-1
