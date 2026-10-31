@@ -13,8 +13,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CurrentUser, RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import {
+  AuthUser,
+  CurrentUser,
+  RequirePermission,
+  hasPermission,
+} from '@pbl/auth';
 import { Page } from '../common/errors';
 import {
   LoyaltyService,
@@ -38,17 +42,13 @@ import {
   UpdateCustomerReqDto,
 } from './dto/customer.dto';
 
-/** Roles that see whole phone numbers (the contract's `customers.update`) */
-const PHONE_ROLES: string[] = [ROLES.OWNER, ROLES.MANAGER];
-const canSeePhone = (roles: string[] | undefined) =>
-  (roles ?? []).some((role) => PHONE_ROLES.includes(role));
+/** Whole phone numbers need `customers.update`; everyone else gets `phone: null` + `phoneMasked` */
+const canSeePhone = (user: AuthUser) => hasPermission(user, 'customers.update');
 
 /**
- * Permission codes of the contract mapped to roles (no RBAC yet): customers.view,
- * customers.create and customers.update (edit, addresses) = owner, manager, cashier (the POS
- * edits customers); customers.delete and loyalty adjustments = owner, manager. Whole phone
- * numbers are shown to owner and manager only (open question 6 of the contract).
- * Fixed paths (`summary`, `export`) come before `:id`.
+ * Permissions (ADR-0012): GET = customers.view; POST (customers, addresses) = customers.create;
+ * PATCH (customers, addresses) and loyalty adjustments = customers.update; DELETE (customers,
+ * addresses) = customers.delete. Fixed paths (`summary`, `export`) come before `:id`.
  */
 @ApiTags('customers')
 @ApiBearerAuth()
@@ -60,16 +60,16 @@ export class CustomersController {
   ) {}
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   list(
     @Query() query: ListCustomersReqDto,
-    @CurrentUser('roles') roles: string[],
+    @CurrentUser() user: AuthUser,
   ): Promise<Page<CustomerListItemRes>> {
-    return this.customers.list(query, canSeePhone(roles));
+    return this.customers.list(query, canSeePhone(user));
   }
 
   @Get('summary')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   summary(@Query() query: CustomerSummaryReqDto): Promise<CustomerSummaryRes> {
     return this.customers.summary(query);
   }
@@ -77,75 +77,75 @@ export class CustomersController {
   @Get('export')
   @Header('Content-Type', 'text/csv; charset=utf-8')
   @Header('Content-Disposition', 'attachment; filename="customers.csv"')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   export(
     @Query() query: CustomerFiltersDto,
-    @CurrentUser('roles') roles: string[],
+    @CurrentUser() user: AuthUser,
   ): Promise<string> {
-    return this.customers.exportCsv(query, canSeePhone(roles));
+    return this.customers.exportCsv(query, canSeePhone(user));
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.create')
   create(
     @Body() dto: CreateCustomerReqDto,
-    @CurrentUser('roles') roles: string[],
+    @CurrentUser() user: AuthUser,
   ): Promise<CustomerDetailRes> {
-    return this.customers.create(dto, canSeePhone(roles));
+    return this.customers.create(dto, canSeePhone(user));
   }
 
   @Get(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   get(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('roles') roles: string[],
+    @CurrentUser() user: AuthUser,
   ): Promise<CustomerDetailRes> {
-    return this.customers.get(id, canSeePhone(roles));
+    return this.customers.get(id, canSeePhone(user));
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.update')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCustomerReqDto,
-    @CurrentUser('roles') roles: string[],
+    @CurrentUser() user: AuthUser,
   ): Promise<CustomerDetailRes> {
-    return this.customers.update(id, dto, canSeePhone(roles));
+    return this.customers.update(id, dto, canSeePhone(user));
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.delete')
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.customers.remove(id);
   }
 
   @Post(':id/addresses')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.create')
   addAddress(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AddressReqDto,
-    @CurrentUser('roles') roles: string[],
+    @CurrentUser() user: AuthUser,
   ): Promise<CustomerDetailRes> {
-    return this.customers.addAddress(id, dto, canSeePhone(roles));
+    return this.customers.addAddress(id, dto, canSeePhone(user));
   }
 
   @Patch(':id/addresses/:addressId')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.update')
   updateAddress(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('addressId', ParseUUIDPipe) addressId: string,
     @Body() dto: UpdateAddressReqDto,
-    @CurrentUser('roles') roles: string[],
+    @CurrentUser() user: AuthUser,
   ): Promise<CustomerDetailRes> {
-    return this.customers.updateAddress(id, addressId, dto, canSeePhone(roles));
+    return this.customers.updateAddress(id, addressId, dto, canSeePhone(user));
   }
 
   @Delete(':id/addresses/:addressId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.delete')
   removeAddress(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('addressId', ParseUUIDPipe) addressId: string,
@@ -154,7 +154,7 @@ export class CustomersController {
   }
 
   @Get(':id/loyalty-transactions')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   loyaltyTransactions(
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: ListLoyaltyTransactionsReqDto,
@@ -164,7 +164,7 @@ export class CustomersController {
 
   @Post(':id/loyalty-adjustments')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.update')
   adjust(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: LoyaltyAdjustmentReqDto,

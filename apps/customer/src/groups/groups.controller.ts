@@ -10,13 +10,12 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import { ROLES } from '@pbl/contracts';
+import { RequirePermission } from '@pbl/auth';
 import { GroupReqDto, TagReqDto } from '../customers/dto/customer.dto';
 import { GroupRes, GroupsService } from './groups.service';
 import { TagRes, TagsService } from './tags.service';
 
-/** customers.view = every role; customers.update (create, rename) = owner, manager */
+/** customers.view; create = customers.create; rename = customers.update */
 @ApiTags('customer-groups')
 @ApiBearerAuth()
 @Controller('api/v1/customer-groups')
@@ -24,20 +23,20 @@ export class CustomerGroupsController {
   constructor(private readonly groups: GroupsService) {}
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   list(): Promise<{ data: GroupRes[] }> {
     return this.groups.list();
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.create')
   create(@Body() dto: GroupReqDto): Promise<GroupRes> {
     return this.groups.create(dto.name);
   }
 
   @Patch(':id')
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.update')
   rename(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: GroupReqDto,
@@ -53,14 +52,14 @@ export class CustomerTagsController {
   constructor(private readonly tags: TagsService) {}
 
   @Get()
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER, ROLES.CASHIER)
+  @RequirePermission('customers.view')
   list(): Promise<{ data: TagRes[] }> {
     return this.tags.list();
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles(ROLES.OWNER, ROLES.MANAGER)
+  @RequirePermission('customers.create')
   create(@Body() dto: TagReqDto): Promise<TagRes> {
     return this.tags.create(dto.name);
   }

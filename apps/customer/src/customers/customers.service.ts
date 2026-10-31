@@ -48,7 +48,7 @@ export interface CustomerListItemRes {
   id: string;
   code: string;
   name: string;
-  /** null unless the caller may see phones (owner, manager) */
+  /** null unless the caller has customers.update */
   phone: string | null;
   phoneMasked: string;
   email: string | null;
