@@ -12,4 +12,4 @@ IEEE-754 binary floating-point numbers (`number`) introduce rounding drift in mu
 
 ## Consequences
 - **Positive:** Zero floating-point drift across checkout waterfalls, partial return refunds, WAC inventory valuation, and double-entry journals.
-- **Negative / Trade-off:** Requires explicit string formatting (`formatCentsToMoney`, `formatMilliToQty`) at DTO/database boundaries.
+- **Negative / Trade-off:** Requires explicit string formatting (`vndToNumber`, `formatMilliToQty`) at DTO/database boundaries.
