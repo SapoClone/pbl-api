@@ -7,7 +7,7 @@
 IEEE-754 binary floating-point numbers (`number`) introduce rounding drift in multi-line discount allocation, weighted-average cost (`WAC`) valuation, and double-entry journal balancing (e.g., `0.1 + 0.2 !== 0.3`).
 
 ## Decision
-1. Represent monetary amounts as integer cents (`bigint`, scale `100n` for `NUMERIC(18,2)`) or scaled decimals (`10000n` for `NUMERIC(18,4)`) and stock quantities as integer milli-units (`bigint`, scale `1000n` for `NUMERIC(18,3)`).
+1. Represent monetary amounts as whole VND (`bigint`, no minor unit; the M1-M6 integer-VND decision, see docs/decisions/0020 and the money.ts transformers) and stock quantities as integer milli-units (`bigint`, scale `1000n` for `NUMERIC(18,3)`).
 2. Encapsulate arithmetic and invariant validation in immutable Value Objects (`VndMoney`, `StockQuantity`, `DiscountPercentage` in `sales-domain.ts`; `InventoryQuantity`, `InventoryMoney` in `inventory-domain.ts`).
 
 ## Consequences

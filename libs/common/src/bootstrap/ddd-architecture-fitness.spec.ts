@@ -352,8 +352,8 @@ describe('M7.5 Monorepo-Wide DDD & Hexagonal Architecture Fitness Suite (Rules A
         finance: [
           'FinanceDomainError',
           'validateBalancedJournalLines',
-          'parseMoneyCents',
-          'formatMoneyCents',
+          // integer-VND money (no cents) is our M1-M6 base decision
+          'parseVnd',
         ],
         integration: [
           'ChannelConnectionAggregate',

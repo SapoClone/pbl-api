@@ -30,4 +30,4 @@ const allItems =
 
 ## 2. Pure Domain Execution Overhead
 
-Delegating invariant checks to `platform-domain.ts`, `sales-domain.ts`, `inventory-domain.ts`, and `integration-domain.ts` operates purely in-memory on stack/heap primitives (`bigint` cents and milli-units), adding $< 0.01\text{ ms}$ per command while eliminating duplicate validation branches in application services.
+Delegating invariant checks to `platform-domain.ts`, `sales-domain.ts`, `inventory-domain.ts`, and `integration-domain.ts` operates purely in-memory on stack/heap primitives (`bigint` VND and milli-units), adding $< 0.01\text{ ms}$ per command while eliminating duplicate validation branches in application services.
