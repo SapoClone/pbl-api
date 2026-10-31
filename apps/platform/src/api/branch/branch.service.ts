@@ -17,6 +17,12 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { plainToInstance } from 'class-transformer';
 import { EntityManager } from 'typeorm';
+import {
+  PlatformDomainError,
+  PlatformDomainErrorCode,
+  assertNotLastActiveBranch,
+  isBranchDeactivating,
+} from '../../domain/platform-domain';
 import { TenantEntity } from '../tenant/entities/tenant.entity';
 import { BranchResDto } from './dto/branch.res.dto';
 import { CreateBranchReqDto } from './dto/create-branch.req.dto';
@@ -105,9 +111,7 @@ export class BranchService {
     if (dto.code !== undefined && dto.code !== branch.code) {
       await this.assertCodeFree(dto.code);
     }
-    const deactivating =
-      dto.status === BranchStatus.INACTIVE &&
-      branch.status === BranchStatus.ACTIVE;
+    const deactivating = isBranchDeactivating(branch.status, dto.status);
     Object.assign(
       branch,
       Object.fromEntries(
@@ -211,12 +215,19 @@ export class BranchService {
       .setLock('for_no_key_update')
       .where('tenant.id = :tenantId', { tenantId: TenantContext.require() })
       .getOne();
-    if (
-      (await branches.count({
-        where: { status: BranchStatus.ACTIVE },
-      })) <= 1
-    ) {
-      throw new ValidationException(ErrorCode.B002);
+    const activeCount = await branches.count({
+      where: { status: BranchStatus.ACTIVE },
+    });
+    try {
+      assertNotLastActiveBranch(activeCount);
+    } catch (err) {
+      if (
+        err instanceof PlatformDomainError &&
+        err.code === PlatformDomainErrorCode.LAST_ACTIVE_BRANCH
+      ) {
+        throw new ValidationException(ErrorCode.B002);
+      }
+      throw err;
     }
   }
 
