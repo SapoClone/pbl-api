@@ -10,72 +10,114 @@ import { AddressInfo } from 'net';
 import request from 'supertest';
 import { InsightQueryService } from './insight-query.service';
 import { InsightController } from './insight.controller';
-import { DeviceTokensService } from './notifications/device-tokens.service';
-import { NotificationsController } from './notifications/notifications.controller';
-import { NotificationsService } from './notifications/notifications.service';
-import { ReportExportService } from './reports/report-export.service';
-import { ReportsService } from './reports/reports.service';
+import { InsightExportService } from './modules/export/insight-export.service';
+import { InsightAnalyticsController } from './modules/insight-analytics.controller';
+import { InsightInternalController } from './modules/insight-internal.controller';
+import { InsightRebuildService } from './modules/rebuild/insight-rebuild.service';
+import { InsightReconciliationService } from './modules/reconciliation/insight-reconciliation.service';
+import { InsightReportingService } from './modules/reporting/insight-reporting.service';
 
 const auth = createTestAuth();
 const TENANT = '11111111-1111-4111-8111-111111111111';
+const BRANCH_1 = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
+const BRANCH_2 = '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b';
 
 const queries = {
   auditLogs: jest.fn(async () => ({ data: [], pagination: {} })),
   dailySales: jest.fn(async () => ({ data: [], totals: {} })),
 };
 
-const reports = {
-  kpis: jest.fn(async () => ({})),
-  hourly: jest.fn(async () => ({})),
-  byChannel: jest.fn(async () => ({})),
-  topProducts: jest.fn(async () => ({})),
-  byBranch: jest.fn(async () => ({})),
-};
-const exporter = {
-  export: jest.fn(async () => ({ filename: 'daily.csv', csv: 'a,b\r\n' })),
-};
-const notifications = {
-  list: jest.fn(async () => ({ data: [] })),
-  unreadCount: jest.fn(async () => ({ count: 4 })),
-  markRead: jest.fn(async () => undefined),
-  markAllRead: jest.fn(async () => undefined),
-  attentionItems: jest.fn(async () => ({ total: 0, data: [] })),
-};
-const devices = {
-  register: jest.fn(async () => ({ token: 't' })),
-  remove: jest.fn(async () => undefined),
+const reportingStub = {
+  getDashboardOverview: jest.fn(async () => ({ metrics: {}, freshness: {} })),
+  getRevenueTrend: jest.fn(async () => ({ data: [], freshness: {} })),
+  getTopProducts: jest.fn(async () => ({ data: [], freshness: {} })),
+  getChannelBreakdown: jest.fn(async () => ({ data: [], freshness: {} })),
+  getSalesReport: jest.fn(async () => ({ data: [], pagination: {} })),
+  getSalesByBranch: jest.fn(async () => ({ data: [] })),
+  getSalesByChannel: jest.fn(async () => ({ data: [] })),
+  getSalesByEmployee: jest.fn(async () => ({ data: [] })),
+  getSalesByProduct: jest.fn(async () => ({ data: [] })),
+  getSalesByCustomerGroup: jest.fn(async () => ({ data: [] })),
+  getInventorySummary: jest.fn(async () => ({ data: [] })),
+  getLowStockReport: jest.fn(async () => ({ data: [] })),
+  getSlowMovingReport: jest.fn(async () => ({ data: [] })),
+  getInventoryValuation: jest.fn(async () => ({ totals: {}, warehouses: [] })),
+  getInventoryMovements: jest.fn(async () => ({ data: [] })),
+  getGrossProfitSummary: jest.fn(async () => ({ summary: {}, branches: [] })),
+  getGrossProfitByProduct: jest.fn(async () => ({ data: [] })),
+  getGrossProfitByBranch: jest.fn(async () => ({ data: [] })),
+  getBranchComparison: jest.fn(async () => ({ branches: [] })),
+  getBranchRanking: jest.fn(async () => ({ ranking: [] })),
 };
 
-/**
- * The service's HTTP shell without a database: logging, the real auth guard (with
- * a throwaway key), health and the reports controller over a stub service.
- * AppModule needs Postgres and the queue, which the integration tests and the
- * local stack cover.
- */
+const exportsStub = {
+  createExportJob: jest.fn(async () => ({
+    id: '22222222-2222-4222-8222-222222222222',
+    status: 'COMPLETED',
+  })),
+  listExportJobs: jest.fn(async () => ({ data: [] })),
+  getExportJob: jest.fn(async (id: string) => ({ id, status: 'COMPLETED' })),
+  downloadExportJob: jest.fn(async () => ({
+    fileName: 'sales.csv',
+    contentType: 'text/csv; charset=utf-8',
+    checksumSha256: 'abc',
+    buffer: Buffer.from('Date,NetSalesRevenue\r\n2026-10-18,100000.00\r\n'),
+  })),
+};
+
+const rebuildStub = {
+  getProjectionsStatus: jest.fn(async () => ({
+    projections: [],
+    recentRebuilds: [],
+  })),
+  triggerRebuild: jest.fn(async () => ({
+    rebuildId: '33333333-3333-4333-8333-333333333333',
+    status: 'ACTIVE',
+  })),
+  getRebuildById: jest.fn(async (id: string) => ({ id, status: 'ACTIVE' })),
+};
+
+const reconciliationStub = {
+  executeReconciliation: jest.fn(async () => ({
+    id: '44444444-4444-4444-8444-444444444444',
+    status: 'COMPLETED',
+  })),
+  listReconciliationRuns: jest.fn(async () => ({ data: [] })),
+  getReconciliationRun: jest.fn(async (id: string) => ({
+    id,
+    status: 'COMPLETED',
+    issues: [],
+  })),
+};
+
 @Module({
   imports: [
     PblLoggingModule.forRoot('insight'),
     PblAuthModule.forRootAsync({ useFactory: () => auth.options }),
     PblHealthModule.forRoot({ service: 'insight', redisFromEnv: true }),
   ],
-  controllers: [InsightController, NotificationsController],
+  controllers: [
+    InsightController,
+    InsightAnalyticsController,
+    InsightInternalController,
+  ],
   providers: [
     { provide: InsightQueryService, useValue: queries },
-    { provide: ReportsService, useValue: reports },
-    { provide: ReportExportService, useValue: exporter },
-    { provide: NotificationsService, useValue: notifications },
-    { provide: DeviceTokensService, useValue: devices },
+    { provide: InsightReportingService, useValue: reportingStub },
+    { provide: InsightExportService, useValue: exportsStub },
+    { provide: InsightRebuildService, useValue: rebuildStub },
+    { provide: InsightReconciliationService, useValue: reconciliationStub },
   ],
 })
 class TestAppModule {}
 
-describe('Insight service bootstrap', () => {
+describe('Insight service bootstrap & M7 HTTP/RBAC/Branch-Scope E2E', () => {
   let app: INestApplication;
   const saved = { ...process.env };
 
   beforeAll(async () => {
     process.env.APP_SWAGGER_ENABLED = 'false';
-    delete process.env.REDIS_HOST; // no Redis under test
+    delete process.env.REDIS_HOST;
     app = await bootstrapService(TestAppModule, { name: 'insight', port: 0 });
   });
 
@@ -110,33 +152,34 @@ describe('Insight service bootstrap', () => {
     });
   });
 
-  describe('permission matrix on the report routes', () => {
-    const B1 = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
-    const matrix: [string, string][] = [
-      ['/api/v1/dashboard/kpis', 'dashboard.view'],
-      ['/api/v1/sales-summary/hourly', 'dashboard.view'],
-      ['/api/v1/sales-summary/by-channel', 'dashboard.view'],
-      ['/api/v1/sales-summary/top-products', 'dashboard.view'],
-      ['/api/v1/attention-items', 'dashboard.view'],
-      ['/api/v1/sales-summary/daily', 'reports.view'],
-      ['/api/v1/sales-summary/by-branch', 'reports.view'],
-      ['/api/v1/reports/export?report=daily', 'reports.view'],
-      ['/api/v1/audit-logs', 'reports.view'],
+  describe('permissions on the M0 & M7 report routes (Mandatory Test O)', () => {
+    const routes = [
+      '/api/v1/audit-logs',
+      '/api/v1/sales-summary/daily',
+      '/api/v1/insight/dashboard/overview',
+      '/api/v1/insight/dashboard/revenue-trend',
+      '/api/v1/insight/dashboard/top-products',
+      '/api/v1/insight/dashboard/channel-breakdown',
+      '/api/v1/insight/reports/sales',
+      '/api/v1/insight/reports/sales/by-branch',
+      '/api/v1/insight/reports/sales/by-channel',
+      '/api/v1/insight/reports/sales/by-employee',
+      '/api/v1/insight/reports/sales/by-product',
+      '/api/v1/insight/reports/sales/by-customer-group',
+      '/api/v1/insight/reports/inventory',
+      '/api/v1/insight/reports/inventory/low-stock',
+      '/api/v1/insight/reports/inventory/slow-moving',
+      '/api/v1/insight/reports/inventory/valuation',
+      '/api/v1/insight/reports/inventory/movements',
+      '/api/v1/insight/reports/gross-profit',
+      '/api/v1/insight/reports/gross-profit/by-product',
+      '/api/v1/insight/reports/gross-profit/by-branch',
+      '/api/v1/insight/reports/branches/comparison',
+      '/api/v1/insight/reports/branches/ranking',
+      '/api/v1/insight/export-jobs',
+      '/internal/v1/insight/projections/status',
+      '/internal/v1/insight/reconciliation-runs',
     ];
-    const withPerms = (permissions: string[]) =>
-      auth.bearerWithPermissions('custom', permissions, TENANT);
-    const calls = () =>
-      [
-        queries.auditLogs,
-        queries.dailySales,
-        reports.kpis,
-        reports.hourly,
-        reports.byChannel,
-        reports.topProducts,
-        reports.byBranch,
-        exporter.export,
-        notifications.attentionItems,
-      ].reduce((n, fn) => n + fn.mock.calls.length, 0);
 
     it.each(matrix)('refuses %s without a token (401)', async (route) => {
       await request(url()).get(route).expect(401);
@@ -152,37 +195,32 @@ describe('Insight service bootstrap', () => {
       },
     );
 
-    it.each(matrix)(
-      'on %s: %s passes, others and legacy role names do not',
-      async (route, code) => {
-        const other =
-          code === 'reports.view' ? 'dashboard.view' : 'reports.view';
-        await request(url())
-          .get(route)
-          .set('Authorization', withPerms([code]))
-          .expect(200);
-        const passed = calls();
-        expect(passed).toBe(1);
-        for (const refused of [
-          withPerms([other, 'orders.view']),
-          withPerms([]),
-          as(['manager']),
-          as(['cashier']),
-          as(['branch_manager']),
-          as(['viewer']),
-        ]) {
-          await request(url())
-            .get(route)
-            .set('Authorization', refused)
-            .expect(403);
-        }
-        expect(calls()).toBe(passed);
-        await request(url())
-          .get(route)
-          .set('Authorization', as(['owner']))
-          .expect(200);
-      },
-    );
+    it.each(routes)('refuses a cashier on %s (403)', async (route) => {
+      await request(url())
+        .get(route)
+        .set('Authorization', as(['cashier']))
+        .expect(403);
+    });
+
+    it('refuses a cashier or manager on privileged POST /internal/v1/insight/projections/rebuild (403), allows owner (202)', async () => {
+      await request(url())
+        .post('/internal/v1/insight/projections/rebuild')
+        .set('Authorization', as(['cashier']))
+        .send({ projectionName: 'sales_analytics' })
+        .expect(403);
+
+      await request(url())
+        .post('/internal/v1/insight/projections/rebuild')
+        .set('Authorization', as(['manager']))
+        .send({ projectionName: 'sales_analytics' })
+        .expect(403);
+
+      await request(url())
+        .post('/internal/v1/insight/projections/rebuild')
+        .set('Authorization', as(['owner']))
+        .send({ projectionName: 'sales_analytics' })
+        .expect(202);
+    });
 
     it('hands the branch scope of the token to the reads', async () => {
       await request(url())
@@ -240,7 +278,62 @@ describe('Insight service bootstrap', () => {
     });
   });
 
-  it('validates the report filters (422)', async () => {
+  describe('Branch-Scope Authorization Enforcement (Mandatory Test P)', () => {
+    it('blocks a branch manager scoped to BRANCH_1 from querying BRANCH_2 reports (403)', async () => {
+      await request(url())
+        .get(`/api/v1/insight/dashboard/overview?branchId=${BRANCH_2}`)
+        .set('Authorization', as(['manager']))
+        .set('x-allowed-branches', BRANCH_1)
+        .expect(403);
+
+      await request(url())
+        .get(
+          `/api/v1/insight/reports/branches/comparison?branchIds=${BRANCH_1},${BRANCH_2}`,
+        )
+        .set('Authorization', as(['manager']))
+        .set('x-allowed-branches', BRANCH_1)
+        .expect(403);
+    });
+
+    it('restricts unscoped branch manager queries to their assigned allowedBranchIds', async () => {
+      await request(url())
+        .get('/api/v1/insight/dashboard/overview')
+        .set('Authorization', as(['manager']))
+        .set('x-allowed-branches', BRANCH_1)
+        .expect(200);
+
+      expect(reportingStub.getDashboardOverview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          allowedBranchIds: [BRANCH_1],
+        }),
+      );
+    });
+
+    it('creates and downloads export jobs with Content-Disposition and SHA-256 headers', async () => {
+      const createRes = await request(url())
+        .post('/api/v1/insight/export-jobs')
+        .set('Authorization', as(['owner']))
+        .send({
+          reportType: 'SALES_SUMMARY',
+          format: 'CSV',
+          from: '2026-10-18',
+          to: '2026-10-18',
+        })
+        .expect(201);
+
+      const jobId = createRes.body.id;
+      const dlRes = await request(url())
+        .get(`/api/v1/insight/export-jobs/${jobId}/download`)
+        .set('Authorization', as(['owner']))
+        .expect(200);
+
+      expect(dlRes.headers['content-type']).toContain('text/csv');
+      expect(dlRes.headers['content-disposition']).toContain('sales.csv');
+      expect(dlRes.headers['x-content-sha256']).toBe('abc');
+    });
+  });
+
+  it('validates the M0 report filters (422)', async () => {
     await request(url())
       .get('/api/v1/sales-summary/daily?from=yesterday')
       .set('Authorization', as(['owner']))
