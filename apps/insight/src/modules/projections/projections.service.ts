@@ -36,6 +36,8 @@ export interface OrderItemEventInput {
   unitPrice: number | string;
   discount?: number | string;
   unitCost?: number | string | null;
+  /** Whole-line cost (VND), e.g. the order cost allocated to the line; wins over unitCost */
+  cogsAmount?: number | string | null;
   costMissing?: boolean;
 }
 
@@ -218,7 +220,13 @@ export class ProjectionsService {
     manager: EntityManager,
     input: {
       tenantId?: string;
-      dimensionType: 'PRODUCT' | 'VARIANT' | 'CUSTOMER' | 'BRANCH';
+      dimensionType:
+        | 'PRODUCT'
+        | 'VARIANT'
+        | 'CUSTOMER'
+        | 'BRANCH'
+        | 'WAREHOUSE'
+        | 'RECEIVABLE';
       entityId: string;
       code: string;
       name: string;
@@ -268,6 +276,159 @@ export class ProjectionsService {
         version,
       ],
     );
+  }
+
+  /**
+   * The SKU code of a catalog variant id (inventory events carry the variant id as `skuId`, orders
+   * and the catalog carry the SKU code). Falls back to the id when the variant is not cached yet.
+   */
+  async resolveSkuCode(
+    manager: EntityManager,
+    tenantId: string,
+    skuId: string,
+  ): Promise<string> {
+    const rows = await manager.query(
+      `SELECT "entity_id" FROM ${qualifiedTable(manager.connection, 'insight_dimension_caches')}
+       WHERE "tenant_id" = $1 AND "dimension_type" = 'VARIANT' AND "metadata"->>'variantId' = $2
+       LIMIT 1`,
+      [tenantId, skuId],
+    );
+    return (rows[0]?.entity_id as string | undefined) ?? skuId;
+  }
+
+  /** The branch of a warehouse, learnt from events that carry both (`inventory.stock.below_min`) */
+  async resolveWarehouseBranch(
+    manager: EntityManager,
+    tenantId: string,
+    warehouseId: string,
+  ): Promise<string | null> {
+    const rows = await manager.query(
+      `SELECT "parent_id" FROM ${qualifiedTable(manager.connection, 'insight_dimension_caches')}
+       WHERE "tenant_id" = $1 AND "dimension_type" = 'WAREHOUSE' AND "entity_id" = $2
+       LIMIT 1`,
+      [tenantId, warehouseId],
+    );
+    return (rows[0]?.parent_id as string | undefined) ?? null;
+  }
+
+  /** Changes only the group of a cached customer (the customer.group.changed event carries nothing else) */
+  async setCustomerGroup(
+    manager: EntityManager,
+    tenantId: string,
+    customerId: string,
+    groupId: string,
+  ): Promise<void> {
+    const dim = qualifiedTable(manager.connection, 'insight_dimension_caches');
+    const updated = await manager.query(
+      `UPDATE ${dim} SET "customer_group_id" = $3, "updated_at" = now()
+       WHERE "tenant_id" = $1 AND "dimension_type" = 'CUSTOMER' AND "entity_id" = $2
+       RETURNING "id"`,
+      [tenantId, customerId, groupId],
+    );
+    if (updated.length === 0) {
+      await this.upsertDimensionCache(manager, {
+        tenantId,
+        dimensionType: 'CUSTOMER',
+        entityId: customerId,
+        code: customerId,
+        name: customerId,
+        customerGroupId: groupId,
+      });
+    }
+  }
+
+  /**
+   * `finance.receivable.payment_applied` carries the receivable's cumulative paid amount, not the
+   * payment: the amount collected by this event is the growth since the last one seen.
+   */
+  async receivablePaidDelta(
+    manager: EntityManager,
+    tenantId: string,
+    receivableId: string,
+    paidAmount: number,
+  ): Promise<number> {
+    const dim = qualifiedTable(manager.connection, 'insight_dimension_caches');
+    const rows = await manager.query(
+      `SELECT "metadata"->>'paidAmount' AS paid FROM ${dim}
+       WHERE "tenant_id" = $1 AND "dimension_type" = 'RECEIVABLE' AND "entity_id" = $2
+       FOR UPDATE`,
+      [tenantId, receivableId],
+    );
+    const previous = rows[0] ? Number(rows[0].paid ?? 0) : 0;
+    await this.upsertDimensionCache(manager, {
+      tenantId,
+      dimensionType: 'RECEIVABLE',
+      entityId: receivableId,
+      code: receivableId,
+      name: receivableId,
+      metadata: { paidAmount: Math.max(previous, paidAmount) },
+      aggregateVersion: 1,
+    });
+    return Math.max(0, paidAmount - previous);
+  }
+
+  /** Stock held (positive) or let go (negative) by a reservation, which no stock.changed reports */
+  async adjustReserved(
+    manager: EntityManager,
+    tenantId: string,
+    warehouseId: string,
+    skuId: string,
+    qtyDelta: string,
+  ): Promise<void> {
+    await manager.query(
+      `UPDATE ${qualifiedTable(manager.connection, 'inventory_stock_projections')}
+       SET "reserved_qty" = GREATEST(0, "reserved_qty" + $4::numeric),
+           "available_qty" = GREATEST(0, "on_hand_qty" - GREATEST(0, "reserved_qty" + $4::numeric)),
+           "updated_at" = now()
+       WHERE "tenant_id" = $1 AND "warehouse_id" = $2 AND ("variant_id" = $3 OR "sku_code" = $3)`,
+      [tenantId, warehouseId, skuId, qtyDelta],
+    );
+  }
+
+  /**
+   * A transfer receipt clears the in-transit stock the dispatch left at the source warehouse
+   * (dispatch and receipt are separate events: the receipt names no source).
+   */
+  async releaseDispatchedInTransit(
+    manager: EntityManager,
+    tenantId: string,
+    input: {
+      transferId: string;
+      skuCode: string;
+      receivingWarehouseId: string;
+      qty: string;
+    },
+  ): Promise<void> {
+    const stock = qualifiedTable(
+      manager.connection,
+      'inventory_stock_projections',
+    );
+    const movements = qualifiedTable(
+      manager.connection,
+      'inventory_movement_projections',
+    );
+    const sources = await manager.query(
+      `SELECT DISTINCT "warehouse_id" FROM ${movements}
+       WHERE "tenant_id" = $1 AND "reference_id" = $2 AND "sku_code" = $3
+         AND "movement_type" = 'TRANSFER_DISPATCH' AND "warehouse_id" <> $4`,
+      [tenantId, input.transferId, input.skuCode, input.receivingWarehouseId],
+    );
+    for (const { warehouse_id: warehouseId } of sources) {
+      await manager.query(
+        `UPDATE ${stock}
+         SET "in_transit_qty" = GREATEST(0, "in_transit_qty" - $4::numeric),
+             "in_transit_valuation" = GREATEST(0, ROUND(GREATEST(0, "in_transit_qty" - $4::numeric) * "avg_unit_cost")),
+             "updated_at" = now()
+         WHERE "tenant_id" = $1 AND "warehouse_id" = $2 AND "sku_code" = $3`,
+        [tenantId, warehouseId, input.skuCode, input.qty],
+      );
+      await this.refreshWarehouseValuationSnapshot(
+        manager,
+        tenantId,
+        warehouseId,
+        toReportingDateBucket(new Date()),
+      );
+    }
   }
 
   /**
@@ -515,6 +676,10 @@ export class ProjectionsService {
         } else if (item.costMissing || payload.costMissing) {
           costStatus = 'PENDING';
           unitCostSnapshotStr = '0';
+        } else if (item.cogsAmount !== undefined && item.cogsAmount !== null) {
+          // the line cost is known as a whole: the unit cost snapshot is derived from it
+          unitCostSnapshotStr = divDecimals(wm(item.cogsAmount), qtyStr, 0);
+          costStatus = 'VERIFIED';
         } else if (item.unitCost !== undefined && item.unitCost !== null) {
           unitCostSnapshotStr = formatScaledDecimal(
             parseScaledDecimal(item.unitCost),
@@ -525,10 +690,10 @@ export class ProjectionsService {
           // Look up current weighted-average cost in inventory_stock_projections
           const stockRows = await manager.query(
             `SELECT "avg_unit_cost" FROM ${stockTable}
-             WHERE "tenant_id" = $1 AND "sku_code" = $2
+             WHERE "tenant_id" = $1 AND ("sku_code" = $2 OR "variant_id" = $4)
              ORDER BY ("branch_id" = $3) DESC NULLS LAST, "updated_at" DESC
              LIMIT 1`,
-            [tenantId, skuCode, branchId],
+            [tenantId, skuCode, branchId, variantId],
           );
           if (stockRows[0] && stockRows[0].avg_unit_cost !== null) {
             unitCostSnapshotStr = formatScaledDecimal(
@@ -544,7 +709,11 @@ export class ProjectionsService {
 
         const cogsAmountStr =
           costStatus === 'VERIFIED'
-            ? mulDecimals(qtyStr, unitCostSnapshotStr, 0)
+            ? item.cogsAmount !== undefined &&
+              item.cogsAmount !== null &&
+              !(prevLine && prevLine.cost_status === 'VERIFIED')
+              ? wm(item.cogsAmount)
+              : mulDecimals(qtyStr, unitCostSnapshotStr, 0)
             : '0';
         const lineNetRevStr = subDecimals(lineSubtotalStr, lineDiscountStr, 0);
         const grossProfitStr = subDecimals(lineNetRevStr, cogsAmountStr, 0);
@@ -1641,6 +1810,20 @@ export class ProjectionsService {
       );
     }
 
+    if (movementType === 'TRANSFER_RECEIPT' && p.referenceId) {
+      await this.releaseDispatchedInTransit(manager, tenantId, {
+        transferId: p.referenceId,
+        skuCode,
+        receivingWarehouseId: warehouseId,
+        qty: formatScaledDecimal(
+          parseScaledDecimal(qtyDeltaStr) < 0n
+            ? -parseScaledDecimal(qtyDeltaStr)
+            : parseScaledDecimal(qtyDeltaStr),
+          4,
+        ),
+      });
+    }
+
     const availableStr = computeAvailableQty(newOnHandStr, newReservedStr, 4);
     const valuationStr = computeInventoryValuation(
       newOnHandStr,
@@ -1800,8 +1983,8 @@ export class ProjectionsService {
         parseScaledDecimal(p.paymentDelta ?? p.paidAmount ?? p.amount ?? 0),
         0,
       );
+      // the cash of the payment arrives as a cashbook entry: only the debt collected is counted here
       debtCollectedDelta = amt;
-      cashInflowDelta = amt;
     } else if (kind === 'CASHBOOK') {
       const amt = formatScaledDecimal(parseScaledDecimal(p.amount ?? 0), 0);
       if (p.direction === 'EXPENSE') {
