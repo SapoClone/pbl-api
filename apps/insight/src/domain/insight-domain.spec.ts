@@ -76,8 +76,8 @@ describe('M7 Insight Pure Analytical Domain Engine', () => {
         unitsTotal: '2',
       });
       expect(created.orderCount).toBe(1);
-      expect(created.gmv).toBe('0.0000');
-      expect(created.grossRevenue).toBe('0.0000');
+      expect(created.gmv).toBe('0');
+      expect(created.grossRevenue).toBe('0');
 
       const confirmed = computeTargetOrderContribution({
         status: 'CONFIRMED',
@@ -90,8 +90,8 @@ describe('M7 Insight Pure Analytical Domain Engine', () => {
         confirmed,
         created,
       );
-      expect(deltaToConfirmed.gmv).toBe('500000.0000');
-      expect(deltaToConfirmed.grossRevenue).toBe('0.0000');
+      expect(deltaToConfirmed.gmv).toBe('500000');
+      expect(deltaToConfirmed.grossRevenue).toBe('0');
       expect(deltaToConfirmed.orderCount).toBe(0);
 
       const completed = computeTargetOrderContribution({
@@ -105,11 +105,11 @@ describe('M7 Insight Pure Analytical Domain Engine', () => {
         completed,
         confirmed,
       );
-      expect(deltaToCompleted.gmv).toBe('0.0000');
-      expect(deltaToCompleted.grossRevenue).toBe('500000.0000');
-      expect(deltaToCompleted.discount).toBe('50000.0000');
-      expect(deltaToCompleted.netRevenue).toBe('450000.0000');
-      expect(deltaToCompleted.cogs).toBe('200000.0000');
+      expect(deltaToCompleted.gmv).toBe('0');
+      expect(deltaToCompleted.grossRevenue).toBe('500000');
+      expect(deltaToCompleted.discount).toBe('50000');
+      expect(deltaToCompleted.netRevenue).toBe('450000');
+      expect(deltaToCompleted.cogs).toBe('200000');
       expect(deltaToCompleted.completedCount).toBe(1);
 
       // Duplicate event produces zero delta
@@ -131,10 +131,10 @@ describe('M7 Insight Pure Analytical Domain Engine', () => {
         cancelled,
         completed,
       );
-      expect(deltaToCancelled.gmv).toBe('-500000.0000');
-      expect(deltaToCancelled.grossRevenue).toBe('-500000.0000');
-      expect(deltaToCancelled.netRevenue).toBe('-450000.0000');
-      expect(deltaToCancelled.cogs).toBe('-200000.0000');
+      expect(deltaToCancelled.gmv).toBe('-500000');
+      expect(deltaToCancelled.grossRevenue).toBe('-500000');
+      expect(deltaToCancelled.netRevenue).toBe('-450000');
+      expect(deltaToCancelled.cogs).toBe('-200000');
       expect(deltaToCancelled.completedCount).toBe(-1);
       expect(deltaToCancelled.cancelledCount).toBe(1);
     });
@@ -152,25 +152,25 @@ describe('M7 Insight Pure Analytical Domain Engine', () => {
         grossMarginPct: '55.88',
       });
 
-      expect(computeAov('850000', 4)).toBe('212500.00');
-      expect(computeAov('850000', 0)).toBe('0.00');
+      expect(computeAov('850000', 4)).toBe(212500);
+      expect(computeAov('850000', 0)).toBe(0);
 
       // Growth when previous period is 0 returns growthPct: null without division-by-zero
       const zeroPrevGrowth = computeGrowthMetric('500000', '0');
       expect(zeroPrevGrowth).toEqual({
-        current: '500000.00',
-        previous: '0.00',
-        delta: '500000.00',
+        current: 500000,
+        previous: 0,
+        delta: 500000,
         growthPct: null,
         direction: 'UP',
       });
 
       const normalGrowth = computeGrowthMetric('600000', '400000');
       expect(normalGrowth).toEqual({
-        current: '600000.00',
-        previous: '400000.00',
-        delta: '200000.00',
-        growthPct: '50.00',
+        current: 600000,
+        previous: 400000,
+        delta: 200000,
+        growthPct: 50,
         direction: 'UP',
       });
     });
@@ -180,7 +180,8 @@ describe('M7 Insight Pure Analytical Domain Engine', () => {
     it('computes available stock, valuation, and weighted-average cost accurately', () => {
       expect(computeAvailableQty('10', '3', 2)).toBe('7.00');
       expect(computeAvailableQty('2', '5', 2)).toBe('0.00');
-      expect(computeInventoryValuation('10', '45000', 2)).toBe('450000.00');
+      expect(computeInventoryValuation('10', '45000')).toBe('450000');
+      expect(computeInventoryValuation('1.5', '10001')).toBe('15002');
       expect(computeWeightedAverageCost('10', '40000', '10', '60000', 2)).toBe(
         '50000.00',
       );

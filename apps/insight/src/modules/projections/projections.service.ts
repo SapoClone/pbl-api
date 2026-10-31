@@ -92,6 +92,14 @@ export interface NormalizedReturnEventInput {
   lines?: ReturnLineEventInput[];
 }
 
+/** A scaled (4 decimals) money amount rounded half up to whole VND, still scaled */
+const roundToWholeMoney = (scaled: bigint): bigint =>
+  parseScaledDecimal(formatScaledDecimal(scaled, 0));
+
+/** A money string (any scale) as whole VND, the form every bigint money column takes */
+const wm = (value: string | number | null | undefined): string =>
+  formatScaledDecimal(parseScaledDecimal(value), 0);
+
 const ORDER_STATUS_RANK: Record<string, number> = {
   DRAFT: 1,
   CREATED: 1,
@@ -480,18 +488,19 @@ export class ProjectionsService {
         );
         const unitPriceStr = formatScaledDecimal(
           parseScaledDecimal(item.unitPrice),
-          4,
+          0,
         );
-        const lineSubtotalStr = mulDecimals(qtyStr, unitPriceStr, 4);
+        // money is whole VND: the quantity may be fractional, the line amount is rounded half up
+        const lineSubtotalStr = mulDecimals(qtyStr, unitPriceStr, 0);
         const lineDiscountStr = formatScaledDecimal(
           parseScaledDecimal(item.discount ?? 0),
-          4,
+          0,
         );
 
         // Determine transaction-time unit cost snapshot:
         // If prevLine already captured a VERIFIED snapshot, preserve it!
         let costStatus: 'VERIFIED' | 'PENDING' = 'VERIFIED';
-        let unitCostSnapshotStr = '0.0000';
+        let unitCostSnapshotStr = '0';
 
         if (
           prevLine &&
@@ -500,16 +509,16 @@ export class ProjectionsService {
         ) {
           unitCostSnapshotStr = formatScaledDecimal(
             parseScaledDecimal(prevLine.unit_cost_snapshot as string),
-            4,
+            0,
           );
           costStatus = 'VERIFIED';
         } else if (item.costMissing || payload.costMissing) {
           costStatus = 'PENDING';
-          unitCostSnapshotStr = '0.0000';
+          unitCostSnapshotStr = '0';
         } else if (item.unitCost !== undefined && item.unitCost !== null) {
           unitCostSnapshotStr = formatScaledDecimal(
             parseScaledDecimal(item.unitCost),
-            4,
+            0,
           );
           costStatus = 'VERIFIED';
         } else {
@@ -524,21 +533,21 @@ export class ProjectionsService {
           if (stockRows[0] && stockRows[0].avg_unit_cost !== null) {
             unitCostSnapshotStr = formatScaledDecimal(
               parseScaledDecimal(stockRows[0].avg_unit_cost),
-              4,
+              0,
             );
             costStatus = 'VERIFIED';
           } else {
-            unitCostSnapshotStr = '0.0000';
+            unitCostSnapshotStr = '0';
             costStatus = 'VERIFIED';
           }
         }
 
         const cogsAmountStr =
           costStatus === 'VERIFIED'
-            ? mulDecimals(qtyStr, unitCostSnapshotStr, 4)
-            : '0.0000';
-        const lineNetRevStr = subDecimals(lineSubtotalStr, lineDiscountStr, 4);
-        const grossProfitStr = subDecimals(lineNetRevStr, cogsAmountStr, 4);
+            ? mulDecimals(qtyStr, unitCostSnapshotStr, 0)
+            : '0';
+        const lineNetRevStr = subDecimals(lineSubtotalStr, lineDiscountStr, 0);
+        const grossProfitStr = subDecimals(lineNetRevStr, cogsAmountStr, 0);
 
         resolvedLines.push({
           lineKey,
@@ -614,26 +623,26 @@ export class ProjectionsService {
 
     const subtotalStr =
       payload.subtotal !== undefined
-        ? formatScaledDecimal(parseScaledDecimal(payload.subtotal), 4)
+        ? formatScaledDecimal(parseScaledDecimal(payload.subtotal), 0)
         : sumLineSubtotals > 0n
-          ? formatScaledDecimal(sumLineSubtotals, 4)
+          ? formatScaledDecimal(sumLineSubtotals, 0)
           : existing
             ? String(existing.subtotal)
             : formatScaledDecimal(
                 parseScaledDecimal(
                   payload.grandTotal ?? payload.totalAmount ?? 0,
                 ),
-                4,
+                0,
               );
 
     const discountTotalStr =
       payload.discountTotal !== undefined
-        ? formatScaledDecimal(parseScaledDecimal(payload.discountTotal), 4)
+        ? formatScaledDecimal(parseScaledDecimal(payload.discountTotal), 0)
         : sumLineDiscounts > 0n
-          ? formatScaledDecimal(sumLineDiscounts, 4)
+          ? formatScaledDecimal(sumLineDiscounts, 0)
           : existing
             ? String(existing.discount_total)
-            : '0.0000';
+            : '0';
 
     // Allocate order-level discount across lines if line discounts were 0 but order discountTotal > 0
     if (
@@ -646,47 +655,50 @@ export class ProjectionsService {
       for (let i = 0; i < resolvedLines.length; i++) {
         const line = resolvedLines[i];
         const lineSub = parseScaledDecimal(line.lineSubtotal);
+        // whole VND per line: the last line takes the remainder
         const alloc =
           i === resolvedLines.length - 1
             ? remainingDiscount
-            : (parseScaledDecimal(discountTotalStr) * lineSub) /
-              sumLineSubtotals;
+            : roundToWholeMoney(
+                (parseScaledDecimal(discountTotalStr) * lineSub) /
+                  sumLineSubtotals,
+              );
         remainingDiscount -= alloc;
-        line.lineDiscount = formatScaledDecimal(alloc, 4);
-        line.lineNetRevenue = formatScaledDecimal(lineSub - alloc, 4);
+        line.lineDiscount = formatScaledDecimal(alloc, 0);
+        line.lineNetRevenue = formatScaledDecimal(lineSub - alloc, 0);
         line.grossProfitAmount = formatScaledDecimal(
           lineSub - alloc - parseScaledDecimal(line.cogsAmount),
-          4,
+          0,
         );
       }
     }
 
     const taxTotalStr =
       payload.taxTotal !== undefined
-        ? formatScaledDecimal(parseScaledDecimal(payload.taxTotal), 4)
+        ? formatScaledDecimal(parseScaledDecimal(payload.taxTotal), 0)
         : existing
           ? String(existing.tax_total)
-          : '0.0000';
+          : '0';
 
     const grandTotalStr =
       payload.grandTotal !== undefined || payload.totalAmount !== undefined
         ? formatScaledDecimal(
             parseScaledDecimal(payload.grandTotal ?? payload.totalAmount ?? 0),
-            4,
+            0,
           )
         : formatScaledDecimal(
             parseScaledDecimal(subtotalStr) -
               parseScaledDecimal(discountTotalStr) +
               parseScaledDecimal(taxTotalStr),
-            4,
+            0,
           );
 
     const cogsTotalStr =
       resolvedLines.length > 0
-        ? formatScaledDecimal(sumLineCogs, 4)
+        ? formatScaledDecimal(sumLineCogs, 0)
         : existing
           ? String(existing.cogs_total)
-          : '0.0000';
+          : '0';
 
     const unitsTotalStr =
       resolvedLines.length > 0
@@ -833,29 +845,28 @@ export class ProjectionsService {
     let pendingLinesDeltaTotal = 0;
     for (const line of resolvedLines) {
       const lineTargetGross =
-        rawStatus === 'COMPLETED' ? line.lineSubtotal : '0.0000';
+        rawStatus === 'COMPLETED' ? line.lineSubtotal : '0';
       const lineTargetDiscount =
-        rawStatus === 'COMPLETED' ? line.lineDiscount : '0.0000';
+        rawStatus === 'COMPLETED' ? line.lineDiscount : '0';
       const lineTargetNet =
-        rawStatus === 'COMPLETED' ? line.lineNetRevenue : '0.0000';
-      const lineTargetCogs =
-        rawStatus === 'COMPLETED' ? line.cogsAmount : '0.0000';
+        rawStatus === 'COMPLETED' ? line.lineNetRevenue : '0';
+      const lineTargetCogs = rawStatus === 'COMPLETED' ? line.cogsAmount : '0';
       const lineTargetUnits =
         rawStatus === 'COMPLETED' ? line.quantity : '0.0000';
 
       const lineDeltaGross = subDecimals(
         lineTargetGross,
         line.prevGrossRevenue,
-        4,
+        0,
       );
       const lineDeltaDiscount = subDecimals(
         lineTargetDiscount,
         line.prevDiscount,
-        4,
+        0,
       );
-      const lineDeltaNet = subDecimals(lineTargetNet, line.prevNetRevenue, 4);
-      const lineDeltaCogs = subDecimals(lineTargetCogs, line.prevCogs, 4);
-      const lineDeltaProfit = subDecimals(lineDeltaNet, lineDeltaCogs, 4);
+      const lineDeltaNet = subDecimals(lineTargetNet, line.prevNetRevenue, 0);
+      const lineDeltaCogs = subDecimals(lineTargetCogs, line.prevCogs, 0);
+      const lineDeltaProfit = subDecimals(lineDeltaNet, lineDeltaCogs, 0);
       const lineDeltaUnits = subDecimals(
         lineTargetUnits,
         line.prevUnitsSold,
@@ -990,7 +1001,7 @@ export class ProjectionsService {
     }
 
     if (!isZeroContributionDelta(delta) || pendingLinesDeltaTotal !== 0) {
-      const grossProfitDelta = subDecimals(delta.netRevenue, delta.cogs, 4);
+      const grossProfitDelta = subDecimals(delta.netRevenue, delta.cogs, 0);
       for (const genId of targetGenerations) {
         await this.applyOrderDeltaToSummaries(manager, {
           tenantId,
@@ -1028,7 +1039,7 @@ export class ProjectionsService {
     if (unitCostScaled <= 0n) {
       return { resolvedLines: 0 };
     }
-    const unitCostStr = formatScaledDecimal(unitCostScaled, 4);
+    const unitCostStr = formatScaledDecimal(unitCostScaled, 0);
 
     const lineFactsTable = qualifiedTable(
       manager.connection,
@@ -1063,18 +1074,18 @@ export class ProjectionsService {
 
     for (const line of pendingLines) {
       const qtyStr = String(line.quantity);
-      const newCogsStr = mulDecimals(qtyStr, unitCostStr, 4);
+      const newCogsStr = mulDecimals(qtyStr, unitCostStr, 0);
       const newGrossProfitStr = subDecimals(
         String(line.line_net_revenue),
         newCogsStr,
-        4,
+        0,
       );
       const isCompletedContribution =
         parseScaledDecimal(String(line.contributed_units_sold)) > 0n;
-      const cogsDeltaStr = isCompletedContribution ? newCogsStr : '0.0000';
+      const cogsDeltaStr = isCompletedContribution ? newCogsStr : '0';
       const profitDeltaStr = isCompletedContribution
-        ? subDecimals('0', newCogsStr, 4)
-        : '0.0000';
+        ? subDecimals('0', newCogsStr, 0)
+        : '0';
 
       await manager.query(
         `UPDATE ${lineFactsTable}
@@ -1234,7 +1245,7 @@ export class ProjectionsService {
     );
     const refundAmountStr = formatScaledDecimal(
       parseScaledDecimal(payload.totalRefundAmount),
-      4,
+      0,
     );
     const restocked = payload.restocked !== false;
 
@@ -1258,19 +1269,19 @@ export class ProjectionsService {
         );
         const unitCostStr =
           rLine.unitCost !== undefined
-            ? formatScaledDecimal(parseScaledDecimal(rLine.unitCost), 4)
+            ? formatScaledDecimal(parseScaledDecimal(rLine.unitCost), 0)
             : origLine
               ? String(origLine.unit_cost_snapshot)
-              : '0.0000';
+              : '0';
         const lineRestocked =
           rLine.restocked !== undefined ? rLine.restocked : restocked;
         const lineReturnedCogsStr = lineRestocked
-          ? mulDecimals(qtyStr, unitCostStr, 4)
-          : '0.0000';
+          ? mulDecimals(qtyStr, unitCostStr, 0)
+          : '0';
 
         const lineRefundStr =
           rLine.refundAmount !== undefined
-            ? formatScaledDecimal(parseScaledDecimal(rLine.refundAmount), 4)
+            ? formatScaledDecimal(parseScaledDecimal(rLine.refundAmount), 0)
             : origLine
               ? mulDecimals(
                   qtyStr,
@@ -1279,7 +1290,7 @@ export class ProjectionsService {
                     String(origLine.quantity),
                     4,
                   ),
-                  4,
+                  0,
                 )
               : refundAmountStr;
 
@@ -1289,7 +1300,7 @@ export class ProjectionsService {
         const lineProfitImpact = subDecimals(
           lineReturnedCogsStr,
           lineRefundStr,
-          4,
+          0,
         );
 
         for (const genId of targetGenerations) {
@@ -1306,11 +1317,11 @@ export class ProjectionsService {
             brandId: (origLine?.brand_id as string) ?? null,
             unitsSoldDelta: '0.0000',
             unitsReturnedDelta: qtyStr,
-            grossRevenueDelta: '0.0000',
-            discountDelta: '0.0000',
+            grossRevenueDelta: '0',
+            discountDelta: '0',
             returnsAmountDelta: lineRefundStr,
-            netRevenueDelta: subDecimals('0', lineRefundStr, 4),
-            cogsDelta: '0.0000',
+            netRevenueDelta: subDecimals('0', lineRefundStr, 0),
+            cogsDelta: '0',
             returnedCogsDelta: lineReturnedCogsStr,
             grossProfitDelta: lineProfitImpact,
             orderCountDelta: 0,
@@ -1324,7 +1335,7 @@ export class ProjectionsService {
         subDecimals(
           String(orderFact.subtotal),
           String(orderFact.discount_total),
-          4,
+          0,
         ),
       );
       const refundScaled = parseScaledDecimal(refundAmountStr);
@@ -1348,13 +1359,14 @@ export class ProjectionsService {
             ratioDen
           : 0n;
 
-        const lineRefundStr = formatScaledDecimal(lineRefundScaled, 4);
+        // whole VND per line; the return total adds the rounded lines
+        const lineRefundStr = formatScaledDecimal(lineRefundScaled, 0);
         const lineUnitsStr = formatScaledDecimal(lineUnitsScaled, 4);
-        const lineCogsStr = formatScaledDecimal(lineCogsScaled, 4);
-        const lineProfitImpact = subDecimals(lineCogsStr, lineRefundStr, 4);
+        const lineCogsStr = formatScaledDecimal(lineCogsScaled, 0);
+        const lineProfitImpact = subDecimals(lineCogsStr, lineRefundStr, 0);
 
         totalReturnedUnits += lineUnitsScaled;
-        totalReturnedCogs += lineCogsScaled;
+        totalReturnedCogs += parseScaledDecimal(lineCogsStr);
 
         for (const genId of targetGenerations) {
           await this.applyProductSummaryDelta(manager, {
@@ -1370,11 +1382,11 @@ export class ProjectionsService {
             brandId: (origLine.brand_id as string) ?? null,
             unitsSoldDelta: '0.0000',
             unitsReturnedDelta: lineUnitsStr,
-            grossRevenueDelta: '0.0000',
-            discountDelta: '0.0000',
+            grossRevenueDelta: '0',
+            discountDelta: '0',
             returnsAmountDelta: lineRefundStr,
-            netRevenueDelta: subDecimals('0', lineRefundStr, 4),
-            cogsDelta: '0.0000',
+            netRevenueDelta: subDecimals('0', lineRefundStr, 0),
+            cogsDelta: '0',
             returnedCogsDelta: lineCogsStr,
             grossProfitDelta: lineProfitImpact,
             orderCountDelta: 0,
@@ -1387,7 +1399,7 @@ export class ProjectionsService {
     }
 
     const returnedUnitsStr = formatScaledDecimal(totalReturnedUnits, 4);
-    const returnedCogsStr = formatScaledDecimal(totalReturnedCogs, 4);
+    const returnedCogsStr = formatScaledDecimal(totalReturnedCogs, 0);
 
     await manager.query(
       `INSERT INTO ${returnFactsTable} (
@@ -1423,11 +1435,11 @@ export class ProjectionsService {
       ],
     );
 
-    const netRevenueDeltaStr = subDecimals('0', refundAmountStr, 4);
+    const netRevenueDeltaStr = subDecimals('0', refundAmountStr, 0);
     const grossProfitDeltaStr = subDecimals(
       returnedCogsStr,
       refundAmountStr,
-      4,
+      0,
     );
 
     for (const genId of targetGenerations) {
@@ -1562,7 +1574,7 @@ export class ProjectionsService {
     if (p.avgCostAfter !== undefined && p.avgCostAfter !== null) {
       newAvgCostStr = formatScaledDecimal(
         parseScaledDecimal(p.avgCostAfter),
-        4,
+        0,
       );
     } else if (
       p.unitCost !== undefined &&
@@ -1575,19 +1587,19 @@ export class ProjectionsService {
         curAvgCost,
         qtyDeltaStr,
         p.unitCost,
-        4,
+        0,
       );
     } else if (
       parseScaledDecimal(curAvgCost) === 0n &&
       p.unitCost !== undefined &&
       p.unitCost !== null
     ) {
-      newAvgCostStr = formatScaledDecimal(parseScaledDecimal(p.unitCost), 4);
+      newAvgCostStr = formatScaledDecimal(parseScaledDecimal(p.unitCost), 0);
     }
 
     const unitCostForMovement =
       p.unitCost !== undefined && p.unitCost !== null
-        ? formatScaledDecimal(parseScaledDecimal(p.unitCost), 4)
+        ? formatScaledDecimal(parseScaledDecimal(p.unitCost), 0)
         : newAvgCostStr;
 
     // Handle multi-warehouse transfer in-transit tracking so stock is never double-counted
@@ -1633,12 +1645,12 @@ export class ProjectionsService {
     const valuationStr = computeInventoryValuation(
       newOnHandStr,
       newAvgCostStr,
-      4,
+      0,
     );
     const inTransitValuationStr = computeInventoryValuation(
       newInTransitStr,
       newAvgCostStr,
-      4,
+      0,
     );
     const isLowStock =
       parseScaledDecimal(thresholdStr) > 0n &&
@@ -1694,7 +1706,7 @@ export class ProjectionsService {
       ],
     );
 
-    const valueDeltaStr = mulDecimals(qtyDeltaStr, unitCostForMovement, 4);
+    const valueDeltaStr = mulDecimals(qtyDeltaStr, unitCostForMovement, 0);
     await manager.query(
       `INSERT INTO ${movementTable} (
         "id", "tenant_id", "event_id", "date_bucket", "warehouse_id", "branch_id",
@@ -1779,19 +1791,19 @@ export class ProjectionsService {
       'daily_sales_summaries',
     );
 
-    let cashInflowDelta = '0.0000';
-    let cashOutflowDelta = '0.0000';
-    let debtCollectedDelta = '0.0000';
+    let cashInflowDelta = '0';
+    let cashOutflowDelta = '0';
+    let debtCollectedDelta = '0';
 
     if (kind === 'RECEIVABLE_PAYMENT') {
       const amt = formatScaledDecimal(
         parseScaledDecimal(p.paymentDelta ?? p.paidAmount ?? p.amount ?? 0),
-        4,
+        0,
       );
       debtCollectedDelta = amt;
       cashInflowDelta = amt;
     } else if (kind === 'CASHBOOK') {
-      const amt = formatScaledDecimal(parseScaledDecimal(p.amount ?? 0), 4);
+      const amt = formatScaledDecimal(parseScaledDecimal(p.amount ?? 0), 0);
       if (p.direction === 'EXPENSE') {
         cashOutflowDelta = amt;
       } else {
@@ -1846,7 +1858,7 @@ export class ProjectionsService {
     const inTransitValDelta = mulDecimals(
       input.inTransitQtyDelta,
       input.unitCost,
-      4,
+      0,
     );
 
     await manager.query(
@@ -1921,7 +1933,7 @@ export class ProjectionsService {
     const agg = aggRows[0];
     const onHandVal = String(agg?.on_hand_valuation ?? '0');
     const inTransitVal = String(agg?.in_transit_valuation ?? '0');
-    const totalVal = addDecimals(onHandVal, inTransitVal, 4);
+    const totalVal = addDecimals(onHandVal, inTransitVal, 0);
 
     await manager.query(
       `INSERT INTO ${snapTable} (
@@ -1990,7 +2002,15 @@ export class ProjectionsService {
       'customer_group_sales_summaries',
     );
 
-    const { delta } = input;
+    const delta = {
+      ...input.delta,
+      gmv: wm(input.delta.gmv),
+      grossRevenue: wm(input.delta.grossRevenue),
+      discount: wm(input.delta.discount),
+      netRevenue: wm(input.delta.netRevenue),
+      cogs: wm(input.delta.cogs),
+    };
+    const grossProfitDelta = wm(input.grossProfitDelta);
 
     // 1. Daily Sales Summary
     await manager.query(
@@ -2033,7 +2053,7 @@ export class ProjectionsService {
         delta.discount,
         delta.netRevenue,
         delta.cogs,
-        input.grossProfitDelta,
+        grossProfitDelta,
         delta.orderCount,
         delta.completedCount,
         delta.cancelledCount,
@@ -2075,7 +2095,7 @@ export class ProjectionsService {
         delta.grossRevenue,
         delta.discount,
         delta.netRevenue,
-        input.grossProfitDelta,
+        grossProfitDelta,
         delta.orderCount,
         delta.completedCount,
         delta.cancelledCount,
@@ -2086,7 +2106,7 @@ export class ProjectionsService {
     // 3. Employee Sales Summary (when completed revenue/profit/count changes)
     if (
       parseScaledDecimal(delta.grossRevenue) !== 0n ||
-      parseScaledDecimal(input.grossProfitDelta) !== 0n ||
+      parseScaledDecimal(grossProfitDelta) !== 0n ||
       delta.completedCount !== 0
     ) {
       await manager.query(
@@ -2117,7 +2137,7 @@ export class ProjectionsService {
           delta.grossRevenue,
           delta.discount,
           delta.netRevenue,
-          input.grossProfitDelta,
+          grossProfitDelta,
           delta.completedCount,
           delta.unitsSold,
         ],
@@ -2152,7 +2172,7 @@ export class ProjectionsService {
           delta.grossRevenue,
           delta.discount,
           delta.netRevenue,
-          input.grossProfitDelta,
+          grossProfitDelta,
           delta.completedCount,
           delta.unitsSold,
         ],
@@ -2194,7 +2214,11 @@ export class ProjectionsService {
       'customer_group_sales_summaries',
     );
 
-    const netCogsDelta = subDecimals('0', input.returnedCogs, 4);
+    const refundAmount = wm(input.refundAmount);
+    const netRevenueDelta = wm(input.netRevenueDelta);
+    const returnedCogs = wm(input.returnedCogs);
+    const grossProfitDelta = wm(input.grossProfitDelta);
+    const netCogsDelta = subDecimals('0', returnedCogs, 0);
 
     await manager.query(
       `INSERT INTO ${dailyTable} (
@@ -2226,11 +2250,11 @@ export class ProjectionsService {
         input.generationId,
         input.dateBucket,
         input.branchId,
-        input.refundAmount,
-        input.netRevenueDelta,
-        input.returnedCogs,
+        refundAmount,
+        netRevenueDelta,
+        returnedCogs,
         netCogsDelta,
-        input.grossProfitDelta,
+        grossProfitDelta,
         input.returnedUnits,
       ],
     );
@@ -2257,9 +2281,9 @@ export class ProjectionsService {
         input.dateBucket,
         input.branchId,
         input.channelType,
-        input.refundAmount,
-        input.netRevenueDelta,
-        input.grossProfitDelta,
+        refundAmount,
+        netRevenueDelta,
+        grossProfitDelta,
       ],
     );
 
@@ -2286,9 +2310,9 @@ export class ProjectionsService {
         input.dateBucket,
         input.branchId,
         input.employeeId,
-        input.refundAmount,
-        input.netRevenueDelta,
-        input.grossProfitDelta,
+        refundAmount,
+        netRevenueDelta,
+        grossProfitDelta,
       ],
     );
 
@@ -2314,9 +2338,9 @@ export class ProjectionsService {
         input.dateBucket,
         input.branchId,
         input.customerGroupId,
-        input.refundAmount,
-        input.netRevenueDelta,
-        input.grossProfitDelta,
+        refundAmount,
+        netRevenueDelta,
+        grossProfitDelta,
       ],
     );
   }
@@ -2351,11 +2375,14 @@ export class ProjectionsService {
       manager.connection,
       'product_sales_summaries',
     );
-    const netCogsDelta = subDecimals(
-      input.cogsDelta,
-      input.returnedCogsDelta,
-      4,
-    );
+    const grossRevenueDelta = wm(input.grossRevenueDelta);
+    const discountDelta = wm(input.discountDelta);
+    const returnsAmountDelta = wm(input.returnsAmountDelta);
+    const netRevenueDelta = wm(input.netRevenueDelta);
+    const cogsDelta = wm(input.cogsDelta);
+    const returnedCogsDelta = wm(input.returnedCogsDelta);
+    const grossProfitDelta = wm(input.grossProfitDelta);
+    const netCogsDelta = subDecimals(cogsDelta, returnedCogsDelta, 0);
 
     await manager.query(
       `INSERT INTO ${productTable} (
@@ -2402,14 +2429,14 @@ export class ProjectionsService {
         input.brandId,
         input.unitsSoldDelta,
         input.unitsReturnedDelta,
-        input.grossRevenueDelta,
-        input.discountDelta,
-        input.returnsAmountDelta,
-        input.netRevenueDelta,
-        input.cogsDelta,
-        input.returnedCogsDelta,
+        grossRevenueDelta,
+        discountDelta,
+        returnsAmountDelta,
+        netRevenueDelta,
+        cogsDelta,
+        returnedCogsDelta,
         netCogsDelta,
-        input.grossProfitDelta,
+        grossProfitDelta,
         input.orderCountDelta,
         input.pendingCostLinesDelta,
       ],

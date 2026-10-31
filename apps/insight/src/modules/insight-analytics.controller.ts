@@ -8,16 +8,12 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
-  Req,
   Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import type { Request, Response } from 'express';
-import {
-  InsightAuthenticatedUser,
-  resolveAuthorizedBranchScope,
-} from './analytics-auth.helper';
+import { AllowedBranches, CurrentUser, RequirePermission } from '@pbl/auth';
+import type { Response } from 'express';
+import { resolveScope } from '../common/branch-scope';
 import {
   CreateExportJobInput,
   InsightExportService,
@@ -36,15 +32,15 @@ export class InsightAnalyticsController {
   // ---- 1. Dashboard Endpoints ----
 
   @Get('dashboard/overview')
-  @RequireRoles('insight.dashboard.read')
+  @RequirePermission('dashboard.view')
   @ApiOperation({ summary: 'Get store analytical dashboard overview' })
   getDashboardOverview(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getDashboardOverview({
       from,
       to,
@@ -54,16 +50,16 @@ export class InsightAnalyticsController {
   }
 
   @Get('dashboard/revenue-trend')
-  @RequireRoles('insight.dashboard.read')
+  @RequirePermission('dashboard.view')
   @ApiOperation({ summary: 'Get dashboard revenue & profit trend series' })
   getRevenueTrend(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('granularity') granularity?: 'DAY' | 'WEEK' | 'MONTH',
     @Query('branchId') branchId?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getRevenueTrend({
       from,
       to,
@@ -74,12 +70,12 @@ export class InsightAnalyticsController {
   }
 
   @Get('dashboard/top-products')
-  @RequireRoles('insight.dashboard.read')
+  @RequirePermission('dashboard.view')
   @ApiOperation({
     summary: 'Get top selling products by revenue, units, or profit',
   })
   getTopProducts(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('limit') limit?: string,
@@ -87,7 +83,7 @@ export class InsightAnalyticsController {
     @Query('branchId') branchId?: string,
     @Query('categoryId') categoryId?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getTopProducts({
       from,
       to,
@@ -100,15 +96,15 @@ export class InsightAnalyticsController {
   }
 
   @Get('dashboard/channel-breakdown')
-  @RequireRoles('insight.dashboard.read')
+  @RequirePermission('dashboard.view')
   @ApiOperation({ summary: 'Get omnichannel sales revenue breakdown' })
   getChannelBreakdown(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getChannelBreakdown({
       from,
       to,
@@ -120,17 +116,17 @@ export class InsightAnalyticsController {
   // ---- 2. Sales Analytics Reports ----
 
   @Get('reports/sales')
-  @RequireRoles('insight.sales.read')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'Get daily sales analytical report' })
   getSalesReport(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getSalesReport({
       from,
       to,
@@ -142,15 +138,15 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/sales/by-branch')
-  @RequireRoles('insight.sales.read')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'Get sales analytical report grouped by branch' })
   getSalesByBranch(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getSalesByBranch({
       from,
       to,
@@ -160,16 +156,16 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/sales/by-channel')
-  @RequireRoles('insight.sales.read')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'Get sales analytical report grouped by channel' })
   getSalesByChannel(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
     @Query('channelType') channelType?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getSalesByChannel({
       from,
       to,
@@ -180,10 +176,10 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/sales/by-employee')
-  @RequireRoles('insight.sales.read')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'Get sales analytical report grouped by employee' })
   getSalesByEmployee(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
@@ -191,7 +187,7 @@ export class InsightAnalyticsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getSalesByEmployee({
       from,
       to,
@@ -204,12 +200,12 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/sales/by-product')
-  @RequireRoles('insight.sales.read')
+  @RequirePermission('reports.view')
   @ApiOperation({
     summary: 'Get sales analytical report grouped by SKU/product',
   })
   getSalesByProduct(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
@@ -219,7 +215,7 @@ export class InsightAnalyticsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getSalesByProduct({
       from,
       to,
@@ -234,18 +230,18 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/sales/by-customer-group')
-  @RequireRoles('insight.sales.read')
+  @RequirePermission('reports.view')
   @ApiOperation({
     summary: 'Get sales analytical report grouped by customer segment',
   })
   getSalesByCustomerGroup(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
     @Query('customerGroupId') customerGroupId?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getSalesByCustomerGroup({
       from,
       to,
@@ -258,12 +254,12 @@ export class InsightAnalyticsController {
   // ---- 3. Inventory Analytics Reports ----
 
   @Get('reports/inventory')
-  @RequireRoles('insight.inventory.read')
+  @RequirePermission('reports.view')
   @ApiOperation({
     summary: 'Get warehouse & SKU inventory analytical projection',
   })
   getInventorySummary(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('warehouseId') warehouseId?: string,
     @Query('branchId') branchId?: string,
     @Query('categoryId') categoryId?: string,
@@ -271,7 +267,7 @@ export class InsightAnalyticsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getInventorySummary({
       warehouseId,
       branchId: scope.branchId,
@@ -284,16 +280,16 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/inventory/low-stock')
-  @RequireRoles('insight.inventory.read')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'Get low-stock SKU alert report' })
   getLowStockReport(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('warehouseId') warehouseId?: string,
     @Query('branchId') branchId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getLowStockReport({
       warehouseId,
       branchId: scope.branchId,
@@ -304,10 +300,10 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/inventory/slow-moving')
-  @RequireRoles('insight.inventory.read')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'Get slow-moving / dead stock analytical report' })
   getSlowMovingReport(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('daysWindow') daysWindow?: string,
     @Query('maxUnitsSold') maxUnitsSold?: string,
     @Query('warehouseId') warehouseId?: string,
@@ -315,7 +311,7 @@ export class InsightAnalyticsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getSlowMovingReport({
       daysWindow: daysWindow ? Number(daysWindow) : undefined,
       maxUnitsSold: maxUnitsSold ? Number(maxUnitsSold) : undefined,
@@ -328,17 +324,17 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/inventory/valuation')
-  @RequireRoles('insight.inventory.read')
+  @RequirePermission('reports.view')
   @ApiOperation({
     summary: 'Get inventory cost valuation & in-transit valuation report',
   })
   getInventoryValuation(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('date') date?: string,
     @Query('warehouseId') warehouseId?: string,
     @Query('branchId') branchId?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getInventoryValuation({
       date,
       warehouseId,
@@ -348,10 +344,10 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/inventory/movements')
-  @RequireRoles('insight.inventory.read')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'Get inventory movement analytical report' })
   getInventoryMovements(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('warehouseId') warehouseId?: string,
@@ -361,7 +357,7 @@ export class InsightAnalyticsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getInventoryMovements({
       from,
       to,
@@ -378,15 +374,15 @@ export class InsightAnalyticsController {
   // ---- 4. Profitability / Gross Profit Reports ----
 
   @Get('reports/gross-profit')
-  @RequireRoles('insight.profitability.read')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'Get gross profit and margin summary report' })
   getGrossProfitSummary(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getGrossProfitSummary({
       from,
       to,
@@ -396,12 +392,12 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/gross-profit/by-product')
-  @RequireRoles('insight.profitability.read')
+  @RequirePermission('reports.view')
   @ApiOperation({
     summary: 'Get gross profit & margin breakdown by SKU/product',
   })
   getGrossProfitByProduct(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
@@ -410,7 +406,7 @@ export class InsightAnalyticsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getGrossProfitByProduct({
       from,
       to,
@@ -424,15 +420,15 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/gross-profit/by-branch')
-  @RequireRoles('insight.profitability.read')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'Get gross profit & margin breakdown by branch' })
   getGrossProfitByBranch(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchId') branchId?: string,
   ) {
-    const scope = resolveAuthorizedBranchScope(req, branchId);
+    const scope = resolveScope(allowed, branchId);
     return this.reporting.getGrossProfitByBranch({
       from,
       to,
@@ -444,10 +440,10 @@ export class InsightAnalyticsController {
   // ---- 5. Branch Comparison & Ranking ----
 
   @Get('reports/branches/comparison')
-  @RequireRoles('insight.branch_comparison.read')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'Compare analytical KPIs across branches' })
   getBranchComparison(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('branchIds') branchIdsRaw?: string,
@@ -458,7 +454,7 @@ export class InsightAnalyticsController {
           .map((s) => s.trim())
           .filter(Boolean)
       : undefined;
-    const scope = resolveAuthorizedBranchScope(req, null, requestedBranchIds);
+    const scope = resolveScope(allowed, null, requestedBranchIds);
     return this.reporting.getBranchComparison({
       from,
       to,
@@ -467,18 +463,18 @@ export class InsightAnalyticsController {
   }
 
   @Get('reports/branches/ranking')
-  @RequireRoles('insight.branch_comparison.read')
+  @RequirePermission('reports.view')
   @ApiOperation({
     summary: 'Rank branches by revenue, gross profit, order count, or AOV',
   })
   getBranchRanking(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('metric')
     metric?: 'NET_REVENUE' | 'GROSS_PROFIT' | 'ORDER_COUNT' | 'AOV',
   ) {
-    const scope = resolveAuthorizedBranchScope(req);
+    const scope = resolveScope(allowed);
     return this.reporting.getBranchRanking({
       from,
       to,
@@ -491,50 +487,56 @@ export class InsightAnalyticsController {
 
   @Post('export-jobs')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('insight.export.create')
+  @RequirePermission('reports.view')
   @ApiOperation({
     summary: 'Create an analytical report export job (CSV, XLSX, PDF)',
   })
-  createExportJob(@Req() req: Request, @Body() body: CreateExportJobInput) {
-    const scope = resolveAuthorizedBranchScope(req, body.branchId);
-    const user = (req['user'] ?? {}) as InsightAuthenticatedUser;
+  createExportJob(
+    @AllowedBranches() allowed: string[] | null,
+    @CurrentUser('id') accountId: string,
+    @Body() body: CreateExportJobInput,
+  ) {
+    const scope = resolveScope(allowed, body.branchId);
     return this.exportsService.createExportJob({
       ...body,
       branchId: scope.branchId,
       allowedBranchIds: scope.allowedBranchIds,
-      requestedBy: user.sub ?? user.accountId ?? 'user',
+      requestedBy: accountId,
     });
   }
 
   @Get('export-jobs')
-  @RequireRoles('insight.export.download')
+  @RequirePermission('reports.view')
   @ApiOperation({ summary: 'List analytical report export jobs' })
-  listExportJobs(@Req() req: Request) {
-    const scope = resolveAuthorizedBranchScope(req);
+  listExportJobs(@AllowedBranches() allowed: string[] | null) {
+    const scope = resolveScope(allowed);
     return this.exportsService.listExportJobs(scope.allowedBranchIds);
   }
 
   @Get('export-jobs/:id')
-  @RequireRoles('insight.export.download')
+  @RequirePermission('reports.view')
   @ApiOperation({
     summary: 'Get analytical report export job status & metadata',
   })
-  getExportJob(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
-    const scope = resolveAuthorizedBranchScope(req);
+  getExportJob(
+    @AllowedBranches() allowed: string[] | null,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const scope = resolveScope(allowed);
     return this.exportsService.getExportJob(id, scope.allowedBranchIds);
   }
 
   @Get('export-jobs/:id/download')
-  @RequireRoles('insight.export.download')
+  @RequirePermission('reports.view')
   @ApiOperation({
     summary: 'Download completed analytical report export artifact',
   })
   async downloadExportJob(
-    @Req() req: Request,
+    @AllowedBranches() allowed: string[] | null,
     @Param('id', ParseUUIDPipe) id: string,
     @Res() res: Response,
   ) {
-    const scope = resolveAuthorizedBranchScope(req);
+    const scope = resolveScope(allowed);
     const artifact = await this.exportsService.downloadExportJob(
       id,
       scope.allowedBranchIds,

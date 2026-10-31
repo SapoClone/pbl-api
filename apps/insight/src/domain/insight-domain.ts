@@ -21,10 +21,10 @@ export interface OrderContributionVector {
 }
 
 export interface GrowthMetricResult {
-  current: string;
-  previous: string;
-  delta: string;
-  growthPct: string | null;
+  current: number;
+  previous: number;
+  delta: number;
+  growthPct: number | null;
   direction: 'UP' | 'DOWN' | 'FLAT';
 }
 
@@ -222,11 +222,11 @@ export function computeTargetOrderContribution(input: {
 
   if (status === 'COMPLETED') {
     return {
-      gmv: formatScaledDecimal(subtotalScaled, 4),
-      grossRevenue: formatScaledDecimal(subtotalScaled, 4),
-      discount: formatScaledDecimal(discountScaled, 4),
-      netRevenue: formatScaledDecimal(netScaled, 4),
-      cogs: formatScaledDecimal(cogsScaled, 4),
+      gmv: formatScaledDecimal(subtotalScaled, 0),
+      grossRevenue: formatScaledDecimal(subtotalScaled, 0),
+      discount: formatScaledDecimal(discountScaled, 0),
+      netRevenue: formatScaledDecimal(netScaled, 0),
+      cogs: formatScaledDecimal(cogsScaled, 0),
       unitsSold: formatScaledDecimal(unitsScaled, 4),
       orderCount: 1,
       completedCount: 1,
@@ -236,11 +236,11 @@ export function computeTargetOrderContribution(input: {
 
   if (status === 'CONFIRMED') {
     return {
-      gmv: formatScaledDecimal(subtotalScaled, 4),
-      grossRevenue: formatScaledDecimal(0n, 4),
-      discount: formatScaledDecimal(0n, 4),
-      netRevenue: formatScaledDecimal(0n, 4),
-      cogs: formatScaledDecimal(0n, 4),
+      gmv: formatScaledDecimal(subtotalScaled, 0),
+      grossRevenue: formatScaledDecimal(0n, 0),
+      discount: formatScaledDecimal(0n, 0),
+      netRevenue: formatScaledDecimal(0n, 0),
+      cogs: formatScaledDecimal(0n, 0),
       unitsSold: formatScaledDecimal(0n, 4),
       orderCount: 1,
       completedCount: 0,
@@ -250,11 +250,11 @@ export function computeTargetOrderContribution(input: {
 
   if (status === 'CANCELLED') {
     return {
-      gmv: formatScaledDecimal(0n, 4),
-      grossRevenue: formatScaledDecimal(0n, 4),
-      discount: formatScaledDecimal(0n, 4),
-      netRevenue: formatScaledDecimal(0n, 4),
-      cogs: formatScaledDecimal(0n, 4),
+      gmv: formatScaledDecimal(0n, 0),
+      grossRevenue: formatScaledDecimal(0n, 0),
+      discount: formatScaledDecimal(0n, 0),
+      netRevenue: formatScaledDecimal(0n, 0),
+      cogs: formatScaledDecimal(0n, 0),
       unitsSold: formatScaledDecimal(0n, 4),
       orderCount: 1,
       completedCount: 0,
@@ -264,11 +264,11 @@ export function computeTargetOrderContribution(input: {
 
   // CREATED / DRAFT / PENDING
   return {
-    gmv: formatScaledDecimal(0n, 4),
-    grossRevenue: formatScaledDecimal(0n, 4),
-    discount: formatScaledDecimal(0n, 4),
-    netRevenue: formatScaledDecimal(0n, 4),
-    cogs: formatScaledDecimal(0n, 4),
+    gmv: formatScaledDecimal(0n, 0),
+    grossRevenue: formatScaledDecimal(0n, 0),
+    discount: formatScaledDecimal(0n, 0),
+    netRevenue: formatScaledDecimal(0n, 0),
+    cogs: formatScaledDecimal(0n, 0),
     unitsSold: formatScaledDecimal(0n, 4),
     orderCount: 1,
     completedCount: 0,
@@ -291,20 +291,20 @@ export function computeOrderContributionDelta(
   const prevCancelledCount = previous?.cancelledCount ?? 0;
 
   return {
-    gmv: formatScaledDecimal(parseScaledDecimal(target.gmv) - prevGmv, 4),
+    gmv: formatScaledDecimal(parseScaledDecimal(target.gmv) - prevGmv, 0),
     grossRevenue: formatScaledDecimal(
       parseScaledDecimal(target.grossRevenue) - prevGross,
-      4,
+      0,
     ),
     discount: formatScaledDecimal(
       parseScaledDecimal(target.discount) - prevDiscount,
-      4,
+      0,
     ),
     netRevenue: formatScaledDecimal(
       parseScaledDecimal(target.netRevenue) - prevNet,
-      4,
+      0,
     ),
-    cogs: formatScaledDecimal(parseScaledDecimal(target.cogs) - prevCogs, 4),
+    cogs: formatScaledDecimal(parseScaledDecimal(target.cogs) - prevCogs, 0),
     unitsSold: formatScaledDecimal(
       parseScaledDecimal(target.unitsSold) - prevUnits,
       4,
@@ -372,15 +372,15 @@ export function computeGrossProfit(
   };
 }
 
+/** Average order value in whole VND */
 export function computeAov(
   netSalesRevenue: string | number,
   completedOrderCount: number,
-  decimals = 2,
-): string {
+): number {
   if (!completedOrderCount || completedOrderCount <= 0) {
-    return formatScaledDecimal(0n, decimals);
+    return 0;
   }
-  return divDecimals(netSalesRevenue, completedOrderCount, decimals);
+  return Number(divDecimals(netSalesRevenue, completedOrderCount, 0));
 }
 
 export function computeGrowthMetric(
@@ -394,20 +394,20 @@ export function computeGrowthMetric(
   const direction: 'UP' | 'DOWN' | 'FLAT' =
     delta > 0n ? 'UP' : delta < 0n ? 'DOWN' : 'FLAT';
 
-  let growthPct: string | null = null;
+  let growthPct: number | null = null;
   if (prev > 0n) {
     const pctScaled = (delta * 100n * DECIMAL_SCALE) / prev;
-    growthPct = formatScaledDecimal(pctScaled, 2);
+    growthPct = Number(formatScaledDecimal(pctScaled, 2));
   } else if (prev < 0n) {
     const absPrev = -prev;
     const pctScaled = (delta * 100n * DECIMAL_SCALE) / absPrev;
-    growthPct = formatScaledDecimal(pctScaled, 2);
+    growthPct = Number(formatScaledDecimal(pctScaled, 2));
   }
 
   return {
-    current: formatScaledDecimal(curr, decimals),
-    previous: formatScaledDecimal(prev, decimals),
-    delta: formatScaledDecimal(delta, decimals),
+    current: Number(formatScaledDecimal(curr, decimals)),
+    previous: Number(formatScaledDecimal(prev, decimals)),
+    delta: Number(formatScaledDecimal(delta, decimals)),
     growthPct,
     direction,
   };
@@ -425,7 +425,7 @@ export function computeAvailableQty(
 export function computeInventoryValuation(
   qty: string | number,
   avgUnitCost: string | number,
-  decimals = 4,
+  decimals = 0,
 ): string {
   const q = parseScaledDecimal(qty);
   if (q <= 0n) {
@@ -439,7 +439,7 @@ export function computeWeightedAverageCost(
   currentAvgCost: string | number,
   receivedQty: string | number,
   receivedUnitCost: string | number,
-  decimals = 4,
+  decimals = 0,
 ): string {
   const curQty = parseScaledDecimal(currentOnHandQty);
   const curCost = parseScaledDecimal(currentAvgCost);

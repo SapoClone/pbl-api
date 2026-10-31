@@ -74,17 +74,17 @@ export class InsightReconciliationService {
         scope: i.scope,
         metricName: i.metric_name,
         dimensionKey: i.dimension_key,
-        expectedValue: formatScaledDecimal(
-          parseScaledDecimal(i.expected_value as string),
-          2,
+        expectedValue: Number(
+          formatScaledDecimal(
+            parseScaledDecimal(i.expected_value as string),
+            0,
+          ),
         ),
-        actualValue: formatScaledDecimal(
-          parseScaledDecimal(i.actual_value as string),
-          2,
+        actualValue: Number(
+          formatScaledDecimal(parseScaledDecimal(i.actual_value as string), 0),
         ),
-        deltaValue: formatScaledDecimal(
-          parseScaledDecimal(i.delta_value as string),
-          2,
+        deltaValue: Number(
+          formatScaledDecimal(parseScaledDecimal(i.delta_value as string), 0),
         ),
         severity: i.severity,
         details: i.details,
@@ -352,9 +352,9 @@ export class InsightReconciliationService {
                 scope,
                 metricName: check.metricName,
                 dimensionKey,
-                expectedValue: formatScaledDecimal(expScaled, 2),
-                actualValue: formatScaledDecimal(actScaled, 2),
-                deltaValue: formatScaledDecimal(deltaScaled, 2),
+                expectedValue: formatScaledDecimal(expScaled, 0),
+                actualValue: formatScaledDecimal(actScaled, 0),
+                deltaValue: formatScaledDecimal(deltaScaled, 0),
                 severity: check.severity,
                 occurredAt: new Date().toISOString(),
               },
@@ -365,9 +365,9 @@ export class InsightReconciliationService {
             id: issueId,
             metricName: check.metricName,
             dimensionKey,
-            expectedValue: formatScaledDecimal(expScaled, 2),
-            actualValue: formatScaledDecimal(actScaled, 2),
-            deltaValue: formatScaledDecimal(deltaScaled, 2),
+            expectedValue: Number(formatScaledDecimal(expScaled, 0)),
+            actualValue: Number(formatScaledDecimal(actScaled, 0)),
+            deltaValue: Number(formatScaledDecimal(deltaScaled, 0)),
             severity: check.severity,
           });
         }
@@ -376,21 +376,23 @@ export class InsightReconciliationService {
       const status = issues.length > 0 ? 'COMPLETED_WITH_ISSUES' : 'COMPLETED';
       const summaryReport = {
         activeGenerationId,
-        expectedNetSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(expectedNetRev),
-          2,
+        expectedNetSalesRevenue: Number(
+          formatScaledDecimal(parseScaledDecimal(expectedNetRev), 0),
         ),
-        actualNetSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(act.actual_net_rev as string),
-          2,
+        actualNetSalesRevenue: Number(
+          formatScaledDecimal(
+            parseScaledDecimal(act.actual_net_rev as string),
+            0,
+          ),
         ),
-        expectedGrossProfit: formatScaledDecimal(
-          parseScaledDecimal(expectedGrossProfit),
-          2,
+        expectedGrossProfit: Number(
+          formatScaledDecimal(parseScaledDecimal(expectedGrossProfit), 0),
         ),
-        actualGrossProfit: formatScaledDecimal(
-          parseScaledDecimal(act.actual_gross_profit as string),
-          2,
+        actualGrossProfit: Number(
+          formatScaledDecimal(
+            parseScaledDecimal(act.actual_gross_profit as string),
+            0,
+          ),
         ),
       };
 

@@ -8,23 +8,54 @@ import {
 } from '@pbl/common';
 import { AddressInfo } from 'net';
 import request from 'supertest';
-import { InsightQueryService } from './insight-query.service';
-import { InsightController } from './insight.controller';
+import { AuditQueryService } from './audit/audit-query.service';
 import { InsightExportService } from './modules/export/insight-export.service';
 import { InsightAnalyticsController } from './modules/insight-analytics.controller';
 import { InsightInternalController } from './modules/insight-internal.controller';
 import { InsightRebuildService } from './modules/rebuild/insight-rebuild.service';
 import { InsightReconciliationService } from './modules/reconciliation/insight-reconciliation.service';
 import { InsightReportingService } from './modules/reporting/insight-reporting.service';
+import { ScreenExportService } from './modules/screens/screen-export.service';
+import { ScreenReportsService } from './modules/screens/screen-reports.service';
+import { ScreensController } from './modules/screens/screens.controller';
+import { DeviceTokensService } from './notifications/device-tokens.service';
+import { NotificationsController } from './notifications/notifications.controller';
+import { NotificationsService } from './notifications/notifications.service';
 
 const auth = createTestAuth();
 const TENANT = '11111111-1111-4111-8111-111111111111';
 const BRANCH_1 = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
 const BRANCH_2 = '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b';
 
-const queries = {
+const audit = {
   auditLogs: jest.fn(async () => ({ data: [], pagination: {} })),
+};
+
+const reports = {
+  clock: () => new Date(),
+  kpis: jest.fn(async () => ({})),
   dailySales: jest.fn(async () => ({ data: [], totals: {} })),
+  hourly: jest.fn(async () => ({})),
+  byChannel: jest.fn(async () => ({ data: [] })),
+  topProducts: jest.fn(async () => ({ data: [] })),
+  byBranch: jest.fn(async () => ({ data: [] })),
+};
+
+const exporter = {
+  export: jest.fn(async () => ({ filename: 'daily.csv', csv: 'a,b\r\n' })),
+};
+
+const notifications = {
+  list: jest.fn(async () => ({ data: [], pagination: {} })),
+  unreadCount: jest.fn(async () => ({ count: 4 })),
+  markRead: jest.fn(async () => undefined),
+  markAllRead: jest.fn(async () => undefined),
+  attentionItems: jest.fn(async () => ({ total: 0, data: [] })),
+};
+
+const devices = {
+  register: jest.fn(async () => ({ token: 'fcm-1', platform: 'android' })),
+  remove: jest.fn(async () => undefined),
 };
 
 const reportingStub = {
@@ -61,7 +92,7 @@ const exportsStub = {
     fileName: 'sales.csv',
     contentType: 'text/csv; charset=utf-8',
     checksumSha256: 'abc',
-    buffer: Buffer.from('Date,NetSalesRevenue\r\n2026-10-18,100000.00\r\n'),
+    buffer: Buffer.from('Date,NetSalesRevenue\r\n2026-10-18,100000\r\n'),
   })),
 };
 
@@ -97,12 +128,17 @@ const reconciliationStub = {
     PblHealthModule.forRoot({ service: 'insight', redisFromEnv: true }),
   ],
   controllers: [
-    InsightController,
+    ScreensController,
+    NotificationsController,
     InsightAnalyticsController,
     InsightInternalController,
   ],
   providers: [
-    { provide: InsightQueryService, useValue: queries },
+    { provide: AuditQueryService, useValue: audit },
+    { provide: ScreenReportsService, useValue: reports },
+    { provide: ScreenExportService, useValue: exporter },
+    { provide: NotificationsService, useValue: notifications },
+    { provide: DeviceTokensService, useValue: devices },
     { provide: InsightReportingService, useValue: reportingStub },
     { provide: InsightExportService, useValue: exportsStub },
     { provide: InsightRebuildService, useValue: rebuildStub },
@@ -132,6 +168,8 @@ describe('Insight service bootstrap & M7 HTTP/RBAC/Branch-Scope E2E', () => {
     `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
   const as = (roles: string[], tid: string | null = TENANT) =>
     auth.bearer(roles, tid ?? undefined);
+  const withPerms = (codes: string[]) =>
+    auth.bearerWithPermissions('custom', codes, TENANT);
 
   it('GET /health reports the service', async () => {
     const res = await request(url()).get('/health').expect(200);
@@ -152,103 +190,261 @@ describe('Insight service bootstrap & M7 HTTP/RBAC/Branch-Scope E2E', () => {
     });
   });
 
-  describe('permissions on the M0 & M7 report routes (Mandatory Test O)', () => {
-    const routes = [
-      '/api/v1/audit-logs',
-      '/api/v1/sales-summary/daily',
-      '/api/v1/insight/dashboard/overview',
-      '/api/v1/insight/dashboard/revenue-trend',
-      '/api/v1/insight/dashboard/top-products',
-      '/api/v1/insight/dashboard/channel-breakdown',
-      '/api/v1/insight/reports/sales',
-      '/api/v1/insight/reports/sales/by-branch',
-      '/api/v1/insight/reports/sales/by-channel',
-      '/api/v1/insight/reports/sales/by-employee',
-      '/api/v1/insight/reports/sales/by-product',
-      '/api/v1/insight/reports/sales/by-customer-group',
-      '/api/v1/insight/reports/inventory',
-      '/api/v1/insight/reports/inventory/low-stock',
-      '/api/v1/insight/reports/inventory/slow-moving',
-      '/api/v1/insight/reports/inventory/valuation',
-      '/api/v1/insight/reports/inventory/movements',
-      '/api/v1/insight/reports/gross-profit',
-      '/api/v1/insight/reports/gross-profit/by-product',
-      '/api/v1/insight/reports/gross-profit/by-branch',
-      '/api/v1/insight/reports/branches/comparison',
-      '/api/v1/insight/reports/branches/ranking',
-      '/api/v1/insight/export-jobs',
-      '/internal/v1/insight/projections/status',
-      '/internal/v1/insight/reconciliation-runs',
-    ];
+  /** [route, permission code that opens it] */
+  const READS: [string, string][] = [
+    ['/api/v1/audit-logs', 'reports.view'],
+    ['/api/v1/dashboard/kpis', 'dashboard.view'],
+    ['/api/v1/sales-summary/daily', 'reports.view'],
+    ['/api/v1/sales-summary/hourly', 'dashboard.view'],
+    ['/api/v1/sales-summary/by-channel', 'dashboard.view'],
+    ['/api/v1/sales-summary/top-products', 'dashboard.view'],
+    ['/api/v1/sales-summary/by-branch', 'reports.view'],
+    ['/api/v1/attention-items', 'dashboard.view'],
+    ['/api/v1/reports/export?report=daily', 'reports.view'],
+    ['/api/v1/insight/dashboard/overview', 'dashboard.view'],
+    ['/api/v1/insight/dashboard/revenue-trend', 'dashboard.view'],
+    ['/api/v1/insight/dashboard/top-products', 'dashboard.view'],
+    ['/api/v1/insight/dashboard/channel-breakdown', 'dashboard.view'],
+    ['/api/v1/insight/reports/sales', 'reports.view'],
+    ['/api/v1/insight/reports/sales/by-branch', 'reports.view'],
+    ['/api/v1/insight/reports/sales/by-channel', 'reports.view'],
+    ['/api/v1/insight/reports/sales/by-employee', 'reports.view'],
+    ['/api/v1/insight/reports/sales/by-product', 'reports.view'],
+    ['/api/v1/insight/reports/sales/by-customer-group', 'reports.view'],
+    ['/api/v1/insight/reports/inventory', 'reports.view'],
+    ['/api/v1/insight/reports/inventory/low-stock', 'reports.view'],
+    ['/api/v1/insight/reports/inventory/slow-moving', 'reports.view'],
+    ['/api/v1/insight/reports/inventory/valuation', 'reports.view'],
+    ['/api/v1/insight/reports/inventory/movements', 'reports.view'],
+    ['/api/v1/insight/reports/gross-profit', 'reports.view'],
+    ['/api/v1/insight/reports/gross-profit/by-product', 'reports.view'],
+    ['/api/v1/insight/reports/gross-profit/by-branch', 'reports.view'],
+    ['/api/v1/insight/reports/branches/comparison', 'reports.view'],
+    ['/api/v1/insight/reports/branches/ranking', 'reports.view'],
+    ['/api/v1/insight/export-jobs', 'reports.view'],
+    ['/internal/v1/insight/projections/status', 'settings.view'],
+    ['/internal/v1/insight/reconciliation-runs', 'settings.view'],
+  ];
 
-    it.each(matrix)('refuses %s without a token (401)', async (route) => {
+  describe('permission matrix (ADR-0020)', () => {
+    it.each(READS)('%s needs a token (401)', async (route) => {
       await request(url()).get(route).expect(401);
     });
 
-    it.each(matrix)(
-      'refuses %s with a token without a store (403)',
-      async (route) => {
-        await request(url())
-          .get(route)
-          .set('Authorization', as(['owner'], null))
-          .expect(403);
-      },
-    );
-
-    it.each(routes)('refuses a cashier on %s (403)', async (route) => {
+    it.each(READS)('%s needs a store in the token (403)', async (route) => {
       await request(url())
         .get(route)
-        .set('Authorization', as(['cashier']))
+        .set('Authorization', auth.bearer(['owner']))
         .expect(403);
     });
 
-    it('refuses a cashier or manager on privileged POST /internal/v1/insight/projections/rebuild (403), allows owner (202)', async () => {
+    it.each(READS)('%s opens with its code only', async (route, code) => {
       await request(url())
-        .post('/internal/v1/insight/projections/rebuild')
-        .set('Authorization', as(['cashier']))
-        .send({ projectionName: 'sales_analytics' })
+        .get(route)
+        .set('Authorization', withPerms([code]))
+        .expect(200);
+      await request(url())
+        .get(route)
+        .set('Authorization', withPerms(['orders.view', 'inventory.view']))
         .expect(403);
-
       await request(url())
-        .post('/internal/v1/insight/projections/rebuild')
-        .set('Authorization', as(['manager']))
-        .send({ projectionName: 'sales_analytics' })
+        .get(route)
+        .set('Authorization', withPerms([]))
         .expect(403);
+    });
 
+    it.each(READS)('%s lets the owner (wildcard) in', async (route) => {
       await request(url())
+        .get(route)
+        .set('Authorization', auth.bearer(['owner'], TENANT))
+        .expect(200);
+    });
+
+    it('does not check role names: a role called owner without the code is refused', async () => {
+      await request(url())
+        .get('/api/v1/insight/reports/sales')
+        .set(
+          'Authorization',
+          auth.bearerWithPermissions('owner', ['orders.view'], TENANT),
+        )
+        .expect(403);
+    });
+
+    it('lets the accountant default (reports.view) read reports, not the dashboard of nobody else', async () => {
+      await request(url())
+        .get('/api/v1/insight/reports/sales')
+        .set('Authorization', withPerms(['reports.view']))
+        .expect(200);
+      await request(url())
+        .get('/api/v1/insight/dashboard/overview')
+        .set('Authorization', withPerms(['reports.view']))
+        .expect(403);
+    });
+
+    it('creates export jobs with reports.view only', async () => {
+      await request(url())
+        .post('/api/v1/insight/export-jobs')
+        .set('Authorization', withPerms(['dashboard.view']))
+        .send({ reportType: 'SALES_SUMMARY', format: 'CSV' })
+        .expect(403);
+      await request(url())
+        .post('/api/v1/insight/export-jobs')
+        .set('Authorization', withPerms(['reports.view']))
+        .send({ reportType: 'SALES_SUMMARY', format: 'CSV' })
+        .expect(201);
+      expect(exportsStub.createExportJob).toHaveBeenCalledWith(
+        expect.objectContaining({ requestedBy: expect.any(String) }),
+      );
+    });
+  });
+
+  describe('internal operator routes', () => {
+    const rebuild = () =>
+      request(url())
         .post('/internal/v1/insight/projections/rebuild')
-        .set('Authorization', as(['owner']))
-        .send({ projectionName: 'sales_analytics' })
+        .send({ projectionName: 'sales_analytics' });
+    const envSaved = { ...process.env };
+    afterEach(() => {
+      process.env = { ...envSaved };
+    });
+
+    it('needs settings.update to rebuild or reconcile', async () => {
+      await rebuild()
+        .set('Authorization', withPerms(['settings.view']))
+        .expect(403);
+      await rebuild()
+        .set('Authorization', withPerms(['settings.update']))
+        .expect(202);
+      await request(url())
+        .post('/internal/v1/insight/reconciliation-runs')
+        .set('Authorization', withPerms(['reports.view']))
+        .send({})
+        .expect(403);
+      await request(url())
+        .post('/internal/v1/insight/reconciliation-runs')
+        .set('Authorization', withPerms(['settings.update']))
+        .send({})
+        .expect(201);
+      expect(rebuildStub.triggerRebuild).toHaveBeenCalledWith(
+        expect.objectContaining({ triggeredBy: expect.any(String) }),
+      );
+    });
+
+    it('requires x-internal-token when INTERNAL_S2S_TOKEN is set', async () => {
+      process.env.INTERNAL_S2S_TOKEN = 'secret-token';
+      await rebuild()
+        .set('Authorization', withPerms(['settings.update']))
+        .expect(401);
+      await rebuild()
+        .set('Authorization', withPerms(['settings.update']))
+        .set('x-internal-token', 'wrong')
+        .expect(401);
+      await rebuild()
+        .set('Authorization', withPerms(['settings.update']))
+        .set('x-internal-token', 'secret-token')
         .expect(202);
     });
 
-    it('hands the branch scope of the token to the reads', async () => {
+    it('fails closed outside tests when no token is configured', async () => {
+      delete process.env.INTERNAL_S2S_TOKEN;
+      process.env.NODE_ENV = 'production';
+      await rebuild()
+        .set('Authorization', withPerms(['settings.update']))
+        .expect(401);
+    });
+  });
+
+  describe('branch scope (404 for a foreign branch, lists filtered)', () => {
+    const scoped = (...codes: string[]) =>
+      auth.bearerWithPermissions('custom', codes, TENANT, [BRANCH_1]);
+
+    it('answers 404 for a branch outside the scope, on every branch-aware read', async () => {
+      for (const route of [
+        `/api/v1/insight/dashboard/overview?branchId=${BRANCH_2}`,
+        `/api/v1/insight/dashboard/revenue-trend?branchId=${BRANCH_2}`,
+        `/api/v1/insight/reports/sales?branchId=${BRANCH_2}`,
+        `/api/v1/insight/reports/inventory?branchId=${BRANCH_2}`,
+        `/api/v1/insight/reports/branches/comparison?branchIds=${BRANCH_1},${BRANCH_2}`,
+      ]) {
+        await request(url())
+          .get(route)
+          .set('Authorization', scoped('dashboard.view', 'reports.view'))
+          .expect(404);
+      }
       await request(url())
-        .get('/api/v1/dashboard/kpis')
+        .post('/api/v1/insight/export-jobs')
+        .set('Authorization', scoped('reports.view'))
+        .send({
+          reportType: 'SALES_SUMMARY',
+          format: 'CSV',
+          branchId: BRANCH_2,
+        })
+        .expect(404);
+      expect(exportsStub.createExportJob).not.toHaveBeenCalled();
+    });
+
+    it('lets the named allowed branch through and filters the unnamed read to the scope', async () => {
+      await request(url())
+        .get(`/api/v1/insight/dashboard/overview?branchId=${BRANCH_1}`)
+        .set('Authorization', scoped('dashboard.view'))
+        .expect(200);
+      expect(reportingStub.getDashboardOverview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          branchId: BRANCH_1,
+          allowedBranchIds: [BRANCH_1],
+        }),
+      );
+      await request(url())
+        .get('/api/v1/insight/reports/sales')
+        .set('Authorization', scoped('reports.view'))
+        .expect(200);
+      expect(reportingStub.getSalesReport).toHaveBeenCalledWith(
+        expect.objectContaining({ allowedBranchIds: [BRANCH_1] }),
+      );
+    });
+
+    it('does not filter an owner and hands an empty scope through as nothing', async () => {
+      await request(url())
+        .get('/api/v1/insight/reports/sales')
+        .set('Authorization', auth.bearer(['owner'], TENANT))
+        .expect(200);
+      expect(reportingStub.getSalesReport).toHaveBeenLastCalledWith(
+        expect.objectContaining({ allowedBranchIds: undefined }),
+      );
+      await request(url())
+        .get('/api/v1/insight/reports/sales')
         .set(
           'Authorization',
-          auth.bearerWithPermissions('custom', ['dashboard.view'], TENANT, [
-            B1,
-          ]),
+          auth.bearerWithPermissions('custom', ['reports.view'], TENANT, []),
         )
         .expect(200);
-      expect(reports.kpis).toHaveBeenCalledWith(expect.anything(), [B1]);
+      expect(reportingStub.getSalesReport).toHaveBeenLastCalledWith(
+        expect.objectContaining({ allowedBranchIds: [] }),
+      );
+    });
+
+    it('hands the branch scope of the token to the screen reads', async () => {
+      await request(url())
+        .get('/api/v1/dashboard/kpis')
+        .set('Authorization', scoped('dashboard.view'))
+        .expect(200);
+      expect(reports.kpis).toHaveBeenCalledWith(expect.anything(), [BRANCH_1]);
       await request(url())
         .get('/api/v1/sales-summary/by-branch')
-        .set('Authorization', as(['owner']))
+        .set('Authorization', auth.bearer(['owner'], TENANT))
         .expect(200);
       expect(reports.byBranch).toHaveBeenCalledWith(expect.anything(), null);
     });
 
     it('hands the scope to notifications and the export', async () => {
-      const bearer = auth.bearerWithPermissions('custom', [], TENANT, [B1]);
+      const bearer = scoped();
       await request(url())
         .get('/api/v1/notifications/unread-count')
         .set('Authorization', bearer)
         .expect(200);
       expect(notifications.unreadCount).toHaveBeenCalledWith(
         expect.any(String),
-        [B1],
+        [BRANCH_1],
       );
       await request(url())
         .post('/api/v1/notifications/read-all')
@@ -256,81 +452,32 @@ describe('Insight service bootstrap & M7 HTTP/RBAC/Branch-Scope E2E', () => {
         .expect(204);
       expect(notifications.markAllRead).toHaveBeenCalledWith(
         expect.any(String),
-        [B1],
-      );
-      await request(url())
-        .get('/api/v1/notifications')
-        .set('Authorization', bearer)
-        .expect(200);
-      expect(notifications.list).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.anything(),
-        [B1],
+        [BRANCH_1],
       );
       await request(url())
         .get('/api/v1/reports/export?report=daily')
-        .set(
-          'Authorization',
-          auth.bearerWithPermissions('custom', ['reports.view'], TENANT, [B1]),
-        )
+        .set('Authorization', scoped('reports.view'))
         .expect(200);
-      expect(exporter.export).toHaveBeenCalledWith(expect.anything(), [B1]);
+      expect(exporter.export).toHaveBeenCalledWith(expect.anything(), [
+        BRANCH_1,
+      ]);
     });
   });
 
-  describe('Branch-Scope Authorization Enforcement (Mandatory Test P)', () => {
-    it('blocks a branch manager scoped to BRANCH_1 from querying BRANCH_2 reports (403)', async () => {
-      await request(url())
-        .get(`/api/v1/insight/dashboard/overview?branchId=${BRANCH_2}`)
-        .set('Authorization', as(['manager']))
-        .set('x-allowed-branches', BRANCH_1)
-        .expect(403);
-
-      await request(url())
-        .get(
-          `/api/v1/insight/reports/branches/comparison?branchIds=${BRANCH_1},${BRANCH_2}`,
-        )
-        .set('Authorization', as(['manager']))
-        .set('x-allowed-branches', BRANCH_1)
-        .expect(403);
-    });
-
-    it('restricts unscoped branch manager queries to their assigned allowedBranchIds', async () => {
-      await request(url())
-        .get('/api/v1/insight/dashboard/overview')
-        .set('Authorization', as(['manager']))
-        .set('x-allowed-branches', BRANCH_1)
-        .expect(200);
-
-      expect(reportingStub.getDashboardOverview).toHaveBeenCalledWith(
-        expect.objectContaining({
-          allowedBranchIds: [BRANCH_1],
-        }),
-      );
-    });
-
-    it('creates and downloads export jobs with Content-Disposition and SHA-256 headers', async () => {
-      const createRes = await request(url())
-        .post('/api/v1/insight/export-jobs')
-        .set('Authorization', as(['owner']))
-        .send({
-          reportType: 'SALES_SUMMARY',
-          format: 'CSV',
-          from: '2026-10-18',
-          to: '2026-10-18',
-        })
-        .expect(201);
-
-      const jobId = createRes.body.id;
-      const dlRes = await request(url())
-        .get(`/api/v1/insight/export-jobs/${jobId}/download`)
-        .set('Authorization', as(['owner']))
-        .expect(200);
-
-      expect(dlRes.headers['content-type']).toContain('text/csv');
-      expect(dlRes.headers['content-disposition']).toContain('sales.csv');
-      expect(dlRes.headers['x-content-sha256']).toBe('abc');
-    });
+  it('creates and downloads export jobs with Content-Disposition and SHA-256 headers', async () => {
+    const owner = auth.bearer(['owner'], TENANT);
+    const createRes = await request(url())
+      .post('/api/v1/insight/export-jobs')
+      .set('Authorization', owner)
+      .send({ reportType: 'SALES_SUMMARY', format: 'CSV' })
+      .expect(201);
+    const dl = await request(url())
+      .get(`/api/v1/insight/export-jobs/${createRes.body.id}/download`)
+      .set('Authorization', owner)
+      .expect(200);
+    expect(dl.headers['content-type']).toContain('text/csv');
+    expect(dl.headers['content-disposition']).toContain('sales.csv');
+    expect(dl.headers['x-content-sha256']).toBe('abc');
   });
 
   it('validates the M0 report filters (422)', async () => {

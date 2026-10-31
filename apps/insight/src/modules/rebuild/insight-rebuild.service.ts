@@ -374,7 +374,7 @@ export class InsightRebuildService {
                 const lineDiscount = String(line.line_discount);
                 const lineNet = String(line.line_net_revenue);
                 const lineCogs = String(line.cogs_amount);
-                const lineProfit = subDecimals(lineNet, lineCogs, 4);
+                const lineProfit = subDecimals(lineNet, lineCogs, 0);
                 await this.projections.applyProductSummaryDelta(manager, {
                   tenantId,
                   generationId: newGenerationId,
@@ -412,7 +412,7 @@ export class InsightRebuildService {
             const grossProfitDelta = subDecimals(
               contribution.netRevenue,
               contribution.cogs,
-              4,
+              0,
             );
 
             await this.projections.applyOrderDeltaToSummaries(manager, {
@@ -442,11 +442,11 @@ export class InsightRebuildService {
             const refundAmountStr = String(ret.refund_amount);
             const returnedUnitsStr = String(ret.returned_units);
             const returnedCogsStr = String(ret.returned_cogs_amount);
-            const netRevenueDeltaStr = subDecimals('0', refundAmountStr, 4);
+            const netRevenueDeltaStr = subDecimals('0', refundAmountStr, 0);
             const grossProfitDeltaStr = subDecimals(
               returnedCogsStr,
               refundAmountStr,
-              4,
+              0,
             );
 
             const orderLines = linesByOrder.get(String(ret.order_id)) ?? [];
@@ -473,23 +473,23 @@ export class InsightRebuildService {
                 );
                 const unitCostStr =
                   rLine.unitCost !== undefined
-                    ? formatScaledDecimal(parseScaledDecimal(rLine.unitCost), 4)
+                    ? formatScaledDecimal(parseScaledDecimal(rLine.unitCost), 0)
                     : origLine
                       ? String(origLine.unit_cost_snapshot)
-                      : '0.0000';
+                      : '0';
                 const lineCogsStr = ret.restocked
                   ? formatScaledDecimal(
                       (parseScaledDecimal(qtyStr) *
                         parseScaledDecimal(unitCostStr)) /
                         10000n,
-                      4,
+                      0,
                     )
-                  : '0.0000';
+                  : '0';
                 const lineRefundStr =
                   rLine.refundAmount !== undefined
                     ? formatScaledDecimal(
                         parseScaledDecimal(rLine.refundAmount),
-                        4,
+                        0,
                       )
                     : refundAmountStr;
 
@@ -509,10 +509,10 @@ export class InsightRebuildService {
                   grossRevenueDelta: '0.0000',
                   discountDelta: '0.0000',
                   returnsAmountDelta: lineRefundStr,
-                  netRevenueDelta: subDecimals('0', lineRefundStr, 4),
+                  netRevenueDelta: subDecimals('0', lineRefundStr, 0),
                   cogsDelta: '0.0000',
                   returnedCogsDelta: lineCogsStr,
-                  grossProfitDelta: subDecimals(lineCogsStr, lineRefundStr, 4),
+                  grossProfitDelta: subDecimals(lineCogsStr, lineRefundStr, 0),
                   orderCountDelta: 0,
                   pendingCostLinesDelta: 0,
                 });

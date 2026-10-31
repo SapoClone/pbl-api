@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { moneyTransformer } from '../../common/money';
 
 @Entity('insight_dimension_caches')
 export class InsightDimensionCacheEntity {
@@ -114,20 +115,28 @@ export class SalesOrderFactEntity {
   @Column({ name: 'date_bucket', type: 'date' })
   dateBucket!: string;
 
-  @Column({ name: 'subtotal', type: 'numeric', precision: 18, scale: 4 })
-  subtotal!: string;
+  @Column({ name: 'subtotal', type: 'bigint', transformer: moneyTransformer })
+  subtotal!: number;
 
-  @Column({ name: 'discount_total', type: 'numeric', precision: 18, scale: 4 })
-  discountTotal!: string;
+  @Column({
+    name: 'discount_total',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  discountTotal!: number;
 
-  @Column({ name: 'tax_total', type: 'numeric', precision: 18, scale: 4 })
-  taxTotal!: string;
+  @Column({ name: 'tax_total', type: 'bigint', transformer: moneyTransformer })
+  taxTotal!: number;
 
-  @Column({ name: 'grand_total', type: 'numeric', precision: 18, scale: 4 })
-  grandTotal!: string;
+  @Column({
+    name: 'grand_total',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  grandTotal!: number;
 
-  @Column({ name: 'cogs_total', type: 'numeric', precision: 18, scale: 4 })
-  cogsTotal!: string;
+  @Column({ name: 'cogs_total', type: 'bigint', transformer: moneyTransformer })
+  cogsTotal!: number;
 
   @Column({ name: 'units_total', type: 'numeric', precision: 18, scale: 4 })
   unitsTotal!: string;
@@ -140,40 +149,40 @@ export class SalesOrderFactEntity {
   })
   costStatus!: 'VERIFIED' | 'PENDING';
 
-  @Column({ name: 'contributed_gmv', type: 'numeric', precision: 18, scale: 4 })
-  contributedGmv!: string;
+  @Column({
+    name: 'contributed_gmv',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  contributedGmv!: number;
 
   @Column({
     name: 'contributed_gross_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  contributedGrossRevenue!: string;
+  contributedGrossRevenue!: number;
 
   @Column({
     name: 'contributed_discount',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  contributedDiscount!: string;
+  contributedDiscount!: number;
 
   @Column({
     name: 'contributed_net_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  contributedNetRevenue!: string;
+  contributedNetRevenue!: number;
 
   @Column({
     name: 'contributed_cogs',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  contributedCogs!: string;
+  contributedCogs!: number;
 
   @Column({
     name: 'contributed_units_sold',
@@ -271,41 +280,50 @@ export class SalesOrderLineFactEntity {
   @Column({ name: 'quantity', type: 'numeric', precision: 18, scale: 4 })
   quantity!: string;
 
-  @Column({ name: 'unit_price', type: 'numeric', precision: 18, scale: 4 })
-  unitPrice!: string;
+  @Column({ name: 'unit_price', type: 'bigint', transformer: moneyTransformer })
+  unitPrice!: number;
 
-  @Column({ name: 'line_subtotal', type: 'numeric', precision: 18, scale: 4 })
-  lineSubtotal!: string;
+  @Column({
+    name: 'line_subtotal',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  lineSubtotal!: number;
 
-  @Column({ name: 'line_discount', type: 'numeric', precision: 18, scale: 4 })
-  lineDiscount!: string;
+  @Column({
+    name: 'line_discount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  lineDiscount!: number;
 
   @Column({
     name: 'line_net_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  lineNetRevenue!: string;
+  lineNetRevenue!: number;
 
   @Column({
     name: 'unit_cost_snapshot',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  unitCostSnapshot!: string;
+  unitCostSnapshot!: number;
 
-  @Column({ name: 'cogs_amount', type: 'numeric', precision: 18, scale: 4 })
-  cogsAmount!: string;
+  @Column({
+    name: 'cogs_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  cogsAmount!: number;
 
   @Column({
     name: 'gross_profit_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  grossProfitAmount!: string;
+  grossProfitAmount!: number;
 
   @Column({
     name: 'cost_status',
@@ -317,35 +335,31 @@ export class SalesOrderLineFactEntity {
 
   @Column({
     name: 'contributed_gross_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  contributedGrossRevenue!: string;
+  contributedGrossRevenue!: number;
 
   @Column({
     name: 'contributed_discount',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  contributedDiscount!: string;
+  contributedDiscount!: number;
 
   @Column({
     name: 'contributed_net_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  contributedNetRevenue!: string;
+  contributedNetRevenue!: number;
 
   @Column({
     name: 'contributed_cogs',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  contributedCogs!: string;
+  contributedCogs!: number;
 
   @Column({
     name: 'contributed_units_sold',
@@ -407,19 +421,22 @@ export class SalesReturnFactEntity {
   @Column({ name: 'date_bucket', type: 'date' })
   dateBucket!: string;
 
-  @Column({ name: 'refund_amount', type: 'numeric', precision: 18, scale: 4 })
-  refundAmount!: string;
+  @Column({
+    name: 'refund_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  refundAmount!: number;
 
   @Column({ name: 'returned_units', type: 'numeric', precision: 18, scale: 4 })
   returnedUnits!: string;
 
   @Column({
     name: 'returned_cogs_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  returnedCogsAmount!: string;
+  returnedCogsAmount!: number;
 
   @Column({ name: 'restocked', type: 'boolean', default: true })
   restocked!: boolean;
@@ -459,50 +476,67 @@ export class DailySalesSummaryEntity {
   @Column({ name: 'branch_id', type: 'uuid' })
   branchId!: string;
 
-  @Column({ name: 'gmv', type: 'numeric', precision: 18, scale: 4 })
-  gmv!: string;
+  @Column({ name: 'gmv', type: 'bigint', transformer: moneyTransformer })
+  gmv!: number;
 
   @Column({
     name: 'gross_sales_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  grossSalesRevenue!: string;
+  grossSalesRevenue!: number;
 
-  @Column({ name: 'discount_total', type: 'numeric', precision: 18, scale: 4 })
-  discountTotal!: string;
+  @Column({
+    name: 'discount_total',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  discountTotal!: number;
 
-  @Column({ name: 'returns_amount', type: 'numeric', precision: 18, scale: 4 })
-  returnsAmount!: string;
+  @Column({
+    name: 'returns_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  returnsAmount!: number;
 
   @Column({
     name: 'net_sales_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  netSalesRevenue!: string;
+  netSalesRevenue!: number;
 
-  @Column({ name: 'tax_total', type: 'numeric', precision: 18, scale: 4 })
-  taxTotal!: string;
+  @Column({ name: 'tax_total', type: 'bigint', transformer: moneyTransformer })
+  taxTotal!: number;
 
-  @Column({ name: 'cogs_amount', type: 'numeric', precision: 18, scale: 4 })
-  cogsAmount!: string;
+  @Column({
+    name: 'cogs_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  cogsAmount!: number;
 
   @Column({
     name: 'returned_cogs_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  returnedCogsAmount!: string;
+  returnedCogsAmount!: number;
 
-  @Column({ name: 'net_cogs_amount', type: 'numeric', precision: 18, scale: 4 })
-  netCogsAmount!: string;
+  @Column({
+    name: 'net_cogs_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  netCogsAmount!: number;
 
-  @Column({ name: 'gross_profit', type: 'numeric', precision: 18, scale: 4 })
-  grossProfit!: string;
+  @Column({
+    name: 'gross_profit',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  grossProfit!: number;
 
   @Column({ name: 'order_count', type: 'integer', default: 0 })
   orderCount!: number;
@@ -527,27 +561,24 @@ export class DailySalesSummaryEntity {
 
   @Column({
     name: 'cash_inflow_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  cashInflowAmount!: string;
+  cashInflowAmount!: number;
 
   @Column({
     name: 'cash_outflow_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  cashOutflowAmount!: string;
+  cashOutflowAmount!: number;
 
   @Column({
     name: 'debt_collected_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  debtCollectedAmount!: string;
+  debtCollectedAmount!: number;
 
   @Column({ name: 'projection_version', type: 'bigint', default: 1 })
   projectionVersion!: string;
@@ -604,42 +635,59 @@ export class ProductSalesSummaryEntity {
 
   @Column({
     name: 'gross_sales_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  grossSalesRevenue!: string;
+  grossSalesRevenue!: number;
 
-  @Column({ name: 'discount_total', type: 'numeric', precision: 18, scale: 4 })
-  discountTotal!: string;
+  @Column({
+    name: 'discount_total',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  discountTotal!: number;
 
-  @Column({ name: 'returns_amount', type: 'numeric', precision: 18, scale: 4 })
-  returnsAmount!: string;
+  @Column({
+    name: 'returns_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  returnsAmount!: number;
 
   @Column({
     name: 'net_sales_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  netSalesRevenue!: string;
+  netSalesRevenue!: number;
 
-  @Column({ name: 'cogs_amount', type: 'numeric', precision: 18, scale: 4 })
-  cogsAmount!: string;
+  @Column({
+    name: 'cogs_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  cogsAmount!: number;
 
   @Column({
     name: 'returned_cogs_amount',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  returnedCogsAmount!: string;
+  returnedCogsAmount!: number;
 
-  @Column({ name: 'net_cogs_amount', type: 'numeric', precision: 18, scale: 4 })
-  netCogsAmount!: string;
+  @Column({
+    name: 'net_cogs_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  netCogsAmount!: number;
 
-  @Column({ name: 'gross_profit', type: 'numeric', precision: 18, scale: 4 })
-  grossProfit!: string;
+  @Column({
+    name: 'gross_profit',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  grossProfit!: number;
 
   @Column({ name: 'order_count', type: 'integer', default: 0 })
   orderCount!: number;
@@ -678,28 +726,38 @@ export class EmployeeSalesSummaryEntity {
 
   @Column({
     name: 'gross_sales_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  grossSalesRevenue!: string;
+  grossSalesRevenue!: number;
 
-  @Column({ name: 'discount_total', type: 'numeric', precision: 18, scale: 4 })
-  discountTotal!: string;
+  @Column({
+    name: 'discount_total',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  discountTotal!: number;
 
-  @Column({ name: 'returns_amount', type: 'numeric', precision: 18, scale: 4 })
-  returnsAmount!: string;
+  @Column({
+    name: 'returns_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  returnsAmount!: number;
 
   @Column({
     name: 'net_sales_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  netSalesRevenue!: string;
+  netSalesRevenue!: number;
 
-  @Column({ name: 'gross_profit', type: 'numeric', precision: 18, scale: 4 })
-  grossProfit!: string;
+  @Column({
+    name: 'gross_profit',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  grossProfit!: number;
 
   @Column({ name: 'completed_order_count', type: 'integer', default: 0 })
   completedOrderCount!: number;
@@ -739,33 +797,43 @@ export class ChannelSalesSummaryEntity {
   @Column({ name: 'channel_type', type: 'varchar', length: 32 })
   channelType!: string;
 
-  @Column({ name: 'gmv', type: 'numeric', precision: 18, scale: 4 })
-  gmv!: string;
+  @Column({ name: 'gmv', type: 'bigint', transformer: moneyTransformer })
+  gmv!: number;
 
   @Column({
     name: 'gross_sales_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  grossSalesRevenue!: string;
+  grossSalesRevenue!: number;
 
-  @Column({ name: 'discount_total', type: 'numeric', precision: 18, scale: 4 })
-  discountTotal!: string;
+  @Column({
+    name: 'discount_total',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  discountTotal!: number;
 
-  @Column({ name: 'returns_amount', type: 'numeric', precision: 18, scale: 4 })
-  returnsAmount!: string;
+  @Column({
+    name: 'returns_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  returnsAmount!: number;
 
   @Column({
     name: 'net_sales_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  netSalesRevenue!: string;
+  netSalesRevenue!: number;
 
-  @Column({ name: 'gross_profit', type: 'numeric', precision: 18, scale: 4 })
-  grossProfit!: string;
+  @Column({
+    name: 'gross_profit',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  grossProfit!: number;
 
   @Column({ name: 'order_count', type: 'integer', default: 0 })
   orderCount!: number;
@@ -810,28 +878,38 @@ export class CustomerGroupSalesSummaryEntity {
 
   @Column({
     name: 'gross_sales_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  grossSalesRevenue!: string;
+  grossSalesRevenue!: number;
 
-  @Column({ name: 'discount_total', type: 'numeric', precision: 18, scale: 4 })
-  discountTotal!: string;
+  @Column({
+    name: 'discount_total',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  discountTotal!: number;
 
-  @Column({ name: 'returns_amount', type: 'numeric', precision: 18, scale: 4 })
-  returnsAmount!: string;
+  @Column({
+    name: 'returns_amount',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  returnsAmount!: number;
 
   @Column({
     name: 'net_sales_revenue',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  netSalesRevenue!: string;
+  netSalesRevenue!: number;
 
-  @Column({ name: 'gross_profit', type: 'numeric', precision: 18, scale: 4 })
-  grossProfit!: string;
+  @Column({
+    name: 'gross_profit',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  grossProfit!: number;
 
   @Column({ name: 'completed_order_count', type: 'integer', default: 0 })
   completedOrderCount!: number;
@@ -887,24 +965,26 @@ export class InventoryStockProjectionEntity {
   @Column({ name: 'in_transit_qty', type: 'numeric', precision: 18, scale: 4 })
   inTransitQty!: string;
 
-  @Column({ name: 'avg_unit_cost', type: 'numeric', precision: 18, scale: 4 })
-  avgUnitCost!: string;
+  @Column({
+    name: 'avg_unit_cost',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  avgUnitCost!: number;
 
   @Column({
     name: 'inventory_valuation',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  inventoryValuation!: string;
+  inventoryValuation!: number;
 
   @Column({
     name: 'in_transit_valuation',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  inTransitValuation!: string;
+  inTransitValuation!: number;
 
   @Column({
     name: 'low_stock_threshold',
@@ -985,27 +1065,24 @@ export class InventoryValueSnapshotEntity {
 
   @Column({
     name: 'on_hand_valuation',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  onHandValuation!: string;
+  onHandValuation!: number;
 
   @Column({
     name: 'in_transit_valuation',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  inTransitValuation!: string;
+  inTransitValuation!: number;
 
   @Column({
     name: 'total_valuation',
-    type: 'numeric',
-    precision: 18,
-    scale: 4,
+    type: 'bigint',
+    transformer: moneyTransformer,
   })
-  totalValuation!: string;
+  totalValuation!: number;
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
@@ -1040,11 +1117,15 @@ export class InventoryMovementProjectionEntity {
   @Column({ name: 'qty_delta', type: 'numeric', precision: 18, scale: 4 })
   qtyDelta!: string;
 
-  @Column({ name: 'unit_cost', type: 'numeric', precision: 18, scale: 4 })
-  unitCost!: string;
+  @Column({ name: 'unit_cost', type: 'bigint', transformer: moneyTransformer })
+  unitCost!: number;
 
-  @Column({ name: 'value_delta', type: 'numeric', precision: 18, scale: 4 })
-  valueDelta!: string;
+  @Column({
+    name: 'value_delta',
+    type: 'bigint',
+    transformer: moneyTransformer,
+  })
+  valueDelta!: number;
 
   @Column({ name: 'on_hand_after', type: 'numeric', precision: 18, scale: 4 })
   onHandAfter!: string;

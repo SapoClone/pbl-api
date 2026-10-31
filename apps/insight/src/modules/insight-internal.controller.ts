@@ -7,12 +7,16 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  Req,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { RequireRoles } from '@pbl/auth';
-import type { Request } from 'express';
-import { InsightAuthenticatedUser } from './analytics-auth.helper';
+import {
+  ApiBearerAuth,
+  ApiHeader,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { CurrentUser, RequirePermission } from '@pbl/auth';
+import { InternalTokenGuard } from '../common/internal-token.guard';
 import {
   InsightRebuildService,
   TriggerRebuildInput,
@@ -22,8 +26,18 @@ import {
   RunReconciliationInput,
 } from './reconciliation/insight-reconciliation.service';
 
+/**
+ * Operator routes, not declared in `krakend.json`: they need the service token (fail closed) and the
+ * forwarded user token with `settings.view` (reads) or `settings.update` (rebuild, reconciliation).
+ */
 @ApiTags('insight-internal')
 @ApiBearerAuth()
+@ApiHeader({
+  name: 'x-internal-token',
+  required: true,
+  description: 'Service token: the value of INTERNAL_S2S_TOKEN',
+})
+@UseGuards(InternalTokenGuard)
 @Controller('internal/v1/insight')
 export class InsightInternalController {
   constructor(
@@ -32,7 +46,7 @@ export class InsightInternalController {
   ) {}
 
   @Get('projections/status')
-  @RequireRoles('insight.projection.status.read')
+  @RequirePermission('settings.view')
   @ApiOperation({
     summary:
       'Get analytical projection freshness, checkpoints & recent rebuilds',
@@ -43,20 +57,22 @@ export class InsightInternalController {
 
   @Post('projections/rebuild')
   @HttpCode(HttpStatus.ACCEPTED)
-  @RequireRoles('insight.projection.rebuild')
+  @RequirePermission('settings.update')
   @ApiOperation({
     summary: 'Trigger shadow generation projection rebuild & cutover',
   })
-  triggerRebuild(@Req() req: Request, @Body() body: TriggerRebuildInput) {
-    const user = (req['user'] ?? {}) as InsightAuthenticatedUser;
+  triggerRebuild(
+    @CurrentUser('id') accountId: string,
+    @Body() body: TriggerRebuildInput,
+  ) {
     return this.rebuildService.triggerRebuild({
       ...body,
-      triggeredBy: user.sub ?? user.accountId ?? 'owner',
+      triggeredBy: accountId,
     });
   }
 
   @Get('projections/rebuild/:id')
-  @RequireRoles('insight.projection.status.read')
+  @RequirePermission('settings.view')
   @ApiOperation({ summary: 'Get projection rebuild job details by ID' })
   getRebuildById(@Param('id', ParseUUIDPipe) id: string) {
     return this.rebuildService.getRebuildById(id);
@@ -64,31 +80,30 @@ export class InsightInternalController {
 
   @Post('reconciliation-runs')
   @HttpCode(HttpStatus.CREATED)
-  @RequireRoles('insight.reconciliation.execute')
+  @RequirePermission('settings.update')
   @ApiOperation({
     summary:
       'Execute analytical reconciliation run against normalized fact tables',
   })
   executeReconciliation(
-    @Req() req: Request,
+    @CurrentUser('id') accountId: string,
     @Body() body: RunReconciliationInput,
   ) {
-    const user = (req['user'] ?? {}) as InsightAuthenticatedUser;
     return this.reconciliationService.executeReconciliation({
       ...body,
-      triggeredBy: user.sub ?? user.accountId ?? 'owner',
+      triggeredBy: accountId,
     });
   }
 
   @Get('reconciliation-runs')
-  @RequireRoles('insight.reconciliation.read')
+  @RequirePermission('settings.view')
   @ApiOperation({ summary: 'List analytical reconciliation runs' })
   listReconciliationRuns() {
     return this.reconciliationService.listReconciliationRuns();
   }
 
   @Get('reconciliation-runs/:id')
-  @RequireRoles('insight.reconciliation.read')
+  @RequirePermission('settings.view')
   @ApiOperation({
     summary:
       'Get analytical reconciliation run details & detected discrepancies',

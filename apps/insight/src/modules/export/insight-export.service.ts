@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -376,9 +375,7 @@ export class InsightExportService {
       throw new NotFoundException(`Export job ${jobId} not found`);
     }
     if (!this.canAccessExportJob(job, allowedBranchIds)) {
-      throw new ForbiddenException(
-        'Access denied to export job outside your branch scope',
-      );
+      throw new NotFoundException(`Export job ${jobId} not found`);
     }
     return this.mapJobRow(job);
   }
@@ -405,9 +402,7 @@ export class InsightExportService {
       throw new NotFoundException(`Export job ${jobId} not found`);
     }
     if (!this.canAccessExportJob(job, allowedBranchIds)) {
-      throw new ForbiddenException(
-        'Access denied to download export job outside your branch scope',
-      );
+      throw new NotFoundException(`Export job ${jobId} not found`);
     }
     const base64 = String(job.file_content_base64 ?? '');
     return {
@@ -422,8 +417,12 @@ export class InsightExportService {
     jobRow: Record<string, unknown>,
     allowedBranchIds?: string[],
   ): boolean {
-    if (!allowedBranchIds || allowedBranchIds.length === 0) {
+    // undefined: every branch; an empty scope sees nothing
+    if (!allowedBranchIds) {
       return true;
+    }
+    if (allowedBranchIds.length === 0) {
+      return false;
     }
     const filters = (jobRow.filters ?? {}) as Record<string, unknown>;
     const jobBranchId = filters.branchId as string | null | undefined;

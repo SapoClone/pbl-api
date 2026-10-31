@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TenantContext } from '@pbl/common';
 import { qualifiedTable } from '@pbl/events';
 import { DataSource } from 'typeorm';
+import { toMoney } from '../../common/money';
 import {
   computeAov,
   computeGrossProfit,
@@ -16,6 +17,14 @@ import {
   toReportingDateBucket,
 } from '../../domain/insight-domain';
 import { ProjectionsService } from '../projections/projections.service';
+
+/** A money value (any scale) as whole VND */
+const money = (value: unknown): number =>
+  toMoney(formatScaledDecimal(parseScaledDecimal(value as string), 0));
+
+/** A scaled bigint money amount as whole VND */
+const moneyScaled = (scaled: bigint): number =>
+  toMoney(formatScaledDecimal(scaled, 0));
 
 export interface DateRangeScopeInput {
   from?: string;
@@ -54,7 +63,8 @@ export class InsightReportingService {
       params.push(branchId);
       return ` AND ${columnExpr} = $${params.length}`;
     }
-    if (allowedBranchIds && allowedBranchIds.length > 0) {
+    // an empty scope matches no branch (ANY of an empty array)
+    if (allowedBranchIds) {
       params.push(allowedBranchIds);
       return ` AND ${columnExpr} = ANY($${params.length}::uuid[])`;
     }
@@ -210,14 +220,8 @@ export class InsightReportingService {
           curr.units_returned,
           prev.units_returned,
         ),
-        cashInflowAmount: formatScaledDecimal(
-          parseScaledDecimal(curr.cash_inflow_amount),
-          2,
-        ),
-        debtCollectedAmount: formatScaledDecimal(
-          parseScaledDecimal(curr.debt_collected_amount),
-          2,
-        ),
+        cashInflowAmount: money(curr.cash_inflow_amount),
+        debtCollectedAmount: money(curr.debt_collected_amount),
         isProfitProvisional: Number(curr.pending_cost_lines_count) > 0,
         pendingCostLinesCount: Number(curr.pending_cost_lines_count),
       },
@@ -231,14 +235,8 @@ export class InsightReportingService {
           parseScaledDecimal(inv.total_available_qty),
           2,
         ),
-        onHandValuation: formatScaledDecimal(
-          parseScaledDecimal(inv.on_hand_valuation),
-          2,
-        ),
-        inTransitValuation: formatScaledDecimal(
-          parseScaledDecimal(inv.in_transit_valuation),
-          2,
-        ),
+        onHandValuation: money(inv.on_hand_valuation),
+        inTransitValuation: money(inv.in_transit_valuation),
       },
       freshness,
     };
@@ -297,31 +295,16 @@ export class InsightReportingService {
     const dates = enumerateDateRange(fromDate, toDate);
     const series = dates.map((d) => {
       const r = rowMap.get(d);
-      const netRev = formatScaledDecimal(
-        parseScaledDecimal(r?.net_sales_revenue as string),
-        2,
-      );
+      const netRev = money(r?.net_sales_revenue as string);
       const completedCount = Number(r?.completed_order_count ?? 0);
       return {
         date: d,
-        gmv: formatScaledDecimal(parseScaledDecimal(r?.gmv as string), 2),
-        grossSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(r?.gross_sales_revenue as string),
-          2,
-        ),
-        discountTotal: formatScaledDecimal(
-          parseScaledDecimal(r?.discount_total as string),
-          2,
-        ),
-        returnsAmount: formatScaledDecimal(
-          parseScaledDecimal(r?.returns_amount as string),
-          2,
-        ),
+        gmv: money(r?.gmv as string),
+        grossSalesRevenue: money(r?.gross_sales_revenue as string),
+        discountTotal: money(r?.discount_total as string),
+        returnsAmount: money(r?.returns_amount as string),
         netSalesRevenue: netRev,
-        grossProfit: formatScaledDecimal(
-          parseScaledDecimal(r?.gross_profit as string),
-          2,
-        ),
+        grossProfit: money(r?.gross_profit as string),
         orderCount: Number(r?.order_count ?? 0),
         completedOrderCount: completedCount,
         cancelledOrderCount: Number(r?.cancelled_order_count ?? 0),
@@ -438,22 +421,10 @@ export class InsightReportingService {
           parseScaledDecimal(r.units_returned as string),
           2,
         ),
-        grossSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(r.gross_sales_revenue as string),
-          2,
-        ),
-        discountTotal: formatScaledDecimal(
-          parseScaledDecimal(r.discount_total as string),
-          2,
-        ),
-        returnsAmount: formatScaledDecimal(
-          parseScaledDecimal(r.returns_amount as string),
-          2,
-        ),
-        netSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(r.net_sales_revenue as string),
-          2,
-        ),
+        grossSalesRevenue: money(r.gross_sales_revenue as string),
+        discountTotal: money(r.discount_total as string),
+        returnsAmount: money(r.returns_amount as string),
+        netSalesRevenue: money(r.net_sales_revenue as string),
         netCogsAmount: profitCalc.netCogs,
         grossProfit: profitCalc.grossProfit,
         grossMarginPct: profitCalc.grossMarginPct,
@@ -522,34 +493,19 @@ export class InsightReportingService {
     const totalNetStr = formatScaledDecimal(totalNetScaled, 4);
 
     const data = rows.map((r: Record<string, unknown>) => {
-      const netStr = formatScaledDecimal(
-        parseScaledDecimal(r.net_sales_revenue as string),
-        2,
-      );
+      const netStr = money(r.net_sales_revenue as string);
       const sharePct =
         totalNetScaled > 0n
           ? mulDecimals(divDecimals(netStr, totalNetStr, 4), 100, 2)
           : '0.00';
       return {
         channelType: r.channel_type,
-        gmv: formatScaledDecimal(parseScaledDecimal(r.gmv as string), 2),
-        grossSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(r.gross_sales_revenue as string),
-          2,
-        ),
-        discountTotal: formatScaledDecimal(
-          parseScaledDecimal(r.discount_total as string),
-          2,
-        ),
-        returnsAmount: formatScaledDecimal(
-          parseScaledDecimal(r.returns_amount as string),
-          2,
-        ),
+        gmv: money(r.gmv as string),
+        grossSalesRevenue: money(r.gross_sales_revenue as string),
+        discountTotal: money(r.discount_total as string),
+        returnsAmount: money(r.returns_amount as string),
         netSalesRevenue: netStr,
-        grossProfit: formatScaledDecimal(
-          parseScaledDecimal(r.gross_profit as string),
-          2,
-        ),
+        grossProfit: money(r.gross_profit as string),
         orderCount: Number(r.order_count),
         completedOrderCount: Number(r.completed_order_count),
         cancelledOrderCount: Number(r.cancelled_order_count),
@@ -564,7 +520,7 @@ export class InsightReportingService {
 
     return {
       period: { from: fromDate, to: toDate },
-      totalNetSalesRevenue: formatScaledDecimal(totalNetScaled, 2),
+      totalNetSalesRevenue: moneyScaled(totalNetScaled),
       data,
       freshness,
     };
@@ -621,10 +577,7 @@ export class InsightReportingService {
 
     const data = rows.map((r: Record<string, unknown>) => {
       const dateStr = formatDateColumn(r.date_bucket);
-      const netRev = formatScaledDecimal(
-        parseScaledDecimal(r.net_sales_revenue as string),
-        2,
-      );
+      const netRev = money(r.net_sales_revenue as string);
       const profitCalc = computeGrossProfit(
         r.net_sales_revenue as string,
         r.cogs_amount as string,
@@ -633,19 +586,10 @@ export class InsightReportingService {
       return {
         date: dateStr,
         branchId: r.branch_id,
-        gmv: formatScaledDecimal(parseScaledDecimal(r.gmv as string), 2),
-        grossSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(r.gross_sales_revenue as string),
-          2,
-        ),
-        discountTotal: formatScaledDecimal(
-          parseScaledDecimal(r.discount_total as string),
-          2,
-        ),
-        returnsAmount: formatScaledDecimal(
-          parseScaledDecimal(r.returns_amount as string),
-          2,
-        ),
+        gmv: money(r.gmv as string),
+        grossSalesRevenue: money(r.gross_sales_revenue as string),
+        discountTotal: money(r.discount_total as string),
+        returnsAmount: money(r.returns_amount as string),
         netSalesRevenue: netRev,
         netCogsAmount: profitCalc.netCogs,
         grossProfit: profitCalc.grossProfit,
@@ -729,10 +673,7 @@ export class InsightReportingService {
     );
 
     const data = rows.map((r: Record<string, unknown>) => {
-      const netRev = formatScaledDecimal(
-        parseScaledDecimal(r.net_sales_revenue as string),
-        2,
-      );
+      const netRev = money(r.net_sales_revenue as string);
       const profitCalc = computeGrossProfit(
         r.net_sales_revenue as string,
         r.cogs_amount as string,
@@ -740,19 +681,10 @@ export class InsightReportingService {
       );
       return {
         branchId: r.branch_id,
-        gmv: formatScaledDecimal(parseScaledDecimal(r.gmv as string), 2),
-        grossSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(r.gross_sales_revenue as string),
-          2,
-        ),
-        discountTotal: formatScaledDecimal(
-          parseScaledDecimal(r.discount_total as string),
-          2,
-        ),
-        returnsAmount: formatScaledDecimal(
-          parseScaledDecimal(r.returns_amount as string),
-          2,
-        ),
+        gmv: money(r.gmv as string),
+        grossSalesRevenue: money(r.gross_sales_revenue as string),
+        discountTotal: money(r.discount_total as string),
+        returnsAmount: money(r.returns_amount as string),
         netSalesRevenue: netRev,
         netCogsAmount: profitCalc.netCogs,
         grossProfit: profitCalc.grossProfit,
@@ -858,29 +790,14 @@ export class InsightReportingService {
     );
 
     const data = rows.map((r: Record<string, unknown>) => {
-      const netRev = formatScaledDecimal(
-        parseScaledDecimal(r.net_sales_revenue as string),
-        2,
-      );
+      const netRev = money(r.net_sales_revenue as string);
       return {
         employeeId: r.employee_id,
-        grossSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(r.gross_sales_revenue as string),
-          2,
-        ),
-        discountTotal: formatScaledDecimal(
-          parseScaledDecimal(r.discount_total as string),
-          2,
-        ),
-        returnsAmount: formatScaledDecimal(
-          parseScaledDecimal(r.returns_amount as string),
-          2,
-        ),
+        grossSalesRevenue: money(r.gross_sales_revenue as string),
+        discountTotal: money(r.discount_total as string),
+        returnsAmount: money(r.returns_amount as string),
         netSalesRevenue: netRev,
-        grossProfit: formatScaledDecimal(
-          parseScaledDecimal(r.gross_profit as string),
-          2,
-        ),
+        grossProfit: money(r.gross_profit as string),
         completedOrderCount: Number(r.completed_order_count),
         returnCount: Number(r.return_count),
         unitsSold: formatScaledDecimal(
@@ -998,30 +915,12 @@ export class InsightReportingService {
           parseScaledDecimal(r.units_returned as string),
           2,
         ),
-        grossSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(r.gross_sales_revenue as string),
-          2,
-        ),
-        discountTotal: formatScaledDecimal(
-          parseScaledDecimal(r.discount_total as string),
-          2,
-        ),
-        returnsAmount: formatScaledDecimal(
-          parseScaledDecimal(r.returns_amount as string),
-          2,
-        ),
-        netSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(r.net_sales_revenue as string),
-          2,
-        ),
-        cogsAmount: formatScaledDecimal(
-          parseScaledDecimal(r.cogs_amount as string),
-          2,
-        ),
-        returnedCogsAmount: formatScaledDecimal(
-          parseScaledDecimal(r.returned_cogs_amount as string),
-          2,
-        ),
+        grossSalesRevenue: money(r.gross_sales_revenue as string),
+        discountTotal: money(r.discount_total as string),
+        returnsAmount: money(r.returns_amount as string),
+        netSalesRevenue: money(r.net_sales_revenue as string),
+        cogsAmount: money(r.cogs_amount as string),
+        returnedCogsAmount: money(r.returned_cogs_amount as string),
         netCogsAmount: profitCalc.netCogs,
         grossProfit: profitCalc.grossProfit,
         grossMarginPct: profitCalc.grossMarginPct,
@@ -1089,29 +988,14 @@ export class InsightReportingService {
     );
 
     const data = rows.map((r: Record<string, unknown>) => {
-      const netRev = formatScaledDecimal(
-        parseScaledDecimal(r.net_sales_revenue as string),
-        2,
-      );
+      const netRev = money(r.net_sales_revenue as string);
       return {
         customerGroupId: r.customer_group_id,
-        grossSalesRevenue: formatScaledDecimal(
-          parseScaledDecimal(r.gross_sales_revenue as string),
-          2,
-        ),
-        discountTotal: formatScaledDecimal(
-          parseScaledDecimal(r.discount_total as string),
-          2,
-        ),
-        returnsAmount: formatScaledDecimal(
-          parseScaledDecimal(r.returns_amount as string),
-          2,
-        ),
+        grossSalesRevenue: money(r.gross_sales_revenue as string),
+        discountTotal: money(r.discount_total as string),
+        returnsAmount: money(r.returns_amount as string),
         netSalesRevenue: netRev,
-        grossProfit: formatScaledDecimal(
-          parseScaledDecimal(r.gross_profit as string),
-          2,
-        ),
+        grossProfit: money(r.gross_profit as string),
         completedOrderCount: Number(r.completed_order_count),
         unitsSold: formatScaledDecimal(
           parseScaledDecimal(r.units_sold as string),
@@ -1205,18 +1089,9 @@ export class InsightReportingService {
         parseScaledDecimal(r.in_transit_qty as string),
         2,
       ),
-      avgUnitCost: formatScaledDecimal(
-        parseScaledDecimal(r.avg_unit_cost as string),
-        2,
-      ),
-      inventoryValuation: formatScaledDecimal(
-        parseScaledDecimal(r.inventory_valuation as string),
-        2,
-      ),
-      inTransitValuation: formatScaledDecimal(
-        parseScaledDecimal(r.in_transit_valuation as string),
-        2,
-      ),
+      avgUnitCost: money(r.avg_unit_cost as string),
+      inventoryValuation: money(r.inventory_valuation as string),
+      inTransitValuation: money(r.in_transit_valuation as string),
       lowStockThreshold: formatScaledDecimal(
         parseScaledDecimal(r.low_stock_threshold as string),
         2,
@@ -1401,14 +1276,8 @@ export class InsightReportingService {
         parseScaledDecimal(r.available_qty as string),
         2,
       ),
-      avgUnitCost: formatScaledDecimal(
-        parseScaledDecimal(r.avg_unit_cost as string),
-        2,
-      ),
-      inventoryValuation: formatScaledDecimal(
-        parseScaledDecimal(r.inventory_valuation as string),
-        2,
-      ),
+      avgUnitCost: money(r.avg_unit_cost as string),
+      inventoryValuation: money(r.inventory_valuation as string),
       unitsSoldInWindow: formatScaledDecimal(
         parseScaledDecimal(r.window_units_sold as string),
         2,
@@ -1500,20 +1369,17 @@ export class InsightReportingService {
           parseScaledDecimal(r.total_in_transit_qty as string),
           2,
         ),
-        onHandValuation: formatScaledDecimal(onHandVal, 2),
-        inTransitValuation: formatScaledDecimal(inTransitVal, 2),
-        totalValuation: formatScaledDecimal(onHandVal + inTransitVal, 2),
+        onHandValuation: moneyScaled(onHandVal),
+        inTransitValuation: moneyScaled(inTransitVal),
+        totalValuation: moneyScaled(onHandVal + inTransitVal),
       };
     });
 
     return {
       totals: {
-        onHandValuation: formatScaledDecimal(tenantOnHandVal, 2),
-        inTransitValuation: formatScaledDecimal(tenantInTransitVal, 2),
-        totalValuation: formatScaledDecimal(
-          tenantOnHandVal + tenantInTransitVal,
-          2,
-        ),
+        onHandValuation: moneyScaled(tenantOnHandVal),
+        inTransitValuation: moneyScaled(tenantInTransitVal),
+        totalValuation: moneyScaled(tenantOnHandVal + tenantInTransitVal),
       },
       warehouses,
       freshness,
@@ -1590,14 +1456,8 @@ export class InsightReportingService {
         parseScaledDecimal(r.qty_delta as string),
         2,
       ),
-      unitCost: formatScaledDecimal(
-        parseScaledDecimal(r.unit_cost as string),
-        2,
-      ),
-      valueDelta: formatScaledDecimal(
-        parseScaledDecimal(r.value_delta as string),
-        2,
-      ),
+      unitCost: money(r.unit_cost as string),
+      valueDelta: money(r.value_delta as string),
       onHandAfter: formatScaledDecimal(
         parseScaledDecimal(r.on_hand_after as string),
         2,
@@ -1692,8 +1552,8 @@ export class InsightReportingService {
     return {
       period: branchReport.period,
       totals: {
-        netSalesRevenue: formatScaledDecimal(totalNetScaled, 2),
-        grossProfit: formatScaledDecimal(totalProfitScaled, 2),
+        netSalesRevenue: moneyScaled(totalNetScaled),
+        grossProfit: moneyScaled(totalProfitScaled),
       },
       branches: comparison,
       freshness: branchReport.freshness,
