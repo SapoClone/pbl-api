@@ -25,5 +25,6 @@ large changes are built on them. Summary rules live in [`/CLAUDE.md`](../../CLAU
 | [0016](0016-customer-m4-crm-loyalty-ledger-and-holds.md) | Customer M4 CRM profiles, membership tiers, append-only loyalty ledger, and point holds | Accepted |
 | [0017](0017-finance-m5-journal-receivables-payables-credit-and-reconciliation.md) | Finance M5 cashbook, AR/AP subledgers, credit exposure authorization, and COD/shift reconciliation | Accepted |
 | [0018](0018-integration-m6-omnichannel-webhooks-sku-mapping-sync-jobs-and-reconciliation.md) | Integration M6 omnichannel connectors, webhook verification, SKU mapping, sync jobs, and reconciliation | Accepted |
+| [0019](0019-insight-m7-event-driven-projections-incremental-deltas-rebuild-and-reconciliation.md) | Insight M7 event-driven read projections, incremental delta rollups, rebuild workflows, and reconciliation | Accepted |
 
 New record: copy [0000-template.md](0000-template.md), take the next number.

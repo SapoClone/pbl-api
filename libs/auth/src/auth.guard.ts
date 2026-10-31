@@ -116,6 +116,26 @@ export class AuthGuard implements CanActivate {
       }
       return false;
     }
+    if (required.startsWith('insight.')) {
+      if (normalized.has('owner')) {
+        return true;
+      }
+      if (normalized.has('manager') || normalized.has('accountant')) {
+        const managerPermissions = new Set([
+          'insight.dashboard.read',
+          'insight.sales.read',
+          'insight.inventory.read',
+          'insight.profitability.read',
+          'insight.branch_comparison.read',
+          'insight.export.create',
+          'insight.export.download',
+          'insight.projection.status.read',
+          'insight.reconciliation.read',
+        ]);
+        return managerPermissions.has(required);
+      }
+      return false;
+    }
     return false;
   }
 
