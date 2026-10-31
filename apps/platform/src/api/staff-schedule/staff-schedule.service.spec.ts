@@ -206,6 +206,29 @@ describe('StaffScheduleService', () => {
 
       expect(schedules.delete).toHaveBeenCalledWith({ id: 's1' });
     });
+
+    it('answers 404 for a shift in a branch outside the caller’s scope, and changes nothing', async () => {
+      schedules.findOne.mockResolvedValue(shift({ branchId: 'b2' }));
+
+      await expect(
+        inTenant(() => service.update('o', 's1', {}, ['b1'])),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        inTenant(() => service.remove('s1', ['b1'])),
+      ).rejects.toThrow(NotFoundException);
+      expect(schedules.delete).not.toHaveBeenCalled();
+      expect(schedules.save).not.toHaveBeenCalled();
+    });
+
+    it('changes a shift in a branch of the caller’s scope', async () => {
+      schedules.findOne.mockResolvedValue(shift({ branchId: 'b1' }));
+
+      await inTenant(() => service.update('o', 's1', {}, ['b1', 'b2']));
+      await inTenant(() => service.remove('s1', ['b1']));
+
+      expect(schedules.save).toHaveBeenCalled();
+      expect(schedules.delete).toHaveBeenCalledWith({ id: 's1' });
+    });
   });
 
   describe('list and today', () => {
@@ -220,6 +243,29 @@ describe('StaffScheduleService', () => {
         branchId: 'b1',
         accountId: 'a1',
         weekday: 2,
+      });
+    });
+
+    it('restricts the list to the allowed branches', async () => {
+      await inTenant(() => service.list({}, ['b1', 'b2']));
+
+      expect(schedules.find.mock.calls[0][0].where).toEqual({
+        branchId: expect.objectContaining({ _value: ['b1', 'b2'] }),
+      });
+    });
+
+    it('answers 404 when the branch filter is outside the scope (existence not leaked)', async () => {
+      await expect(
+        inTenant(() => service.list({ branchId: 'b9' }, ['b1'])),
+      ).rejects.toThrow(NotFoundException);
+      expect(schedules.find).not.toHaveBeenCalled();
+    });
+
+    it('keeps an allowed branch filter', async () => {
+      await inTenant(() => service.list({ branchId: 'b1' }, ['b1']));
+
+      expect(schedules.find.mock.calls[0][0].where).toEqual({
+        branchId: 'b1',
       });
     });
 

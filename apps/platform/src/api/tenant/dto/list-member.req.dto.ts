@@ -1,8 +1,9 @@
 import {
   EnumFieldOptional,
   StringFieldOptional,
+  UUIDFieldOptional,
 } from '@/decorators/field.decorators';
-import { MemberStatus, TenantRole } from '../entities/account-tenant.entity';
+import { MemberStatus } from '../entities/account-tenant.entity';
 
 export class ListMemberReqDto {
   /** Searches name, email and code */
@@ -12,6 +13,10 @@ export class ListMemberReqDto {
   @EnumFieldOptional(() => MemberStatus)
   status?: MemberStatus;
 
-  @EnumFieldOptional(() => TenantRole)
-  role?: TenantRole;
+  /** A role code (`branch_manager`; the legacy `manager` and `cashier` too) */
+  @StringFieldOptional({ maxLength: 64 })
+  role?: string;
+
+  @UUIDFieldOptional()
+  roleId?: string;
 }

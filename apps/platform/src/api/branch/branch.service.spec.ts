@@ -419,5 +419,33 @@ describe('BranchService', () => {
         { q: '%kho\\%%' },
       );
     });
+
+    describe('branch scope', () => {
+      const fresh = () =>
+        Object.assign(new ListBranchReqDto(), { order: Order.ASC });
+
+      it('limits the list to the allowed branches', async () => {
+        await as('t1').list(fresh(), ['b1', 'b2']);
+
+        expect(builder.andWhere).toHaveBeenCalledWith(
+          'branch.id IN (:...allowed)',
+          { allowed: ['b1', 'b2'] },
+        );
+      });
+
+      it('returns nothing for an empty scope instead of everything', async () => {
+        await as('t1').list(fresh(), []);
+
+        expect(builder.andWhere).toHaveBeenCalledWith('1 = 0', {
+          allowed: [],
+        });
+      });
+
+      it('adds no condition for every branch (null)', async () => {
+        await as('t1').list(fresh(), null);
+
+        expect(builder.andWhere).not.toHaveBeenCalled();
+      });
+    });
   });
 });

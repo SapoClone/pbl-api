@@ -93,7 +93,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
    * @param exception ValidationException
    * @returns ErrorDto
    */
-  private handleValidationException(exception: ValidationException): ErrorDto {
+  private handleValidationException(exception: HttpException): ErrorDto {
     const r = exception.getResponse() as {
       errorCode: ErrorCode;
       message: string;
@@ -122,6 +122,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
    * @returns ErrorDto
    */
   private handleHttpException(exception: HttpException): ErrorDto {
+    // a 404/409 raised with an error code (see coded.exception.ts)
+    const body = exception.getResponse();
+    if (
+      typeof body === 'object' &&
+      body !== null &&
+      'errorCode' in body &&
+      Object.values(ErrorCode).includes(body.errorCode as ErrorCode)
+    ) {
+      return this.handleValidationException(exception);
+    }
     const statusCode = exception.getStatus();
     const errorRes = {
       timestamp: new Date().toISOString(),

@@ -12,11 +12,16 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiParam, ApiTags } from '@nestjs/swagger';
-import { AuthUser, CurrentTenant, CurrentUser, RequireRoles } from '@pbl/auth';
+import {
+  AllowedBranches,
+  AuthUser,
+  CurrentTenant,
+  CurrentUser,
+  RequirePermission,
+} from '@pbl/auth';
 import { plainToInstance } from 'class-transformer';
 import { AuthService } from '../auth/auth.service';
 import { AddMemberReqDto } from './dto/add-member.req.dto';
-import { ChangeMemberRoleReqDto } from './dto/change-member-role.req.dto';
 import { CreateTenantReqDto } from './dto/create-tenant.req.dto';
 import { CreateTenantResDto } from './dto/create-tenant.res.dto';
 import { ListMemberReqDto } from './dto/list-member.req.dto';
@@ -26,16 +31,16 @@ import { MemberResDto } from './dto/member.res.dto';
 import { MembershipResDto } from './dto/membership.res.dto';
 import { TenantContextResDto } from './dto/tenant-context.res.dto';
 import { TenantResDto } from './dto/tenant.res.dto';
+import { UpdateMemberReqDto } from './dto/update-member.req.dto';
 import { UpdateTenantReqDto } from './dto/update-tenant.req.dto';
-import { TenantRole } from './entities/account-tenant.entity';
 import { MemberService } from './member.service';
 import { TenantService } from './tenant.service';
 
 /**
- * Contract permissions: `staff.view` (list, summary, detail) maps to owner and
- * manager (the existing list was already limited to them, so the new reads
- * follow it rather than opening staff emails to cashiers); `staff.update`,
- * `staff.delete` (lock, unlock, remove) map to owner only.
+ * Permissions (ADR-0012): `settings.update` edits the store; members need
+ * `staff.view` (list, summary, detail), `staff.create` (add), `staff.update`
+ * (role, branches, lock, unlock) and `staff.delete` (remove). The store list
+ * and the context are open to every member.
  */
 @ApiTags('tenants')
 @Controller({ path: 'tenants', version: '1' })
@@ -83,13 +88,20 @@ export class TenantController {
   @Get('current/context')
   getContext(
     @CurrentTenant() tenantId: string,
-    @CurrentUser('id') accountId: string,
+    @CurrentUser() user: AuthUser,
+    @AllowedBranches() branches: string[] | null,
   ): Promise<TenantContextResDto> {
-    return this.tenantService.getContext(tenantId, accountId);
+    return this.tenantService.getContext(tenantId, user.id, {
+      permissions: user.permissions,
+      branches,
+    });
   }
 
-  @ApiAuth({ type: TenantResDto, summary: 'Update the selected store (owner)' })
-  @RequireRoles(TenantRole.OWNER)
+  @ApiAuth({
+    type: TenantResDto,
+    summary: 'Update the selected store (settings.update)',
+  })
+  @RequirePermission('settings.update')
   @Patch('current')
   updateCurrent(
     @CurrentTenant() tenantId: string,
@@ -101,9 +113,9 @@ export class TenantController {
 
   @ApiAuth({
     type: MemberResDto,
-    summary: 'Members of the selected store (owner, manager)',
+    summary: 'Members of the selected store (staff.view)',
   })
-  @RequireRoles(TenantRole.OWNER, TenantRole.MANAGER)
+  @RequirePermission('staff.view')
   @Get('current/members')
   listMembers(
     @CurrentTenant() tenantId: string,
@@ -114,9 +126,9 @@ export class TenantController {
 
   @ApiAuth({
     type: MemberSummaryResDto,
-    summary: 'KPI cards of the staff screen (owner, manager)',
+    summary: 'KPI cards of the staff screen (staff.view)',
   })
-  @RequireRoles(TenantRole.OWNER, TenantRole.MANAGER)
+  @RequirePermission('staff.view')
   @Get('current/members/summary')
   memberSummary(
     @CurrentTenant() tenantId: string,
@@ -126,10 +138,10 @@ export class TenantController {
 
   @ApiAuth({
     type: MemberDetailResDto,
-    summary: 'One member with their shifts (owner, manager)',
+    summary: 'One member with their shifts (staff.view)',
   })
   @ApiParam({ name: 'accountId', type: 'String' })
-  @RequireRoles(TenantRole.OWNER, TenantRole.MANAGER)
+  @RequirePermission('staff.view')
   @Get('current/members/:accountId')
   getMember(
     @CurrentTenant() tenantId: string,
@@ -140,10 +152,11 @@ export class TenantController {
 
   @ApiAuth({
     type: MemberResDto,
-    summary: 'Lock a member out of the store and end their sessions (owner)',
+    summary:
+      'Lock a member out of the store and end their sessions (staff.update)',
   })
   @ApiParam({ name: 'accountId', type: 'String' })
-  @RequireRoles(TenantRole.OWNER)
+  @RequirePermission('staff.update')
   @Post('current/members/:accountId/lock')
   lockMember(
     @CurrentTenant() tenantId: string,
@@ -153,9 +166,9 @@ export class TenantController {
     return this.memberService.lock(tenantId, actorId, accountId);
   }
 
-  @ApiAuth({ type: MemberResDto, summary: 'Unlock a member (owner)' })
+  @ApiAuth({ type: MemberResDto, summary: 'Unlock a member (staff.update)' })
   @ApiParam({ name: 'accountId', type: 'String' })
-  @RequireRoles(TenantRole.OWNER)
+  @RequirePermission('staff.update')
   @Post('current/members/:accountId/unlock')
   unlockMember(
     @CurrentTenant() tenantId: string,
@@ -165,11 +178,11 @@ export class TenantController {
   }
 
   @ApiAuth({
-    summary: 'Remove a member from the store (owner); the account stays',
+    summary: 'Remove a member from the store (staff.delete); the account stays',
     statusCode: HttpStatus.NO_CONTENT,
   })
   @ApiParam({ name: 'accountId', type: 'String' })
-  @RequireRoles(TenantRole.OWNER)
+  @RequirePermission('staff.delete')
   @Delete('current/members/:accountId')
   removeMember(
     @CurrentTenant() tenantId: string,
@@ -181,10 +194,11 @@ export class TenantController {
 
   @ApiAuth({
     type: MemberResDto,
-    summary: 'Give a registered account a role in the store (owner)',
+    summary:
+      'Give a registered account a role (roleId, or the legacy role) and branches (staff.create)',
     statusCode: HttpStatus.CREATED,
   })
-  @RequireRoles(TenantRole.OWNER)
+  @RequirePermission('staff.create')
   @Post('current/members')
   addMember(
     @CurrentTenant() tenantId: string,
@@ -195,27 +209,31 @@ export class TenantController {
       tenantId,
       actorId,
       dto.email,
-      dto.role as unknown as TenantRole,
+      { roleId: dto.roleId, role: dto.role },
+      dto.branchIds,
     );
   }
 
   @ApiAuth({
     type: MemberResDto,
-    summary: 'Change the role of a member (owner)',
+    summary:
+      'Change the role and/or branches of a member; applies at their next sign-in or refresh (staff.update)',
   })
-  @RequireRoles(TenantRole.OWNER)
+  @ApiParam({ name: 'accountId', type: 'String' })
+  @RequirePermission('staff.update')
   @Patch('current/members/:accountId')
-  changeMemberRole(
+  updateMember(
     @CurrentTenant() tenantId: string,
     @CurrentUser('id') actorId: string,
     @Param('accountId', ParseUUIDPipe) accountId: string,
-    @Body() dto: ChangeMemberRoleReqDto,
+    @Body() dto: UpdateMemberReqDto,
   ): Promise<MemberResDto> {
-    return this.memberService.changeRole(
+    return this.memberService.update(
       tenantId,
       actorId,
       accountId,
-      dto.role as unknown as TenantRole,
+      { roleId: dto.roleId, role: dto.role },
+      dto.branchIds,
     );
   }
 }

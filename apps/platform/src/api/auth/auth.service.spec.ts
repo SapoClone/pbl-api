@@ -201,6 +201,8 @@ describe('AuthService', () => {
         sessionId: 'family-1',
         subjectType: 'account',
         roles: [],
+        permissions: [],
+        branches: ['*'],
         exp,
       });
 
@@ -292,18 +294,38 @@ describe('AuthService', () => {
     name: 'Alpha',
     subdomain: 'alpha',
     role: 'owner',
+    roleId: 'r-owner-1',
+    roleName: 'Chủ cửa hàng',
+    permissions: ['*'],
+    branches: ['*'],
   };
   const beta = {
     tenantId: 't2',
     name: 'Beta',
     subdomain: 'beta',
     role: 'owner',
+    roleId: 'r-owner-2',
+    roleName: 'Chủ cửa hàng',
+    permissions: ['*'],
+    branches: ['*'],
+  };
+  const staffAtGamma = {
+    tenantId: 't3',
+    name: 'Gamma',
+    subdomain: 'gamma',
+    role: 'sales_staff',
+    roleId: 'r-sales-3',
+    roleName: 'Nhân viên bán hàng',
+    permissions: ['orders.view', 'pos.create'],
+    branches: ['b1', 'b2'],
   };
   const caller = {
     id: 'a1',
     sessionId: 'family-old',
     subjectType: 'account' as const,
     roles: [],
+    permissions: [],
+    branches: ['*'],
     exp: Math.floor(Date.now() / 1000) + 600,
   };
 
@@ -341,6 +363,8 @@ describe('AuthService', () => {
         sessionId: 'family-1',
         tenantId: 't1',
         roles: ['owner'],
+        permissions: ['*'],
+        branches: ['*'],
       });
       expect(res).toMatchObject({
         userId: 'a1',
@@ -349,8 +373,50 @@ describe('AuthService', () => {
         tenantId: 't1',
       });
       expect(res.tenants).toEqual([
-        { id: 't1', name: 'Alpha', subdomain: 'alpha', role: 'owner' },
+        {
+          id: 't1',
+          name: 'Alpha',
+          subdomain: 'alpha',
+          role: 'owner',
+          roleId: 'r-owner-1',
+          roleName: 'Chủ cửa hàng',
+        },
       ]);
+    });
+
+    it('signs the role code, permissions and branches of a staff member', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([
+        staffAtGamma,
+      ]);
+
+      await login();
+
+      expect(accessTokenServiceValue.sign).toHaveBeenCalledWith({
+        userId: 'a1',
+        sessionId: 'family-1',
+        tenantId: 't3',
+        roles: ['sales_staff'],
+        permissions: ['orders.view', 'pos.create'],
+        branches: ['b1', 'b2'],
+      });
+    });
+
+    it('signs no permissions and no branches without a store', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([
+        alpha,
+        beta,
+      ]);
+
+      await login();
+
+      expect(accessTokenServiceValue.sign).toHaveBeenCalledWith({
+        userId: 'a1',
+        sessionId: 'family-1',
+        tenantId: undefined,
+        roles: [],
+        permissions: undefined,
+        branches: undefined,
+      });
     });
 
     it('writes a login event for the selected store, with the store as its tenant', async () => {
@@ -589,6 +655,8 @@ describe('AuthService', () => {
         sessionId: 'family-1',
         subjectType: 'account',
         roles: [],
+        permissions: [],
+        branches: ['*'],
         exp: Math.floor(Date.now() / 1000) + 600,
       });
 
@@ -606,6 +674,24 @@ describe('AuthService', () => {
         familyId: 'family-2',
       });
       accessTokenServiceValue.sign.mockResolvedValue('at2');
+    });
+
+    it('signs the claims of the store switched into', async () => {
+      membershipServiceValue.findActiveMemberships.mockResolvedValue([
+        alpha,
+        staffAtGamma,
+      ]);
+
+      await service.switchTenant(caller, 't3');
+
+      expect(accessTokenServiceValue.sign).toHaveBeenCalledWith({
+        userId: 'a1',
+        sessionId: 'family-2',
+        tenantId: 't3',
+        roles: ['sales_staff'],
+        permissions: ['orders.view', 'pos.create'],
+        branches: ['b1', 'b2'],
+      });
     });
 
     it('revokes the current session and starts one in the requested store', async () => {
@@ -693,6 +779,28 @@ describe('AuthService', () => {
         sessionId: 'family-1',
         tenantId: 't1',
         roles: ['owner'],
+        permissions: ['*'],
+        branches: ['*'],
+      });
+    });
+
+    it('re-reads the role, permissions and branches, so a change applies at the refresh', async () => {
+      membershipServiceValue.findActiveMembership.mockResolvedValue({
+        ...staffAtGamma,
+        tenantId: 't1',
+        permissions: ['orders.view'],
+        branches: ['b9'],
+      });
+
+      await service.refreshToken({ refreshToken: 'presented' });
+
+      expect(accessTokenServiceValue.sign).toHaveBeenCalledWith({
+        userId: 'a1',
+        sessionId: 'family-1',
+        tenantId: 't1',
+        roles: ['sales_staff'],
+        permissions: ['orders.view'],
+        branches: ['b9'],
       });
     });
 

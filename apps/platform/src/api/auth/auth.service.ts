@@ -234,6 +234,8 @@ export class AuthService {
         name: m.name,
         subdomain: m.subdomain,
         role: m.role,
+        roleId: m.roleId,
+        roleName: m.roleName,
       })),
     });
   }
@@ -424,6 +426,8 @@ export class AuthService {
       sessionId: data.sessionId,
       tenantId: data.membership?.tenantId,
       roles: data.membership ? [data.membership.role] : [],
+      permissions: data.membership?.permissions,
+      branches: data.membership?.branches,
     });
     return {
       accessToken,

@@ -1,17 +1,20 @@
 import { ErrorCode } from '@/constants/error-code.constant';
 import { ValidationException } from '@/exceptions/validation.exception';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { PLATFORM_BRANCH_CREATED } from '@pbl/contracts';
+import {
+  ALL_PERMISSIONS,
+  DEFAULT_ROLE_PERMISSIONS,
+  PLATFORM_BRANCH_CREATED,
+  SEEDED_ROLES,
+} from '@pbl/contracts';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import {
   AccountEntity,
   AccountStatus,
 } from '../account/entities/account.entity';
 import { BranchEntity, BranchStatus } from '../branch/entities/branch.entity';
-import {
-  AccountTenantEntity,
-  TenantRole,
-} from './entities/account-tenant.entity';
+import { RoleEntity } from '../role/entities/role.entity';
+import { AccountTenantEntity } from './entities/account-tenant.entity';
 import { TenantEntity, TenantStatus } from './entities/tenant.entity';
 import { MembershipService } from './membership.service';
 import { initialsOf, TenantService } from './tenant.service';
@@ -20,6 +23,9 @@ describe('TenantService.create', () => {
   const dto = { name: 'My Shop', subdomain: 'my-shop' };
   let tenantRepository: { exists: jest.Mock };
   let saved: unknown[];
+  let savedRoles: RoleEntity[];
+  let inserted: { roleId: string; permissionCode: string }[];
+  let em: { save: jest.Mock; insert: jest.Mock };
   let dataSource: { transaction: jest.Mock; getRepository: jest.Mock };
   let accountRepository: { findOne: jest.Mock };
   let service: TenantService;
@@ -27,14 +33,27 @@ describe('TenantService.create', () => {
 
   beforeEach(() => {
     saved = [];
+    savedRoles = [];
     outbox = { add: jest.fn().mockResolvedValue(undefined) };
     tenantRepository = { exists: jest.fn().mockResolvedValue(false) };
-    const em = {
+    inserted = [];
+    em = {
       save: jest.fn(async (entity) => {
+        if (Array.isArray(entity)) {
+          // the seeded roles are saved as a batch
+          entity.forEach((role) => {
+            role.id = `role-${role.code}`;
+            savedRoles.push(role);
+          });
+          return entity;
+        }
         saved.push(entity);
         if (entity instanceof TenantEntity)
           entity.id = 't1' as TenantEntity['id'];
         return entity;
+      }),
+      insert: jest.fn(async (_entity, rows) => {
+        inserted.push(...rows);
       }),
     };
     accountRepository = {
@@ -71,6 +90,7 @@ describe('TenantService.create', () => {
       accountId: 'a1',
       tenantId: 't1',
       role: 'owner',
+      roleId: 'role-owner',
       status: 'active',
       code: 'NV001',
     });
@@ -82,6 +102,47 @@ describe('TenantService.create', () => {
       isWarehouse: true,
       status: 'active',
     });
+  });
+
+  it('seeds the five roles of the store with their default permissions, before the creator joins as owner', async () => {
+    await service.create('a1', dto);
+
+    expect(savedRoles.map((r) => r.code)).toEqual(Object.keys(SEEDED_ROLES));
+    expect(savedRoles).toEqual(
+      savedRoles.map(() =>
+        expect.objectContaining({ tenantId: 't1', isSeeded: true }),
+      ),
+    );
+    const permissionsOf = (code: string) =>
+      inserted
+        .filter((row) => row.roleId === `role-${code}`)
+        .map((row) => row.permissionCode)
+        .sort();
+    // the owner is always every permission: no rows
+    expect(permissionsOf('owner')).toEqual([]);
+    for (const code of [
+      'branch_manager',
+      'sales_staff',
+      'warehouse_staff',
+      'accountant',
+    ] as const) {
+      expect(permissionsOf(code)).toEqual(
+        [...(DEFAULT_ROLE_PERMISSIONS[code] as readonly string[])].sort(),
+      );
+    }
+    expect(permissionsOf('branch_manager')).not.toContain('staff.update');
+    // roles come first: the membership references the owner role
+    expect(em.save.mock.invocationCallOrder[1]).toBeLessThan(
+      em.save.mock.invocationCallOrder[2],
+    );
+  });
+
+  it('seeds nothing when the subdomain is taken', async () => {
+    tenantRepository.exists.mockResolvedValue(true);
+
+    await service.create('a1', dto).catch(() => undefined);
+
+    expect(em.save).not.toHaveBeenCalled();
   });
 
   it('writes the branch.created event of the default branch in the same transaction, for the new store', async () => {
@@ -181,12 +242,22 @@ describe('TenantService (read and update)', () => {
         name: 'Shop',
         subdomain: 'shop',
         role: 'owner',
-        extra: 'dropped',
+        roleId: 'r1',
+        roleName: 'Chủ cửa hàng',
+        permissions: ['*'],
+        branches: ['*'],
       },
     ]);
 
     await expect(service.listMine('a1')).resolves.toEqual([
-      { id: 't1', name: 'Shop', subdomain: 'shop', role: 'owner' },
+      {
+        id: 't1',
+        name: 'Shop',
+        subdomain: 'shop',
+        role: 'owner',
+        roleId: 'r1',
+        roleName: 'Chủ cửa hàng',
+      },
     ]);
     expect(membershipService.findActiveMemberships).toHaveBeenCalledWith('a1');
   });
@@ -241,11 +312,13 @@ describe('TenantService.getContext', () => {
     subdomain: 'mocstore',
     status: TenantStatus.ACTIVE,
   });
-  const membership = (role: TenantRole) =>
+  const membership = (code: string, name: string) =>
     new AccountTenantEntity({
       accountId: 'a1',
       tenantId: 't1',
-      role,
+      role: code,
+      roleId: `role-${code}`,
+      memberRole: new RoleEntity({ id: `role-${code}`, code, name }),
       account: new AccountEntity({
         id: 'a1' as AccountEntity['id'],
         name: 'Minh Anh',
@@ -258,7 +331,7 @@ describe('TenantService.getContext', () => {
 
   beforeEach(() => {
     membershipRepo = {
-      findOne: jest.fn().mockResolvedValue(membership(TenantRole.OWNER)),
+      findOne: jest.fn().mockResolvedValue(membership('owner', 'Chủ cửa hàng')),
     };
     branchRepo = {
       find: jest.fn().mockResolvedValue([
@@ -308,7 +381,7 @@ describe('TenantService.getContext', () => {
         initials: 'MA',
         email: 'minhanh@mocstore.vn',
         role: 'owner',
-        roleId: null,
+        roleId: 'role-owner',
         roleName: 'Chủ cửa hàng',
         isOwner: true,
       },
@@ -326,6 +399,39 @@ describe('TenantService.getContext', () => {
     });
   });
 
+  it('lists the token’s permissions, and every code for the owner’s wildcard', async () => {
+    const staff = await service.getContext('t1', 'a1', {
+      permissions: ['orders.view', 'pos.create'],
+      branches: null,
+    });
+    expect(staff.permissions).toEqual(['orders.view', 'pos.create']);
+
+    const owner = await service.getContext('t1', 'a1', {
+      permissions: ['*'],
+      branches: null,
+    });
+    expect(owner.permissions).toEqual([...ALL_PERMISSIONS]);
+  });
+
+  it('lists only the branches the caller may act in, and counts those', async () => {
+    await service.getContext('t1', 'a1', {
+      permissions: [],
+      branches: ['b1', 'b2'],
+    });
+
+    expect(branchRepo.find.mock.calls[0][0].where).toMatchObject({
+      tenantId: 't1',
+      status: 'active',
+      id: expect.objectContaining({ _type: 'in', _value: ['b1', 'b2'] }),
+    });
+  });
+
+  it('adds no branch filter for a caller with every branch', async () => {
+    await service.getContext('t1', 'a1', { permissions: [], branches: null });
+
+    expect(branchRepo.find.mock.calls[0][0].where).not.toHaveProperty('id');
+  });
+
   it('lists only the active branches of the token’s store', async () => {
     await service.getContext('t1', 'a1');
 
@@ -339,13 +445,16 @@ describe('TenantService.getContext', () => {
     });
   });
 
-  it('knows a cashier is not the owner', async () => {
-    membershipRepo.findOne.mockResolvedValue(membership(TenantRole.CASHIER));
+  it('knows a sales member is not the owner', async () => {
+    membershipRepo.findOne.mockResolvedValue(
+      membership('sales_staff', 'Nhân viên bán hàng'),
+    );
 
     const { me } = await service.getContext('t1', 'a1');
 
     expect(me).toMatchObject({
       isOwner: false,
+      role: 'sales_staff',
       roleName: 'Nhân viên bán hàng',
     });
   });

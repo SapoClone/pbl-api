@@ -35,8 +35,7 @@ export class ContextMeResDto {
   @StringField() @Expose() initials: string;
   @StringField() @Expose() email: string;
   @StringField() @Expose() role: string;
-  /** Null until roles are rows (RBAC is deferred) */
-  @StringFieldOptional({ nullable: true }) @Expose() roleId: string | null;
+  @StringField() @Expose() roleId: string;
   @StringField() @Expose() roleName: string;
   @BooleanField() @Expose() isOwner: boolean;
 }
@@ -59,7 +58,7 @@ export class TenantContextResDto {
   @ClassField(() => ContextBranchResDto, { each: true, isArray: true })
   @Expose()
   branches: ContextBranchResDto[];
-  /** Empty until permissions exist (RBAC is deferred) */
+  /** The token's permissions; the owner's `*` is listed as every code of the catalog */
   @StringField({ each: true, isArray: true })
   @Expose()
   permissions: string[];
