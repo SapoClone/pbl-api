@@ -17,6 +17,7 @@ import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
 import { BranchProjectionEntity } from '../src/branches/branch-projection.entity';
 import { BranchProjectionHandler } from '../src/branches/branch-projection.handler';
 import { CreateInventoryTables1791900000000 } from '../src/migrations/1791900000000-create-inventory-tables';
+import { AddPurchasingAndDocuments1792100000000 } from '../src/migrations/1792100000000-add-purchasing-and-documents';
 import {
   InventoryLedgerEntity,
   StockItemEntity,
@@ -126,6 +127,7 @@ describe('inventory (Postgres)', () => {
         migrations: [
           ...CONSUMER_MIGRATIONS,
           CreateInventoryTables1791900000000,
+          AddPurchasingAndDocuments1792100000000,
         ],
       }),
     );
@@ -223,6 +225,9 @@ describe('inventory (Postgres)', () => {
           onHand: 10,
           reserved: 4,
           available: 6,
+          minQuantity: null,
+          maxQuantity: null,
+          level: 'ok',
         },
       ]);
       expect(b.data[0]).toMatchObject({ onHand: 99, available: 99 });

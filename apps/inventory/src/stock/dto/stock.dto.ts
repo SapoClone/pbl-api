@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -54,7 +55,37 @@ export class StockReceiptReqDto {
   items!: StockLineDto[];
 }
 
-export class ListStockReqDto {
+export const STOCK_LEVELS = ['ok', 'below_min', 'out_of_stock'] as const;
+export const STOCK_SORTS = ['sku', 'available', 'onHand', 'reserved'] as const;
+
+/** Filters shared by the stock list, its export and the summary */
+export class StockFilterDto {
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  /** Searches the SKU */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
+
+  @IsOptional()
+  @IsIn(STOCK_LEVELS)
+  level?: (typeof STOCK_LEVELS)[number];
+
+  @IsOptional()
+  @IsIn(STOCK_SORTS)
+  sort?: (typeof STOCK_SORTS)[number];
+
+  @IsOptional()
+  @IsIn(['ASC', 'DESC'])
+  order?: 'ASC' | 'DESC';
+}
+
+export class ExportStockReqDto extends StockFilterDto {}
+
+export class ListStockReqDto extends StockFilterDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -68,8 +99,20 @@ export class ListStockReqDto {
   @Min(1)
   @Max(100)
   limit: number = 10;
+}
 
+export class StockSummaryReqDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+}
+
+export class StockLookupReqDto {
+  @IsUUID()
+  branchId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  code!: string;
 }
