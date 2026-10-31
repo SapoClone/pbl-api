@@ -30,6 +30,7 @@ export const TOPOLOGY = {
       PLATFORM_BRANCH_UPDATED.type,
       SALES_ORDER_COMPLETED.type,
     ],
+    customer: [SALES_ORDER_COMPLETED.type],
     insight: [
       PLATFORM_ACCOUNT_LOGGED_IN.type,
       PLATFORM_MEMBERSHIP_GRANTED.type,

@@ -87,6 +87,12 @@ export interface OrderCompletedPayload {
   createdBy: string;
   completedAt: string;
   items: { sku: string; name: string; quantity: number; unitPrice: number }[];
+  /** Where the order was sold (`pos`, `manual`, `website`, `shopee`, ...); absent on older events */
+  channel?: string;
+  /** Buyer, when the order has one */
+  customerId?: string | null;
+  /** Integer VND, what the goods cost; absent until costs are tracked */
+  costAmount?: number | null;
 }
 
 // ---- inventory (internal command, not an event: sales holds stock before it sells)
