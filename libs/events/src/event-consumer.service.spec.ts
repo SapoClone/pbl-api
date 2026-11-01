@@ -68,6 +68,27 @@ describe('EventConsumer.handleBody', () => {
     );
   });
 
+  it("binds the event's tenant to the transaction before any handler writes (row-level security)", async () => {
+    const { consumer, registry, manager } = build([{ event_id: 'x' }]);
+    const seen: string[] = [];
+    (manager.query as jest.Mock).mockImplementation(async (sql: string) => {
+      seen.push(sql.includes('set_config') ? 'set_config' : 'inbox');
+      return [{ event_id: 'x' }];
+    });
+    registry.register('platform.branch.updated', async () => {
+      seen.push('handler');
+    });
+
+    await consumer.handleBody(JSON.stringify(envelope()));
+
+    expect(seen).toEqual(['set_config', 'inbox', 'handler']);
+    expect(manager.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("set_config('app.tenant_id'"),
+      ['tenant-a'],
+    );
+  });
+
   it('skips a duplicate delivery without running the handler', async () => {
     const { consumer, registry } = build([]);
     const handler = jest.fn();
