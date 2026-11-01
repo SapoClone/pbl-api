@@ -1037,3 +1037,343 @@ export function calculateReturnRefund(
     isFullOrderReturn,
   };
 }
+
+// ============================================================================
+// VALUE OBJECTS & ORDER AGGREGATE ROOT (M7.5 Tactical DDD)
+// ============================================================================
+
+/**
+ * Immutable Value Object representing an exact VND monetary amount.
+ */
+export class VndMoney {
+  public readonly amount: bigint;
+
+  private constructor(amount: bigint) {
+    this.amount = amount;
+  }
+
+  static of(raw: number | bigint, allowZero = true): VndMoney {
+    return new VndMoney(parseVndAmount(raw, allowZero));
+  }
+
+  static zero(): VndMoney {
+    return new VndMoney(0n);
+  }
+
+  add(other: VndMoney): VndMoney {
+    return new VndMoney(this.amount + other.amount);
+  }
+
+  subtract(other: VndMoney): VndMoney {
+    const next = this.amount - other.amount;
+    if (next < 0n) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.VALIDATION_ERROR,
+        `Monetary subtraction cannot produce a negative amount (${this.toString()} - ${other.toString()})`,
+        422,
+      );
+    }
+    return new VndMoney(next);
+  }
+
+  equals(other: VndMoney): boolean {
+    return this.amount === other.amount;
+  }
+
+  isPositive(): boolean {
+    return this.amount > 0n;
+  }
+
+  toString(): string {
+    return this.amount.toString();
+  }
+}
+
+/**
+ * Immutable Value Object representing a positive stock quantity in NUMERIC(18,3) milli-units.
+ */
+export class StockQuantity {
+  public readonly millis: bigint;
+
+  private constructor(millis: bigint) {
+    this.millis = millis;
+  }
+
+  static of(raw: string | number): StockQuantity {
+    return new StockQuantity(parseQtyMillis(raw));
+  }
+
+  add(other: StockQuantity): StockQuantity {
+    return new StockQuantity(this.millis + other.millis);
+  }
+
+  toBaseQuantity(conversionFactor?: string | number | null): StockQuantity {
+    const factor = parseConversionFactor(conversionFactor);
+    return new StockQuantity(computeBaseQtyMillis(this.millis, factor));
+  }
+
+  equals(other: StockQuantity): boolean {
+    return this.millis === other.millis;
+  }
+
+  toString(): string {
+    return formatQtyMillis(this.millis);
+  }
+}
+
+/**
+ * Immutable Value Object representing a validated discount percentage (0..100).
+ */
+export class DiscountPercentage {
+  public readonly value: number;
+  public readonly basisPoints: bigint;
+
+  private constructor(value: number, basisPoints: bigint) {
+    this.value = value;
+    this.basisPoints = basisPoints;
+  }
+
+  static of(raw: string | number): DiscountPercentage {
+    const num = Number(raw);
+    if (!Number.isFinite(num) || num < 0 || num > 100) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.INVALID_DISCOUNT,
+        `Discount percentage must be between 0 and 100, got ${raw}`,
+        422,
+      );
+    }
+    return new DiscountPercentage(num, BigInt(Math.round(num * 100)));
+  }
+}
+
+export interface OrderStateTransitionRecord {
+  fromOrderStatus: CommercialOrderStatus;
+  toOrderStatus: CommercialOrderStatus;
+  fromPaymentStatus: OrderPaymentStatus;
+  toPaymentStatus: OrderPaymentStatus;
+  fromFulfillmentStatus: OrderFulfillmentStatus;
+  toFulfillmentStatus: OrderFulfillmentStatus;
+  reason: string;
+}
+
+/**
+ * Rich Aggregate Root protecting the 3D state machine (CommercialOrderStatus x
+ * OrderPaymentStatus x OrderFulfillmentStatus), optimistic concurrency version,
+ * and fulfillment/cancellation invariants of a Sales Order.
+ */
+export class OrderAggregate {
+  constructor(
+    public readonly id: string,
+    public readonly tenantId: string,
+    public readonly code: string,
+    private _orderStatus: CommercialOrderStatus,
+    private _paymentStatus: OrderPaymentStatus,
+    private _fulfillmentStatus: OrderFulfillmentStatus,
+    private _version: number = 1,
+    private _warehouseId: string | null = null,
+    private _reservationId: string | null = null,
+    private _completedAt: Date | null = null,
+    private _cancelledAt: Date | null = null,
+    private _cancelReason: string | null = null,
+  ) {
+    validateOrderStateCombination({
+      orderStatus: this._orderStatus,
+      paymentStatus: this._paymentStatus,
+      fulfillmentStatus: this._fulfillmentStatus,
+    });
+  }
+
+  get orderStatus(): CommercialOrderStatus {
+    return this._orderStatus;
+  }
+
+  get legacyStatus(): string {
+    return this._orderStatus.toLowerCase();
+  }
+
+  get paymentStatus(): OrderPaymentStatus {
+    return this._paymentStatus;
+  }
+
+  get fulfillmentStatus(): OrderFulfillmentStatus {
+    return this._fulfillmentStatus;
+  }
+
+  get version(): number {
+    return this._version;
+  }
+
+  get warehouseId(): string | null {
+    return this._warehouseId;
+  }
+
+  get reservationId(): string | null {
+    return this._reservationId;
+  }
+
+  get completedAt(): Date | null {
+    return this._completedAt;
+  }
+
+  get cancelledAt(): Date | null {
+    return this._cancelledAt;
+  }
+
+  get cancelReason(): string | null {
+    return this._cancelReason;
+  }
+
+  /**
+   * Verifies that the order is in an editable pre-confirmation state (DRAFT or PENDING)
+   * and optionally checks optimistic concurrency version.
+   */
+  assertEditable(expectedVersion?: number): void {
+    if (
+      expectedVersion !== undefined &&
+      Number(this._version) !== Number(expectedVersion)
+    ) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.RESOURCE_VERSION_CONFLICT,
+        `Order ${this.code} version mismatch (expected ${expectedVersion}, actual ${this._version})`,
+        409,
+      );
+    }
+    if (this._orderStatus !== 'DRAFT' && this._orderStatus !== 'PENDING') {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.ORDER_INVALID_STATE,
+        `Order ${this.code} in status ${this._orderStatus} cannot be edited`,
+        409,
+      );
+    }
+  }
+
+  bumpVersion(): number {
+    this._version = Number(this._version) + 1;
+    return this._version;
+  }
+
+  /**
+   * Validates that an order is eligible to be confirmed and reserved.
+   */
+  assertCanConfirm(): void {
+    if (this._orderStatus !== 'DRAFT' && this._orderStatus !== 'PENDING') {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.ORDER_INVALID_STATE,
+        `Cannot confirm order in status ${this._orderStatus}`,
+        409,
+      );
+    }
+  }
+
+  /**
+   * Transitions the order to CONFIRMED + RESERVED once stock reservation succeeds.
+   */
+  confirmWithReservation(
+    warehouseId: string,
+    reservationId: string,
+  ): OrderStateTransitionRecord {
+    this.assertCanConfirm();
+    const prevOrder = this._orderStatus;
+    const prevFulfill = this._fulfillmentStatus;
+
+    this._warehouseId = warehouseId;
+    this._reservationId = reservationId;
+    this._orderStatus = 'CONFIRMED';
+    this._fulfillmentStatus = 'RESERVED';
+    validateOrderStateCombination({
+      orderStatus: this._orderStatus,
+      paymentStatus: this._paymentStatus,
+      fulfillmentStatus: this._fulfillmentStatus,
+    });
+    this.bumpVersion();
+
+    return {
+      fromOrderStatus: prevOrder,
+      toOrderStatus: this._orderStatus,
+      fromPaymentStatus: this._paymentStatus,
+      toPaymentStatus: this._paymentStatus,
+      fromFulfillmentStatus: prevFulfill,
+      toFulfillmentStatus: this._fulfillmentStatus,
+      reason: 'ORDER_CONFIRMED_AND_RESERVED',
+    };
+  }
+
+  /**
+   * Validates and executes order cancellation, returning the transition record.
+   */
+  cancel(reason?: string, now: Date = new Date()): OrderStateTransitionRecord {
+    assertCanCancelOrder({
+      orderStatus: this._orderStatus,
+      fulfillmentStatus: this._fulfillmentStatus,
+    });
+    const prevOrder = this._orderStatus;
+    const prevFulfill = this._fulfillmentStatus;
+
+    this._orderStatus = 'CANCELLED';
+    this._fulfillmentStatus = 'UNFULFILLED';
+    this._cancelReason = reason ?? 'CANCELLED_BY_USER';
+    this._cancelledAt = now;
+    validateOrderStateCombination({
+      orderStatus: this._orderStatus,
+      paymentStatus: this._paymentStatus,
+      fulfillmentStatus: this._fulfillmentStatus,
+    });
+    this.bumpVersion();
+
+    return {
+      fromOrderStatus: prevOrder,
+      toOrderStatus: this._orderStatus,
+      fromPaymentStatus: this._paymentStatus,
+      toPaymentStatus: this._paymentStatus,
+      fromFulfillmentStatus: prevFulfill,
+      toFulfillmentStatus: this._fulfillmentStatus,
+      reason: reason ?? 'ORDER_CANCELLED',
+    };
+  }
+
+  /**
+   * Validates that a fulfillment shipment can be created for this order.
+   */
+  assertCanCreateFulfillment(): void {
+    if (this._orderStatus === 'CANCELLED' || this._orderStatus === 'DRAFT') {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.FULFILLMENT_INVALID_STATE,
+        `Cannot create fulfillment for order in status ${this._orderStatus}`,
+        409,
+      );
+    }
+  }
+
+  /**
+   * Transitions fulfillmentStatus to FULFILLED and auto-completes the order if PAID.
+   */
+  markFulfilled(
+    fulfillmentCode: string,
+    now: Date = new Date(),
+  ): OrderStateTransitionRecord {
+    const prevOrder = this._orderStatus;
+    const prevFulfill = this._fulfillmentStatus;
+
+    this._fulfillmentStatus = 'FULFILLED';
+    if (this._paymentStatus === 'PAID') {
+      this._orderStatus = 'COMPLETED';
+      this._completedAt = now;
+    }
+    validateOrderStateCombination({
+      orderStatus: this._orderStatus,
+      paymentStatus: this._paymentStatus,
+      fulfillmentStatus: this._fulfillmentStatus,
+    });
+    this.bumpVersion();
+
+    return {
+      fromOrderStatus: prevOrder,
+      toOrderStatus: this._orderStatus,
+      fromPaymentStatus: this._paymentStatus,
+      toPaymentStatus: this._paymentStatus,
+      fromFulfillmentStatus: prevFulfill,
+      toFulfillmentStatus: this._fulfillmentStatus,
+      reason: `FULFILLMENT_CONFIRMED:${fulfillmentCode}`,
+    };
+  }
+}
