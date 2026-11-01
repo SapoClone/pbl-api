@@ -1,4 +1,7 @@
 name: Deploy to ECS
+# Test once, build one image per service (+ the gateway), run the platform migration as a one-off ECS task, then roll
+# every service out. The deploy jobs are skipped until the repository variable AWS_DEPLOYER_ROLE_ARN exists (set it
+# from the pbl-infra output `github_actions_variables` after `terragrunt apply`), so merges stay green before that.
 on:
   workflow_dispatch:
   push:
@@ -6,6 +9,8 @@ on:
     paths:
       - 'apps/**'
       - 'libs/**'
+      - 'krakend/**'
+      - 'scripts/render-krakend-prod.mjs'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'Dockerfile'
@@ -13,21 +18,21 @@ on:
 
 permissions:
   contents: read
-  id-token: write # required for OIDC auth to AWS (no long-lived access keys)
+  id-token: write # OIDC auth to AWS (no long-lived access keys)
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Build, test, and deploy to ECS
+  test:
+    name: Lint, build, test
     runs-on: ubuntu-latest
-    environment: production
-    strategy:
-      matrix:
-        node-version: [24]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 24
       - uses: pnpm/action-setup@v4
         with:
           run_install: false
@@ -46,56 +51,124 @@ jobs:
       - run: pnpm test
       - run: pnpm test:libs
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+  images:
+    name: Image ${{ matrix.app }}
+    needs: test
+    if: vars.AWS_DEPLOYER_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        app: [platform, catalog, customer, inventory, sales, finance, integration, insight, gateway]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOYER_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: ecr-login
+      - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Set image tag
-        id: image
-        run: |
-          IMAGE="${{ steps.ecr-login.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:${{ github.sha }}"
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build and push
+      # The gateway config is rendered from krakend/krakend.json: only the JWKS URL and the web origins differ.
+      - name: Render the production gateway config
+        if: matrix.app == 'gateway'
+        env:
+          JWKS_URL: ${{ vars.GATEWAY_JWKS_URL }}
+          CORS_ORIGINS: ${{ vars.GATEWAY_CORS_ORIGINS }}
+        run: node scripts/render-krakend-prod.mjs > krakend/krakend.prod.json
+
+      - name: Build and push a service
+        if: matrix.app != 'gateway'
         uses: docker/build-push-action@v6
         with:
           context: .
           target: production
+          build-args: APP_NAME=${{ matrix.app }}
           push: true
-          tags: ${{ steps.image.outputs.image }}
-          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:buildcache
-          cache-to: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:buildcache,mode=max
+          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:${{ matrix.app }}-${{ github.sha }}
+          cache-from: type=registry,ref=${{ steps.ecr.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:buildcache-${{ matrix.app }}
+          cache-to: type=registry,ref=${{ steps.ecr.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:buildcache-${{ matrix.app }},mode=max
 
-      # No task-definition.json checked in here — pbl-infra's Terraform owns
-      # the task definition's shape. This pulls whatever's currently
-      # registered, swaps in the new image, and registers that as the next
-      # revision, so there's one source of truth (Terraform) for everything
-      # except the image tag.
-      - name: Deploy new task definition revision to ECS
+      - name: Build and push the gateway
+        if: matrix.app == 'gateway'
+        uses: docker/build-push-action@v6
+        with:
+          context: krakend
+          build-args: GATEWAY_CONFIG=krakend.prod.json
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.AWS_GATEWAY_ECR_REPOSITORY }}:${{ github.sha }}
+
+  migrate:
+    name: Platform migration
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOYER_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      # Platform's schema comes from hand-written migrations (the other services migrate themselves at start).
+      # A one-off task of the NEW image runs them before any service is rolled out, with the service's own
+      # network, secrets and role, so no database credential lives in GitHub.
+      - name: Run the migrations as a one-off task
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:platform-${{ github.sha }}
+          CLUSTER: ${{ vars.AWS_ECS_CLUSTER }}
         run: |
-          TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition ${{ vars.AWS_ECS_TASK_FAMILY }} \
-            --query 'taskDefinition' --output json)
-
-          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq --arg IMAGE "${{ steps.image.outputs.image }}" '
+          set -euo pipefail
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition platform --query taskDefinition --output json)
+          NEW=$(echo "$TASK_DEF" | jq --arg IMAGE "$IMAGE" '
             .containerDefinitions[0].image = $IMAGE
-            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
-          ')
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+          ARN=$(aws ecs register-task-definition --cli-input-json "$NEW" --query taskDefinition.taskDefinitionArn --output text)
+          NETWORK=$(aws ecs describe-services --cluster "$CLUSTER" --services platform \
+            --query 'services[0].networkConfiguration' --output json)
+          OVERRIDES=$(jq -n '{containerOverrides:[{name:"platform",command:[
+            "node","node_modules/typeorm/cli.js","migration:run","-d",
+            "dist/apps/platform/apps/platform/src/database/data-source.js"]}]}')
+          TASK=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE --task-definition "$ARN" \
+            --network-configuration "$NETWORK" --overrides "$OVERRIDES" --query 'tasks[0].taskArn' --output text)
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK"
+          CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK" --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "migration exit code: $CODE"
+          [ "$CODE" = "0" ]
 
-          NEW_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_TASK_DEF" \
-            --query 'taskDefinition.taskDefinitionArn' --output text)
-
-          aws ecs update-service \
-            --cluster ${{ vars.AWS_ECS_CLUSTER }} \
-            --service ${{ vars.AWS_ECS_SERVICE }} \
-            --task-definition "$NEW_ARN" \
-            --force-new-deployment
+  rollout:
+    name: Roll out ${{ matrix.app }}
+    needs: migrate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        app: [platform, catalog, customer, inventory, sales, finance, integration, insight, gateway]
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOYER_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      # Terraform owns the task definition's shape; this swaps only the image of the latest revision.
+      - name: Register a revision with the new image and update the service
+        env:
+          APP: ${{ matrix.app }}
+          CLUSTER: ${{ vars.AWS_ECS_CLUSTER }}
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          set -euo pipefail
+          if [ "$APP" = gateway ]; then
+            IMAGE="$REGISTRY/${{ vars.AWS_GATEWAY_ECR_REPOSITORY }}:${{ github.sha }}"
+          else
+            IMAGE="$REGISTRY/${{ vars.AWS_ECR_REPOSITORY }}:$APP-${{ github.sha }}"
+          fi
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition "$APP" --query taskDefinition --output json)
+          NEW=$(echo "$TASK_DEF" | jq --arg IMAGE "$IMAGE" '
+            .containerDefinitions[0].image = $IMAGE
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+          ARN=$(aws ecs register-task-definition --cli-input-json "$NEW" --query taskDefinition.taskDefinitionArn --output text)
+          aws ecs update-service --cluster "$CLUSTER" --service "$APP" --task-definition "$ARN" --force-new-deployment >/dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$APP"

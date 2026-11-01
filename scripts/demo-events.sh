@@ -21,7 +21,7 @@ customer="$gateway/customer/api/v1"
 inventory="$gateway/inventory/api/v1"
 sales="$gateway/sales/api/v1"
 insight="$gateway/insight/api/v1"
-sqs="http://localhost:9324/000000000000"
+sqs="${SQS_URL:-http://localhost:9324/000000000000}"
 run="$(date +%s)"
 password="Passw0rd!"
 steps=0
@@ -240,8 +240,16 @@ owner_id=$(jv "$(http GET "$platform/accounts/me" "$store_token")" .id)
 expect_status 400 "the owner role cannot be changed" "$(http PATCH "$platform/tenants/current/members/$owner_id" "$store_token" '{"role":"sales_staff"}')"
 
 step "9. Nothing got stuck"
+# platform's hand-written migrations create its tables in `public` (the schema `platform` exists only on the dev stack)
+schema_of() {
+  if [[ "$1" == platform && "$(psql_count "select count(*) from information_schema.tables where table_schema='platform' and table_name='outbox_event'")" == 0 ]]; then
+    echo public
+  else
+    echo "$1"
+  fi
+}
 for svc in platform catalog sales inventory customer finance; do
-  failed=$(psql_count "select count(*) from $svc.outbox_event where failed_at is not null and tenant_id='$tenant_id'")
+  failed=$(psql_count "select count(*) from $(schema_of "$svc").outbox_event where failed_at is not null and tenant_id='$tenant_id'")
   [[ "$failed" == "0" ]] || fail "$failed outbox event(s) could not be published ($svc)"
   ok "no outbox event failed ($svc)"
 done
@@ -249,7 +257,7 @@ for svc in sales inventory customer insight finance; do
   seen=$(psql_count "select count(*) from $svc.inbox_event")
   [[ "$seen" -gt 0 ]] || fail "$svc consumed no event"
   ok "$svc consumed events (inbox rows: $seen)"
-  depth=$(curl -s "$sqs/$svc-events-dlq?Action=GetQueueAttributes&AttributeName=ApproximateNumberOfMessages" | grep -o '<Value>[0-9]*' | tr -dc '0-9')
+  depth=$(curl -s "$sqs/$svc-events-dlq?Action=GetQueueAttributes&AttributeName=ApproximateNumberOfMessages&AttributeName.1=ApproximateNumberOfMessages" | grep -o '<Value>[0-9]*' | tr -dc '0-9')
   [[ "$depth" == "0" ]] || fail "$svc has $depth dead letter(s): node scripts/redrive-dlq.js $svc"
   ok "the $svc dead-letter queue is empty"
 done
