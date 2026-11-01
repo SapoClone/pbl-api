@@ -153,12 +153,12 @@ export async function assertCatalogSkuEligible(
   tenantId: string,
   skuId: string,
   requireProjected = false,
-): Promise<void> {
+): Promise<string> {
   const rows = await em.query(
     `
-    SELECT status, sku_code AS "skuCode"
+    SELECT sku_id AS "skuId", status, sku_code AS "skuCode"
     FROM ${prefix}"catalog_sku_projection"
-    WHERE tenant_id = $1 AND sku_id = $2
+    WHERE tenant_id = $1 AND (sku_id::text = $2 OR sku_code = $2)
     LIMIT 1
     `,
     [tenantId, skuId],
@@ -171,7 +171,7 @@ export async function assertCatalogSkuEligible(
         404,
       );
     }
-    return;
+    return skuId;
   }
   if (rows[0].status !== 'ACTIVE') {
     throw new InventoryDomainError(
@@ -180,4 +180,5 @@ export async function assertCatalogSkuEligible(
       409,
     );
   }
+  return String(rows[0].skuId);
 }

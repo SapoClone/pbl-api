@@ -91,7 +91,12 @@ export class ReceivingService {
     >();
 
     for (const item of dto.items) {
-      await assertCatalogSkuEligible(em, prefix, tenantId, item.skuId);
+      const resolvedSkuId = await assertCatalogSkuEligible(
+        em,
+        prefix,
+        tenantId,
+        item.skuId,
+      );
       const factor = parseConversionFactorToTenThousandths(
         item.conversionFactor,
       );
@@ -100,7 +105,7 @@ export class ReceivingService {
         item.conversionFactor,
       );
       const unitCostVnd = parseMoneyToVnd(item.unitCost ?? 0);
-      const existing = mergedMap.get(item.skuId);
+      const existing = mergedMap.get(resolvedSkuId);
       if (existing) {
         // Weighted average unit cost across duplicate lines in the same receipt
         const totalQty = existing.baseQtyMilli + baseQtyMilli;
@@ -110,8 +115,8 @@ export class ReceivingService {
         existing.unitCostVnd = (totalVal + totalQty / 2n) / totalQty;
         existing.baseQtyMilli = totalQty;
       } else {
-        mergedMap.set(item.skuId, {
-          skuId: item.skuId,
+        mergedMap.set(resolvedSkuId, {
+          skuId: resolvedSkuId,
           baseQtyMilli,
           unitCostVnd,
           unitName: (item.unitName ?? 'PCS').trim().toUpperCase(),
@@ -129,6 +134,15 @@ export class ReceivingService {
       ? normalizeInventoryCode(dto.code, 'receipt code')
       : `RCV-${receiptId.slice(0, 8).toUpperCase()}`;
 
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const safePoId =
+      dto.purchaseOrderId && uuidRegex.test(dto.purchaseOrderId)
+        ? dto.purchaseOrderId
+        : null;
+    const safeSupplierId =
+      dto.supplierId && uuidRegex.test(dto.supplierId) ? dto.supplierId : null;
+
     await em.query(
       `
       INSERT INTO ${prefix}"stock_receipt" (
@@ -142,8 +156,8 @@ export class ReceivingService {
         code,
         dto.warehouseId,
         dto.sourceType ?? 'MANUAL',
-        dto.purchaseOrderId ?? null,
-        dto.supplierId ?? null,
+        safePoId,
+        safeSupplierId,
         cleanKey,
         dto.note ?? null,
         RequestContext.get()?.actor?.id ?? null,
