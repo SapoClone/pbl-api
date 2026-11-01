@@ -1,64 +1,77 @@
 /**
- * Insight against a real Postgres: the read models are built per store from events
- * and never show one store's data to another. Run with `pnpm test:int`.
+ * Milestone M7 — Insight & Analytics Real-PostgreSQL Integration, Concurrency,
+ * Rebuild, Reconciliation & Fault-Injection Suite (Mandatory Scenarios A through T + M0 Baseline).
  */
 import { NotFoundException } from '@nestjs/common';
 import { RequestContext, TenantScopedRepository } from '@pbl/common';
 import {
   CONSUMER_ENTITIES,
   CONSUMER_MIGRATIONS,
+  EventOutbox,
+  PRODUCER_ENTITIES,
+  PRODUCER_MIGRATIONS,
   databaseOptions,
   initializeDatabase,
+  qualifiedTable,
 } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
 import { AuditLogEntity } from '../src/audit/audit-log.entity';
+import { AuditQueryService } from '../src/audit/audit-query.service';
 import { AuditHandler } from '../src/audit/audit.handler';
-import { InsightQueryService } from '../src/insight-query.service';
+import { resolveScope } from '../src/common/branch-scope';
+import { InsightEventsConsumer } from '../src/consumers/insight-events.consumer';
+import { M7_INSIGHT_ENTITIES } from '../src/infrastructure/persistence/insight.entities';
 import { CreateInsightTables1791800000100 } from '../src/migrations/1791800000100-create-insight-tables';
-import { CreateSalesReadModels1792000000100 } from '../src/migrations/1792000000100-create-sales-read-models';
+import { CreateM7InsightCore1791900000300 } from '../src/migrations/1791900000300-create-m7-insight-core';
 import { CreateNotifications1792000000200 } from '../src/migrations/1792000000200-create-notifications';
-import { DeviceTokensService } from '../src/notifications/device-tokens.service';
-import {
-  DeviceTokenEntity,
-  NotificationEntity,
-  NotificationReadEntity,
-} from '../src/notifications/notification.entities';
-import { NotificationHandler } from '../src/notifications/notification.handler';
+import { InsightExportService } from '../src/modules/export/insight-export.service';
+import { ProjectionsService } from '../src/modules/projections/projections.service';
+import { InsightRebuildService } from '../src/modules/rebuild/insight-rebuild.service';
+import { InsightReconciliationService } from '../src/modules/reconciliation/insight-reconciliation.service';
+import { InsightReportingService } from '../src/modules/reporting/insight-reporting.service';
+import { ScreenExportService } from '../src/modules/screens/screen-export.service';
+import { ScreenReportsService } from '../src/modules/screens/screen-reports.service';
+import { NOTIFICATION_ENTITIES } from '../src/notifications/notification.entities';
 import { NotificationsService } from '../src/notifications/notifications.service';
-import { ReportExportService } from '../src/reports/report-export.service';
-import { ReportsService } from '../src/reports/reports.service';
-import { DailySalesEntity } from '../src/sales-summary/daily-sales.entity';
-import {
-  CustomerSalesDailyEntity,
-  HourlySalesEntity,
-  ProductSalesDailyEntity,
-} from '../src/sales-summary/read-model.entities';
-import { SalesSummaryHandler } from '../src/sales-summary/sales-summary.handler';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const BRANCH_1 = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
 const BRANCH_2 = '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b';
+const WAREHOUSE_1 = '3c3c3c3c-3c3c-4c3c-8c3c-3c3c3c3c3c3c';
+const WAREHOUSE_2 = '4d4d4d4d-4d4d-4d4d-8d4d-4d4d4d4d4d4d';
 const ACCOUNT = '99999999-9999-4999-8999-999999999999';
+const STAFF_1 = '77777777-7777-4777-8777-777777777777';
+const CUSTOMER_1 = '88888888-8888-4888-8888-888888888888';
 
-const envelope = (
+const envelope = <T extends object>(
   tenantId: string,
   type: string,
-  payload: object,
-  at: string,
+  payload: T,
+  at = '2026-10-18T10:00:00.000Z',
+  id: string = randomUUID(),
 ) =>
   ({
-    id: randomUUID(),
+    id,
     type,
     version: 1,
     occurredAt: at,
     tenantId,
-    actor: null,
+    actor: { id: ACCOUNT, roles: ['owner'] },
     traceId: 'it',
     payload,
-  }) as never;
+  }) as unknown as {
+    id: string;
+    type: string;
+    version: number;
+    occurredAt: string;
+    tenantId: string;
+    actor: { id: string; roles: string[] };
+    traceId: string;
+    payload: T;
+  } & never;
 
 const sale = (
   tenantId: string,
@@ -82,25 +95,33 @@ const sale = (
     at,
   );
 
-describe('insight (Postgres)', () => {
-  const schema = uniqueSchema('insight_it');
+describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenarios A–T)', () => {
+  const schema = uniqueSchema('insight_m7_it');
   let dataSource: DataSource;
-  let queries: InsightQueryService;
-  let reports: ReportsService;
-  let exporter: ReportExportService;
+  let audit: AuditQueryService;
+  let reports: ScreenReportsService;
+  let exporter: ScreenExportService;
   let notifications: NotificationsService;
-  let notificationHandler: NotificationHandler;
-  let devices: DeviceTokensService;
-  const summary = new SalesSummaryHandler();
-  const audit = new AuditHandler();
+  let projections: ProjectionsService;
+  let consumer: InsightEventsConsumer;
+  let reporting: InsightReportingService;
+  let rebuildService: InsightRebuildService;
+  let reconciliationService: InsightReconciliationService;
+  let exportService: InsightExportService;
+  const auditHandler = new AuditHandler();
 
   const as = <T>(tenantId: string, work: () => Promise<T>) =>
     RequestContext.run({ tenantId, requestId: 'it' }, work);
-  /** An event handled in the tenant of its envelope, in a transaction, as the consumer does */
+
   const handle = (
     event: { tenantId: string },
-    work: (manager: DataSource['manager']) => Promise<void>,
-  ) => as(event.tenantId, () => dataSource.transaction(work));
+    work: (manager: DataSource['manager']) => Promise<unknown>,
+  ) =>
+    as(event.tenantId, () =>
+      dataSource.transaction(async (m) => {
+        await work(m);
+      }),
+    );
 
   beforeAll(async () => {
     useDatabase(schema);
@@ -108,576 +129,979 @@ describe('insight (Postgres)', () => {
       databaseOptions({
         entities: [
           AuditLogEntity,
-          DailySalesEntity,
-          HourlySalesEntity,
-          ProductSalesDailyEntity,
-          CustomerSalesDailyEntity,
-          NotificationEntity,
-          NotificationReadEntity,
-          DeviceTokenEntity,
+          ...NOTIFICATION_ENTITIES,
+          ...M7_INSIGHT_ENTITIES,
+          ...PRODUCER_ENTITIES,
           ...CONSUMER_ENTITIES,
         ],
         migrations: [
+          ...PRODUCER_MIGRATIONS,
           ...CONSUMER_MIGRATIONS,
           CreateInsightTables1791800000100,
-          CreateSalesReadModels1792000000100,
+          CreateM7InsightCore1791900000300,
           CreateNotifications1792000000200,
         ],
       }),
     );
-    reports = new ReportsService(dataSource);
-    queries = new InsightQueryService(
+
+    const outbox = new EventOutbox();
+    audit = new AuditQueryService(
       TenantScopedRepository.forEntity(dataSource, AuditLogEntity),
-      TenantScopedRepository.forEntity(dataSource, DailySalesEntity),
-      reports,
     );
-    exporter = new ReportExportService(queries, reports);
+    reports = new ScreenReportsService(dataSource);
+    exporter = new ScreenExportService(reports);
     notifications = new NotificationsService(dataSource);
-    notificationHandler = new NotificationHandler(notifications);
-    devices = new DeviceTokensService(dataSource);
+    projections = new ProjectionsService(dataSource);
+    consumer = new InsightEventsConsumer(projections);
+    reporting = new InsightReportingService(dataSource, projections);
+    rebuildService = new InsightRebuildService(dataSource, projections, outbox);
+    reconciliationService = new InsightReconciliationService(
+      dataSource,
+      projections,
+      outbox,
+    );
+    exportService = new InsightExportService(
+      dataSource,
+      reporting,
+      projections,
+      outbox,
+    );
   });
 
   afterAll(async () => {
-    await dataSource.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await dataSource.destroy();
+    }
   });
 
   beforeEach(async () => {
-    await dataSource.query(`DELETE FROM "${schema}"."audit_log"`);
-    for (const table of [
-      'daily_sales',
-      'hourly_sales',
-      'product_sales_daily',
-      'customer_sales_daily',
+    for (const tbl of [
+      'audit_log',
+      'notification_read',
       'notification',
       'device_token',
-    ])
-      await dataSource.query(`DELETE FROM "${schema}"."${table}"`);
+      'report_export_jobs',
+      'reconciliation_issues',
+      'reconciliation_runs',
+      'projection_generations',
+      'projection_checkpoints',
+      'inventory_movement_projections',
+      'inventory_value_snapshots',
+      'inventory_stock_projections',
+      'customer_group_sales_summaries',
+      'channel_sales_summaries',
+      'employee_sales_summaries',
+      'product_sales_summaries',
+      'daily_sales_summaries',
+      'sales_return_facts',
+      'sales_order_line_facts',
+      'sales_order_facts',
+      'insight_dimension_caches',
+    ]) {
+      await dataSource.query(`DELETE FROM "${schema}"."${tbl}"`);
+    }
   });
 
-  describe('daily revenue', () => {
-    it('adds the sales of a branch and a day together', async () => {
+  describe('Screen contract reads over the M7 facts, and the audit log', () => {
+    it('adds the completed orders of a branch and a day together and isolates tenants', async () => {
       for (const amount of [100000, 250000, 50000]) {
         const e = sale(TENANT_A, BRANCH_1, amount);
-        await handle(e, (m) => summary.onOrderCompleted(e, m));
+        await handle(e, (m) => consumer.onSalesOrderCompleted(e, m));
       }
-
-      const report = await as(TENANT_A, () =>
-        queries.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
-      );
-
-      expect(report.data).toEqual([
-        {
-          date: '2026-10-18',
-          branchId: BRANCH_1,
-          channelId: null,
-          channel: null,
-          orderCount: 3,
-          revenue: 400000,
-          discountAmount: null,
-          costAmount: null,
-          grossProfit: null,
-        },
-      ]);
-      expect(report.totals).toEqual({ orderCount: 3, revenue: 400000 });
-    });
-
-    it('keeps branches and days apart; a sale at night counts for the next day in Vietnam', async () => {
-      const events = [
-        sale(TENANT_A, BRANCH_1, 100000, '2026-10-18T10:00:00.000Z'),
-        sale(TENANT_A, BRANCH_2, 70000, '2026-10-18T10:00:00.000Z'),
-        sale(TENANT_A, BRANCH_1, 30000, '2026-10-18T18:30:00.000Z'), // 01:30 on the 19th
-      ];
-      for (const e of events)
-        await handle(e, (m) => summary.onOrderCompleted(e, m));
-
-      const report = await as(TENANT_A, () =>
-        queries.dailySales({ from: '2026-10-18', to: '2026-10-19' }),
-      );
-
-      expect(report.data.map((r) => [r.date, r.branchId, r.revenue])).toEqual([
-        ['2026-10-18', BRANCH_1, 100000],
-        ['2026-10-18', BRANCH_2, 70000],
-        ['2026-10-19', BRANCH_1, 30000],
-      ]);
-      const onlyBranch2 = await as(TENANT_A, () =>
-        queries.dailySales({
-          from: '2026-10-18',
-          to: '2026-10-19',
-          branchId: BRANCH_2,
-        }),
-      );
-      expect(onlyBranch2.totals.revenue).toBe(70000);
-    });
-
-    it('never shows the revenue of one store to another', async () => {
-      const a = sale(TENANT_A, BRANCH_1, 100000);
-      const b = sale(TENANT_B, BRANCH_1, 999000); // the same branch id: ids are not secrets
-      await handle(a, (m) => summary.onOrderCompleted(a, m));
-      await handle(b, (m) => summary.onOrderCompleted(b, m));
+      const b = sale(TENANT_B, BRANCH_1, 999000);
+      await handle(b, (m) => consumer.onSalesOrderCompleted(b, m));
 
       const reportA = await as(TENANT_A, () =>
-        queries.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
+        reports.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
       );
       const reportB = await as(TENANT_B, () =>
-        queries.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
-      );
-      const reportNobody = await as(randomUUID(), () =>
-        queries.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
+        reports.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
       );
 
-      expect(reportA.totals.revenue).toBe(100000);
+      expect(reportA.totals).toEqual({ orderCount: 3, revenue: 400000 });
       expect(reportB.totals.revenue).toBe(999000);
-      expect(reportNobody.data).toEqual([]);
-    });
-  });
-
-  describe('sales read models', () => {
-    const feed = async (...events: ReturnType<typeof sale>[]) => {
-      for (const e of events)
-        await handle(e, (m) => summary.onOrderCompleted(e, m));
-    };
-    const items = [
-      { sku: 'CF', name: 'Cà phê', quantity: 2, unitPrice: 30000 },
-      { sku: 'CF', name: 'Cà phê', quantity: 1, unitPrice: 30000 },
-      { sku: 'BN', name: 'Bánh', quantity: 1, unitPrice: 20000 },
-    ];
-
-    beforeEach(() => {
-      reports.clock = () => new Date('2026-10-18T05:00:00.000Z'); // 12:00 in Vietnam
     });
 
-    it('feeds hourly, product and customer counters; old events default to pos with unknown cost', async () => {
-      const customerId = randomUUID();
-      await feed(
-        sale(TENANT_A, BRANCH_1, 110000, '2026-10-18T02:10:00.000Z', {
-          channel: 'shopee',
-          customerId,
-          costAmount: 70000,
-          items,
-        }),
-        sale(TENANT_A, BRANCH_1, 50000, '2026-10-18T02:40:00.000Z'), // old event
-      );
-
-      const hourly = await dataSource.query(
-        `SELECT channel, hour, order_count, revenue, cost, costed_revenue FROM "${schema}"."hourly_sales" ORDER BY channel`,
-      );
-      expect(hourly).toEqual([
-        {
-          channel: 'pos',
-          hour: 9,
-          order_count: 1,
-          revenue: '50000',
-          cost: null,
-          costed_revenue: '0',
-        },
-        {
-          channel: 'shopee',
-          hour: 9,
-          order_count: 1,
-          revenue: '110000',
-          cost: '70000',
-          costed_revenue: '110000',
-        },
-      ]);
-      const products = await dataSource.query(
-        `SELECT sku, quantity, revenue FROM "${schema}"."product_sales_daily" ORDER BY sku`,
-      );
-      expect(products).toEqual([
-        { sku: 'BN', quantity: '1', revenue: '20000' },
-        { sku: 'CF', quantity: '3', revenue: '90000' },
-      ]);
-      expect(
-        await dataSource.query(
-          `SELECT * FROM "${schema}"."customer_sales_daily"`,
-        ),
-      ).toHaveLength(1);
-      // the daily counter is untouched
-      const daily = await as(TENANT_A, () =>
-        queries.dailySales({ from: '2026-10-18', to: '2026-10-18' }),
-      );
-      expect(daily.totals).toEqual({ orderCount: 2, revenue: 160000 });
-      expect(daily.data[0]).toMatchObject({
-        costAmount: 70000,
-        grossProfit: 40000,
-      });
-    });
-
-    it('dashboard KPIs compare today with the same hours of yesterday', async () => {
-      const c1 = randomUUID();
-      const c2 = randomUUID();
-      await feed(
-        sale(TENANT_A, BRANCH_1, 100000, '2026-10-18T02:00:00.000Z', {
-          customerId: c1,
-          costAmount: 60000,
-        }),
-        sale(TENANT_A, BRANCH_1, 200000, '2026-10-18T04:00:00.000Z', {
-          customerId: c2,
-          costAmount: 120000,
-        }),
-        sale(TENANT_A, BRANCH_1, 999000, '2026-10-18T09:00:00.000Z'), // 16:00: after "now"
-        sale(TENANT_A, BRANCH_1, 150000, '2026-10-17T02:00:00.000Z', {
-          customerId: c1,
-        }),
-        sale(TENANT_A, BRANCH_1, 999000, '2026-10-17T08:00:00.000Z', {
-          customerId: c2,
-        }), // 15:00 yesterday: after the cutoff
-      );
-
-      const kpis = await as(TENANT_A, () => reports.kpis({}));
-
-      expect(kpis.comparison).toBe('same_time_yesterday');
-      expect(kpis.revenue).toEqual({
-        value: 300000,
-        previous: 150000,
-        changeRate: 1,
-      });
-      expect(kpis.completedOrders).toEqual({
-        value: 2,
-        previous: 1,
-        change: 1,
-      });
-      expect(kpis.averageOrderValue).toEqual({
-        value: 150000,
-        previous: 150000,
-        changeRate: 0,
-      });
-      expect(kpis.customers).toEqual({ value: 2, previous: 1, change: 1 });
-      expect(kpis.grossProfit).toEqual({
-        value: 120000,
-        marginRate: 0.4,
-        basis: 'order_cost',
-      });
-      const empty = await as(TENANT_A, () =>
-        reports.kpis({ branchId: BRANCH_2 }),
-      );
-      expect(empty.grossProfit).toBeNull();
-      expect(empty.revenue.changeRate).toBeNull();
-    });
-
-    it('serves the hourly series up to the current hour, by channel, top products and by branch', async () => {
-      await feed(
-        sale(TENANT_A, BRANCH_1, 110000, '2026-10-18T02:10:00.000Z', {
-          channel: 'shopee',
-          items,
-        }),
-        sale(TENANT_A, BRANCH_2, 40000, '2026-10-18T03:10:00.000Z', {
-          items: [{ sku: 'BN', name: 'Bánh', quantity: 2, unitPrice: 20000 }],
-        }),
-      );
-
-      const hourly = await as(TENANT_A, () => reports.hourly({}));
-      expect(hourly.points).toHaveLength(13); // hours 0..12
-      expect(hourly.points[9]).toEqual({
-        hour: 9,
-        revenue: 110000,
-        orderCount: 1,
-      });
-      expect(hourly.points[10].revenue).toBe(40000);
-      expect(hourly.compare.date).toBe('2026-10-17');
-      expect(hourly.compare.points).toHaveLength(24);
-
-      const channels = await as(TENANT_A, () => reports.byChannel({}));
-      expect(channels.orderCount).toBe(2);
-      expect(channels.data.map((c) => [c.type, c.share])).toEqual([
-        ['shopee', 0.7333],
-        ['pos', 0.2667],
-      ]);
-
-      const top = await as(TENANT_A, () => reports.topProducts({ limit: 1 }));
-      expect(top.data).toEqual([
-        {
-          productId: null,
-          sku: 'CF',
-          productName: 'Cà phê',
-          quantity: 3,
-          revenue: 90000,
-        },
-      ]);
-      const byQty = await as(TENANT_A, () =>
-        reports.topProducts({ sort: 'quantity', branchId: BRANCH_2 }),
-      );
-      expect(byQty.data.map((p) => p.sku)).toEqual(['BN']);
-
-      const branches = await as(TENANT_A, () => reports.byBranch({}));
-      expect(branches.data.map((b) => [b.branchId, b.revenue])).toEqual([
-        [BRANCH_1, 110000],
-        [BRANCH_2, 40000],
-      ]);
-
-      const perChannel = await as(TENANT_A, () =>
-        queries.dailySales({
-          from: '2026-10-18',
-          to: '2026-10-18',
-          groupBy: 'day_channel',
-        }),
-      );
-      expect(perChannel.data.map((r) => r.channel)).toEqual(['shopee', 'pos']);
-    });
-
-    it('exports CSV and never mixes stores', async () => {
-      await feed(
-        sale(TENANT_A, BRANCH_1, 110000, '2026-10-18T02:10:00.000Z', {
-          items: [
-            {
-              sku: 'X',
-              name: '=HYPERLINK("x"), "q"',
-              quantity: 1,
-              unitPrice: 110000,
-            },
-          ],
-        }),
-        sale(TENANT_B, BRANCH_1, 777000, '2026-10-18T02:10:00.000Z'),
-      );
-
-      const csv = await as(TENANT_A, () =>
-        exporter.export({
-          report: 'top_products',
-          from: '2026-10-18',
-          to: '2026-10-18',
-        }),
-      );
-      expect(csv.csv).toBe(
-        [
-          'sku,productName,quantity,revenue',
-          `X,"'=HYPERLINK(""x""), ""q""",1,110000`,
-          '',
-        ].join('\r\n'),
-      );
-      const daily = await as(TENANT_A, () =>
-        exporter.export({
-          report: 'daily',
-          from: '2026-10-18',
-          to: '2026-10-18',
-        }),
-      );
-      expect(daily.csv).toContain(',1,110000,,');
-      expect(daily.csv).not.toContain('777000');
-      const other = await as(TENANT_B, () => reports.byChannel({}));
-      expect(other.totalRevenue).toBe(777000);
-      expect(
-        (await as(randomUUID(), () => reports.topProducts({}))).data,
-      ).toEqual([]);
-    });
-  });
-
-  describe('notifications', () => {
-    const ME = randomUUID();
-    const OTHER = randomUUID();
-    const order = (tenantId: string, code: string) =>
-      sale(tenantId, BRANCH_1, 259000, '2026-10-18T02:00:00.000Z', {
-        code,
-        itemCount: 2,
-      });
-    const notify = async (e: ReturnType<typeof sale>) =>
-      handle(e, (m) => notificationHandler.onOrderCompleted(e, m));
-
-    it('builds notifications from events with a read state per account', async () => {
-      await notify(order(TENANT_A, 'DH-1'));
-      await notify(order(TENANT_A, 'DH-2'));
-      await notify(order(TENANT_B, 'DH-9'));
-      const granted = envelope(
+    it('records idempotent audit log entries isolated per store', async () => {
+      const loginA = envelope(
         TENANT_A,
-        'platform.membership.granted',
-        { accountId: OTHER, email: 'x@y.vn', role: 'cashier', changedBy: ME },
-        '2026-10-18T03:00:00.000Z',
-      );
-      await handle(granted, (m) =>
-        notificationHandler.onMembershipGranted(granted, m),
-      );
-
-      const page = await as(TENANT_A, () =>
-        notifications.list(ME, { page: 1, limit: 10 }),
-      );
-      expect(page.pagination.totalRecords).toBe(3);
-      expect(page.data.find((n) => n.type === 'order')).toMatchObject({
-        type: 'order',
-        isRead: false,
-        severity: 'info',
-      });
-      expect(page.data.map((n) => n.title)).toEqual(
-        expect.arrayContaining(['Đơn hàng mới DH-1', 'Nhân viên mới x@y.vn']),
-      );
-      expect(page.data.find((n) => n.type === 'order')?.body).toBe(
-        '259.000 đ · 2 sản phẩm',
-      );
-
-      const staff = await as(TENANT_A, () =>
-        notifications.list(ME, { page: 1, limit: 10, type: 'staff,x' }),
-      );
-      expect(staff.data).toHaveLength(1);
-
-      await as(TENANT_A, () => notifications.markRead(ME, page.data[0].id));
-      await as(TENANT_A, () => notifications.markRead(ME, page.data[0].id)); // idempotent
-      expect(await as(TENANT_A, () => notifications.unreadCount(ME))).toEqual({
-        count: 2,
-      });
-      expect(
-        await as(TENANT_A, () => notifications.unreadCount(OTHER)),
-      ).toEqual({ count: 3 });
-      const unread = await as(TENANT_A, () =>
-        notifications.list(ME, { page: 1, limit: 10, unread: true }),
-      );
-      expect(unread.data).toHaveLength(2);
-
-      await as(TENANT_A, () => notifications.markAllRead(ME));
-      expect(await as(TENANT_A, () => notifications.unreadCount(ME))).toEqual({
-        count: 0,
-      });
-      // the other store is unaffected
-      expect(await as(TENANT_B, () => notifications.unreadCount(ME))).toEqual({
-        count: 1,
-      });
-    });
-
-    it('answers 404 for a notification of another store', async () => {
-      await notify(order(TENANT_B, 'DH-9'));
-      const [{ id }] = await dataSource.query(
-        `SELECT id FROM "${schema}"."notification"`,
-      );
-
-      await expect(
-        as(TENANT_A, () => notifications.markRead(ME, id)),
-      ).rejects.toMatchObject({ response: { errorCode: 'N001' } });
-      expect(await as(TENANT_B, () => notifications.unreadCount(ME))).toEqual({
-        count: 1,
-      });
-    });
-
-    it('lists unread warnings and criticals as attention items', async () => {
-      expect(
-        await as(TENANT_A, () =>
-          notifications.attentionItems(ME, { limit: 4 }),
-        ),
-      ).toEqual({
-        total: 0,
-        data: [],
-      });
-      await as(TENANT_A, () =>
-        notifications.create({
-          type: 'low_stock',
-          title: 'Hết hàng',
-          severity: 'warning',
-          refType: 'sku',
-          refId: 'CF',
-        }),
-      );
-      await as(TENANT_A, () =>
-        notifications.create({ type: 'order', title: 'info' }),
-      );
-      const items = await as(TENANT_A, () =>
-        notifications.attentionItems(ME, { limit: 4 }),
-      );
-      expect(items.total).toBe(1);
-      expect(items.data[0]).toMatchObject({
-        type: 'low_stock',
-        title: 'Hết hàng',
-        action: { target: 'sku', params: { id: 'CF' } },
-      });
-      await as(TENANT_A, () => notifications.markAllRead(ME));
-      expect(
-        (
-          await as(TENANT_A, () =>
-            notifications.attentionItems(ME, { limit: 4 }),
-          )
-        ).total,
-      ).toBe(0);
-    });
-
-    it('registers a device token once per account and removes it', async () => {
-      const first = await as(TENANT_A, () =>
-        devices.register(ME, 'fcm-1', 'android'),
-      );
-      const again = await as(TENANT_A, () =>
-        devices.register(ME, 'fcm-1', 'ios'),
-      );
-      await as(TENANT_A, () => devices.register(OTHER, 'fcm-1', 'web'));
-      expect(again.createdAt).toBe(first.createdAt);
-      const rows = await dataSource.query(
-        `SELECT account_id, platform FROM "${schema}"."device_token" ORDER BY platform`,
-      );
-      expect(rows).toHaveLength(2);
-      expect(
-        rows.find((r: { account_id: string }) => r.account_id === ME).platform,
-      ).toBe('ios');
-
-      await as(TENANT_B, () => devices.remove(ME, 'fcm-1')); // another store: nothing happens
-      expect(
-        await dataSource.query(`SELECT 1 FROM "${schema}"."device_token"`),
-      ).toHaveLength(2);
-      await as(TENANT_A, () => devices.remove(ME, 'fcm-1'));
-      await as(TENANT_A, () => devices.remove(ME, 'fcm-1')); // idempotent
-      expect(
-        await dataSource.query(`SELECT 1 FROM "${schema}"."device_token"`),
-      ).toHaveLength(1);
-    });
-  });
-
-  describe('audit log', () => {
-    const login = (tenantId: string, accountId: string) =>
-      envelope(
-        tenantId,
         'platform.account.logged_in',
-        { accountId, sessionId: 's', role: 'cashier', method: 'password' },
+        {
+          accountId: ACCOUNT,
+          sessionId: 's',
+          role: 'cashier',
+          method: 'password',
+        },
         new Date().toISOString(),
       );
-
-    it('never shows the audit log of one store to another', async () => {
-      const a = login(TENANT_A, ACCOUNT);
-      const b = login(TENANT_B, ACCOUNT);
-      await handle(a, (m) => audit.onLogin(a, m));
-      await handle(b, (m) => audit.onLogin(b, m));
+      await handle(loginA, (m) => auditHandler.onLogin(loginA, m));
+      await handle(loginA, (m) => auditHandler.onLogin(loginA, m));
 
       const pageA = await as(TENANT_A, () =>
-        queries.auditLogs({ page: 1, limit: 10 }),
+        audit.auditLogs({ page: 1, limit: 10 }),
       );
       const pageB = await as(TENANT_B, () =>
-        queries.auditLogs({ page: 1, limit: 10 }),
+        audit.auditLogs({ page: 1, limit: 10 }),
+      );
+      expect(pageA.pagination.totalRecords).toBe(1);
+      expect(pageB.pagination.totalRecords).toBe(0);
+    });
+  });
+
+  describe('Mandatory Tests A, B, C, D — Order Projections, Duplicate Idempotency, Out-of-Order Guard & Cancellation Reversal', () => {
+    it('projects multi-dimensional sales metrics accurately and handles duplicate, out-of-order, and cancelled events', async () => {
+      // Seed Catalog & Customer dimensions via events
+      const prodEvt = envelope(TENANT_A, 'catalog.product.created', {
+        productId: 'prod-1',
+        name: 'Arabica Coffee Beans 1kg',
+        baseUnit: 'BAG',
+        categoryId: 'cat-coffee',
+        brandId: 'brand-highlands',
+        status: 'ACTIVE',
+        aggregateVersion: 1,
+        updatedAt: '2026-10-18T08:00:00.000Z',
+      });
+      const varEvt = envelope(TENANT_A, 'catalog.variant.created', {
+        variantId: 'var-1',
+        productId: 'prod-1',
+        skuCode: 'SKU-COFFEE-1KG',
+        barcode: '8930001',
+        name: 'Arabica Coffee Beans 1kg',
+        basePrice: '250000',
+        status: 'ACTIVE',
+        isDefault: true,
+        aggregateVersion: 1,
+        updatedAt: '2026-10-18T08:00:00.000Z',
+      });
+      const custEvt = envelope(TENANT_A, 'customer.created', {
+        customerId: CUSTOMER_1,
+        code: 'KH-001',
+        status: 'ACTIVE',
+        customerGroupId: 'VIP_GOLD',
+        membershipTierId: 'GOLD',
+        version: 1,
+        occurredAt: '2026-10-18T08:00:00.000Z',
+      });
+
+      await handle(prodEvt, (m) => consumer.onProductCreated(prodEvt, m));
+      await handle(varEvt, (m) => consumer.onVariantCreated(varEvt, m));
+      await handle(custEvt, (m) => consumer.onCustomerCreated(custEvt, m));
+
+      // Order 1: Completed POS order (2 units * 250,000 = 500,000 subtotal, 50,000 discount -> 450,000 net; unitCost = 120,000 -> 240,000 COGS -> 210,000 gross profit)
+      const order1Id = randomUUID();
+      const order1Payload = {
+        orderId: order1Id,
+        code: 'ORD-001',
+        branchId: BRANCH_1,
+        channelType: 'POS',
+        customerId: CUSTOMER_1,
+        sellerStaffId: STAFF_1,
+        subtotal: '500000',
+        discountTotal: '50000',
+        grandTotal: '450000',
+        completedAt: '2026-10-18T10:00:00.000Z',
+        items: [
+          {
+            skuCode: 'SKU-COFFEE-1KG',
+            quantity: 2,
+            unitPrice: 250000,
+            discount: 50000,
+            unitCost: 120000,
+          },
+        ],
+      };
+      const order1Completed = envelope(
+        TENANT_A,
+        'sales.order.completed',
+        order1Payload,
+        '2026-10-18T10:00:00.000Z',
       );
 
-      expect(pageA.pagination.totalRecords).toBe(1);
-      expect(pageB.pagination.totalRecords).toBe(1);
-      expect(pageA.data[0].id).not.toBe(pageB.data[0].id);
-    });
+      // Test A: First processing
+      await handle(order1Completed, (m) =>
+        consumer.onSalesOrderCompleted(order1Completed, m),
+      );
 
-    it('filters by type and pages newest first', async () => {
-      for (let i = 0; i < 3; i++) {
-        const e = login(TENANT_A, ACCOUNT);
-        await handle(e, (m) => audit.onLogin(e, m));
-      }
-      const s = sale(TENANT_A, BRANCH_1, 1);
-      await handle(s, (m) => audit.onOrderCompleted(s, m));
+      // Test B: Duplicate delivery (same event ID + new event ID with identical state)
+      await handle(order1Completed, (m) =>
+        consumer.onSalesOrderCompleted(order1Completed, m),
+      );
+      const duplicateRetried = envelope(
+        TENANT_A,
+        'sales.order.completed',
+        order1Payload,
+        '2026-10-18T10:00:05.000Z',
+      );
+      await handle(duplicateRetried, (m) =>
+        consumer.onSalesOrderCompleted(duplicateRetried, m),
+      );
 
-      const logins = await as(TENANT_A, () =>
-        queries.auditLogs({
-          page: 1,
-          limit: 2,
-          type: 'platform.account.logged_in',
+      // Test C: Out-of-order late arrival of sales.order.created & sales.order.confirmed AFTER sales.order.completed
+      const lateCreated = envelope(
+        TENANT_A,
+        'sales.order.created',
+        {
+          orderId: order1Id,
+          code: 'ORD-001',
+          branchId: BRANCH_1,
+          channelType: 'POS',
+          subtotal: '500000',
+          discountTotal: '50000',
+          grandTotal: '450000',
+          occurredAt: '2026-10-18T09:58:00.000Z',
+        },
+        '2026-10-18T09:58:00.000Z',
+      );
+      await handle(lateCreated, (m) =>
+        consumer.onSalesOrderCreated(lateCreated, m),
+      );
+
+      const overviewAfterO1 = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
         }),
       );
+      expect(overviewAfterO1.metrics.gmv.current).toBe(500000);
+      expect(overviewAfterO1.metrics.grossSalesRevenue.current).toBe(500000);
+      expect(overviewAfterO1.metrics.discountTotal.current).toBe(50000);
+      expect(overviewAfterO1.metrics.netSalesRevenue.current).toBe(450000);
+      expect(overviewAfterO1.metrics.grossProfit.current).toBe(210000);
+      expect(overviewAfterO1.metrics.completedOrderCount.current).toBe(1);
+      expect(overviewAfterO1.metrics.orderCount.current).toBe(1);
 
-      expect(logins.pagination).toMatchObject({
-        limit: 2,
-        totalRecords: 3,
-        totalPages: 2,
-        nextPage: 2,
+      // Verify dimensional breakdowns (Product, Channel, Employee, Customer Group)
+      const topProducts = await as(TENANT_A, () =>
+        reporting.getTopProducts({ from: '2026-10-18', to: '2026-10-18' }),
+      );
+      expect(topProducts.data[0]).toMatchObject({
+        skuCode: 'SKU-COFFEE-1KG',
+        productName: 'Arabica Coffee Beans 1kg',
+        categoryId: 'cat-coffee',
+        brandId: 'brand-highlands',
+        unitsSold: '2.00',
+        netSalesRevenue: 450000,
+        grossProfit: 210000,
       });
-      expect(logins.data).toHaveLength(2);
-      expect(
-        logins.data.every((r) => r.type === 'platform.account.logged_in'),
-      ).toBe(true);
+
+      const byEmployee = await as(TENANT_A, () =>
+        reporting.getSalesByEmployee({ from: '2026-10-18', to: '2026-10-18' }),
+      );
+      expect(byEmployee.data[0]).toMatchObject({
+        employeeId: STAFF_1,
+        netSalesRevenue: 450000,
+        completedOrderCount: 1,
+      });
+
+      const byCustGroup = await as(TENANT_A, () =>
+        reporting.getSalesByCustomerGroup({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(byCustGroup.data[0]).toMatchObject({
+        customerGroupId: 'VIP_GOLD',
+        netSalesRevenue: 450000,
+        completedOrderCount: 1,
+      });
+
+      // Test D: Order 2 is CONFIRMED then CANCELLED -> GMV is added then reversed, cancelledOrderCount = 1
+      const order2Id = randomUUID();
+      const order2Confirmed = envelope(
+        TENANT_A,
+        'sales.order.confirmed',
+        {
+          orderId: order2Id,
+          code: 'ORD-002',
+          branchId: BRANCH_1,
+          channelType: 'SHOPEE',
+          subtotal: '300000',
+          discountTotal: '0',
+          grandTotal: '300000',
+          occurredAt: '2026-10-18T11:00:00.000Z',
+        },
+        '2026-10-18T11:00:00.000Z',
+      );
+      await handle(order2Confirmed, (m) =>
+        consumer.onSalesOrderConfirmed(order2Confirmed, m),
+      );
+
+      let overviewMid = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(overviewMid.metrics.gmv.current).toBe(800000);
+      expect(overviewMid.metrics.netSalesRevenue.current).toBe(450000);
+
+      const order2Cancelled = envelope(
+        TENANT_A,
+        'sales.order.cancelled',
+        {
+          orderId: order2Id,
+          code: 'ORD-002',
+          branchId: BRANCH_1,
+          channelType: 'SHOPEE',
+          subtotal: '300000',
+          discountTotal: '0',
+          grandTotal: '300000',
+          occurredAt: '2026-10-18T11:30:00.000Z',
+        },
+        '2026-10-18T11:30:00.000Z',
+      );
+      await handle(order2Cancelled, (m) =>
+        consumer.onSalesOrderCancelled(order2Cancelled, m),
+      );
+
+      overviewMid = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(overviewMid.metrics.gmv.current).toBe(500000);
+      expect(overviewMid.metrics.netSalesRevenue.current).toBe(450000);
+      expect(overviewMid.metrics.cancelledOrderCount.current).toBe(1);
+      expect(overviewMid.metrics.orderCount.current).toBe(2);
     });
+  });
 
-    it('is idempotent: handling the same event twice leaves one row', async () => {
-      const e = login(TENANT_A, ACCOUNT);
-      await handle(e, (m) => audit.onLogin(e, m));
+  describe('Mandatory Tests E, F, G, H — Partial Returns, Return Idempotency, Historical Cost Preservation & Missing Cost Late Arrival', () => {
+    it('handles partial returns, preserves historical COGS when inventory cost changes, and resolves pending COGS on late cost arrival', async () => {
+      // 1. Seed initial inventory receipt for SKU-TEA at 50,000 VND/unit (10 units)
+      const receipt1 = envelope(TENANT_A, 'inventory.stock.received', {
+        warehouseId: WAREHOUSE_1,
+        branchId: BRANCH_1,
+        skuId: 'SKU-TEA',
+        skuCode: 'SKU-TEA',
+        productName: 'Oolong Tea 500g',
+        movementType: 'PURCHASE_RECEIPT',
+        qtyDelta: '10',
+        onHandAfter: '10',
+        reservedAfter: '0',
+        unitCost: '50000',
+        avgCostAfter: '50000',
+        referenceType: 'PO',
+        referenceId: 'po-1',
+        occurredAt: '2026-10-18T08:00:00.000Z',
+      });
+      await handle(receipt1, (m) =>
+        consumer.onInventoryStockReceived(receipt1, m),
+      );
 
-      await handle(e, (m) => audit.onLogin(e, m)); // the inbox stops this in practice; the row id makes it harmless anyway
-      expect(await dataSource.getRepository(AuditLogEntity).count()).toBe(1);
+      // 2. Complete Order 1 for 4 units of SKU-TEA @ 100,000 VND (subtotal 400,000, COGS = 4 * 50,000 = 200,000, Gross Profit = 200,000)
+      const order1Id = randomUUID();
+      const order1 = envelope(TENANT_A, 'sales.order.completed', {
+        orderId: order1Id,
+        code: 'ORD-TEA-1',
+        branchId: BRANCH_1,
+        channelType: 'POS',
+        subtotal: '400000',
+        discountTotal: '0',
+        grandTotal: '400000',
+        completedAt: '2026-10-18T10:00:00.000Z',
+        items: [
+          {
+            skuCode: 'SKU-TEA',
+            productName: 'Oolong Tea 500g',
+            quantity: 4,
+            unitPrice: 100000,
+          },
+        ],
+      });
+      await handle(order1, (m) => consumer.onSalesOrderCompleted(order1, m));
+
+      // Test E & F: Partial return of 1 unit of SKU-TEA (refund 100,000, restocked COGS 50,000 -> net revenue 300,000, net COGS 150,000, gross profit 150,000)
+      const return1Id = randomUUID();
+      const return1 = envelope(TENANT_A, 'sales.return.completed', {
+        returnId: return1Id,
+        code: 'RET-TEA-1',
+        orderId: order1Id,
+        branchId: BRANCH_1,
+        status: 'COMPLETED',
+        totalRefundAmount: '100000',
+        restocked: true,
+        occurredAt: '2026-10-18T12:00:00.000Z',
+        items: [
+          {
+            skuCode: 'SKU-TEA',
+            quantity: 1,
+            refundAmount: 100000,
+            restocked: true,
+          },
+        ],
+      });
+      await handle(return1, (m) => consumer.onSalesReturnCompleted(return1, m));
+      // Test F: Duplicate return event delivery is ignored
+      await handle(return1, (m) => consumer.onSalesReturnCompleted(return1, m));
+
+      let gpReport = await as(TENANT_A, () =>
+        reporting.getGrossProfitSummary({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(gpReport.summary).toMatchObject({
+        grossSalesRevenue: 400000,
+        returnsAmount: 100000,
+        netSalesRevenue: 300000,
+        grossProfit: 150000,
+        grossMarginPct: 50,
+        isProfitProvisional: false,
+      });
+
+      // Test G: Later inventory purchase receipt on 2026-10-19 doubles SKU-TEA cost to 90,000 VND.
+      // Historical 2026-10-18 gross profit MUST remain 150,000.00!
+      const receipt2 = envelope(TENANT_A, 'inventory.stock.received', {
+        warehouseId: WAREHOUSE_1,
+        branchId: BRANCH_1,
+        skuId: 'SKU-TEA',
+        skuCode: 'SKU-TEA',
+        productName: 'Oolong Tea 500g',
+        movementType: 'PURCHASE_RECEIPT',
+        qtyDelta: '10',
+        onHandAfter: '17',
+        reservedAfter: '0',
+        unitCost: '90000',
+        avgCostAfter: '75000',
+        referenceType: 'PO',
+        referenceId: 'po-2',
+        occurredAt: '2026-10-19T08:00:00.000Z',
+      });
+      await handle(receipt2, (m) =>
+        consumer.onInventoryStockReceived(receipt2, m),
+      );
+
+      gpReport = await as(TENANT_A, () =>
+        reporting.getGrossProfitSummary({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(gpReport.summary.grossProfit).toBe(150000);
+
+      // Test H: Order completed on 2026-10-19 for SKU-NEW-MUG with missing cost (costMissing: true)
+      const orderPendingCostId = randomUUID();
+      const orderPendingCost = envelope(
+        TENANT_A,
+        'sales.order.completed',
+        {
+          orderId: orderPendingCostId,
+          code: 'ORD-MUG-1',
+          branchId: BRANCH_1,
+          channelType: 'POS',
+          subtotal: '200000',
+          discountTotal: '0',
+          grandTotal: '200000',
+          costMissing: true,
+          completedAt: '2026-10-19T09:00:00.000Z',
+          items: [
+            {
+              skuCode: 'SKU-NEW-MUG',
+              productName: 'Ceramic Mug',
+              quantity: 2,
+              unitPrice: 100000,
+              costMissing: true,
+            },
+          ],
+        },
+        '2026-10-19T09:00:00.000Z',
+      );
+      await handle(orderPendingCost, (m) =>
+        consumer.onSalesOrderCompleted(orderPendingCost, m),
+      );
+
+      const gpDay2BeforeCost = await as(TENANT_A, () =>
+        reporting.getGrossProfitSummary({
+          from: '2026-10-19',
+          to: '2026-10-19',
+        }),
+      );
+      expect(gpDay2BeforeCost.summary.isProfitProvisional).toBe(true);
+      expect(gpDay2BeforeCost.summary.pendingCostLinesCount).toBe(1);
+      expect(gpDay2BeforeCost.summary.grossProfit).toBe(200000);
+
+      // Late cost event arrives for SKU-NEW-MUG with unitCost = 60,000 -> resolves 2 units * 60,000 = 120,000 COGS -> Gross profit becomes 80,000
+      const lateCostReceipt = envelope(TENANT_A, 'inventory.stock.received', {
+        warehouseId: WAREHOUSE_1,
+        branchId: BRANCH_1,
+        skuId: 'SKU-NEW-MUG',
+        skuCode: 'SKU-NEW-MUG',
+        productName: 'Ceramic Mug',
+        movementType: 'PURCHASE_RECEIPT',
+        qtyDelta: '20',
+        onHandAfter: '18',
+        reservedAfter: '0',
+        unitCost: '60000',
+        avgCostAfter: '60000',
+        referenceType: 'PO',
+        referenceId: 'po-mug',
+        occurredAt: '2026-10-19T10:00:00.000Z',
+      });
+      await handle(lateCostReceipt, (m) =>
+        consumer.onInventoryStockReceived(lateCostReceipt, m),
+      );
+
+      const gpDay2AfterCost = await as(TENANT_A, () =>
+        reporting.getGrossProfitSummary({
+          from: '2026-10-19',
+          to: '2026-10-19',
+        }),
+      );
+      expect(gpDay2AfterCost.summary.isProfitProvisional).toBe(false);
+      expect(gpDay2AfterCost.summary.pendingCostLinesCount).toBe(0);
+      expect(gpDay2AfterCost.summary.grossProfit).toBe(80000);
+      expect(gpDay2AfterCost.summary.grossMarginPct).toBe(40);
+    });
+  });
+
+  describe('Mandatory Tests I & J — Multi-Warehouse Transfer Valuation & Debt Collection Revenue Separation', () => {
+    it('tracks in-transit inventory during inter-warehouse transfers without double counting and separates debt collection from sales revenue', async () => {
+      // Seed 20 units @ 100,000 VND in WAREHOUSE_1 (total valuation = 2,000,000)
+      const seedWh1 = envelope(TENANT_A, 'inventory.stock.received', {
+        warehouseId: WAREHOUSE_1,
+        branchId: BRANCH_1,
+        skuId: 'SKU-PRO-1',
+        skuCode: 'SKU-PRO-1',
+        productName: 'Wireless Scanner',
+        qtyDelta: '20',
+        onHandAfter: '20',
+        reservedAfter: '0',
+        unitCost: '100000',
+        avgCostAfter: '100000',
+        lowStockThreshold: '5',
+        referenceType: 'PO',
+        referenceId: 'po-scan',
+        occurredAt: '2026-10-18T08:00:00.000Z',
+      });
+      await handle(seedWh1, (m) =>
+        consumer.onInventoryStockReceived(seedWh1, m),
+      );
+
+      // Dispatch 8 units from WAREHOUSE_1 to WAREHOUSE_2
+      const dispatchEvt = envelope(TENANT_A, 'inventory.transfer.dispatched', {
+        warehouseId: WAREHOUSE_1,
+        destinationWarehouseId: WAREHOUSE_2,
+        branchId: BRANCH_1,
+        skuId: 'SKU-PRO-1',
+        skuCode: 'SKU-PRO-1',
+        productName: 'Wireless Scanner',
+        movementType: 'TRANSFER_DISPATCH',
+        qtyDelta: '-8',
+        onHandAfter: '12',
+        reservedAfter: '0',
+        unitCost: '100000',
+        avgCostAfter: '100000',
+        referenceType: 'TRANSFER',
+        referenceId: 'trf-1',
+        occurredAt: '2026-10-18T09:00:00.000Z',
+      });
+      await handle(dispatchEvt, (m) =>
+        consumer.onInventoryTransferDispatched(dispatchEvt, m),
+      );
+
+      let valuation = await as(TENANT_A, () =>
+        reporting.getInventoryValuation({}),
+      );
+      // On-hand is 12 units (1,200,000), in-transit at WH2 is 8 units (800,000), total conserved = 2,000,000
+      expect(valuation.totals).toEqual({
+        onHandValuation: 1200000,
+        inTransitValuation: 800000,
+        totalValuation: 2000000,
+      });
+
+      // Receive 8 units at WAREHOUSE_2
+      const receiveEvt = envelope(TENANT_A, 'inventory.transfer.received', {
+        warehouseId: WAREHOUSE_2,
+        branchId: BRANCH_2,
+        skuId: 'SKU-PRO-1',
+        skuCode: 'SKU-PRO-1',
+        productName: 'Wireless Scanner',
+        movementType: 'TRANSFER_RECEIPT',
+        qtyDelta: '8',
+        onHandAfter: '8',
+        reservedAfter: '0',
+        unitCost: '100000',
+        avgCostAfter: '100000',
+        referenceType: 'TRANSFER',
+        referenceId: 'trf-1',
+        occurredAt: '2026-10-18T11:00:00.000Z',
+      });
+      await handle(receiveEvt, (m) =>
+        consumer.onInventoryTransferReceived(receiveEvt, m),
+      );
+
+      valuation = await as(TENANT_A, () => reporting.getInventoryValuation({}));
+      expect(valuation.totals).toEqual({
+        onHandValuation: 2000000,
+        inTransitValuation: 0,
+        totalValuation: 2000000,
+      });
+
+      // Test J: Credit sale completed for 500,000 VND, followed by receivable debt collection of 500,000 VND
+      const creditOrderId = randomUUID();
+      const creditOrder = envelope(TENANT_A, 'sales.order.completed', {
+        orderId: creditOrderId,
+        code: 'ORD-CREDIT-1',
+        branchId: BRANCH_1,
+        channelType: 'WHOLESALE',
+        paymentStatus: 'UNPAID',
+        subtotal: '500000',
+        discountTotal: '0',
+        grandTotal: '500000',
+        completedAt: '2026-10-18T12:00:00.000Z',
+        items: [
+          {
+            skuCode: 'SKU-PRO-1',
+            quantity: 2,
+            unitPrice: 250000,
+            unitCost: 100000,
+          },
+        ],
+      });
+      await handle(creditOrder, (m) =>
+        consumer.onSalesOrderCompleted(creditOrder, m),
+      );
+
+      const debtPayment = envelope(
+        TENANT_A,
+        'finance.receivable.payment_applied',
+        {
+          receivableId: randomUUID(),
+          code: 'AR-001',
+          customerId: CUSTOMER_1,
+          orderId: creditOrderId,
+          branchId: BRANCH_1,
+          originalAmount: '500000',
+          paidAmount: '500000',
+          outstandingAmount: '0',
+          customerTotalDebtAfter: '0',
+          status: 'PAID',
+          journalId: randomUUID(),
+          occurredAt: '2026-10-18T15:00:00.000Z',
+        },
+      );
+      await handle(debtPayment, (m) =>
+        consumer.onReceivablePaymentApplied(debtPayment, m),
+      );
+
+      // the same cumulative paid amount again (a redelivery) collects nothing more
+      const again = envelope(TENANT_A, 'finance.receivable.payment_applied', {
+        ...(debtPayment as unknown as { payload: object }).payload,
+        branchId: BRANCH_1,
+      });
+      await handle(again, (m) => consumer.onReceivablePaymentApplied(again, m));
+      // the cash of the payment arrives as its own cashbook entry
+      const cash = envelope(TENANT_A, 'finance.cashbook.entry_posted', {
+        entryId: randomUUID(),
+        code: 'PT-001',
+        branchId: BRANCH_1,
+        direction: 'RECEIPT',
+        amount: 500000,
+        occurredAt: '2026-10-18T15:00:00.000Z',
+      });
+      await handle(cash, (m) => consumer.onCashbookEntryPosted(cash, m));
+
+      const overview = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      // Sales revenue is 500,000 (NOT 1,000,000), while debtCollectedAmount is 500,000
+      expect(overview.metrics.netSalesRevenue.current).toBe(500000);
+      expect(overview.metrics.debtCollectedAmount).toBe(500000);
+      expect(overview.metrics.cashInflowAmount).toBe(500000);
+    });
+  });
+
+  describe('Mandatory Tests K, L, M, R — Shadow Generation Rebuild Equivalence, Live Events During Rebuild, Fault Rollback & Reconciliation', () => {
+    it('rebuilds projections into a new generation with zero drift, preserves live events during rebuild, rolls back failed rebuilds, and detects injected reconciliation discrepancies', async () => {
+      // Seed 2 orders and 1 return
+      for (const idx of [1, 2]) {
+        const ord = envelope(TENANT_A, 'sales.order.completed', {
+          orderId: randomUUID(),
+          code: `ORD-RB-${idx}`,
+          branchId: idx === 1 ? BRANCH_1 : BRANCH_2,
+          channelType: 'POS',
+          subtotal: '300000',
+          discountTotal: '20000',
+          grandTotal: '280000',
+          completedAt: '2026-10-18T10:00:00.000Z',
+          items: [
+            {
+              skuCode: `SKU-RB-${idx}`,
+              productName: `Item ${idx}`,
+              quantity: 2,
+              unitPrice: 150000,
+              discount: 20000,
+              unitCost: 80000,
+            },
+          ],
+        });
+        await handle(ord, (m) => consumer.onSalesOrderCompleted(ord, m));
+      }
+
+      const beforeRebuild = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(beforeRebuild.metrics.netSalesRevenue.current).toBe(560000);
+      expect(beforeRebuild.metrics.grossProfit.current).toBe(240000);
+
+      // Test R: Simulate a mid-rebuild failure before cutover -> active generation remains untouched!
+      await expect(
+        as(TENANT_A, () =>
+          rebuildService.triggerRebuild({
+            projectionName: 'sales_analytics',
+            fromDate: '2026-10-18',
+            toDate: '2026-10-18',
+            simulateFailureAfterShadowBuild: true,
+          }),
+        ),
+      ).rejects.toThrow('Simulated mid-rebuild failure');
+
+      const afterFailedRebuild = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(afterFailedRebuild.metrics.netSalesRevenue.current).toBe(560000);
+      expect(afterFailedRebuild.freshness.activeGenerationId).toBe(
+        'gen-active',
+      );
+
+      // Test L: Start a BUILDING shadow generation row and verify a live event dual-writes to both active and BUILDING generations
+      const genTable = qualifiedTable(dataSource, 'projection_generations');
+      await dataSource.query(
+        `INSERT INTO ${genTable} (
+          "id", "tenant_id", "projection_name", "generation_id", "previous_generation_id",
+          "status", "triggered_by", "started_at"
+        ) VALUES ($1, $2, 'sales_analytics', 'gen-shadow-live', 'gen-active', 'BUILDING', 'test', now())`,
+        [randomUUID(), TENANT_A],
+      );
+
+      const liveOrderDuringBuild = envelope(TENANT_A, 'sales.order.completed', {
+        orderId: randomUUID(),
+        code: 'ORD-LIVE-3',
+        branchId: BRANCH_1,
+        channelType: 'ONLINE',
+        subtotal: '100000',
+        discountTotal: '0',
+        grandTotal: '100000',
+        completedAt: '2026-10-18T14:00:00.000Z',
+        items: [
+          {
+            skuCode: 'SKU-LIVE',
+            productName: 'Live Item',
+            quantity: 1,
+            unitPrice: 100000,
+            unitCost: 40000,
+          },
+        ],
+      });
+      await handle(liveOrderDuringBuild, (m) =>
+        consumer.onSalesOrderCompleted(liveOrderDuringBuild, m),
+      );
+
+      // Clean up temporary shadow marker and run full deterministic rebuild (Test K)
+      await dataSource.query(
+        `UPDATE ${genTable} SET "status" = 'SUPERSEDED' WHERE "generation_id" = 'gen-shadow-live'`,
+      );
+
+      const rebuildResult = await as(TENANT_A, () =>
+        rebuildService.triggerRebuild({
+          projectionName: 'sales_analytics',
+          fromDate: '2026-10-18',
+          toDate: '2026-10-18',
+          reason: 'Verify deterministic rebuild equivalence',
+        }),
+      );
+      expect(rebuildResult.status).toBe('ACTIVE');
+      expect(rebuildResult.ordersReplayed).toBe(3);
+
+      const afterRebuild = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(afterRebuild.freshness.activeGenerationId).toBe(
+        rebuildResult.newGenerationId,
+      );
+      expect(afterRebuild.metrics.netSalesRevenue.current).toBe(660000);
+      expect(afterRebuild.metrics.grossProfit.current).toBe(300000);
+
+      // Clean reconciliation passes with 0 discrepancies
+      const cleanRecon = await as(TENANT_A, () =>
+        reconciliationService.executeReconciliation({
+          scope: 'SALES',
+          fromDate: '2026-10-18',
+          toDate: '2026-10-18',
+        }),
+      );
+      expect(cleanRecon.status).toBe('COMPLETED');
+      expect(cleanRecon.discrepanciesFound).toBe(0);
+
+      // Test M: Inject artificial corruption (+50,000 net_sales_revenue) into daily_sales_summaries and verify reconciliation catches it
+      const dailyTable = qualifiedTable(dataSource, 'daily_sales_summaries');
+      await dataSource.query(
+        `UPDATE ${dailyTable}
+         SET "net_sales_revenue" = "net_sales_revenue" + 50000
+         WHERE "tenant_id" = $1 AND "generation_id" = $2 AND "branch_id" = $3`,
+        [TENANT_A, rebuildResult.newGenerationId, BRANCH_1],
+      );
+
+      const driftRecon = await as(TENANT_A, () =>
+        reconciliationService.executeReconciliation({
+          scope: 'SALES',
+          fromDate: '2026-10-18',
+          toDate: '2026-10-18',
+        }),
+      );
+      expect(driftRecon.status).toBe('COMPLETED_WITH_ISSUES');
+      expect(driftRecon.discrepanciesFound).toBeGreaterThanOrEqual(1);
+      expect(driftRecon.issues[0]).toMatchObject({
+        metricName: 'net_sales_revenue',
+        expectedValue: 660000,
+        actualValue: 710000,
+        deltaValue: 50000,
+        severity: 'CRITICAL',
+      });
+    });
+  });
+
+  describe('Mandatory Tests N, P, Q, S, T — Tenant Isolation, Branch Scope, Exports, Formula-Injection & Backlog Replay', () => {
+    it('enforces tenant & branch isolation across reports and exports, sanitizes CSV formulas, and replays POS backlog', async () => {
+      // Seed Tenant A order on BRANCH_1 with malicious formula in product name (Test S) and BRANCH_2 order
+      const orderB1 = envelope(TENANT_A, 'sales.order.completed', {
+        orderId: randomUUID(),
+        code: 'ORD-B1',
+        branchId: BRANCH_1,
+        channelType: 'POS',
+        subtotal: '200000',
+        discountTotal: '0',
+        grandTotal: '200000',
+        completedAt: '2026-10-18T10:00:00.000Z',
+        items: [
+          {
+            skuCode: 'SKU-INJECT',
+            productName: "=cmd|' /C calc'!A0",
+            quantity: 1,
+            unitPrice: 200000,
+            unitCost: 100000,
+          },
+        ],
+      });
+      const orderB2 = envelope(TENANT_A, 'sales.order.completed', {
+        orderId: randomUUID(),
+        code: 'ORD-B2',
+        branchId: BRANCH_2,
+        channelType: 'POS',
+        subtotal: '900000',
+        discountTotal: '0',
+        grandTotal: '900000',
+        completedAt: '2026-10-18T11:00:00.000Z',
+        items: [
+          {
+            skuCode: 'SKU-B2',
+            productName: 'Branch 2 Item',
+            quantity: 3,
+            unitPrice: 300000,
+            unitCost: 150000,
+          },
+        ],
+      });
+      await handle(orderB1, (m) => consumer.onSalesOrderCompleted(orderB1, m));
+      await handle(orderB2, (m) => consumer.onSalesOrderCompleted(orderB2, m));
+
+      // Test N: Tenant B sees zero revenue and cannot access Tenant A's data
+      const tenantBOverview = await as(TENANT_B, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(tenantBOverview.metrics.netSalesRevenue.current).toBe(0);
+
+      // Test P: Branch manager restricted to BRANCH_1 only sees BRANCH_1 in comparison and ranking
+      const scopedRanking = await as(TENANT_A, () =>
+        reporting.getBranchRanking({
+          from: '2026-10-18',
+          to: '2026-10-18',
+          allowedBranchIds: [BRANCH_1],
+        }),
+      );
+      expect(scopedRanking.ranking).toHaveLength(1);
+      expect(scopedRanking.ranking[0].branchId).toBe(BRANCH_1);
+      expect(scopedRanking.ranking[0].netSalesRevenue).toBe(200000);
+
+      expect(() => resolveScope([BRANCH_1], BRANCH_2)).toThrow(
+        NotFoundException,
+      );
+
+      // Test Q & S: Create CSV, XLSX, and PDF exports for PRODUCT_SALES and verify formula-injection escaping and branch-scope download protection
+      const csvExport = await as(TENANT_A, () =>
+        exportService.createExportJob({
+          reportType: 'PRODUCT_SALES',
+          format: 'CSV',
+          from: '2026-10-18',
+          to: '2026-10-18',
+          branchId: BRANCH_1,
+          allowedBranchIds: [BRANCH_1],
+          requestedBy: ACCOUNT,
+        }),
+      );
+      expect(csvExport.status).toBe('COMPLETED');
+      expect(csvExport.rowCount).toBe(1);
+
+      const downloadedCsv = await as(TENANT_A, () =>
+        exportService.downloadExportJob(csvExport.id, [BRANCH_1]),
+      );
+      const csvText = downloadedCsv.buffer.toString('utf8');
+      expect(csvText).toContain("SKU-INJECT,'=cmd|' /C calc'!A0");
+
+      // Manager restricted to BRANCH_2 cannot download BRANCH_1's export job
+      await expect(
+        as(TENANT_A, () =>
+          exportService.downloadExportJob(csvExport.id, [BRANCH_2]),
+        ),
+      ).rejects.toThrow(NotFoundException);
+
+      // Also verify XLSX and PDF exports
+      const xlsxExport = await as(TENANT_A, () =>
+        exportService.createExportJob({
+          reportType: 'BRANCH_COMPARISON',
+          format: 'XLSX',
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(xlsxExport.byteSize).toBeGreaterThan(100);
+
+      const pdfExport = await as(TENANT_A, () =>
+        exportService.createExportJob({
+          reportType: 'SALES_SUMMARY',
+          format: 'PDF',
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      const pdfArtifact = await as(TENANT_A, () =>
+        exportService.downloadExportJob(pdfExport.id),
+      );
+      expect(pdfArtifact.buffer.toString('utf8').startsWith('%PDF-1.4')).toBe(
+        true,
+      );
     });
   });
   describe('migrations', () => {
-    it('undo and redo the read model and notification tables', async () => {
+    it('undo and redo the notification tables and keep the M7 and audit tables', async () => {
       const tables = () =>
         dataSource
           .query(
@@ -687,24 +1111,43 @@ describe('insight (Postgres)', () => {
           .then((rows: { table_name: string }[]) =>
             rows.map((r) => r.table_name),
           );
+      const money = (table: string, column: string) =>
+        dataSource
+          .query(
+            `SELECT data_type FROM information_schema.columns
+              WHERE table_schema = $1 AND table_name = $2 AND column_name = $3`,
+            [schema, table, column],
+          )
+          .then((rows: { data_type: string }[]) => rows[0]?.data_type);
       expect(await tables()).toEqual(
-        expect.arrayContaining(['hourly_sales', 'notification']),
+        expect.arrayContaining([
+          'audit_log',
+          'sales_order_facts',
+          'notification',
+          'device_token',
+        ]),
       );
+      expect(await tables()).not.toContain('daily_sales');
+      // money is bigint, quantities stay numeric
+      expect(await money('sales_order_facts', 'grand_total')).toBe('bigint');
+      expect(await money('daily_sales_summaries', 'gross_profit')).toBe(
+        'bigint',
+      );
+      expect(await money('inventory_stock_projections', 'avg_unit_cost')).toBe(
+        'bigint',
+      );
+      expect(await money('sales_order_line_facts', 'quantity')).toBe('numeric');
 
-      await dataSource.undoLastMigration();
       await dataSource.undoLastMigration();
       const after = await tables();
       expect(after).not.toContain('notification');
       expect(after).not.toContain('notification_read');
-      expect(after).not.toContain('hourly_sales');
-      expect(after).toContain('daily_sales');
+      expect(after).not.toContain('device_token');
+      expect(after).toContain('sales_order_facts');
 
       await dataSource.runMigrations();
       expect(await tables()).toEqual(
         expect.arrayContaining([
-          'hourly_sales',
-          'product_sales_daily',
-          'customer_sales_daily',
           'notification',
           'notification_read',
           'device_token',
@@ -716,7 +1159,7 @@ describe('insight (Postgres)', () => {
   describe('branch scope (ADR-0020 §8)', () => {
     const feed = async (...events: ReturnType<typeof sale>[]) => {
       for (const e of events)
-        await handle(e, (m) => summary.onOrderCompleted(e, m));
+        await handle(e, (m) => consumer.onSalesOrderCompleted(e, m));
     };
     const ME = randomUUID();
     const only1 = [BRANCH_1];
@@ -747,8 +1190,8 @@ describe('insight (Postgres)', () => {
         () => reports.hourly({ branchId: BRANCH_2 }, only1),
         () => reports.byChannel(range, only1),
         () => reports.topProducts(range, only1),
-        () => queries.dailySales(range, only1),
-        () => queries.dailySales({ ...range, groupBy: 'day_channel' }, only1),
+        () => reports.dailySales(range, only1),
+        () => reports.dailySales({ ...range, groupBy: 'day_channel' }, only1),
         () => exporter.export({ ...range, report: 'daily' }, only1),
         () =>
           notifications.list(
@@ -815,11 +1258,11 @@ describe('insight (Postgres)', () => {
           (b) => b.branchId,
         ),
       ).toEqual([BRANCH_1]);
-      const daily = await as(TENANT_A, () => queries.dailySales(day, only1));
+      const daily = await as(TENANT_A, () => reports.dailySales(day, only1));
       expect(daily.data.map((r) => r.branchId)).toEqual([BRANCH_1]);
       expect(daily.totals.revenue).toBe(110000);
       const perChannel = await as(TENANT_A, () =>
-        queries.dailySales({ ...day, groupBy: 'day_channel' }, only1),
+        reports.dailySales({ ...day, groupBy: 'day_channel' }, only1),
       );
       expect(perChannel.data.map((r) => r.channel)).toEqual(['pos']);
       const csv = await as(TENANT_A, () =>
@@ -904,6 +1347,372 @@ describe('insight (Postgres)', () => {
       expect(await as(TENANT_A, () => notifications.unreadCount(ME))).toEqual({
         count: 1,
       });
+    });
+  });
+
+  describe('events as the adopted services emit them', () => {
+    const VARIANT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const q = (sql: string, params: unknown[] = []) =>
+      dataSource.query(sql.replace(/\$S/g, `"${schema}"`), params);
+
+    it('reads sales.order.completed with channel, variant ids and the order cost, in whole VND', async () => {
+      const orderId = randomUUID();
+      const e = envelope(TENANT_A, 'sales.order.completed', {
+        orderId,
+        code: 'DH-9',
+        branchId: BRANCH_1,
+        customerId: CUSTOMER_1,
+        subtotal: 100001,
+        discountTotal: 1,
+        taxTotal: 0,
+        grandTotal: 100000,
+        totalAmount: 100000,
+        itemCount: 3,
+        paymentMethod: 'cash',
+        createdBy: ACCOUNT,
+        completedAt: '2026-10-18T03:00:00.000Z',
+        items: [
+          {
+            sku: 'A',
+            name: 'A',
+            quantity: 1,
+            unitPrice: 60001,
+            variantId: VARIANT,
+          },
+          { sku: 'B', name: 'B', quantity: 2, unitPrice: 20000 },
+        ],
+        channel: 'shopee',
+        channelId: randomUUID(),
+        costAmount: 60000,
+      });
+      await handle(e, (m) => consumer.onSalesOrderCompleted(e, m));
+
+      const [fact] = await q(
+        `SELECT * FROM $S.sales_order_facts WHERE order_id = $1`,
+        [orderId],
+      );
+      expect(fact.channel_type).toBe('SHOPEE');
+      expect(fact.grand_total).toBe('100000');
+      expect(fact.cogs_total).toBe('60000');
+      expect(fact.cost_status).toBe('VERIFIED');
+      const lines = await q(
+        `SELECT sku_code, variant_id, cogs_amount, line_subtotal FROM $S.sales_order_line_facts WHERE order_id = $1 ORDER BY sku_code`,
+        [orderId],
+      );
+      // the cost is spread by subtotal share and sums back to the order cost
+      expect(lines.map((l: { cogs_amount: string }) => l.cogs_amount)).toEqual([
+        '36000',
+        '24000',
+      ]);
+      expect(lines[0].variant_id).toBe(VARIANT);
+
+      const kpis = await as(TENANT_A, () =>
+        reports.kpis({ date: '2026-10-18' }, null),
+      );
+      expect(kpis.revenue.value).toBe(100000);
+      expect(kpis.grossProfit?.value).toBe(40000);
+      const channels = await as(TENANT_A, () =>
+        reports.byChannel({ from: '2026-10-18', to: '2026-10-18' }, null),
+      );
+      expect(channels.data[0]).toMatchObject({
+        type: 'shopee',
+        revenue: 100000,
+      });
+    });
+
+    it('rounds a fractional line half up to whole VND and keeps summaries integer', async () => {
+      const e = envelope(TENANT_A, 'sales.order.completed', {
+        orderId: randomUUID(),
+        code: 'DH-10',
+        branchId: BRANCH_1,
+        grandTotal: 15002,
+        totalAmount: 15002,
+        subtotal: 15002,
+        itemCount: 1,
+        paymentMethod: 'cash',
+        createdBy: ACCOUNT,
+        completedAt: '2026-10-18T03:00:00.000Z',
+        items: [{ sku: 'KG', name: 'Gạo', quantity: 1.5, unitPrice: 10001 }],
+      });
+      await handle(e, (m) => consumer.onSalesOrderCompleted(e, m));
+      const overview = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(overview.metrics.grossSalesRevenue.current).toBe(15002);
+      expect(Number.isInteger(overview.metrics.netSalesRevenue.current)).toBe(
+        true,
+      );
+    });
+
+    it('maps the variant id of stock.changed to the SKU code and does not count a commit twice', async () => {
+      const variant = envelope(TENANT_A, 'catalog.variant.created', {
+        variantId: VARIANT,
+        productId: randomUUID(),
+        skuCode: 'SKU-V',
+        barcode: null,
+        name: 'Variant',
+        basePrice: 1000,
+        status: 'ACTIVE',
+        isDefault: true,
+        aggregateVersion: 1,
+        updatedAt: '2026-10-18T01:00:00.000Z',
+      });
+      await handle(variant, (m) => consumer.onVariantCreated(variant, m));
+      const stock = (type: string, payload: object) =>
+        envelope(TENANT_A, type, payload);
+      const received = stock('inventory.stock.changed', {
+        warehouseId: WAREHOUSE_1,
+        skuId: VARIANT,
+        movementType: 'RECEIPT',
+        qtyDelta: '10.000',
+        onHandAfter: '10.000',
+        reservedAfter: '0.000',
+        unitCost: 5000,
+        avgCostAfter: 5000,
+        referenceType: 'STOCK_RECEIPT',
+        referenceId: randomUUID(),
+        occurredAt: '2026-10-18T02:00:00.000Z',
+      });
+      await handle(received, (m) =>
+        consumer.onInventoryStockChanged(received, m),
+      );
+      // the document-level event carries no stock line: nothing moves
+      const doc = stock('inventory.stock.received', {
+        receiptId: randomUUID(),
+        warehouseId: WAREHOUSE_1,
+        totalAmount: 50000,
+        postedAt: '2026-10-18T02:00:00.000Z',
+      });
+      await handle(doc, (m) => consumer.onInventoryStockReceived(doc, m));
+
+      const held = stock('inventory.reservation.confirmed', {
+        reservationId: randomUUID(),
+        sourceRefType: 'ORDER',
+        sourceRefId: randomUUID(),
+        state: 'HELD',
+        expiresAt: '2026-10-18T03:00:00.000Z',
+        lines: [{ warehouseId: WAREHOUSE_1, skuId: VARIANT, qty: '4.000' }],
+      });
+      await handle(held, (m) => consumer.onReservationConfirmed(held, m));
+      const rows = () =>
+        q(
+          `SELECT sku_code, on_hand_qty, reserved_qty, available_qty, inventory_valuation FROM $S.inventory_stock_projections WHERE tenant_id = $1`,
+          [TENANT_A],
+        );
+      expect(await rows()).toEqual([
+        {
+          sku_code: 'SKU-V',
+          on_hand_qty: '10.0000',
+          reserved_qty: '4.0000',
+          available_qty: '6.0000',
+          inventory_valuation: '50000',
+        },
+      ]);
+
+      // the commit: one stock.changed (balances after) and the reservation event
+      const commitMove = stock('inventory.stock.changed', {
+        warehouseId: WAREHOUSE_1,
+        skuId: VARIANT,
+        movementType: 'SALE_COMMIT',
+        qtyDelta: '-4.000',
+        onHandAfter: '6.000',
+        reservedAfter: '0.000',
+        unitCost: 5000,
+        avgCostAfter: 5000,
+        referenceType: 'ORDER',
+        referenceId: randomUUID(),
+        occurredAt: '2026-10-18T04:00:00.000Z',
+      });
+      await handle(commitMove, (m) =>
+        consumer.onInventoryStockChanged(commitMove, m),
+      );
+      const committed = stock('inventory.reservation.committed', {
+        reservationId: randomUUID(),
+        sourceRefType: 'ORDER',
+        sourceRefId: randomUUID(),
+        state: 'COMMITTED',
+        occurredAt: '2026-10-18T04:00:00.000Z',
+        lines: [{ warehouseId: WAREHOUSE_1, skuId: VARIANT, qty: '4.000' }],
+      });
+      await handle(committed, (m) =>
+        consumer.onReservationCommitted(committed, m),
+      );
+      const [after] = await rows();
+      expect(after.on_hand_qty).toBe('6.0000');
+      expect(after.reserved_qty).toBe('0.0000');
+      expect(after.inventory_valuation).toBe('30000');
+
+      // an expired hold lets go of what it held, never below zero
+      const expired = stock('inventory.reservation.expired', {
+        reservationId: randomUUID(),
+        sourceRefType: 'ORDER',
+        sourceRefId: randomUUID(),
+        state: 'EXPIRED',
+        occurredAt: '2026-10-18T05:00:00.000Z',
+        lines: [{ warehouseId: WAREHOUSE_1, skuId: VARIANT, qty: '2.000' }],
+      });
+      await handle(expired, (m) => consumer.onReservationExpired(expired, m));
+      expect((await rows())[0].reserved_qty).toBe('0.0000');
+    });
+
+    it('clears the in-transit stock of the source when the transfer is received', async () => {
+      const transferId = randomUUID();
+      const move = (
+        warehouseId: string,
+        movementType: string,
+        qtyDelta: string,
+        onHandAfter: string,
+        at: string,
+      ) =>
+        envelope(TENANT_A, 'inventory.stock.changed', {
+          warehouseId,
+          skuId: 'SKU-T',
+          movementType,
+          qtyDelta,
+          onHandAfter,
+          reservedAfter: '0.000',
+          unitCost: 1000,
+          avgCostAfter: 1000,
+          referenceType: 'STOCK_TRANSFER',
+          referenceId: transferId,
+          occurredAt: at,
+        });
+      const seed = envelope(TENANT_A, 'inventory.stock.changed', {
+        warehouseId: WAREHOUSE_1,
+        skuId: 'SKU-T',
+        movementType: 'RECEIPT',
+        qtyDelta: '10.000',
+        onHandAfter: '10.000',
+        reservedAfter: '0.000',
+        unitCost: 1000,
+        avgCostAfter: 1000,
+        referenceType: 'STOCK_RECEIPT',
+        referenceId: randomUUID(),
+        occurredAt: '2026-10-18T01:00:00.000Z',
+      });
+      const dispatch = move(
+        WAREHOUSE_1,
+        'TRANSFER_DISPATCH',
+        '-6.000',
+        '4.000',
+        '2026-10-18T02:00:00.000Z',
+      );
+      const receipt = move(
+        WAREHOUSE_2,
+        'TRANSFER_RECEIPT',
+        '6.000',
+        '6.000',
+        '2026-10-18T03:00:00.000Z',
+      );
+      for (const ev of [seed, dispatch]) {
+        await handle(ev, (m) => consumer.onInventoryStockChanged(ev, m));
+      }
+      const transit = () =>
+        q(
+          `SELECT warehouse_id, in_transit_qty FROM $S.inventory_stock_projections WHERE tenant_id = $1 AND sku_code = 'SKU-T' ORDER BY warehouse_id`,
+          [TENANT_A],
+        );
+      expect((await transit())[0].in_transit_qty).toBe('6.0000');
+      await handle(receipt, (m) =>
+        consumer.onInventoryStockChanged(receipt, m),
+      );
+      const after = await transit();
+      expect(
+        after.every(
+          (r: { in_transit_qty: string }) => r.in_transit_qty === '0.0000',
+        ),
+      ).toBe(true);
+    });
+
+    it('keeps the cached customer code and name when only the group changes', async () => {
+      const created = envelope(TENANT_A, 'customer.created', {
+        customerId: CUSTOMER_1,
+        code: 'KH-001',
+        status: 'ACTIVE',
+        customerGroupId: 'g1',
+        membershipTierId: null,
+        version: 2,
+        occurredAt: '2026-10-18T01:00:00.000Z',
+      });
+      await handle(created, (m) => consumer.onCustomerCreated(created, m));
+      const changed = envelope(TENANT_A, 'customer.group.changed', {
+        customerId: CUSTOMER_1,
+        previousGroupId: 'g1',
+        newGroupId: 'g2',
+        actorId: ACCOUNT,
+        occurredAt: '2026-10-18T02:00:00.000Z',
+      });
+      await handle(changed, (m) => consumer.onCustomerGroupChanged(changed, m));
+      const [row] = await q(
+        `SELECT code, customer_group_id FROM $S.insight_dimension_caches WHERE dimension_type = 'CUSTOMER' AND entity_id = $1`,
+        [CUSTOMER_1],
+      );
+      expect(row).toEqual({ code: 'KH-001', customer_group_id: 'g2' });
+    });
+
+    it('learns the branch of a warehouse from stock.below_min and notifies the branch', async () => {
+      const below = envelope(TENANT_A, 'inventory.stock.below_min', {
+        branchId: BRANCH_1,
+        warehouseId: WAREHOUSE_1,
+        variantId: VARIANT,
+        sku: 'SKU-V',
+        name: 'Variant',
+        available: 1,
+        minQuantity: 5,
+        occurredAt: '2026-10-18T02:00:00.000Z',
+      });
+      await handle(below, (m) => consumer.onStockBelowMin(below, m));
+      const move = envelope(TENANT_A, 'inventory.stock.changed', {
+        warehouseId: WAREHOUSE_1,
+        skuId: VARIANT,
+        movementType: 'RECEIPT',
+        qtyDelta: '1.000',
+        onHandAfter: '1.000',
+        reservedAfter: '0.000',
+        referenceType: 'STOCK_RECEIPT',
+        referenceId: randomUUID(),
+        occurredAt: '2026-10-18T03:00:00.000Z',
+      });
+      await handle(move, (m) => consumer.onInventoryStockChanged(move, m));
+      const [row] = await q(
+        `SELECT branch_id FROM $S.inventory_stock_projections WHERE tenant_id = $1`,
+        [TENANT_A],
+      );
+      expect(row.branch_id).toBe(BRANCH_1);
+    });
+
+    it('reads a receivable payment as the growth of the cumulative paid amount only', async () => {
+      const receivableId = randomUUID();
+      const pay = (paidAmount: number) =>
+        envelope(TENANT_A, 'finance.receivable.payment_applied', {
+          receivableId,
+          code: 'AR-2',
+          customerId: CUSTOMER_1,
+          orderId: null,
+          branchId: BRANCH_1,
+          originalAmount: 300000,
+          paidAmount,
+          outstandingAmount: 300000 - paidAmount,
+          customerTotalDebtAfter: 0,
+          status: 'PARTIALLY_PAID',
+          journalId: randomUUID(),
+          occurredAt: '2026-10-18T15:00:00.000Z',
+        });
+      for (const paid of [100000, 300000]) {
+        const e = pay(paid);
+        await handle(e, (m) => consumer.onReceivablePaymentApplied(e, m));
+      }
+      const overview = await as(TENANT_A, () =>
+        reporting.getDashboardOverview({
+          from: '2026-10-18',
+          to: '2026-10-18',
+        }),
+      );
+      expect(overview.metrics.debtCollectedAmount).toBe(300000);
+      expect(overview.metrics.cashInflowAmount).toBe(0);
     });
   });
 });

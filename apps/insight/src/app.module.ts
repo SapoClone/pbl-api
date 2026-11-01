@@ -4,34 +4,37 @@ import { PblHealthModule, PblLoggingModule, TenancyModule } from '@pbl/common';
 import {
   CONSUMER_ENTITIES,
   CONSUMER_MIGRATIONS,
+  PRODUCER_ENTITIES,
+  PRODUCER_MIGRATIONS,
   PblDatabaseModule,
   PblEventsModule,
 } from '@pbl/events';
 import { AuditLogEntity } from './audit/audit-log.entity';
+import { AuditQueryService } from './audit/audit-query.service';
 import { AuditHandler } from './audit/audit.handler';
-import { InsightQueryService } from './insight-query.service';
-import { InsightController } from './insight.controller';
+import { InsightEventsConsumer } from './consumers/insight-events.consumer';
+import { M7_INSIGHT_ENTITIES } from './infrastructure/persistence/insight.entities';
 import { CreateInsightTables1791800000100 } from './migrations/1791800000100-create-insight-tables';
-import { CreateSalesReadModels1792000000100 } from './migrations/1792000000100-create-sales-read-models';
+import { CreateM7InsightCore1791900000300 } from './migrations/1791900000300-create-m7-insight-core';
 import { CreateNotifications1792000000200 } from './migrations/1792000000200-create-notifications';
+import { InsightExportService } from './modules/export/insight-export.service';
+import { InsightAnalyticsController } from './modules/insight-analytics.controller';
+import { InsightInternalController } from './modules/insight-internal.controller';
+import { ProjectionsService } from './modules/projections/projections.service';
+import { InsightRebuildService } from './modules/rebuild/insight-rebuild.service';
+import { InsightReconciliationService } from './modules/reconciliation/insight-reconciliation.service';
+import { InsightReportingService } from './modules/reporting/insight-reporting.service';
+import { ScreenExportService } from './modules/screens/screen-export.service';
+import { ScreenReportsService } from './modules/screens/screen-reports.service';
+import { ScreensController } from './modules/screens/screens.controller';
 import { DeviceTokensService } from './notifications/device-tokens.service';
 import {
-  DeviceTokenEntity,
+  NOTIFICATION_ENTITIES,
   NotificationEntity,
-  NotificationReadEntity,
 } from './notifications/notification.entities';
 import { NotificationHandler } from './notifications/notification.handler';
 import { NotificationsController } from './notifications/notifications.controller';
 import { NotificationsService } from './notifications/notifications.service';
-import { ReportExportService } from './reports/report-export.service';
-import { ReportsService } from './reports/reports.service';
-import { DailySalesEntity } from './sales-summary/daily-sales.entity';
-import {
-  CustomerSalesDailyEntity,
-  HourlySalesEntity,
-  ProductSalesDailyEntity,
-} from './sales-summary/read-model.entities';
-import { SalesSummaryHandler } from './sales-summary/sales-summary.handler';
 
 @Module({
   // Every route requires a platform-issued access token unless @Public()
@@ -47,39 +50,53 @@ import { SalesSummaryHandler } from './sales-summary/sales-summary.handler';
     PblDatabaseModule.forRoot({
       entities: [
         AuditLogEntity,
-        DailySalesEntity,
-        HourlySalesEntity,
-        ProductSalesDailyEntity,
-        CustomerSalesDailyEntity,
-        NotificationEntity,
-        NotificationReadEntity,
-        DeviceTokenEntity,
+        ...NOTIFICATION_ENTITIES,
+        ...M7_INSIGHT_ENTITIES,
+        ...PRODUCER_ENTITIES,
         ...CONSUMER_ENTITIES,
       ],
       migrations: [
+        ...PRODUCER_MIGRATIONS,
         ...CONSUMER_MIGRATIONS,
         CreateInsightTables1791800000100,
-        CreateSalesReadModels1792000000100,
+        CreateM7InsightCore1791900000300,
         CreateNotifications1792000000200,
       ],
     }),
     PblEventsModule.forRoot({ service: 'insight' }),
     TenancyModule.forFeature([
       AuditLogEntity,
-      DailySalesEntity,
       NotificationEntity,
+      ...M7_INSIGHT_ENTITIES,
     ]),
   ],
-  controllers: [InsightController, NotificationsController],
+  controllers: [
+    ScreensController,
+    NotificationsController,
+    InsightAnalyticsController,
+    InsightInternalController,
+  ],
   providers: [
-    InsightQueryService,
-    ReportsService,
-    ReportExportService,
+    AuditQueryService,
+    ScreenReportsService,
+    ScreenExportService,
     NotificationsService,
     DeviceTokensService,
-    AuditHandler,
-    SalesSummaryHandler,
     NotificationHandler,
+    AuditHandler,
+    ProjectionsService,
+    InsightEventsConsumer,
+    InsightReportingService,
+    InsightRebuildService,
+    InsightReconciliationService,
+    InsightExportService,
+  ],
+  exports: [
+    ProjectionsService,
+    InsightReportingService,
+    InsightRebuildService,
+    InsightReconciliationService,
+    InsightExportService,
   ],
 })
 export class AppModule {}

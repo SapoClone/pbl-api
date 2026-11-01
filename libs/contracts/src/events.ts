@@ -1000,3 +1000,77 @@ export interface IntegrationReconciliationDiscrepancyPayload {
   internalRef: string | null;
   occurredAt: string;
 }
+
+// ---- insight & analytics (M7 Insight Core — ADR-0021)
+
+export const INSIGHT_PROJECTION_REBUILT = {
+  type: 'insight.projection.rebuilt',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INSIGHT_PROJECTION_STALE_DETECTED = {
+  type: 'insight.projection.stale_detected',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INSIGHT_RECONCILIATION_DISCREPANCY_DETECTED = {
+  type: 'insight.reconciliation.discrepancy_detected',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INSIGHT_EXPORT_COMPLETED = {
+  type: 'insight.export.completed',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export const INSIGHT_EXPORT_FAILED = {
+  type: 'insight.export.failed',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export interface InsightProjectionRebuiltPayload {
+  rebuildId: string;
+  projectionName: string;
+  previousGenerationId: string;
+  newGenerationId: string;
+  fromDate: string | null;
+  toDate: string | null;
+  ordersProcessed: number;
+  returnsProcessed: number;
+  durationMs: number;
+  triggeredBy: string;
+  occurredAt: string;
+}
+
+export interface InsightProjectionStaleDetectedPayload {
+  projectionName: string;
+  lastProcessedAt: string | null;
+  lagSeconds: number;
+  thresholdSeconds: number;
+  detectedAt: string;
+}
+
+export interface InsightReconciliationDiscrepancyPayload {
+  runId: string;
+  issueId: string;
+  scope: string;
+  metricName: string;
+  dimensionKey: string;
+  expectedValue: string;
+  actualValue: string;
+  deltaValue: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  occurredAt: string;
+}
+
+export interface InsightExportJobEventPayload {
+  jobId: string;
+  reportType: string;
+  format: 'CSV' | 'XLSX' | 'PDF';
+  status: 'COMPLETED' | 'FAILED';
+  rowCount: number;
+  byteSize: number;
+  requestedBy: string;
+  errorMessage?: string | null;
+  occurredAt: string;
+}

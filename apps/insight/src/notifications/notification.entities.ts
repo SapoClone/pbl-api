@@ -78,3 +78,9 @@ export class DeviceTokenEntity {
   @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
   updatedAt!: Date;
 }
+
+export const NOTIFICATION_ENTITIES = [
+  NotificationEntity,
+  NotificationReadEntity,
+  DeviceTokenEntity,
+];

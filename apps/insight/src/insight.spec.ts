@@ -1,11 +1,7 @@
 import { RequestContext, TenantScopedRepository } from '@pbl/common';
 import { AuditHandler } from './audit/audit.handler';
+import { salesDate } from './common/store-time';
 import { NotificationHandler } from './notifications/notification.handler';
-import { toCsv } from './reports/report-export.service';
-import {
-  SalesSummaryHandler,
-  salesDate,
-} from './sales-summary/sales-summary.handler';
 
 const envelope = (type: string, payload: object) =>
   ({
@@ -23,116 +19,6 @@ describe('salesDate', () => {
   it('uses the store timezone (UTC+7), so a late-night sale lands on the next day', () => {
     expect(salesDate('2026-10-18T10:00:00.000Z')).toBe('2026-10-18');
     expect(salesDate('2026-10-18T18:30:00.000Z')).toBe('2026-10-19');
-  });
-});
-
-describe('SalesSummaryHandler', () => {
-  it('adds the order to the revenue of its day, in the event tenant', async () => {
-    const query = jest.fn();
-    const manager = { query, connection: { options: { schema: 'insight' } } };
-
-    await RequestContext.run({ tenantId: 'tenant-a' }, () =>
-      new SalesSummaryHandler().onOrderCompleted(
-        envelope('sales.order.completed', {
-          branchId: 'b1',
-          totalAmount: 590000,
-          completedAt: '2026-10-18T10:00:00.000Z',
-        }),
-        manager as never,
-      ),
-    );
-
-    const [sql, params] = query.mock.calls[0];
-    expect(sql).toContain('"insight"."daily_sales"');
-    expect(sql).toContain('ON CONFLICT');
-    expect(params).toEqual(['tenant-a', 'b1', '2026-10-18', 590000]);
-  });
-});
-
-describe('SalesSummaryHandler read models', () => {
-  const run = async (payload: object) => {
-    const query = jest.fn();
-    const manager = { query, connection: { options: { schema: 'insight' } } };
-    await RequestContext.run({ tenantId: 'tenant-a' }, () =>
-      new SalesSummaryHandler().onOrderCompleted(
-        envelope('sales.order.completed', {
-          branchId: 'b1',
-          totalAmount: 100,
-          completedAt: '2026-10-18T18:30:00.000Z',
-          ...payload,
-        }),
-        manager as never,
-      ),
-    );
-    return query.mock.calls.map(([sql, params]) => ({
-      sql: sql as string,
-      params,
-    }));
-  };
-
-  it('keeps the daily counter first and defaults an old event to pos, unknown cost, no customer', async () => {
-    const calls = await run({});
-
-    expect(calls[0].sql).toContain('"insight"."daily_sales"');
-    expect(calls[1].sql).toContain('"insight"."hourly_sales"');
-    // 18:30Z is 01:30 on the 19th in Vietnam
-    expect(calls[1].params).toEqual([
-      'tenant-a',
-      'b1',
-      'pos',
-      '2026-10-19',
-      1,
-      100,
-      null,
-      0,
-    ]);
-    expect(calls).toHaveLength(2);
-  });
-
-  it('adds channel, cost, one row per SKU and the customer when present', async () => {
-    const calls = await run({
-      channel: 'shopee',
-      costAmount: 60,
-      customerId: 'c1',
-      items: [
-        { sku: 'A', name: 'a', quantity: 1, unitPrice: 10 },
-        { sku: 'A', name: 'a', quantity: 2, unitPrice: 10 },
-        { sku: 'B', name: 'b', quantity: 1, unitPrice: 5 },
-      ],
-    });
-
-    expect(calls[1].params).toEqual([
-      'tenant-a',
-      'b1',
-      'shopee',
-      '2026-10-19',
-      1,
-      100,
-      60,
-      100,
-    ]);
-    const products = calls.filter((c) => c.sql.includes('product_sales_daily'));
-    expect(products.map((c) => c.params.slice(3))).toEqual([
-      ['A', 'a', 3, 30],
-      ['B', 'b', 1, 5],
-    ]);
-    const customer = calls.find((c) => c.sql.includes('customer_sales_daily'));
-    expect(customer?.params).toEqual(['tenant-a', 'b1', '2026-10-19', 'c1', 1]);
-  });
-});
-
-describe('csv', () => {
-  it('quotes cells and neutralises formulas', () => {
-    expect(
-      toCsv(
-        ['a', 'b'],
-        [
-          ['x,y', 1],
-          ['=1+1', null],
-          ['say "hi"', 'ok'],
-        ],
-      ),
-    ).toBe('a,b\r\n"x,y",1\r\n\'=1+1,\r\n"say ""hi""",ok\r\n');
   });
 });
 
@@ -181,6 +67,69 @@ describe('NotificationHandler', () => {
       type: 'staff',
       refType: 'account',
       refId: 'a1',
+    });
+  });
+});
+
+describe('NotificationHandler attention producers', () => {
+  const create = jest.fn();
+  const handler = new NotificationHandler({ create } as never);
+  beforeEach(() => create.mockClear());
+
+  it('turns inventory.stock.below_min into a branch warning, critical at zero', async () => {
+    const payload = {
+      branchId: 'b1',
+      warehouseId: 'w1',
+      variantId: 'v1',
+      sku: 'SKU-1',
+      name: 'Áo',
+      available: 2,
+      minQuantity: 5,
+      occurredAt: '2026-10-18T10:00:00.000Z',
+    };
+    await handler.onStockBelowMin(
+      envelope('inventory.stock.below_min', payload),
+      'm' as never,
+    );
+    await handler.onStockBelowMin(
+      envelope('inventory.stock.below_min', { ...payload, available: 0 }),
+      'm' as never,
+    );
+    expect(create.mock.calls[0][0]).toMatchObject({
+      type: 'low_stock',
+      severity: 'warning',
+      branchId: 'b1',
+      refId: 'v1',
+    });
+    expect(create.mock.calls[1][0]).toMatchObject({ severity: 'critical' });
+  });
+
+  it('flags an unmapped external order and a failed sync job for attention', async () => {
+    await handler.onMappingRequired(
+      envelope('integration.external_order.mapping_required', {
+        channelOrderRefId: 'r1',
+        externalOrderId: 'E1',
+        provider: 'SHOPEE',
+      }),
+      'm' as never,
+    );
+    await handler.onSyncJobFailed(
+      envelope('integration.sync_job.failed', {
+        jobId: 'j1',
+        jobType: 'orders',
+        errorMessage: 'boom',
+      }),
+      'm' as never,
+    );
+    expect(create.mock.calls[0][0]).toMatchObject({
+      type: 'unmapped_sku',
+      severity: 'warning',
+      refId: 'r1',
+    });
+    expect(create.mock.calls[1][0]).toMatchObject({
+      type: 'sync_failed',
+      severity: 'critical',
+      body: 'boom',
     });
   });
 });

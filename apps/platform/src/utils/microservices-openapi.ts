@@ -46,7 +46,7 @@ export const MICROSERVICE_SWAGGER_TAGS: TagsObject = [
   {
     name: 'Insight — Audit & Analytics',
     description:
-      'Insight Service — Cross-Service Audit Logs & Daily Sales Revenue Projections',
+      'Insight Service (M7 Core) — Cross-Service Audit Logs, Executive Dashboard, Revenue/Product/Inventory/Branch/Channel/Customer/Cashflow/Gross-Profit Reports, Export Jobs & Rebuild/Reconciliation (ADR-0021)',
   },
   {
     name: 'Catalog — Categories, Brands, Products, Variants & Pricing',
@@ -4095,6 +4095,289 @@ export const MICROSERVICE_SWAGGER_PATHS: PathsObject = {
         },
         '503': { description: 'WEBHOOK_PERSISTENCE_FAILED' },
       },
+    },
+  },
+  '/api/v1/insight/dashboard/overview': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get executive dashboard KPI overview (gross/net sales, COGS, gross profit, margin, AOV, low-stock, receivables, COD pending, prior-period growth & freshness)',
+      operationId: 'InsightDashboard_getOverview',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Executive dashboard overview' } },
+    },
+  },
+  '/api/v1/insight/dashboard/revenue-trend': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'Get revenue trend time-series with zero-filled date buckets',
+      operationId: 'InsightDashboard_getRevenueTrend',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Revenue trend time-series' } },
+    },
+  },
+  '/api/v1/insight/dashboard/top-products': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get top-selling products ranked by net revenue or units sold with deterministic tie-breakers',
+      operationId: 'InsightDashboard_getTopProducts',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Top products ranking' } },
+    },
+  },
+  '/api/v1/insight/dashboard/alerts': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get operational alerts (low-stock SKUs, stale projections, open reconciliation discrepancies)',
+      operationId: 'InsightDashboard_getAlerts',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Operational dashboard alerts' } },
+    },
+  },
+  '/api/v1/insight/reports/revenue': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get revenue report grouped by day, week, or month with branch and channel filters',
+      operationId: 'InsightReports_getRevenue',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Revenue report' } },
+    },
+  },
+  '/api/v1/insight/reports/products': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get product/SKU sales performance report with net sales, returns, COGS, and gross profit',
+      operationId: 'InsightReports_getProducts',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Product performance report' } },
+    },
+  },
+  '/api/v1/insight/reports/categories': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'Get category sales performance report',
+      operationId: 'InsightReports_getCategories',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Category performance report' } },
+    },
+  },
+  '/api/v1/insight/reports/branches': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'Get branch performance ranking and comparison report',
+      operationId: 'InsightReports_getBranches',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Branch performance report' } },
+    },
+  },
+  '/api/v1/insight/reports/channels': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get sales channel performance report with revenue share percentage',
+      operationId: 'InsightReports_getChannels',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Channel performance report' } },
+    },
+  },
+  '/api/v1/insight/reports/customers': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get customer purchasing and receivable exposure analytics report',
+      operationId: 'InsightReports_getCustomers',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Customer analytics report' } },
+    },
+  },
+  '/api/v1/insight/reports/returns-cancellations': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'Get returns and cancellations analytical report',
+      operationId: 'InsightReports_getReturnsCancellations',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Returns & cancellations report' } },
+    },
+  },
+  '/api/v1/insight/reports/inventory/stock': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get current inventory stock, reserved, available, and valuation projection report',
+      operationId: 'InsightReports_getInventoryStock',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Inventory stock report' } },
+    },
+  },
+  '/api/v1/insight/reports/inventory/low-stock': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'Get low-stock SKU alert report',
+      operationId: 'InsightReports_getInventoryLowStock',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Low-stock SKU report' } },
+    },
+  },
+  '/api/v1/insight/reports/inventory/movements': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get inventory movement summary report (inbound, outbound, return-in, adjustment, damage)',
+      operationId: 'InsightReports_getInventoryMovements',
+      security: [{ bearer: [] }],
+      responses: {
+        '200': { description: 'Inventory movement summary report' },
+      },
+    },
+  },
+  '/api/v1/insight/reports/inventory/valuation': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'Get inventory valuation report by branch and SKU',
+      operationId: 'InsightReports_getInventoryValuation',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Inventory valuation report' } },
+    },
+  },
+  '/api/v1/insight/reports/inventory/slow-moving': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get slow-moving / dead-stock SKU report with days since last sale',
+      operationId: 'InsightReports_getInventorySlowMoving',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Slow-moving inventory report' } },
+    },
+  },
+  '/api/v1/insight/reports/gross-profit': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get gross profit and gross margin % summary report with cost-basis coverage disclosure',
+      operationId: 'InsightReports_getGrossProfit',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Gross profit summary report' } },
+    },
+  },
+  '/api/v1/insight/reports/gross-profit/products': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'Get gross profit and margin % breakdown by SKU/product',
+      operationId: 'InsightReports_getGrossProfitByProduct',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Gross profit by product report' } },
+    },
+  },
+  '/api/v1/insight/reports/cashflow': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get finance & cashflow summary report (inflows, outflows, refunds, receivables, COD pending)',
+      operationId: 'InsightReports_getCashflow',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Cashflow summary report' } },
+    },
+  },
+  '/api/v1/insight/export-jobs': {
+    post: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Create and generate a deterministic report export job (CSV, XLSX, PDF) with formula-injection protection',
+      operationId: 'InsightExports_createJob',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Export job created and generated' } },
+    },
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'List report export jobs for the tenant',
+      operationId: 'InsightExports_listJobs',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of export jobs' } },
+    },
+  },
+  '/api/v1/insight/export-jobs/{id}': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'Get report export job details and checksum metadata',
+      operationId: 'InsightExports_getJobById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Export job details' } },
+    },
+  },
+  '/api/v1/insight/export-jobs/{id}/download': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'Download generated export artifact (CSV, XLSX, or PDF)',
+      operationId: 'InsightExports_downloadJob',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Export file artifact' } },
+    },
+  },
+  '/internal/v1/insight/projection-rebuilds': {
+    post: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Execute a non-blocking shadow-swap projection rebuild from retained analytical fact logs',
+      operationId: 'InsightInternal_runRebuild',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Projection rebuild completed' } },
+    },
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'List projection rebuild runs',
+      operationId: 'InsightInternal_listRebuilds',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of projection rebuild runs' } },
+    },
+  },
+  '/internal/v1/insight/projection-rebuilds/{id}': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'Get projection rebuild run details and verification checksums',
+      operationId: 'InsightInternal_getRebuildById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Projection rebuild run details' } },
+    },
+  },
+  '/internal/v1/insight/reconciliation-runs': {
+    post: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Execute an analytical reconciliation run comparing summary projections against retained fact baselines',
+      operationId: 'InsightInternal_runReconciliation',
+      security: [{ bearer: [] }],
+      responses: { '201': { description: 'Reconciliation run completed' } },
+    },
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary: 'List analytical reconciliation runs',
+      operationId: 'InsightInternal_listReconciliations',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'List of reconciliation runs' } },
+    },
+  },
+  '/internal/v1/insight/reconciliation-runs/{id}': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get analytical reconciliation run details and detected discrepancy issues',
+      operationId: 'InsightInternal_getReconciliationById',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Reconciliation run details' } },
+    },
+  },
+  '/internal/v1/insight/checkpoints': {
+    get: {
+      tags: ['Insight — Audit & Analytics'],
+      summary:
+        'Get projection checkpoint freshness status across all projections',
+      operationId: 'InsightInternal_getCheckpoints',
+      security: [{ bearer: [] }],
+      responses: { '200': { description: 'Projection checkpoints' } },
     },
   },
 };

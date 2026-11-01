@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { EventEnvelope, TenantScopedRepository } from '@pbl/common';
 import {
   AccountLoggedInPayload,
+  INVENTORY_PURCHASE_ORDER_APPROVED,
   MembershipEventPayload,
   OrderCompletedPayload,
   PLATFORM_ACCOUNT_LOGGED_IN,
   PLATFORM_MEMBERSHIP_GRANTED,
   PLATFORM_MEMBERSHIP_ROLE_CHANGED,
+  PurchaseOrderApprovedPayload,
   SALES_ORDER_COMPLETED,
 } from '@pbl/contracts';
 import { OnEvent } from '@pbl/events';
@@ -71,6 +73,20 @@ export class AuditHandler {
       event,
       createdBy,
       `Order ${code} completed for ${totalAmount} VND`,
+    );
+  }
+
+  @OnEvent(INVENTORY_PURCHASE_ORDER_APPROVED.type)
+  onPurchaseOrderApproved(
+    event: EventEnvelope<PurchaseOrderApprovedPayload>,
+    manager: EntityManager,
+  ): Promise<void> {
+    const { code, totalAmount } = event.payload;
+    return this.record(
+      manager,
+      event,
+      null,
+      `Purchase order ${code} approved for ${totalAmount} VND`,
     );
   }
 

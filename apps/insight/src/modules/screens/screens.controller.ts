@@ -2,7 +2,7 @@ import { Controller, Get, Header, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AllowedBranches, CurrentUser, RequirePermission } from '@pbl/auth';
 import type { Response } from 'express';
-import { InsightQueryService } from './insight-query.service';
+import { AuditQueryService } from '../../audit/audit-query.service';
 import {
   AttentionItemsReqDto,
   DailySalesReqDto,
@@ -12,32 +12,33 @@ import {
   ListAuditLogsReqDto,
   RangeReqDto,
   TopProductsReqDto,
-} from './insight.dto';
-import { NotificationsService } from './notifications/notifications.service';
-import { ReportExportService } from './reports/report-export.service';
-import { ReportsService } from './reports/reports.service';
+} from '../../insight.dto';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { ScreenExportService } from './screen-export.service';
+import { ScreenReportsService } from './screen-reports.service';
 
 /**
- * Dashboard routes need `dashboard.view`, report routes `reports.view` (ADR-0020).
- * `@AllowedBranches()` hands the caller's branch scope to the reads: a foreign
- * `branchId` is 404, no `branchId` aggregates the allowed branches only.
- * Audit logs have no branch, so they stay tenant-wide.
+ * The screen-contract routes (docs/specs/2026-10-28-api-contracts), served at `api/v1/...` beside
+ * the M7 routes of `api/v1/insight`. Dashboard routes need `dashboard.view`, report routes `reports.view`
+ * (ADR-0020). `@AllowedBranches()` hands the caller's branch scope to the reads: a foreign
+ * `branchId` is 404, no `branchId` aggregates the allowed branches only. Audit logs have no
+ * branch, so they stay tenant-wide.
  */
-@ApiTags('insight')
+@ApiTags('insight-screens')
 @ApiBearerAuth()
 @Controller('api/v1')
-export class InsightController {
+export class ScreensController {
   constructor(
-    private readonly queries: InsightQueryService,
-    private readonly reports: ReportsService,
-    private readonly exports: ReportExportService,
+    private readonly audit: AuditQueryService,
+    private readonly reports: ScreenReportsService,
+    private readonly exports: ScreenExportService,
     private readonly notifications: NotificationsService,
   ) {}
 
   @Get('audit-logs')
   @RequirePermission('reports.view')
   auditLogs(@Query() query: ListAuditLogsReqDto) {
-    return this.queries.auditLogs(query);
+    return this.audit.auditLogs(query);
   }
 
   @Get('dashboard/kpis')
@@ -52,7 +53,7 @@ export class InsightController {
     @Query() query: DailySalesReqDto,
     @AllowedBranches() scope: string[] | null,
   ) {
-    return this.queries.dailySales(query, scope);
+    return this.reports.dailySales(query, scope);
   }
 
   @Get('sales-summary/hourly')

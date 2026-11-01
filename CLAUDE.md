@@ -444,7 +444,7 @@ never delete it.
 
 `catalog`, `inventory`, `sales`, `customer`, `finance` and `integration` are the implementations of
 contributor dhtphu05's M1-M6 stack (PRs #12-#17, ADR-0011 to 0018); they replaced the earlier
-implementations of ours. `platform`, `insight`, the RBAC libraries and ADR-0019/0020 stay ours.
+implementations of ours. `platform`, `insight`, the RBAC libraries and ADR-0019/0020 stay ours (the adopted M7 insight ADR is [ADR-0021](docs/decisions/0021-insight-m7-event-driven-projections-incremental-deltas-rebuild-and-reconciliation.md)).
 Conversion record, one report per phase, in `docs/specs/2026-11-01-adopt-m1-m6/`:
 
 - **Phase 2, authorization:** every route uses `@RequirePermission` (module codes in

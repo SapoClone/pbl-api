@@ -27517,6 +27517,1784 @@
           ]
         }
       }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/dashboard/overview",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/dashboard/overview",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/dashboard/revenue-trend",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/dashboard/revenue-trend",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/dashboard/top-products",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/dashboard/top-products",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/dashboard/channel-breakdown",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/dashboard/channel-breakdown",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/sales",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/sales",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/sales/by-branch",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/sales/by-branch",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/sales/by-channel",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/sales/by-channel",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/sales/by-employee",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/sales/by-employee",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/sales/by-product",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/sales/by-product",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/sales/by-customer-group",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/sales/by-customer-group",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/inventory",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/inventory",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/inventory/low-stock",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/inventory/low-stock",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/inventory/slow-moving",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/inventory/slow-moving",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/inventory/valuation",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/inventory/valuation",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/inventory/movements",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/inventory/movements",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/gross-profit",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/gross-profit",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/gross-profit/by-product",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/gross-profit/by-product",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/gross-profit/by-branch",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/gross-profit/by-branch",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/branches/comparison",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/branches/comparison",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/reports/branches/ranking",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/reports/branches/ranking",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/export-jobs",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id",
+        "Idempotency-Key",
+        "Content-Length"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/export-jobs",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/export-jobs",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/export-jobs",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/export-jobs/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/export-jobs/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/insight/api/v1/insight/export-jobs/{id}/download",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/insight/export-jobs/{id}/download",
+          "encoding": "no-op",
+          "host": [
+            "http://insight:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "insight-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
     }
   ]
 }

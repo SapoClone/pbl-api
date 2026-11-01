@@ -1,4 +1,4 @@
-import { qualifiedTable } from '@pbl/events';
+import { enableTenantRlsPolicy, qualifiedTable } from '@pbl/events';
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class CreateNotifications1792000000200 implements MigrationInterface {
@@ -54,6 +54,9 @@ export class CreateNotifications1792000000200 implements MigrationInterface {
         CONSTRAINT "UQ_device_token_account_token" UNIQUE ("tenant_id", "account_id", "token"),
         CONSTRAINT "CHK_device_token_platform" CHECK ("platform" IN ('ios', 'android', 'web'))
       )`);
+
+    await enableTenantRlsPolicy(queryRunner, notification);
+    await enableTenantRlsPolicy(queryRunner, device);
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
