@@ -17,7 +17,7 @@ import type { DiscountType, TenderMethod } from '../../domain/sales-domain';
 import { PosCartLineDto } from '../pos/pos.dto';
 
 export class PosTenderItemDto {
-  @IsIn(['CASH', 'BANK_TRANSFER', 'CARD', 'E_WALLET', 'COD'])
+  @IsIn(['CASH', 'BANK_TRANSFER', 'CARD', 'E_WALLET', 'COD', 'ON_ACCOUNT'])
   method!: Exclude<TenderMethod, 'COMBINED'>;
 
   @IsInt()
@@ -100,6 +100,11 @@ export class PosCheckoutDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  redeemLoyaltyPoints?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   shippingFee?: number;
 
   @IsOptional()
@@ -129,7 +134,19 @@ export class PosCheckoutDto {
 
   @IsOptional()
   @IsBoolean()
+  simulateFailureAfterLoyaltyHold?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  simulateFailureAfterCreditAuth?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   simulateFailureAfterReserve?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  simulateFailureAfterStockCommitBeforeLoyaltyCommit?: boolean;
 
   @IsOptional()
   @IsBoolean()

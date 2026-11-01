@@ -4,6 +4,8 @@ import { BranchProjectionEntity } from '../branches/branch-projection.entity';
 import { BranchProjectionHandler } from '../branches/branch-projection.handler';
 import { readInventoryUrl } from '../config/sales.config';
 import { CatalogClient } from '../infrastructure/catalog-client/catalog.client';
+import { CustomerLoyaltyClient } from '../infrastructure/customer-client/customer-loyalty.client';
+import { FinanceCreditClient } from '../infrastructure/finance-client/finance-credit.client';
 import { M3_SALES_ENTITIES } from '../infrastructure/persistence/sales.entities';
 import { InternalOrdersController } from '../internal/internal-orders.controller';
 import { InventoryClient } from '../inventory/inventory.client';
@@ -76,6 +78,8 @@ import { OrdersService } from './orders.service';
     FulfillmentService,
     PromotionsService,
     CatalogClient,
+    CustomerLoyaltyClient,
+    FinanceCreditClient,
     BranchProjectionHandler,
     InventoryClient,
   ],
@@ -89,6 +93,8 @@ import { OrdersService } from './orders.service';
     FulfillmentService,
     PromotionsService,
     CatalogClient,
+    CustomerLoyaltyClient,
+    FinanceCreditClient,
     InventoryClient,
   ],
 })
