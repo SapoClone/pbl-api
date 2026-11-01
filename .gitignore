@@ -76,3 +76,4 @@ docs/superpowers/
 
 # published-library build output
 /libs/*/dist
+krakend/krakend.prod.json

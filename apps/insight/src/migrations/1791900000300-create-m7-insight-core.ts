@@ -1,6 +1,16 @@
 import { enableTenantRlsPolicy, qualifiedTable } from '@pbl/events';
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+/**
+ * Insight filters by tenant in every query and never binds `app.tenant_id`, so the policy is not forced on the
+ * owning role it connects as (forcing it made every read return nothing). Known gap: binding the tenant per
+ * query would let this be forced like the other services.
+ */
+const ownerRls = (
+  queryRunner: Parameters<typeof enableTenantRlsPolicy>[0],
+  table: string,
+) => enableTenantRlsPolicy(queryRunner, table, undefined, false);
+
 export class CreateM7InsightCore1791900000300 implements MigrationInterface {
   name = 'CreateM7InsightCore1791900000300';
 
@@ -26,7 +36,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     const exportJobs = t('report_export_jobs');
 
     // Tenant RLS on the audit log (created by the earlier migration)
-    await enableTenantRlsPolicy(queryRunner, t('audit_log'));
+    await ownerRls(queryRunner, t('audit_log'));
 
     // 1. Insight Dimension Cache (Catalog, Customer, Branch metadata)
     await queryRunner.query(`
@@ -51,7 +61,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_insight_dim_cache_lookup" ON ${dimensionCaches} ("tenant_id", "dimension_type", "code")`,
     );
-    await enableTenantRlsPolicy(queryRunner, dimensionCaches);
+    await ownerRls(queryRunner, dimensionCaches);
 
     // 2. Sales Order Analytical Facts (with Contribution-Delta vector)
     await queryRunner.query(`
@@ -101,7 +111,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_sales_order_facts_tenant_status_date" ON ${orderFacts} ("tenant_id", "order_status", "date_bucket")`,
     );
-    await enableTenantRlsPolicy(queryRunner, orderFacts);
+    await ownerRls(queryRunner, orderFacts);
 
     // 3. Sales Order Line Analytical Facts (Immutable Transaction-Time Cost Snapshots)
     await queryRunner.query(`
@@ -147,7 +157,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_sales_order_line_facts_date_sku" ON ${orderLineFacts} ("tenant_id", "date_bucket", "sku_code")`,
     );
-    await enableTenantRlsPolicy(queryRunner, orderLineFacts);
+    await ownerRls(queryRunner, orderLineFacts);
 
     // 4. Sales Return Analytical Facts
     await queryRunner.query(`
@@ -178,7 +188,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_sales_return_facts_date_branch" ON ${returnFacts} ("tenant_id", "date_bucket", "branch_id")`,
     );
-    await enableTenantRlsPolicy(queryRunner, returnFacts);
+    await ownerRls(queryRunner, returnFacts);
 
     // 5. Daily Sales Summaries (Generation-Scoped Analytical Rollup)
     await queryRunner.query(`
@@ -217,7 +227,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_daily_sales_summaries_branch_date" ON ${dailySummaries} ("tenant_id", "generation_id", "branch_id", "date_bucket")`,
     );
-    await enableTenantRlsPolicy(queryRunner, dailySummaries);
+    await ownerRls(queryRunner, dailySummaries);
 
     // 6. Product Sales Summaries (Generation-Scoped SKU Rollup)
     await queryRunner.query(`
@@ -256,7 +266,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_product_sales_summaries_cat_date" ON ${productSummaries} ("tenant_id", "generation_id", "category_id", "date_bucket")`,
     );
-    await enableTenantRlsPolicy(queryRunner, productSummaries);
+    await ownerRls(queryRunner, productSummaries);
 
     // 7. Employee Sales Summaries
     await queryRunner.query(`
@@ -280,7 +290,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
         CONSTRAINT "UQ_employee_sales_summaries_key" UNIQUE ("tenant_id", "generation_id", "date_bucket", "branch_id", "employee_id")
       )
     `);
-    await enableTenantRlsPolicy(queryRunner, employeeSummaries);
+    await ownerRls(queryRunner, employeeSummaries);
 
     // 8. Channel Sales Summaries
     await queryRunner.query(`
@@ -306,7 +316,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
         CONSTRAINT "UQ_channel_sales_summaries_key" UNIQUE ("tenant_id", "generation_id", "date_bucket", "branch_id", "channel_type")
       )
     `);
-    await enableTenantRlsPolicy(queryRunner, channelSummaries);
+    await ownerRls(queryRunner, channelSummaries);
 
     // 9. Customer Group Sales Summaries
     await queryRunner.query(`
@@ -331,7 +341,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
         CONSTRAINT "UQ_customer_group_sales_summaries_key" UNIQUE ("tenant_id", "generation_id", "date_bucket", "branch_id", "customer_group_id")
       )
     `);
-    await enableTenantRlsPolicy(queryRunner, customerGroupSummaries);
+    await ownerRls(queryRunner, customerGroupSummaries);
 
     // 10. Inventory Stock Projections
     await queryRunner.query(`
@@ -367,7 +377,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_inventory_stock_projections_branch_sku" ON ${stockProjections} ("tenant_id", "branch_id", "sku_code")`,
     );
-    await enableTenantRlsPolicy(queryRunner, stockProjections);
+    await ownerRls(queryRunner, stockProjections);
 
     // 11. Inventory Value Snapshots
     await queryRunner.query(`
@@ -390,7 +400,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
         CONSTRAINT "UQ_inventory_value_snapshots_key" UNIQUE ("tenant_id", "snapshot_date", "warehouse_id")
       )
     `);
-    await enableTenantRlsPolicy(queryRunner, valueSnapshots);
+    await ownerRls(queryRunner, valueSnapshots);
 
     // 12. Inventory Movement Projections
     await queryRunner.query(`
@@ -419,7 +429,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_inventory_movement_projections_date_wh" ON ${movementProjections} ("tenant_id", "date_bucket", "warehouse_id", "movement_type")`,
     );
-    await enableTenantRlsPolicy(queryRunner, movementProjections);
+    await ownerRls(queryRunner, movementProjections);
 
     // 13. Projection Checkpoints
     await queryRunner.query(`
@@ -440,7 +450,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
         CONSTRAINT "UQ_projection_checkpoints_key" UNIQUE ("tenant_id", "projection_name")
       )
     `);
-    await enableTenantRlsPolicy(queryRunner, checkpoints);
+    await ownerRls(queryRunner, checkpoints);
 
     // 14. Projection Generations (Rebuild & Cutover Tracking)
     await queryRunner.query(`
@@ -466,7 +476,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_projection_generations_tenant_name" ON ${generations} ("tenant_id", "projection_name", "started_at")`,
     );
-    await enableTenantRlsPolicy(queryRunner, generations);
+    await ownerRls(queryRunner, generations);
 
     // 15. Reconciliation Runs & Issues
     await queryRunner.query(`
@@ -487,7 +497,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
         CONSTRAINT "PK_insight_reconciliation_runs_id" PRIMARY KEY ("id")
       )
     `);
-    await enableTenantRlsPolicy(queryRunner, reconRuns);
+    await ownerRls(queryRunner, reconRuns);
 
     await queryRunner.query(`
       CREATE TABLE ${reconIssues} (
@@ -509,7 +519,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_insight_recon_issues_run" ON ${reconIssues} ("tenant_id", "run_id")`,
     );
-    await enableTenantRlsPolicy(queryRunner, reconIssues);
+    await ownerRls(queryRunner, reconIssues);
 
     // 16. Report Export Jobs
     await queryRunner.query(`
@@ -541,7 +551,7 @@ export class CreateM7InsightCore1791900000300 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_report_export_jobs_tenant_created" ON ${exportJobs} ("tenant_id", "created_at" DESC)`,
     );
-    await enableTenantRlsPolicy(queryRunner, exportJobs);
+    await ownerRls(queryRunner, exportJobs);
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {

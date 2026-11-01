@@ -11,7 +11,11 @@ import {
   OnApplicationBootstrap,
   OnApplicationShutdown,
 } from '@nestjs/common';
-import { EventEnvelope, consumeEvent } from '@pbl/common';
+import {
+  EventEnvelope,
+  consumeEvent,
+  runInTenantTransaction,
+} from '@pbl/common';
 import { DataSource } from 'typeorm';
 import { EventHandlerRegistry } from './event-handler.registry';
 import { EventsConfig } from './events-config';
@@ -78,7 +82,9 @@ export class EventConsumer
         this.logger.warn(`No handler for ${event.type}; message dropped`);
         return 'processed';
       }
-      return this.dataSource.transaction(async (manager) => {
+      // the event's tenant is bound to the transaction (`app.tenant_id`): the row-level security policies of the
+      // tables a handler writes evaluate against it, and a role that is not a superuser is subject to them
+      return runInTenantTransaction(this.dataSource, async (manager) => {
         const inserted = await manager.query(
           `INSERT INTO ${qualifiedTable(this.dataSource, 'inbox_event')} ("event_id", "type")
            VALUES ($1, $2) ON CONFLICT ("event_id") DO NOTHING RETURNING "event_id"`,

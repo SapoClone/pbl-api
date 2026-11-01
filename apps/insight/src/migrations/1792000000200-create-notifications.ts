@@ -1,6 +1,16 @@
 import { enableTenantRlsPolicy, qualifiedTable } from '@pbl/events';
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+/**
+ * Insight filters by tenant in every query and never binds `app.tenant_id`, so the policy is not forced on the
+ * owning role it connects as (forcing it made every read return nothing). Known gap: binding the tenant per
+ * query would let this be forced like the other services.
+ */
+const ownerRls = (
+  queryRunner: Parameters<typeof enableTenantRlsPolicy>[0],
+  table: string,
+) => enableTenantRlsPolicy(queryRunner, table, undefined, false);
+
 export class CreateNotifications1792000000200 implements MigrationInterface {
   name = 'CreateNotifications1792000000200';
 
@@ -55,8 +65,8 @@ export class CreateNotifications1792000000200 implements MigrationInterface {
         CONSTRAINT "CHK_device_token_platform" CHECK ("platform" IN ('ios', 'android', 'web'))
       )`);
 
-    await enableTenantRlsPolicy(queryRunner, notification);
-    await enableTenantRlsPolicy(queryRunner, device);
+    await ownerRls(queryRunner, notification);
+    await ownerRls(queryRunner, device);
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {

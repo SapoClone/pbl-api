@@ -163,17 +163,22 @@ export async function provisionServiceRole(
 /**
  * Enables and forces PostgreSQL Row-Level Security on a tenant-owned table using
  * the fail-closed `app.tenant_id` transaction-local setting (ADR-0011).
+ *
+ * `force: false` leaves the policy in place but exempts the table's owner, which is the
+ * role a service connects as. Only for a service whose code does not yet bind
+ * `app.tenant_id` and filters by tenant in every query instead (`insight`).
  */
 export async function enableTenantRlsPolicy(
   queryable: { query: DataSource['query'] },
   qualifiedTableName: string,
   policyName = 'tenant_isolation_policy',
+  force = true,
 ): Promise<void> {
   await queryable.query(
     `ALTER TABLE ${qualifiedTableName} ENABLE ROW LEVEL SECURITY`,
   );
   await queryable.query(
-    `ALTER TABLE ${qualifiedTableName} FORCE ROW LEVEL SECURITY`,
+    `ALTER TABLE ${qualifiedTableName} ${force ? 'FORCE' : 'NO FORCE'} ROW LEVEL SECURITY`,
   );
   await queryable.query(
     `DROP POLICY IF EXISTS "${policyName}" ON ${qualifiedTableName}`,

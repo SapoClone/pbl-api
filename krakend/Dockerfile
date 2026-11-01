@@ -9,3 +9,9 @@ RUN go test ./... \
 
 FROM devopsfaith/krakend:2.6.3
 COPY --from=builder /out/pbl-error-body.so /opt/krakend/plugins/pbl-error-body.so
+
+# Production: bake the rendered config in (`node scripts/render-krakend-prod.mjs > krakend/krakend.prod.json`,
+# then `--build-arg GATEWAY_CONFIG=krakend.prod.json`). Locally compose mounts krakend.json over this.
+ARG GATEWAY_CONFIG=krakend.json
+COPY ${GATEWAY_CONFIG} /etc/krakend/krakend.json
+CMD ["run", "-c", "/etc/krakend/krakend.json"]
