@@ -94,7 +94,8 @@ describe('M7 Insight Hexagonal & Microservice Boundary Architecture', () => {
       ),
       'utf8',
     );
-    const rlsMatches = migrationSource.match(/enableTenantRlsPolicy\(/g) ?? [];
+    const rlsMatches =
+      migrationSource.match(/(enableTenantRlsPolicy|ownerRls)\(/g) ?? [];
     // 2 M0 tables + 16 M7 tables = 18 RLS policies enabled
     expect(rlsMatches.length).toBeGreaterThanOrEqual(16);
   });
