@@ -16,6 +16,7 @@ import {
   branchScopeOf,
 } from '../../presentation/branch-scope';
 import { rethrowFinanceHttpError } from '../../presentation/finance-http-error';
+import { withoutTestSwitches } from '../../presentation/test-switches';
 import {
   ConfirmRefundOutcomeDto,
   CreateRefundDto,
@@ -122,7 +123,7 @@ export class RefundsController {
       return await this.refundsService.executeRefund(
         id,
         user.id ?? 'system',
-        dto,
+        withoutTestSwitches(dto),
         user.tenantId!,
       );
     } catch (error) {

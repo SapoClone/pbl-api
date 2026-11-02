@@ -26,6 +26,7 @@ import {
 import type { Response } from 'express';
 import { BranchScope } from '../../presentation/access';
 import { SalesExceptionFilter } from '../../presentation/sales-http-error';
+import { withoutTestSwitches } from '../../presentation/test-switches';
 import { ConfirmCheckoutPaymentDto, PosCheckoutDto } from './checkout.dto';
 import { CheckoutService, PosCheckoutResult } from './checkout.service';
 
@@ -59,7 +60,7 @@ export class CheckoutController {
       user.permissions,
       scope,
       idempotencyKey,
-      dto,
+      withoutTestSwitches(dto),
     );
     res.status(outcome.replayed ? HttpStatus.OK : HttpStatus.CREATED);
     if (outcome.replayed) {
