@@ -71,6 +71,60 @@ describe('SalesOrderClient', () => {
     expect(body.lines[0].unitPriceOverride).toBe(250000);
   });
 
+  it('passes on the shortage sales reports, in integration terms', async () => {
+    process.env.SALES_SERVICE_URL = 'http://sales:3000/';
+    process.env.INTERNAL_S2S_TOKEN = 'tok';
+    const post = jest.fn(async () => ({
+      data: {
+        order: { id: 'ord-1', code: 'HD1', orderStatus: 'PENDING' },
+        replayed: false,
+        shortageDetected: true,
+        shortages: [
+          {
+            warehouseId: 'w1',
+            skuId: 'v1',
+            requestedQty: '3.000',
+            availableQty: '1.000',
+          },
+        ],
+      },
+    }));
+    const client = new SalesOrderClient({
+      post,
+    } as unknown as InternalHttpClient);
+    const res = await client.createOrRecoverOmnichannelOrder({
+      ...cmd,
+      warehouseId: 'w1',
+      lines: [
+        {
+          variantId: 'v1',
+          skuCode: 'SKU-1',
+          itemName: 'n',
+          quantity: 3,
+          unitPrice: 100000,
+          lineDiscount: 0,
+        },
+      ],
+    });
+    expect(res.shortageDetected).toBe(true);
+    expect(res.shortages).toEqual([
+      { variantId: 'v1', skuCode: 'SKU-1', requestedQty: 3, availableQty: 1 },
+    ]);
+  });
+
+  it('reports no shortage when sales reports none', async () => {
+    process.env.SALES_SERVICE_URL = 'http://sales:3000/';
+    process.env.INTERNAL_S2S_TOKEN = 'tok';
+    const client = new SalesOrderClient({
+      post: jest.fn(async () => ({
+        data: { order: { id: 'o', code: 'c' }, shortageDetected: false },
+      })),
+    } as unknown as InternalHttpClient);
+    const res = await client.createOrRecoverOmnichannelOrder(cmd);
+    expect(res.shortageDetected).toBe(false);
+    expect(res.shortages).toEqual([]);
+  });
+
   it('fails clearly, with no in-memory fallback, when SALES_SERVICE_URL is unset', async () => {
     delete process.env.SALES_SERVICE_URL;
     process.env.INTERNAL_S2S_TOKEN = 'tok';
