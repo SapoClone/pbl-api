@@ -28,5 +28,6 @@ large changes are built on them. Summary rules live in [`/CLAUDE.md`](../../CLAU
 | [0019](0019-store-users-are-accounts.md) | Store users are accounts with a membership, not a separate Staff identity | Proposed |
 | [0020](0020-permissions-and-branch-scope.md) | Permissions are role-based, carried in the token, with branch scope | Proposed |
 | [0021](0021-insight-m7-event-driven-projections-incremental-deltas-rebuild-and-reconciliation.md) | Insight M7 event-driven read projections, incremental delta rollups, rebuild workflows, and reconciliation | Accepted |
+| [0022](0022-platform-admin-identity.md) | Platform admins are a separate identity with store-less tokens | Proposed |
 
 New record: copy [0000-template.md](0000-template.md), take the next number.

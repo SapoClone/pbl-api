@@ -389,7 +389,9 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
 
 ## Known open work (don't rediscover, don't depend on)
 
-- Deferred on purpose: staff invitations, forgot/reset/verify email, the platform-admin identity and `/admin` routes,
+- Deferred on purpose: staff invitations, forgot/reset/verify email, the platform-admin identity and `/admin` routes
+  (designed, not built: [ADR-0022](docs/decisions/0022-platform-admin-identity.md), Proposed, and
+  [its design](docs/specs/2026-11-02-platform-admin-design.md)),
   real object storage for uploads (a local-disk adapter exists), a queue for catalog imports (they run in-process),
   PO edit/submit/VAT/payments, receipt `PATCH`, issue `submit`, shipping address capture on orders. Per-service lists:
   `docs/specs/2026-11-01-adopt-m1-m6/phase-4-*.md`; first-wave decisions of ours: [docs/specs/2026-10-29-first-wave/](docs/specs/2026-10-29-first-wave/README.md).
