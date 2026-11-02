@@ -261,8 +261,7 @@ export class CheckoutService {
       loyaltyCommitted: false,
       creditAuthKey,
       creditAuthId: null,
-      creditAmount:
-        onAccountAmountVnd > 0 ? onAccountAmountVnd : null,
+      creditAmount: onAccountAmountVnd > 0 ? onAccountAmountVnd : null,
       creditCommitted: false,
     };
 
