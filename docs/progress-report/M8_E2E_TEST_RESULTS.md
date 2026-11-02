@@ -1,7 +1,7 @@
 # M8 End-to-End Integration Test Results (Workflows A–G)
 
 **Milestone:** M8 — Full-System Integration, Distributed Reliability & Architecture Validation  
-**Test File:** [`libs/events/test/m8-full-system-workflows.int-spec.ts`](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/libs/events/test/m8-full-system-workflows.int-spec.ts)  
+**Test File:** [`test/system/m8-full-system-workflows.int-spec.ts`](../../test/system/m8-full-system-workflows.int-spec.ts)  
 **Database Engine:** Real PostgreSQL (`localhost:25432`, isolated schemas across all 7 domain services)
 
 ---

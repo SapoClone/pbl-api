@@ -39,7 +39,7 @@ flowchart TB
 
 ## 2. The 7 Verified Reconciliation Pairs
 
-All 7 reconciliation pairs are executed against real PostgreSQL in [`m8-concurrency-fault-reconciliation.int-spec.ts`](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/libs/events/test/m8-concurrency-fault-reconciliation.int-spec.ts) (lines 2017–2135):
+All 7 reconciliation pairs are executed against real PostgreSQL in [`m8-concurrency-fault-reconciliation.int-spec.ts`](../../test/system/m8-concurrency-fault-reconciliation.int-spec.ts) (lines 2017–2135):
 
 | Pair # | Bounded Context Pair | Invariant Equation Verified | Clean Baseline Result | Injected Drift & Self-Healing Result |
 |---|---|---|---|---|

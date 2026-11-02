@@ -42,4 +42,4 @@ stateDiagram-v2
 ## 3. Lost-Response Recovery Verification
 
 In [`CheckoutService.reserveInventoryWithRecovery`](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/apps/sales/src/modules/checkout/checkout.service.ts), if `inventoryClient.reserveStock` creates a reservation in PostgreSQL (`inventory.stock_reservations`) and the HTTP response is lost due to a network timeout, `CheckoutService` immediately queries `inventoryClient.getWarehouseReservationByKey(warehouseId, reserveIdempotencyKey)`.
-- **Verified in [`m8-concurrency-fault-reconciliation.int-spec.ts`](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/libs/events/test/m8-concurrency-fault-reconciliation.int-spec.ts) (Fault 2)**: The checkout recovers the existing `reservationId` deterministically in the same request and completes with `on_hand_qty` decremented exactly once (`20.000 -> 19.000`).
+- **Verified in [`m8-concurrency-fault-reconciliation.int-spec.ts`](../../test/system/m8-concurrency-fault-reconciliation.int-spec.ts) (Fault 2)**: The checkout recovers the existing `reservationId` deterministically in the same request and completes with `on_hand_qty` decremented exactly once (`20.000 -> 19.000`).

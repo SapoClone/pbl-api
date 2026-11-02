@@ -38,8 +38,8 @@ Milestone M8 integrated and hardened all eight SapoClone microservices (`platfor
 | Verification Gate | Suite / File | Tests | Result |
 |---|---|---|---|
 | **DDD & Hexagonal Architecture Fitness** | `pnpm test:arch` (9 suites across all 8 apps + `libs/common`) | `85 / 85` | **100% PASS** |
-| **End-to-End Business Workflows A–G** | [`m8-full-system-workflows.int-spec.ts`](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/libs/events/test/m8-full-system-workflows.int-spec.ts) | `7 / 7` | **100% PASS** |
-| **20 Concurrency + 10 Fault + RLS + 7 Recon + Perf** | [`m8-concurrency-fault-reconciliation.int-spec.ts`](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/libs/events/test/m8-concurrency-fault-reconciliation.int-spec.ts) | `8 / 8` | **100% PASS** |
+| **End-to-End Business Workflows A–G** | [`m8-full-system-workflows.int-spec.ts`](../../test/system/m8-full-system-workflows.int-spec.ts) | `7 / 7` | **100% PASS** |
+| **20 Concurrency + 10 Fault + RLS + 7 Recon + Perf** | [`m8-concurrency-fault-reconciliation.int-spec.ts`](../../test/system/m8-concurrency-fault-reconciliation.int-spec.ts) | `8 / 8` | **100% PASS** |
 
 ### Real-PostgreSQL Latency Baseline
 - **POS Checkout Saga (`Sales` + `Inventory` Reserve & Confirm + Outbox)**: `p50 = 35.14 ms`, `p95 = 47.25 ms`, `p99 = 55.92 ms`.

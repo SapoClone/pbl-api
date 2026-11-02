@@ -1,7 +1,7 @@
 # M8 Performance Baseline Report (Real PostgreSQL)
 
 **Milestone:** M8 — Full-System Integration, Distributed Reliability & Architecture Validation  
-**Benchmark Suite:** [`libs/events/test/m8-concurrency-fault-reconciliation.int-spec.ts`](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/libs/events/test/m8-concurrency-fault-reconciliation.int-spec.ts) (`Phase 9 — Real PostgreSQL Performance Baseline`)  
+**Benchmark Suite:** [`test/system/m8-concurrency-fault-reconciliation.int-spec.ts`](../../test/system/m8-concurrency-fault-reconciliation.int-spec.ts) (`Phase 9 — Real PostgreSQL Performance Baseline`)  
 **Environment:** Apple Silicon macOS host, PostgreSQL 16 (`localhost:25432`), TypeORM connection pooling,Forced RLS enabled across all 7 schemas.
 
 ---

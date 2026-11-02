@@ -6,7 +6,7 @@
 
 ## 1. End-to-End Business Workflows Overview
 
-All 7 end-to-end workflows are implemented and verified against real PostgreSQL in [`m8-full-system-workflows.int-spec.ts`](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/libs/events/test/m8-full-system-workflows.int-spec.ts).
+All 7 end-to-end workflows are implemented and verified against real PostgreSQL in [`m8-full-system-workflows.int-spec.ts`](../../test/system/m8-full-system-workflows.int-spec.ts).
 
 | Workflow ID | Business Scenario | Services Participating | Key Invariants Verified | Test Status |
 |---|---|---|---|---|

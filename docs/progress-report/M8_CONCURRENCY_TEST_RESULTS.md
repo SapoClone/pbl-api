@@ -2,8 +2,8 @@
 
 **Milestone:** M8 — Full-System Integration, Distributed Reliability & Architecture Validation  
 **Test Files:**
-- [`libs/events/test/m8-concurrency-fault-reconciliation.int-spec.ts`](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/libs/events/test/m8-concurrency-fault-reconciliation.int-spec.ts)
-- [`libs/events/test/m8-full-system-workflows.int-spec.ts`](file:///Users/mac/Desktop/SEM7/pbl6/pbl-api/libs/events/test/m8-full-system-workflows.int-spec.ts)
+- [`test/system/m8-concurrency-fault-reconciliation.int-spec.ts`](../../test/system/m8-concurrency-fault-reconciliation.int-spec.ts)
+- [`test/system/m8-full-system-workflows.int-spec.ts`](../../test/system/m8-full-system-workflows.int-spec.ts)
 
 ---
 
