@@ -24,6 +24,7 @@ import { M2_INVENTORY_ENTITIES } from '../src/infrastructure/persistence/invento
 import { CreateInventoryTables1791900000000 } from '../src/migrations/1791900000000-create-inventory-tables';
 import { AddWarehouseStockBalances1791900000100 } from '../src/migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from '../src/migrations/1791900000200-create-m2-inventory-core';
+import { AllowReservationExpirySelect1792500000000 } from '../src/migrations/1792500000000-allow-reservation-expiry-select';
 import { IssuingService } from '../src/modules/issuing/issuing.service';
 import { ProcurementService } from '../src/modules/procurement/procurement.service';
 import { ReceivingService } from '../src/modules/receiving/receiving.service';
@@ -155,6 +156,7 @@ describe('inventory (Postgres)', () => {
           CreateInventoryTables1791900000000,
           AddWarehouseStockBalances1791900000100,
           CreateM2InventoryCore1791900000200,
+          AllowReservationExpirySelect1792500000000,
         ],
       }),
     );
@@ -1650,6 +1652,56 @@ describe('inventory (Postgres)', () => {
         stockQueryService.reconcile(),
       );
       expect(reconciliation.consistent).toBe(true);
+    });
+
+    it('the expiry job gives back an overdue warehouse hold, with no tenant context, and leaves a live one', async () => {
+      await as(TENANT_A, () =>
+        receivingService.createReceipt({
+          warehouseId,
+          autoPost: true,
+          items: [{ skuId: SKU_1, qty: '2.000', unitCost: 100000 }],
+        }),
+      );
+      const before = await as(TENANT_A, () =>
+        stockQueryService.getStockBySku(SKU_1),
+      );
+      const hold = () =>
+        as(TENANT_A, () =>
+          reservations.reserveWarehouseStock(randomUUID(), {
+            callerService: 'sales',
+            sourceRefType: 'ORDER',
+            sourceRefId: randomUUID(),
+            lines: [{ warehouseId, skuId: SKU_1, qty: '1.000' }],
+          }),
+        );
+      const overdue = (await hold()).reservation;
+      const live = (await hold()).reservation;
+      await dataSource.query(
+        `UPDATE ${table('warehouse_reservation')} SET expires_at = now() - interval '1 minute' WHERE id = $1`,
+        [overdue.reservationId],
+      );
+
+      // called the way ReservationExpiryJob calls it: outside any request
+      const expired =
+        await reservations.expireDueWarehouseReservationsOfAllTenants();
+
+      expect(expired).toBeGreaterThanOrEqual(1);
+      const states = await as(TENANT_A, async () => [
+        (await reservations.getWarehouseReservation(overdue.reservationId))
+          .state,
+        (await reservations.getWarehouseReservation(live.reservationId)).state,
+      ]);
+      expect(states).toEqual(['EXPIRED', 'HELD']);
+      const after = await as(TENANT_A, () =>
+        stockQueryService.getStockBySku(SKU_1),
+      );
+      // only the live hold still counts as reserved
+      expect(Number(after.totalReservedQty)).toBe(
+        Number(before.totalReservedQty) + 1,
+      );
+      await as(TENANT_A, () =>
+        reservations.releaseWarehouseReservation(live.reservationId),
+      );
     });
 
     it('Test G — Double Receipt Posting Race -> physical stock increases once, concurrent callers receive 409 STOCK_RECEIPT_ALREADY_POSTED', async () => {

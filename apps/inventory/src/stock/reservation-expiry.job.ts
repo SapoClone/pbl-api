@@ -33,7 +33,10 @@ export class ReservationExpiryJob
 
   async run(): Promise<number> {
     try {
-      const expired = await this.reservations.expireDue();
+      // the order-keyed holds, and the warehouse holds that sales' orders and checkouts take
+      const expired =
+        (await this.reservations.expireDue()) +
+        (await this.reservations.expireDueWarehouseReservationsOfAllTenants());
       if (expired > 0) this.logger.log(`Expired ${expired} stock hold(s)`);
       return expired;
     } catch (error) {

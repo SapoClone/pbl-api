@@ -20,6 +20,7 @@ import { M2_INVENTORY_ENTITIES } from './infrastructure/persistence/inventory.en
 import { CreateInventoryTables1791900000000 } from './migrations/1791900000000-create-inventory-tables';
 import { AddWarehouseStockBalances1791900000100 } from './migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from './migrations/1791900000200-create-m2-inventory-core';
+import { AllowReservationExpirySelect1792500000000 } from './migrations/1792500000000-allow-reservation-expiry-select';
 import { DocumentsController } from './modules/documents/documents.controller';
 import { DocumentsService } from './modules/documents/documents.service';
 import { IssuingController } from './modules/issuing/issuing.controller';
@@ -85,6 +86,7 @@ import { StockService } from './stock/stock.service';
         CreateInventoryTables1791900000000,
         AddWarehouseStockBalances1791900000100,
         CreateM2InventoryCore1791900000200,
+        AllowReservationExpirySelect1792500000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'inventory' }),

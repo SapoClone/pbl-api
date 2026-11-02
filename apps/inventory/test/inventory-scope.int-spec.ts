@@ -19,6 +19,7 @@ import { M2_INVENTORY_ENTITIES } from '../src/infrastructure/persistence/invento
 import { CreateInventoryTables1791900000000 } from '../src/migrations/1791900000000-create-inventory-tables';
 import { AddWarehouseStockBalances1791900000100 } from '../src/migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from '../src/migrations/1791900000200-create-m2-inventory-core';
+import { AllowReservationExpirySelect1792500000000 } from '../src/migrations/1792500000000-allow-reservation-expiry-select';
 import { StockQueryService } from '../src/modules/stock/stock-query.service';
 import { WarehousesService } from '../src/modules/warehouses/warehouses.service';
 import { WarehouseScopeService } from '../src/scope/warehouse-scope';
@@ -73,6 +74,7 @@ describe('inventory branch scope (Postgres)', () => {
           CreateInventoryTables1791900000000,
           AddWarehouseStockBalances1791900000100,
           CreateM2InventoryCore1791900000200,
+          AllowReservationExpirySelect1792500000000,
         ],
       }),
     );
