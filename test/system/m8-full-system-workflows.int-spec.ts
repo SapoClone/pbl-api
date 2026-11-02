@@ -169,7 +169,11 @@ import {
   CheckoutWorkflowEntity,
   OrderEntity,
 } from '../../apps/sales/src/orders/entities/order.entity';
-import { uniqueSchema, useDatabase } from '../../libs/events/test/it-env';
+import {
+  storeToday,
+  uniqueSchema,
+  useDatabase,
+} from '../../libs/events/test/it-env';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const BRANCH_A = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
@@ -1440,7 +1444,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       expect(pubRows[0].status).toBe('SUCCEEDED');
 
       // Verify Insight Daily Sales Projection Rollup
-      const today = new Date().toISOString().slice(0, 10);
+      const today = storeToday();
       const overview = await insightReporting.getDashboardOverview({
         from: today,
         to: today,
@@ -1930,7 +1934,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       expect(profileAfterSale.availableCredit).toBe(200000);
 
       // Record Insight netSalesRevenue before debt collection to prove debt collection does not double-count sales revenue
-      const today = new Date().toISOString().slice(0, 10);
+      const today = storeToday();
       const overviewBeforeCollection =
         await insightReporting.getDashboardOverview({
           from: today,
@@ -2481,7 +2485,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
   it('Workflow G: Insight processes 100x duplicate event replay idempotently, catches up after consumer downtime, and deterministically rebuilds projections to match source truth', async () => {
     await runAsTenant(TENANT_A, async () => {
       await drainAllOutboxes();
-      const today = new Date().toISOString().slice(0, 10);
+      const today = storeToday();
 
       // Record baseline before Workflow G sale
       const baselineOverview = await insightReporting.getDashboardOverview({

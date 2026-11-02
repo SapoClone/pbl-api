@@ -162,7 +162,11 @@ import {
   CheckoutWorkflowEntity,
   OrderEntity,
 } from '../../apps/sales/src/orders/entities/order.entity';
-import { uniqueSchema, useDatabase } from '../../libs/events/test/it-env';
+import {
+  storeToday,
+  uniqueSchema,
+  useDatabase,
+} from '../../libs/events/test/it-env';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -1705,7 +1709,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
         ).toBe(true);
 
         // Concurrency 20: Insight projection rebuild uses pg_try_advisory_xact_lock to prevent concurrent corruption
-        const today = new Date().toISOString().slice(0, 10);
+        const today = storeToday();
         const rebuildRes = await insightRebuild.triggerRebuild({
           projectionName: 'sales_analytics',
           fromDate: today,
@@ -2081,7 +2085,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
         expect(intRecon.run.status).toBe('COMPLETED');
 
         // Pair 7a: Source Services <-> Insight (Clean baseline reconciliation)
-        const today = new Date().toISOString().slice(0, 10);
+        const today = storeToday();
         await insightRebuild.triggerRebuild({
           projectionName: 'sales_analytics',
           fromDate: today,
@@ -2207,7 +2211,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
         );
 
         // 3. Measure 25 Insight dashboard overview queries
-        const today = new Date().toISOString().slice(0, 10);
+        const today = storeToday();
         const dashboardSamplesMs: number[] = [];
         for (let i = 0; i < 25; i++) {
           const t0 = performance.now();

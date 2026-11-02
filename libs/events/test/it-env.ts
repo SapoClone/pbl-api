@@ -21,3 +21,11 @@ export function useDatabase(schema: string): void {
 
 export const uniqueSchema = (prefix: string) =>
   `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+/**
+ * Today's date in the store time zone (Asia/Ho_Chi_Minh, UTC+7) as YYYY-MM-DD: the day that sales filters and insight
+ * reports bucket by. `new Date().toISOString().slice(0, 10)` is the UTC date, which is yesterday's between 00:00 and
+ * 07:00 in Vietnam, so a test built on it fails during those hours.
+ */
+export const storeToday = (): string =>
+  new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
