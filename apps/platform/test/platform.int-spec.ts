@@ -42,6 +42,7 @@ import { AddMemberStatusLoginLockoutSessions1792000000000 } from '../src/databas
 import { CreateBranchSettingAndStaffSchedule1792000000001 } from '../src/database/migrations/1792000000001-create-branch-setting-and-staff-schedule';
 import { CreateRolePermissionAndMemberBranch1792300000000 } from '../src/database/migrations/1792300000000-create-role-permission-and-member-branch';
 import { AddFinancePermissions1792400000000 } from '../src/database/migrations/1792400000000-add-finance-permissions';
+import { AddTenantCodeAndSuspension1792700000000 } from '../src/database/migrations/1792700000000-add-tenant-code-and-suspension';
 
 describe('platform (Postgres)', () => {
   const schema = uniqueSchema('platform_it');
@@ -383,6 +384,11 @@ describe('platform RBAC (Postgres)', () => {
     }
     await runner.release();
   };
+  const runTenantCode = async (direction: 'up' | 'down') => {
+    const runner = migrator.createQueryRunner();
+    await new AddTenantCodeAndSuspension1792700000000()[direction](runner);
+    await runner.release();
+  };
   const runRbac = async (direction: 'up' | 'down') => {
     const runner = migrator.createQueryRunner();
     await new CreateRolePermissionAndMemberBranch1792300000000()[direction](
@@ -461,6 +467,8 @@ describe('platform RBAC (Postgres)', () => {
       );
     }
     await runRbac('up');
+    // the stores above exist before the tenant codes do: the migration backfills them
+    await runTenantCode('up');
 
     service = new DataSource({ ...connection, entities });
     await service.initialize();
@@ -478,6 +486,46 @@ describe('platform RBAC (Postgres)', () => {
         .getRepository(RoleEntity)
         .findOneByOrFail({ tenantId, code })
     ).id;
+
+  describe('tenant codes (ADR-0022)', () => {
+    it('backfills every store, deleted ones included, with TN codes in creation order', async () => {
+      const rows = await mig<{ id: string; code: string }[]>(
+        `SELECT "id","code" FROM "tenant" ORDER BY "created_at","id"`,
+      );
+
+      expect(rows.map((r) => r.code)).toEqual(['TN0001', 'TN0002', 'TN0003']);
+      expect(rows.map((r) => r.id)).toEqual([T1, T2, T_DELETED]);
+    });
+
+    it('keeps codes unique across all rows, and the suspension columns empty', async () => {
+      await expect(
+        mig(`UPDATE "tenant" SET "code" = 'TN0001' WHERE "id" = $1`, [T2]),
+      ).rejects.toThrow(/UQ_tenant_code/);
+      const [row] = await mig<
+        { suspended_reason: string | null; suspended_at: Date | null }[]
+      >(`SELECT "suspended_reason","suspended_at" FROM "tenant" LIMIT 1`);
+      expect(row).toEqual({ suspended_reason: null, suspended_at: null });
+    });
+
+    it('runs down and up again', async () => {
+      await runTenantCode('down');
+      expect(
+        await mig(
+          `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'tenant' AND column_name IN ('code','suspended_reason','suspended_at')`,
+          [schema],
+        ),
+      ).toEqual([]);
+
+      await runTenantCode('up');
+      expect(
+        (
+          await mig<{ code: string }[]>(
+            `SELECT "code" FROM "tenant" ORDER BY "code"`,
+          )
+        ).map((r) => r.code),
+      ).toEqual(['TN0001', 'TN0002', 'TN0003']);
+    });
+  });
 
   describe('migration with legacy data', () => {
     it('seeds the five roles in every store, deleted ones included', async () => {
@@ -944,6 +992,7 @@ describe('platform RBAC (Postgres)', () => {
       await service.transaction(async (em) => {
         await em.insert(TenantEntity, {
           id: tenantId as TenantEntity['id'],
+          code: 'TN0090',
           name: 'New',
           subdomain: 'new-store',
           createdBy: 't',
@@ -971,6 +1020,7 @@ describe('platform RBAC (Postgres)', () => {
         service.transaction(async (em) => {
           await em.insert(TenantEntity, {
             id: failed as TenantEntity['id'],
+            code: 'TN0091',
             name: 'Failed',
             subdomain: 'failed-store',
             createdBy: 't',

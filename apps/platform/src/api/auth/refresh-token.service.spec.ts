@@ -281,6 +281,37 @@ describe('RefreshTokenService', () => {
     });
   });
 
+  describe('revokeFamiliesOfTenant (a platform admin suspends a store)', () => {
+    it('should revoke the live logins bound to the store, for every account, once per family', async () => {
+      repository.find.mockResolvedValue([
+        { familyId: 'f1' },
+        { familyId: 'f1' }, // a family with two rows still counts once
+        { familyId: 'f2' },
+      ]);
+
+      const ended = await service.revokeFamiliesOfTenant('tenant-1');
+
+      expect(ended).toEqual(['f1', 'f2']);
+      expect(repository.find.mock.calls[0][0].where).toMatchObject({
+        subjectType: 'account', // never an admin's session
+        tenantId: 'tenant-1',
+        revokedAt: IsNull(),
+      });
+      const [where, change] = repository.update.mock.calls[0];
+      expect(where.familyId._value).toEqual(['f1', 'f2']);
+      expect(change).toEqual({ revokedAt: expect.any(Date) });
+    });
+
+    it('should touch nothing when the store has no live login', async () => {
+      repository.find.mockResolvedValue([]);
+
+      await expect(service.revokeFamiliesOfTenant('tenant-1')).resolves.toEqual(
+        [],
+      );
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('sessions', () => {
     it('stores the client with a new family', async () => {
       await service.issue('user-1', 't1', { userAgent: 'UA', ip: '1.1.1.1' });

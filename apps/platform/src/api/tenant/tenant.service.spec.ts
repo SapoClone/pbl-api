@@ -5,6 +5,8 @@ import {
   ALL_PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
   PLATFORM_BRANCH_CREATED,
+  PLATFORM_MEMBERSHIP_GRANTED,
+  PLATFORM_TENANT_CREATED,
   SEEDED_ROLES,
 } from '@pbl/contracts';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
@@ -25,7 +27,12 @@ describe('TenantService.create', () => {
   let saved: unknown[];
   let savedRoles: RoleEntity[];
   let inserted: { roleId: string; permissionCode: string }[];
-  let em: { save: jest.Mock; insert: jest.Mock };
+  let em: {
+    save: jest.Mock;
+    insert: jest.Mock;
+    query: jest.Mock;
+    getRepository: jest.Mock;
+  };
   let dataSource: { transaction: jest.Mock; getRepository: jest.Mock };
   let accountRepository: { findOne: jest.Mock };
   let service: TenantService;
@@ -55,11 +62,18 @@ describe('TenantService.create', () => {
       insert: jest.fn(async (_entity, rows) => {
         inserted.push(...rows);
       }),
+      // the code generator: the advisory lock, then the next number
+      query: jest.fn(async (sql: string) =>
+        sql.includes('MAX(') ? [{ next: 7 }] : [],
+      ),
+      getRepository: jest.fn(() => ({ metadata: { tablePath: 'tenant' } })),
     };
     accountRepository = {
-      findOne: jest
-        .fn()
-        .mockResolvedValue({ id: 'a1', status: AccountStatus.ACTIVE }),
+      findOne: jest.fn().mockResolvedValue({
+        id: 'a1',
+        status: AccountStatus.ACTIVE,
+        email: 'owner@shop.vn',
+      }),
     };
     dataSource = {
       transaction: jest.fn((work) => work(em)),
@@ -80,6 +94,7 @@ describe('TenantService.create', () => {
     expect(tenant.id).toBe('t1');
     expect(saved[0]).toBeInstanceOf(TenantEntity);
     expect(saved[0]).toMatchObject({
+      code: 'TN0007',
       name: 'My Shop',
       subdomain: 'my-shop',
       status: 'active',
@@ -145,16 +160,91 @@ describe('TenantService.create', () => {
     expect(em.save).not.toHaveBeenCalled();
   });
 
-  it('writes the branch.created event of the default branch in the same transaction, for the new store', async () => {
+  it('writes the tenant.created and branch.created events in the same transaction, for the new store', async () => {
     await service.create('a1', dto);
 
-    expect(outbox.add).toHaveBeenCalledTimes(1);
+    expect(outbox.add).toHaveBeenCalledTimes(2);
+    expect(outbox.add).toHaveBeenCalledWith(
+      expect.anything(),
+      PLATFORM_TENANT_CREATED,
+      expect.objectContaining({
+        id: 't1',
+        code: 'TN0007',
+        ownerAccountId: 'a1',
+        ownerEmail: 'owner@shop.vn',
+        createdBy: 'a1',
+        createdByType: 'account',
+      }),
+      { tenantId: 't1' },
+    );
     expect(outbox.add).toHaveBeenCalledWith(
       expect.anything(),
       PLATFORM_BRANCH_CREATED,
       expect.objectContaining({ code: 'CN01', status: 'active' }),
       { tenantId: 't1' },
     );
+  });
+
+  describe('createStore for another owner (a platform admin, ADR-0022)', () => {
+    const input = {
+      ownerAccountId: 'owner-1',
+      ownerEmail: 'minh@mocstore.vn',
+      actorId: 'admin-1',
+      actorType: 'platform_admin' as const,
+      dto,
+    };
+
+    it('makes the given account the owner and records the admin as the creator', async () => {
+      await service.createStore({
+        ...input,
+        defaultBranchName: 'Chi nhánh Quận 1',
+      });
+
+      expect(saved[0]).toMatchObject({ createdBy: 'admin-1' });
+      expect(saved[1]).toMatchObject({
+        accountId: 'owner-1',
+        role: 'owner',
+      });
+      expect(saved[2]).toMatchObject({
+        name: 'Chi nhánh Quận 1',
+        createdBy: 'admin-1',
+      });
+    });
+
+    it('also audits the owner membership as a grant by the admin', async () => {
+      await service.createStore(input);
+
+      expect(outbox.add).toHaveBeenCalledTimes(3);
+      expect(outbox.add).toHaveBeenCalledWith(
+        expect.anything(),
+        PLATFORM_TENANT_CREATED,
+        expect.objectContaining({
+          createdBy: 'admin-1',
+          createdByType: 'platform_admin',
+        }),
+        { tenantId: 't1' },
+      );
+      expect(outbox.add).toHaveBeenCalledWith(
+        expect.anything(),
+        PLATFORM_MEMBERSHIP_GRANTED,
+        {
+          accountId: 'owner-1',
+          email: 'minh@mocstore.vn',
+          role: 'owner',
+          changedBy: 'admin-1',
+        },
+        { tenantId: 't1' },
+      );
+    });
+
+    it('rejects a taken subdomain with T001 before writing anything', async () => {
+      tenantRepository.exists.mockResolvedValue(true);
+
+      const error = await service.createStore(input).catch((e) => e);
+
+      expect(error.getResponse()).toMatchObject({ errorCode: ErrorCode.T001 });
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
   });
 
   it.each([

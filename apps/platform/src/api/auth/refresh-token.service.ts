@@ -161,6 +161,29 @@ export class RefreshTokenService {
     return familyIds;
   }
 
+  /**
+   * Revokes the live logins bound to a store, whoever they belong to, and returns their ids (they are the access
+   * tokens' sid). Used when a platform admin suspends the store (ADR-0022).
+   */
+  async revokeFamiliesOfTenant(tenantId: string): Promise<string[]> {
+    const rows = await this.repository.find({
+      where: {
+        subjectType: 'account',
+        tenantId: tenantId as Uuid,
+        revokedAt: IsNull(),
+      },
+      select: ['familyId'],
+    });
+    const familyIds = [...new Set(rows.map((row) => row.familyId))];
+    if (familyIds.length > 0) {
+      await this.repository.update(
+        { familyId: In(familyIds), revokedAt: IsNull() },
+        { revokedAt: new Date() },
+      );
+    }
+    return familyIds;
+  }
+
   private async handleReuse(row: RefreshTokenEntity): Promise<never> {
     this.logger.warn(
       `Refresh token reuse detected (family ${row.familyId}); revoking the family`,

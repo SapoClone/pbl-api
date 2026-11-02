@@ -71,6 +71,59 @@ export interface MembershipEventPayload {
   changedBy: string;
 }
 
+/** Who made a change: a platform admin (ADR-0022) or the account of a store member. */
+export type ChangedByType = 'platform_admin' | 'account';
+
+export const PLATFORM_TENANT_CREATED = {
+  type: 'platform.tenant.created',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_TENANT_UPDATED = {
+  type: 'platform.tenant.updated',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_TENANT_STATUS_CHANGED = {
+  type: 'platform.tenant.status_changed',
+  version: 1,
+} as const satisfies EventDefinition;
+
+/** The store in the tenant events; the event's tenant is this store. */
+export interface TenantEventPayload {
+  id: string;
+  /** Readable platform-wide code (TN0001) */
+  code: string;
+  name: string;
+  subdomain: string;
+  status: string;
+}
+
+export interface TenantCreatedPayload extends TenantEventPayload {
+  ownerAccountId: string;
+  ownerEmail: string;
+  createdBy: string;
+  createdByType: ChangedByType;
+}
+
+export interface TenantUpdatedPayload {
+  id: string;
+  code: string;
+  /** Only the fields that changed, with the value before and after (the audit log keeps both) */
+  changes: Record<string, { from: string | null; to: string | null }>;
+  changedBy: string;
+  changedByType: ChangedByType;
+}
+
+export interface TenantStatusChangedPayload {
+  id: string;
+  code: string;
+  from: string;
+  to: string;
+  /** Why the store was suspended (the admin's note on reactivation) */
+  reason: string | null;
+  changedBy: string;
+  changedByType: ChangedByType;
+}
+
 // ---- sales (M0 & M3 Sales & POS Core — ADR-0015)
 
 export const SALES_ORDER_CREATED = {
