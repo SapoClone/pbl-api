@@ -37,10 +37,12 @@ request, and every business read is scoped to that tenant; an admin works across
    never by widening `TenantScopedRepository`. In services with forced row-level security, an admin read sets a
    dedicated session flag after the guard has passed, with a SELECT-only policy, the pattern of
    `webhook_routing_select_policy`.
-6. **Every admin write emits an event that insight records in the audit log** (actor `platform_admin`, the target
-   tenant when there is one). Events and the audit log are scoped to a tenant today, so a platform-scope audit
-   (`tenant_id` null) needs its own design; it arrives with the first admin write (store management), not with the
-   sign-in.
+6. **Every admin write emits an event that insight records in the audit log** (actor `platform_admin`, with the
+   values before and after). Events and the audit log are scoped to a tenant. An action that targets a store emits
+   its event in that store's tenant (`platform.tenant.created`, `.updated`, `.status_changed`), so the audit row
+   lands in the store's own log and the owner can see what the operator did to it. An action that targets no store
+   (managing admins, plans, system settings) needs a platform-scope audit (a null tenant), which is designed with
+   those actions; sign-in itself is not audited yet.
 7. **The first `super_admin` is created by a one-off command**
    (`apps/platform/src/scripts/create-platform-admin.ts`): email and name as arguments, the password from the
    `PLATFORM_ADMIN_BOOTSTRAP_PASSWORD` environment variable only (so it stays out of the process list and the

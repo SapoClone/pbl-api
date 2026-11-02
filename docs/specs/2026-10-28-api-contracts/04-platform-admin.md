@@ -147,6 +147,16 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 
 ## Tenants (platform)
 
+> **As built (ADR-0022, PR 2).** The tenant endpoints below are built with these differences, which close as the later
+> admin PRs land:
+> - The plan, subscription, `expiresAt`, `planCode` and `trial` parts are not there yet (plans and subscriptions are PR 3): `status` is `active` or `suspended`, `counts` has `all`, `active` and `suspended`, and `branches` has `used` only (`limit` comes with the quotas, PR 4).
+> - `POST /admin/tenants` takes `owner.email` of an **existing, active account** and no `owner.name` or `planCode`; creating the account for a new owner with an invite email comes with the set-password flow.
+> - Error codes follow the platform's existing numbering, which differs from the numbers below: `T001` subdomain taken (not `T002`), `T006` already suspended, `T007` not suspended, `T008` the owner has no account, `T009` the owner's account is disabled.
+> - `PATCH` can also change the `subdomain`; `code` (`TN0001`, assigned at creation and never reused), the owner and the status cannot be edited there.
+> - `phoneMasked` is shown for the owner; `isEmailVerified` is not (there is no verification yet). The default page size is the platform's 10: the screen sends `limit=20`.
+> - Each write emits a tenant event that insight records in the store's own audit log, with the admin as the actor.
+
+
 ### GET /platform/api/v1/admin/tenants
 - **Status:** new
 - **Screens:** 02 Doanh nghiệp
