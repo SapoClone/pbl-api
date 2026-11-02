@@ -1,9 +1,11 @@
 import { JwtService } from '@nestjs/jwt';
 import { generateKeyPairSync } from 'crypto';
-import { PblAuthOptions } from '../auth.types';
+import { AccessTokenSubjectType, PblAuthOptions } from '../auth.types';
 
 export interface TestTokenClaims {
   sub?: string;
+  /** Default `account`; `platform_admin` makes a platform-admin token (no store, no permissions) */
+  subjectType?: AccessTokenSubjectType;
   /** The store; omit for a token without one */
   tid?: string;
   roles?: string[];
@@ -58,13 +60,17 @@ export function createTestAuth() {
     ): string {
       return `Bearer ${this.token({ roles: [role], permissions, tid, branches })}`;
     },
+    /** `Bearer <token>` for a platform admin of this role: no store, no permissions (ADR-0022) */
+    adminBearer(role: 'super_admin' | 'admin' = 'admin'): string {
+      return `Bearer ${this.token({ subjectType: 'platform_admin', roles: [role] })}`;
+    },
     token(claims: TestTokenClaims = {}): string {
       const roles = claims.roles ?? [];
       return jwt.sign(
         {
           sub: claims.sub ?? 'account-1',
           sid: 'session-1',
-          sub_type: 'account',
+          sub_type: claims.subjectType ?? 'account',
           ...(claims.tid ? { tid: claims.tid } : {}),
           roles,
           perms: claims.permissions ?? (roles.includes('owner') ? ['*'] : []),

@@ -4,6 +4,21 @@ All notable changes to `@sapoclone/pbl-auth` are recorded here.
 The project follows [Semantic Versioning](https://semver.org): a removed or
 renamed export, or any other breaking change, bumps the major version.
 
+## [1.3.0] - 2026-11-03
+
+### Added
+
+- `@RequirePlatformAdmin(...roles)` (ADR-0022): marks a route or controller as a platform-admin route. Only a token
+  with `sub_type = platform_admin` passes, without a store, and with roles given the admin must hold one (403
+  otherwise); a handler's roles override its controller's.
+- `createTestAuth().adminBearer(role)` and a `subjectType` option for `token()` (testing helper).
+
+### Changed
+
+- `AuthGuard` refuses a `platform_admin` token on every route that is not marked `@RequirePlatformAdmin` (403), so
+  an admin token cannot act in a store, and refuses a store token on an admin route. Nothing issued such tokens
+  before, so no existing caller is affected.
+
 ## [1.2.0] - 2026-10-31
 
 ### Added

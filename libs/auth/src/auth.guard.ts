@@ -15,6 +15,7 @@ import {
   IS_TENANT_OPTIONAL,
   PBL_AUTH_OPTIONS,
   REQUIRED_PERMISSIONS,
+  REQUIRED_PLATFORM_ADMIN,
   REQUIRED_ROLES,
 } from './auth.constants';
 import { hasPermission } from './auth.helpers';
@@ -24,6 +25,7 @@ import { PblAuthOptions } from './auth.types';
  * Global guard (registered by PblAuthModule): every route needs a valid
  * Bearer access token unless marked @Public() or @AuthOptional(). In
  * `tenant: 'required'` mode the token must also carry a store (`tid`).
+ * Platform-admin tokens are accepted only on @RequirePlatformAdmin routes.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -53,6 +55,26 @@ export class AuthGuard implements CanActivate {
 
     const user = await this.verifier.verify(accessToken);
     request['user'] = user;
+
+    // Platform admins and store users never mix (ADR-0022): an admin token passes only on a
+    // @RequirePlatformAdmin route, and such a route refuses every other token.
+    const adminRoles = this.reflector.getAllAndOverride<string[] | undefined>(
+      REQUIRED_PLATFORM_ADMIN,
+      targets,
+    );
+    const isAdminToken = user.subjectType === 'platform_admin';
+    if (isAdminToken || adminRoles !== undefined) {
+      if (!isAdminToken || adminRoles === undefined) {
+        throw new ForbiddenException();
+      }
+      if (
+        adminRoles.length > 0 &&
+        !adminRoles.some((role) => user.roles.includes(role))
+      ) {
+        throw new ForbiddenException();
+      }
+      return true;
+    }
 
     const requiredRoles =
       this.reflector.getAllAndOverride<string[]>(REQUIRED_ROLES, targets) ?? [];
