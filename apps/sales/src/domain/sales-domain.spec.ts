@@ -185,6 +185,20 @@ describe('Sales M3 Pure Domain Layer', () => {
         }),
       ).not.toThrow();
     });
+
+    it('does not lift the limit for an approver name the caller typed in', () => {
+      expect(() =>
+        assertDiscountAuthority({
+          effectiveDiscountPercent: 50,
+          role: 'sales_staff',
+          discountApprovedBy: 'manager',
+        }),
+      ).toThrow(
+        expect.objectContaining({
+          code: SalesDomainErrorCode.DISCOUNT_APPROVAL_REQUIRED,
+        }),
+      );
+    });
   });
 
   describe('discount tier from permissions', () => {

@@ -607,11 +607,9 @@ export function assertDiscountAuthority(params: {
     return;
   }
   const perms = params.permissions ?? [];
-  if (
-    perms.includes('*') ||
-    perms.includes('sales.pos.discount.override') ||
-    params.discountApprovedBy
-  ) {
+  // `discountApprovedBy` is recorded on the sale but proves nothing: it is text the caller sends. An approval that
+  // lifts the limit needs a verified approver (not built).
+  if (perms.includes('*') || perms.includes('sales.pos.discount.override')) {
     return;
   }
   const roleKey = (params.role ?? 'sales_staff').toLowerCase();
