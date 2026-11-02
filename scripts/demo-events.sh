@@ -257,7 +257,7 @@ for svc in sales inventory customer insight finance; do
   seen=$(psql_count "select count(*) from $svc.inbox_event")
   [[ "$seen" -gt 0 ]] || fail "$svc consumed no event"
   ok "$svc consumed events (inbox rows: $seen)"
-  depth=$(curl -s "$sqs/$svc-events-dlq?Action=GetQueueAttributes&AttributeName=ApproximateNumberOfMessages&AttributeName.1=ApproximateNumberOfMessages" | grep -o '<Value>[0-9]*' | tr -dc '0-9')
+  depth=$(curl -s "$sqs/$svc-events-dlq" -d "Action=GetQueueAttributes&AttributeName.1=ApproximateNumberOfMessages" | grep -o '<Value>[0-9]*' | tr -dc '0-9')
   [[ "$depth" == "0" ]] || fail "$svc has $depth dead letter(s): node scripts/redrive-dlq.js $svc"
   ok "the $svc dead-letter queue is empty"
 done
