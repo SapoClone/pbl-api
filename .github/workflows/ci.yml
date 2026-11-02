@@ -231,3 +231,13 @@ jobs:
 
       - name: Integration tests
         run: pnpm test:int
+
+      # platform's tenant isolation on a real Postgres (SRS §8.1 makes it mandatory); its own jest configs
+      - name: Platform tenant isolation (e2e)
+        env:
+          DATABASE_HOST: localhost
+          DATABASE_PORT: '5432'
+        run: pnpm exec jest --config apps/platform/test/jest-e2e.json apps/platform/test/tenancy.e2e-spec.ts
+
+      - name: Platform integration
+        run: pnpm exec jest --config apps/platform/test/jest-int.json
