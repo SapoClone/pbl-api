@@ -11,7 +11,9 @@ import {
 } from '@pbl/events';
 import { M6_INTEGRATION_ENTITIES } from './infrastructure/persistence/integration.entities';
 import { CreateM6IntegrationCore1791900000200 } from './migrations/1791900000200-create-m6-integration-core';
+import { AllowSyncJobSchedulerSelect1792500000000 } from './migrations/1792500000000-allow-sync-job-scheduler-select';
 import { IntegrationCoreModule } from './modules/integration-core.module';
+import { SyncJobWorker } from './modules/sync-jobs/sync-job-worker';
 
 @Module({
   // Every route requires a platform-issued access token unless @Public()
@@ -34,10 +36,13 @@ import { IntegrationCoreModule } from './modules/integration-core.module';
         ...PRODUCER_MIGRATIONS,
         ...CONSUMER_MIGRATIONS,
         CreateM6IntegrationCore1791900000200,
+        AllowSyncJobSchedulerSelect1792500000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'integration' }),
     IntegrationCoreModule,
   ],
+  // the app's own: integration tests load IntegrationCoreModule and run jobs themselves
+  providers: [SyncJobWorker],
 })
 export class AppModule {}

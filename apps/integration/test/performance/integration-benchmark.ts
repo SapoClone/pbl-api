@@ -25,6 +25,7 @@ import {
 } from '../../src/infrastructure/persistence/integration.entities';
 import { ProviderRateLimiterService } from '../../src/infrastructure/rate-limiting/provider-rate-limiter.service';
 import { CreateM6IntegrationCore1791900000200 } from '../../src/migrations/1791900000200-create-m6-integration-core';
+import { AllowSyncJobSchedulerSelect1792500000000 } from '../../src/migrations/1792500000000-allow-sync-job-scheduler-select';
 import { ConnectionsService } from '../../src/modules/connections/connections.service';
 import { InventorySyncService } from '../../src/modules/inventory-sync/inventory-sync.service';
 import { OrderSyncService } from '../../src/modules/order-sync/order-sync.service';
@@ -89,6 +90,7 @@ async function runBenchmark() {
         ...PRODUCER_MIGRATIONS,
         ...CONSUMER_MIGRATIONS,
         CreateM6IntegrationCore1791900000200,
+        AllowSyncJobSchedulerSelect1792500000000,
       ],
     }),
   });

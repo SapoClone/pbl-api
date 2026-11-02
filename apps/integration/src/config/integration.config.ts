@@ -8,6 +8,16 @@ export const INTERNAL_TOKEN_HEADER = 'x-internal-token';
 const isTest = (env: Record<string, string | undefined>) =>
   env.NODE_ENV === 'test';
 
+/** The background sync job worker; off under NODE_ENV=test, where tests run jobs themselves. */
+export function isSyncJobWorkerEnabled(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  if (env.INTEGRATION_SYNC_WORKER_ENABLED !== undefined) {
+    return env.INTEGRATION_SYNC_WORKER_ENABLED === 'true';
+  }
+  return !isTest(env);
+}
+
 export function readCredentialMasterKey(
   env: Record<string, string | undefined> = process.env,
 ): string {
