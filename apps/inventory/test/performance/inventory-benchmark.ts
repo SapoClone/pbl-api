@@ -25,6 +25,7 @@ import { M2_INVENTORY_ENTITIES } from '../../src/infrastructure/persistence/inve
 import { CreateInventoryTables1791900000000 } from '../../src/migrations/1791900000000-create-inventory-tables';
 import { AddWarehouseStockBalances1791900000100 } from '../../src/migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from '../../src/migrations/1791900000200-create-m2-inventory-core';
+import { AllowReservationExpirySelect1792500000000 } from '../../src/migrations/1792500000000-allow-reservation-expiry-select';
 import { ReceivingService } from '../../src/modules/receiving/receiving.service';
 import { StockQueryService } from '../../src/modules/stock/stock-query.service';
 import { WarehousesService } from '../../src/modules/warehouses/warehouses.service';
@@ -140,6 +141,7 @@ async function main() {
     CreateInventoryTables1791900000000,
     AddWarehouseStockBalances1791900000100,
     CreateM2InventoryCore1791900000200,
+    AllowReservationExpirySelect1792500000000,
   ];
 
   const adminDs = await initializeDatabase(

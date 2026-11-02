@@ -8,7 +8,11 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { runInTenantTransaction, TenantContext } from '@pbl/common';
+import {
+  runInTenantTransaction,
+  setLocalTenantContext,
+  TenantContext,
+} from '@pbl/common';
 import {
   CreateWarehouseReservationRequest,
   INVENTORY_RESERVATION_COMMITTED,
@@ -1255,8 +1259,20 @@ export class ReservationsService {
    * using FOR UPDATE SKIP LOCKED so concurrent expiry workers or concurrent commit
    * operations never double-release or corrupt reserved_qty (Test F).
    */
-  async expireWarehouseReservation(reservationId: string): Promise<boolean> {
-    return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
+  /** `tenantId` is for the expiry job, which runs outside a request: the hold's own tenant, read from its row */
+  async expireWarehouseReservation(
+    reservationId: string,
+    tenantId?: string,
+  ): Promise<boolean> {
+    const inTenant = <R>(
+      work: (em: EntityManager, tenantId: string) => Promise<R>,
+    ): Promise<R> =>
+      tenantId
+        ? this.dataSource.transaction(async (em) =>
+            work(em, await setLocalTenantContext(em, tenantId)),
+          )
+        : runInTenantTransaction(this.dataSource, work);
+    return inTenant(async (em, tenantId) => {
       const prefix = this.schemaPrefix(em);
       const rows = await em.query(
         `
@@ -1329,23 +1345,64 @@ export class ReservationsService {
       );
 
       if (this.outbox) {
-        await this.outbox.add(em, INVENTORY_RESERVATION_EXPIRED, {
-          reservationId,
-          sourceRefType: header.sourceRefType,
-          sourceRefId: header.sourceRefId,
-          state: 'EXPIRED',
-          reason: 'EXPIRED',
-          occurredAt,
-          lines: lines.map((l: Record<string, unknown>) => ({
-            warehouseId: String(l.warehouseId),
-            skuId: String(l.skuId),
-            qty: formatMilliToDecimal(parseDecimalToMilli(String(l.qty))),
-          })),
-        } satisfies ReservationLifecycleEventPayload);
+        await this.outbox.add(
+          em,
+          INVENTORY_RESERVATION_EXPIRED,
+          {
+            reservationId,
+            sourceRefType: header.sourceRefType,
+            sourceRefId: header.sourceRefId,
+            state: 'EXPIRED',
+            reason: 'EXPIRED',
+            occurredAt,
+            lines: lines.map((l: Record<string, unknown>) => ({
+              warehouseId: String(l.warehouseId),
+              skuId: String(l.skuId),
+              qty: formatMilliToDecimal(parseDecimalToMilli(String(l.qty))),
+            })),
+          } satisfies ReservationLifecycleEventPayload,
+          // the expiry job has no request context
+          { tenantId },
+        );
       }
 
       return true;
     });
+  }
+
+  /**
+   * Expires the warehouse holds past their time in every store, for the expiry job (no request, no tenant
+   * context). Finds them through reservation_expiry_select_policy, then expires each in its own tenant.
+   */
+  async expireDueWarehouseReservationsOfAllTenants(
+    limit = 50,
+  ): Promise<number> {
+    const due: Array<{ id: string; tenant_id: string }> =
+      await this.dataSource.transaction(async (em) => {
+        await em.query(
+          `SELECT set_config('app.reservation_expiry_scheduler', 'on', true)`,
+        );
+        return em.query(
+          `SELECT id, tenant_id FROM ${this.schemaPrefix(em)}"warehouse_reservation"
+            WHERE state = 'HELD' AND expires_at < now()
+            ORDER BY expires_at ASC
+            LIMIT $1`,
+          [limit],
+        );
+      });
+    let expired = 0;
+    for (const row of due) {
+      try {
+        if (await this.expireWarehouseReservation(row.id, row.tenant_id)) {
+          expired += 1;
+        }
+      } catch (error) {
+        this.logger.error(
+          `Could not expire warehouse hold ${row.id}: ${(error as Error).message}`,
+        );
+      }
+    }
+    return expired;
   }
 
   /**
