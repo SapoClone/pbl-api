@@ -1,0 +1,6 @@
+{
+  "error": {
+    "wrong_credentials": "Sai email hoặc mật khẩu",
+    "account_locked": "Đăng nhập sai quá nhiều lần. Tài khoản bị khóa trong 15 phút"
+  }
+}

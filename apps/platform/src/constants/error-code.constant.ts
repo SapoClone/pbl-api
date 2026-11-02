@@ -13,6 +13,10 @@ export enum ErrorCode {
   E010 = 'user.error.account_locked',
   E015 = 'user.error.current_password_wrong',
 
+  // Platform admin (ADR-0022)
+  A001 = 'admin.error.wrong_credentials',
+  A003 = 'admin.error.account_locked',
+
   // Tenant
   T001 = 'tenant.error.subdomain_exists',
   T002 = 'tenant.error.member_exists',

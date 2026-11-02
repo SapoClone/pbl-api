@@ -41,6 +41,7 @@ import { RefreshReqDto } from './dto/refresh.req.dto';
 import { RefreshResDto } from './dto/refresh.res.dto';
 import { RegisterReqDto } from './dto/register.req.dto';
 import { RegisterResDto } from './dto/register.res.dto';
+import { DUMMY_PASSWORD_HASH } from './dummy-password-hash.constant';
 import {
   LOGIN_LOCK_DURATION_MS,
   MAX_FAILED_LOGINS,
@@ -50,10 +51,6 @@ import {
   RefreshTokenService,
 } from './refresh-token.service';
 import { SessionService } from './session.service';
-
-// Argon2id hash of a random string, verified when no usable account exists
-const DUMMY_PASSWORD_HASH =
-  '$argon2id$v=19$m=65536,t=3,p=4$8d902FJaiwI8/5qJbpHQtw$zrd8rExr4nBCpW2or00BuccYs2iboSx8VQTt3CapOsM';
 
 type Token = Branded<
   {

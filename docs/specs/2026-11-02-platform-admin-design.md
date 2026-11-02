@@ -1,6 +1,6 @@
 # Platform admin (M01): design
 
-Status: **Proposed**, with [ADR-0022](../decisions/0022-platform-admin-identity.md). Phase 1 of the
+Status: **Accepted** with [ADR-0022](../decisions/0022-platform-admin-identity.md); build PR 1 (admin identity) is done, the rest is not. Phase 1 of the
 [SRS plan](2026-11-02-srs-implementation-plan.md). Endpoint shapes are in
 [contract 04](2026-10-28-api-contracts/04-platform-admin.md); this document decides what the contract leaves open
 and the order of the work.
@@ -44,9 +44,19 @@ current branch and member counts.
 
 ## Flows
 
-- **Bootstrap.** `node dist/apps/platform/apps/platform/src/scripts/create-platform-admin.js --email <e> --name <n>`,
-  password from `PLATFORM_ADMIN_BOOTSTRAP_PASSWORD` (SSM SecureString in the one-off task). Exits non-zero, changing
-  nothing, when a `super_admin` exists.
+- **Bootstrap.** Run once per environment from a machine or container that can reach the database, with the same
+  `DATABASE_*` settings as the platform service (a database role that may write `platform_admin`):
+
+  ```bash
+  PLATFORM_ADMIN_BOOTSTRAP_PASSWORD='…' \
+    node dist/apps/platform/apps/platform/src/scripts/create-platform-admin.js --email you@example.com --name "Your Name"
+  ```
+
+  Locally, from the repository: `pnpm exec ts-node -r tsconfig-paths/register apps/platform/src/scripts/create-platform-admin.ts …`.
+  Exit code 0 created, 2 a super admin already exists (nothing changed), 1 bad input or an error. Running it as an ECS
+  one-off task would need the password as a task-definition secret, not a `--overrides` value, which stays visible in
+  the task description; that is an infra change, not made yet. There is no recovery path if the only super admin
+  loses the password (no admin password reset yet): a break-glass fix is done in the database.
 - **Admin sign-in.** As account sign-in: lockout after 5 failures, constant-time comparison, `platform.admin.logged_in`
   for the audit log.
 - **Create a store for an owner.** In one transaction: the owner account (created with no password, or the existing

@@ -86,6 +86,16 @@ describe('RefreshTokenService', () => {
       });
     });
 
+    it('should store a platform admin login with its own subject type (ADR-0022)', async () => {
+      await service.issue('admin-1', null, undefined, 'platform_admin');
+
+      expect(repository.save.mock.calls[0][0]).toMatchObject({
+        subjectType: 'platform_admin',
+        subjectId: 'admin-1',
+        tenantId: null,
+      });
+    });
+
     it('should start a different family for every login', async () => {
       const first = await service.issue('user-1');
       const second = await service.issue('user-1');
@@ -122,6 +132,66 @@ describe('RefreshTokenService', () => {
         tenantId: null,
       });
       expect(rotated.token).not.toBe('presented-token');
+    });
+
+    describe('subject type (ADR-0022)', () => {
+      const adminRow = () =>
+        storedRow({
+          subjectType: 'platform_admin',
+          subjectId: 'admin-1' as RefreshTokenEntity['subjectId'],
+        });
+
+      it('should refuse an admin token on the account path, without revoking anything', async () => {
+        repository.findOneBy.mockResolvedValue(adminRow());
+
+        await expect(service.rotate('presented-token')).rejects.toThrow(
+          UnauthorizedException,
+        );
+        expect(repository.manager.transaction).not.toHaveBeenCalled();
+        expect(repository.update).not.toHaveBeenCalled();
+      });
+
+      it('should refuse an account token on the admin path, without revoking anything', async () => {
+        repository.findOneBy.mockResolvedValue(storedRow());
+
+        await expect(
+          service.rotate('presented-token', 'platform_admin'),
+        ).rejects.toThrow(UnauthorizedException);
+        expect(repository.manager.transaction).not.toHaveBeenCalled();
+        expect(repository.update).not.toHaveBeenCalled();
+      });
+
+      it('should rotate an admin token on the admin path and keep its subject type', async () => {
+        repository.findOneBy.mockResolvedValue(adminRow());
+
+        const rotated = await service.rotate(
+          'presented-token',
+          'platform_admin',
+        );
+
+        expect(rotated).toMatchObject({
+          familyId: 'family-1',
+          subjectId: 'admin-1',
+        });
+        expect(transactionManager.save.mock.calls[0][0]).toMatchObject({
+          subjectType: 'platform_admin',
+          familyId: 'family-1',
+        });
+      });
+
+      it('should still detect reuse of an admin token on the admin path', async () => {
+        repository.findOneBy.mockResolvedValue(
+          storedRow({
+            subjectType: 'platform_admin',
+            revokedAt: new Date(Date.now() - 1000),
+          }),
+        );
+
+        await expect(
+          service.rotate('presented-token', 'platform_admin'),
+        ).rejects.toBeInstanceOf(RefreshTokenReuseError);
+        expect(repository.update).toHaveBeenCalled(); // the family is revoked
+      });
     });
 
     it('should reject an unknown token', async () => {

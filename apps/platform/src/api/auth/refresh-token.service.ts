@@ -4,6 +4,7 @@ import { ClientInfo } from '@/decorators/client-info.decorator';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import { AccessTokenSubjectType } from '@pbl/auth';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import ms from 'ms';
 import { In, IsNull, MoreThan, Repository } from 'typeorm';
@@ -33,11 +34,12 @@ export class RefreshTokenService {
     private readonly configService: ConfigService<AllConfigType>,
   ) {}
 
-  /** Start a new family (one per login). */
+  /** Start a new family (one per login). `subjectType` is `platform_admin` for an admin's login (ADR-0022). */
   async issue(
     subjectId: Uuid | string,
     tenantId: string | null = null,
     client?: Partial<ClientInfo>,
+    subjectType: AccessTokenSubjectType = 'account',
   ): Promise<{ token: string; familyId: Uuid }> {
     const familyId = randomUUID() as Uuid;
     const token = await this.store(
@@ -46,11 +48,19 @@ export class RefreshTokenService {
       subjectId,
       tenantId,
       client,
+      subjectType,
     );
     return { token, familyId };
   }
 
-  async rotate(presentedToken: string): Promise<{
+  /**
+   * Rotates a token of the given subject type. A token of the other type (a store account's on the admin path,
+   * an admin's on the account path) is refused with no other effect: it is not a reuse and revokes nothing.
+   */
+  async rotate(
+    presentedToken: string,
+    expectedSubjectType: AccessTokenSubjectType = 'account',
+  ): Promise<{
     token: string;
     familyId: Uuid;
     subjectId: Uuid;
@@ -60,7 +70,7 @@ export class RefreshTokenService {
       tokenHash: hashToken(presentedToken),
     });
 
-    if (!current) {
+    if (!current || current.subjectType !== expectedSubjectType) {
       throw new UnauthorizedException();
     }
     if (current.revokedAt) {
@@ -86,6 +96,7 @@ export class RefreshTokenService {
         current.subjectId,
         current.tenantId,
         { userAgent: current.userAgent, ip: current.ip },
+        current.subjectType,
       );
     });
 
@@ -164,6 +175,7 @@ export class RefreshTokenService {
     subjectId: Uuid | string,
     tenantId: string | null,
     client?: Partial<ClientInfo>,
+    subjectType: AccessTokenSubjectType = 'account',
   ): Promise<string> {
     const token = randomBytes(32).toString('base64url');
     const lifetime = this.configService.getOrThrow('auth.refreshExpires', {
@@ -173,7 +185,7 @@ export class RefreshTokenService {
     await repository.save(
       new RefreshTokenEntity({
         familyId,
-        subjectType: 'account',
+        subjectType,
         subjectId: subjectId as Uuid,
         tenantId: tenantId as Uuid | null,
         tokenHash: hashToken(token),

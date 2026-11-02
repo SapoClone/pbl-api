@@ -69,10 +69,10 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
   ```
   The access token carries `sub_type = platform_admin` and no `tid`. The refresh token is a `RefreshToken` row with `subject_type = platform_admin`.
 - **Errors:**
-  - 400 `A001` wrong email or password
-  - 400 `A002` admin disabled
-  - 400 `A003` locked after 5 failed attempts in 15 minutes (`PlatformSetting lockout_*`)
-- **Events:** `platform.admin.logged_in` → insight audit
+  - 400 `A001` wrong email or password; also an unknown email, a disabled admin and an admin with no password yet, so sign-in does not reveal which (ADR-0022)
+  - 400 `A002` is not used
+  - 400 `A003` locked: 5 failed attempts lock the admin for 15 minutes, the same rule as accounts (fixed constants for now, `PlatformSetting lockout_*` is not built)
+- **Events:** `platform.admin.logged_in` → insight audit (not emitted yet: events are tenant-scoped, so a platform-scope audit comes with the first admin write)
 
 ### POST /platform/api/v1/admin/auth/refresh
 - **Status:** new. It reuses `RefreshTokenService`, but a refresh token whose subject is a platform admin is only accepted on this path.
