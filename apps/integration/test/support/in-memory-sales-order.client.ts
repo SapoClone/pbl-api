@@ -35,9 +35,25 @@ export class InMemorySalesOrderClient extends SalesOrderClient {
     CanonicalSalesOrderResult & { key: string }
   >();
   private crashAfterSalesSuccessKeys = new Set<string>();
+  private canonicalSalesDelegate:
+    | ((
+        cmd: CreateCanonicalSalesOrderCommand,
+      ) => Promise<CanonicalSalesOrderResult>)
+    | null = null;
 
   constructor(private readonly dataSource: DataSource) {
     super(undefined as never);
+  }
+
+  /** Routes canonical orders to a real sales service (full-system tests) instead of the stand-in below */
+  setCanonicalSalesDelegate(
+    delegate:
+      | ((
+          cmd: CreateCanonicalSalesOrderCommand,
+        ) => Promise<CanonicalSalesOrderResult>)
+      | null,
+  ): void {
+    this.canonicalSalesDelegate = delegate;
   }
 
   simulateCrashAfterSalesCreate(
@@ -76,6 +92,24 @@ export class InMemorySalesOrderClient extends SalesOrderClient {
         ...existing,
         replayed: true,
       };
+    }
+
+    if (this.canonicalSalesDelegate) {
+      const delegated = await this.canonicalSalesDelegate(cmd);
+      this.canonicalOrdersByKey.set(key, delegated);
+      this.canonicalOrdersById.set(delegated.internalOrderId, {
+        ...delegated,
+        key,
+      });
+      if (this.crashAfterSalesSuccessKeys.has(key)) {
+        this.crashAfterSalesSuccessKeys.delete(key);
+        throw new IntegrationDomainError(
+          IntegrationDomainErrorCode.PROVIDER_TIMEOUT_UNKNOWN_OUTCOME,
+          `Simulated network/worker crash after Sales created canonical order ${delegated.internalOrderId} for ${cmd.externalOrderId}`,
+          504,
+        );
+      }
+      return delegated;
     }
 
     // Evaluate stock availability via integration_stock_projections (read-only check;

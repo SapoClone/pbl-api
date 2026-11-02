@@ -56,7 +56,6 @@ services:
     networks:
       - pbl-network
 
-
   finance:
     build:
       context: .
@@ -204,8 +203,11 @@ services:
       AUTH_JWKS_URL: http://platform:3000/.well-known/jwks.json
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      # the one synchronous call: sales holds stock here before it sells (ADR-0010)
+      # synchronous cross-service dependencies (ADR-0010 & M8 Saga Coordination)
       INVENTORY_URL: http://inventory:3000
+      CATALOG_URL: http://catalog:3000
+      CUSTOMER_URL: http://customer:3000
+      FINANCE_URL: http://finance:3000
       DATABASE_HOST: postgres
       DATABASE_PORT: "5432"
       DATABASE_USERNAME: postgres

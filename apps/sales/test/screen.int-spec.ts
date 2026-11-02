@@ -18,7 +18,11 @@ import {
 } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
-import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
+import {
+  storeToday,
+  uniqueSchema,
+  useDatabase,
+} from '../../../libs/events/test/it-env';
 import { BranchProjectionEntity } from '../src/branches/branch-projection.entity';
 import { BranchProjectionHandler } from '../src/branches/branch-projection.handler';
 import { SalesDomainErrorCode } from '../src/domain/sales-domain';
@@ -693,7 +697,7 @@ describe('sales screen contract (Postgres)', () => {
         A(() => views.list(query({ branchId: BRANCH_A }), [BRANCH_C])),
       ).rejects.toMatchObject({ status: 404 });
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = storeToday();
       expect((await ids({ from: today, to: today })).length).toBe(6);
       expect(await ids({ from: '2020-01-01', to: '2020-01-02' })).toEqual([]);
 

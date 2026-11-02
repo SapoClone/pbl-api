@@ -9,7 +9,8 @@
     "<rootDir>/apps/catalog/test",
     "<rootDir>/apps/customer/test",
     "<rootDir>/apps/finance/test",
-    "<rootDir>/apps/integration/test"
+    "<rootDir>/apps/integration/test",
+    "<rootDir>/test/system"
   ],
   "testRegex": ".*\\.int-spec\\.ts$",
   "transform": { "^.+\\.(t|j)s$": "ts-jest" },
