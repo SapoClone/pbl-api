@@ -54,6 +54,26 @@ function deterministicUuid(seed: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
+/**
+ * Sales answers a short marketplace order with inventory's shortages (`skuId` is the variant id, quantities are
+ * decimal strings); integration keys them by variant and SKU code with numbers.
+ */
+function toShortages(
+  raw: unknown,
+  lines: CanonicalSalesOrderLineCommand[],
+): CanonicalSalesOrderResult['shortages'] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((s: any) => {
+    const variantId = String(s?.skuId ?? s?.variantId ?? '');
+    return {
+      variantId,
+      skuCode: lines.find((l) => l.variantId === variantId)?.skuCode ?? '',
+      requestedQty: Number(s?.requestedQty ?? 0),
+      availableQty: Number(s?.availableQty ?? 0),
+    };
+  });
+}
+
 /** Removes the service token from an axios error before it is rethrown (it can end up in logs). */
 function stripInternalToken(err: any): void {
   for (const config of [err?.config, err?.response?.config]) {
@@ -122,6 +142,7 @@ export class SalesOrderClient {
       throw err;
     }
     const data = res.data;
+    const shortages = toShortages(data.shortages, cmd.lines);
     return {
       internalOrderId: data.order?.id ?? data.id ?? deterministicUuid(key),
       internalOrderCode:
@@ -129,8 +150,8 @@ export class SalesOrderClient {
       orderStatus: data.order?.orderStatus ?? 'CONFIRMED',
       fulfillmentStatus: data.order?.fulfillmentStatus ?? 'RESERVED',
       replayed: Boolean(data.replayed),
-      shortageDetected: false,
-      shortages: [],
+      shortageDetected: Boolean(data.shortageDetected),
+      shortages,
     };
   }
 
