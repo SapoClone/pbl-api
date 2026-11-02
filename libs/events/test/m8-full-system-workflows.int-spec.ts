@@ -98,8 +98,6 @@ import { ProjectionsService } from '../../../apps/insight/src/modules/projection
 import { InsightRebuildService } from '../../../apps/insight/src/modules/rebuild/insight-rebuild.service';
 import { InsightReconciliationService } from '../../../apps/insight/src/modules/reconciliation/insight-reconciliation.service';
 import { InsightReportingService } from '../../../apps/insight/src/modules/reporting/insight-reporting.service';
-import { DailySalesEntity } from '../../../apps/insight/src/sales-summary/daily-sales.entity';
-import { SalesSummaryHandler } from '../../../apps/insight/src/sales-summary/sales-summary.handler';
 import { IntegrationEventsConsumer } from '../../../apps/integration/src/consumers/integration-events.consumer';
 import { computeShopeeWebhookSignature } from '../../../apps/integration/src/domain/integration-domain';
 import {
@@ -109,7 +107,6 @@ import {
   WebhookInboxEventEntity,
 } from '../../../apps/integration/src/infrastructure/persistence/integration.entities';
 import { ProviderRateLimiterService } from '../../../apps/integration/src/infrastructure/rate-limiting/provider-rate-limiter.service';
-import { SalesOrderClient } from '../../../apps/integration/src/infrastructure/sales-client/sales-order.client';
 import { CreateM6IntegrationCore1791900000200 } from '../../../apps/integration/src/migrations/1791900000200-create-m6-integration-core';
 import { ConflictsService } from '../../../apps/integration/src/modules/conflicts/conflicts.service';
 import { ConnectionsService } from '../../../apps/integration/src/modules/connections/connections.service';
@@ -122,6 +119,7 @@ import { WebhooksService } from '../../../apps/integration/src/modules/webhooks/
 import { LazadaProviderAdapter } from '../../../apps/integration/src/providers/lazada/lazada.adapter';
 import { ProviderRegistryService } from '../../../apps/integration/src/providers/provider-registry.service';
 import { ShopeeProviderAdapter } from '../../../apps/integration/src/providers/shopee/shopee.adapter';
+import { InMemorySalesOrderClient } from '../../../apps/integration/test/support/in-memory-sales-order.client';
 import { BranchProjectionEntity as InventoryBranchProjectionEntity } from '../../../apps/inventory/src/branches/branch-projection.entity';
 import { BranchProjectionHandler as InventoryBranchProjectionHandler } from '../../../apps/inventory/src/branches/branch-projection.handler';
 import { CatalogSkuProjectionHandler } from '../../../apps/inventory/src/infrastructure/catalog-reference/catalog-sku-projection.handler';
@@ -158,6 +156,7 @@ import { CreateSalesTables1791800000000 } from '../../../apps/sales/src/migratio
 import { AddOrderIdempotency1791800000200 } from '../../../apps/sales/src/migrations/1791800000200-add-order-idempotency';
 import { CreateCheckoutWorkflow1791800000300 } from '../../../apps/sales/src/migrations/1791800000300-create-checkout-workflow';
 import { CreateM3SalesCore1791900000200 } from '../../../apps/sales/src/migrations/1791900000200-create-m3-sales-core';
+import { AllowOnAccountTender1792100000100 } from '../../../apps/sales/src/migrations/1792100000100-allow-on-account-tender';
 import { CheckoutService } from '../../../apps/sales/src/modules/checkout/checkout.service';
 import { FulfillmentService } from '../../../apps/sales/src/modules/fulfillment/fulfillment.service';
 import { M3OrdersService } from '../../../apps/sales/src/modules/orders/m3-orders.service';
@@ -265,7 +264,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
   let intShopeeAdapter: ShopeeProviderAdapter;
   let intLazadaAdapter: LazadaProviderAdapter;
   let intProviderRegistry: ProviderRegistryService;
-  let intSalesOrderClient: SalesOrderClient;
+  let intSalesOrderClient: InMemorySalesOrderClient;
   let intConnections: ConnectionsService;
   let intSkuMapping: SkuMappingService;
   let intOrderSync: OrderSyncService;
@@ -282,7 +281,6 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
   let insightReporting: InsightReportingService;
   let insightRebuild: InsightRebuildService;
   let insightReconciliation: InsightReconciliationService;
-  let insightSummaryHandler: SalesSummaryHandler;
   let insightAuditHandler: AuditHandler;
 
   let pauseInsightConsumer = false;
@@ -449,7 +447,6 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           case SALES_ORDER_COMPLETED.type:
             await insightConsumer.onSalesOrderCompleted(env, em);
             if (typeof env.payload?.totalAmount === 'number') {
-              await insightSummaryHandler.onOrderCompleted(env as never, em);
               await insightAuditHandler.onOrderCompleted(env as never, em);
             }
             break;
@@ -492,6 +489,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
   }
 
   beforeAll(async () => {
+    process.env.INTEGRATION_CREDENTIAL_MASTER_KEY =
+      'test-only-integration-master-key-0123456789';
     const outbox = new EventOutbox();
 
     // 1. Initialize Catalog Schema & Services
@@ -683,6 +682,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           AddOrderIdempotency1791800000200,
           CreateCheckoutWorkflow1791800000300,
           CreateM3SalesCore1791900000200,
+          AllowOnAccountTender1792100000100,
         ],
       }),
     );
@@ -980,7 +980,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
             items: list.map((l) => ({
               skuId: l.skuId,
               qty: l.qty,
-              unitCost: l.unitCost ?? '0.00',
+              unitCost: Number(l.unitCost ?? 0),
             })),
           },
           `ret-rcv-create:${params.returnId}`,
@@ -1046,7 +1046,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       intShopeeAdapter,
       intLazadaAdapter,
     );
-    intSalesOrderClient = new SalesOrderClient(integrationDs);
+    intSalesOrderClient = new InMemorySalesOrderClient(integrationDs);
 
     // Wire Integration -> Real Sales M3OrdersService + Real Inventory Reservations
     intSalesOrderClient.setCanonicalSalesDelegate(async (cmd) => {
@@ -1054,7 +1054,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         try {
           const created = await salesOrders.createOmnichannelOrder(
             ACTOR_OWNER,
-            ['owner'],
+            ['*'],
+            null,
             {
               branchId: cmd.branchId,
               warehouseId: cmd.warehouseId ?? undefined,
@@ -1092,7 +1093,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
             // Create unconfirmed PENDING order in Sales so canonical order exists while on SHORTAGE_HOLD
             const pending = await salesOrders.createOmnichannelOrder(
               ACTOR_OWNER,
-              ['owner'],
+              ['*'],
+              null,
               {
                 branchId: cmd.branchId,
                 warehouseId: cmd.warehouseId ?? undefined,
@@ -1182,7 +1184,6 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
     insightDs = await initializeDatabase(
       databaseOptions({
         entities: [
-          DailySalesEntity,
           AuditLogEntity,
           ...M7_INSIGHT_ENTITIES,
           ...PRODUCER_ENTITIES,
@@ -1212,7 +1213,6 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       insightProjections,
       outbox,
     );
-    insightSummaryHandler = new SalesSummaryHandler();
     insightAuditHandler = new AuditHandler();
 
     // Seed Platform Branch Event into Inventory, Sales, and Insight
@@ -1303,7 +1303,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         createDefaultVariant: true,
         defaultSkuCode: 'SKU-POLO-M8-L',
         defaultBarcode: '8938505970011',
-        defaultBasePrice: '250000.00',
+        defaultBasePrice: 250000,
       });
       const variant = product.variants![0];
       expect(variant.skuCode).toBe('SKU-POLO-M8-L');
@@ -1330,7 +1330,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
             {
               skuId: variant.skuCode,
               qty: '20.000',
-              unitCost: '120000.00',
+              unitCost: 120000,
             },
           ],
         },
@@ -1365,15 +1365,16 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       await drainAllOutboxes();
 
       // Step 5: Open POS Shift & Execute POS Checkout for 2 units @ 250,000 VND = 500,000 VND CASH
-      const shift = await salesShifts.openShift(ACTOR_OWNER, {
+      const shift = await salesShifts.openShift(ACTOR_OWNER, null, {
         branchId: BRANCH_A,
         registerCode: 'POS-01',
-        openingCash: '1000000.00',
+        openingCash: 1000000,
       });
 
       const checkoutRes = await salesCheckout.checkout(
         ACTOR_OWNER,
-        ['owner'],
+        ['*'],
+        null,
         'idem-checkout-wfa-001',
         {
           branchId: BRANCH_A,
@@ -1396,7 +1397,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       expect(checkoutRes.state).toBe('CONFIRMED');
       expect(checkoutRes.paymentStatus).toBe('PAID');
       expect(checkoutRes.fulfillmentStatus).toBe('FULFILLED');
-      expect(checkoutRes.quote.grandTotal).toBe('500000.00');
+      expect(checkoutRes.quote.grandTotal).toBe(500000);
 
       // Step 6: Drain all outboxes so Customer, Finance, Integration, and Insight process the sale
       await drainAllOutboxes();
@@ -1465,7 +1466,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         baseUnit: 'PCS',
         createDefaultVariant: true,
         defaultSkuCode: 'SKU-FLASH-10',
-        defaultBasePrice: '100000.00',
+        defaultBasePrice: 100000,
       });
       const variant = product.variants![0];
       await drainAllOutboxes();
@@ -1483,7 +1484,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
             {
               skuId: variant.skuCode,
               qty: '10.000',
-              unitCost: '50000.00',
+              unitCost: 50000,
             },
           ],
         },
@@ -1497,7 +1498,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         runAsTenant(TENANT_A, () =>
           salesCheckout.checkout(
             ACTOR_OWNER,
-            ['owner'],
+            ['*'],
+            null,
             `idem-wfb-flash-${idx + 1}`,
             {
               branchId: BRANCH_A,
@@ -1556,7 +1558,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         baseUnit: 'PCS',
         createDefaultVariant: true,
         defaultSkuCode: 'SKU-LOY-WFC',
-        defaultBasePrice: '150000.00',
+        defaultBasePrice: 150000,
       });
       const variant = product.variants![0];
       await drainAllOutboxes();
@@ -1570,9 +1572,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         {
           warehouseId: warehouse.id,
           sourceType: 'MANUAL',
-          items: [
-            { skuId: variant.skuCode, qty: '50.000', unitCost: '80000.00' },
-          ],
+          items: [{ skuId: variant.skuCode, qty: '50.000', unitCost: 80000 }],
         },
         'm8-wfc-rcv-1',
       );
@@ -1602,7 +1602,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       // Part 1: Two concurrent checkouts each attempting to redeem 80 points from 100-point balance
       const [c1, c2] = await Promise.allSettled([
         runAsTenant(TENANT_A, () =>
-          salesCheckout.checkout(ACTOR_OWNER, ['owner'], 'idem-wfc-race-1', {
+          salesCheckout.checkout(ACTOR_OWNER, ['*'], null, 'idem-wfc-race-1', {
             branchId: BRANCH_A,
             warehouseId: warehouse.id,
             customerId: customer.id,
@@ -1615,7 +1615,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           }),
         ),
         runAsTenant(TENANT_A, () =>
-          salesCheckout.checkout(ACTOR_OWNER, ['owner'], 'idem-wfc-race-2', {
+          salesCheckout.checkout(ACTOR_OWNER, ['*'], null, 'idem-wfc-race-2', {
             branchId: BRANCH_A,
             warehouseId: warehouse.id,
             customerId: customer.id,
@@ -1656,7 +1656,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       await expect(
         salesCheckout.checkout(
           ACTOR_OWNER,
-          ['owner'],
+          ['*'],
+          null,
           'idem-wfc-fail-stage-1',
           {
             branchId: BRANCH_A,
@@ -1676,7 +1677,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       // Retry with same Idempotency-Key -> resumes workflow, reserves stock, commits stock & loyalty hold
       const recoveredStage1 = await salesCheckout.checkout(
         ACTOR_OWNER,
-        ['owner'],
+        ['*'],
+        null,
         'idem-wfc-fail-stage-1',
         {
           branchId: BRANCH_A,
@@ -1699,7 +1701,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       await expect(
         salesCheckout.checkout(
           ACTOR_OWNER,
-          ['owner'],
+          ['*'],
+          null,
           'idem-wfc-fail-stage-2',
           {
             branchId: BRANCH_A,
@@ -1724,7 +1727,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       await expect(
         salesCheckout.checkout(
           ACTOR_OWNER,
-          ['owner'],
+          ['*'],
+          null,
           'idem-wfc-fail-stage-3',
           {
             branchId: BRANCH_A,
@@ -1742,7 +1746,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       ).rejects.toThrow();
       const recoveredStage3 = await salesCheckout.checkout(
         ACTOR_OWNER,
-        ['owner'],
+        ['*'],
+        null,
         'idem-wfc-fail-stage-3',
         {
           branchId: BRANCH_A,
@@ -1761,7 +1766,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       await expect(
         salesCheckout.checkout(
           ACTOR_OWNER,
-          ['owner'],
+          ['*'],
+          null,
           'idem-wfc-fail-stage-4',
           {
             branchId: BRANCH_A,
@@ -1778,7 +1784,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         ),
       ).rejects.toThrow();
 
-      const reconRes = await salesCheckout.reconcilePendingCheckouts();
+      const reconRes = await salesCheckout.reconcilePendingCheckouts(null);
       expect(reconRes.finalized).toBeGreaterThanOrEqual(1);
 
       // Stage 5: Duplicate retry after completion -> returns same order without double point deduction
@@ -1787,7 +1793,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       ).availablePoints;
       const replayedStage4 = await salesCheckout.checkout(
         ACTOR_OWNER,
-        ['owner'],
+        ['*'],
+        null,
         'idem-wfc-fail-stage-4',
         {
           branchId: BRANCH_A,
@@ -1823,7 +1830,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         baseUnit: 'PCS',
         createDefaultVariant: true,
         defaultSkuCode: 'SKU-CREDIT-800K',
-        defaultBasePrice: '800000.00',
+        defaultBasePrice: 800000,
       });
       const variant = product.variants![0];
       await drainAllOutboxes();
@@ -1837,9 +1844,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         {
           warehouseId: warehouse.id,
           sourceType: 'MANUAL',
-          items: [
-            { skuId: variant.skuCode, qty: '20.000', unitCost: '500000.00' },
-          ],
+          items: [{ skuId: variant.skuCode, qty: '20.000', unitCost: 500000 }],
         },
         'm8-wfd-rcv-1',
       );
@@ -1857,7 +1862,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       );
       await financeCreditAuth.updateCreditLimit(
         customer.id,
-        { creditLimit: '1000000.00' },
+        { creditLimit: 1000000 },
         TENANT_A,
       );
 
@@ -1866,7 +1871,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         runAsTenant(TENANT_A, () =>
           salesCheckout.checkout(
             ACTOR_OWNER,
-            ['owner'],
+            ['*'],
+            null,
             'idem-wfd-credit-race-1',
             {
               branchId: BRANCH_A,
@@ -1883,7 +1889,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         runAsTenant(TENANT_A, () =>
           salesCheckout.checkout(
             ACTOR_OWNER,
-            ['owner'],
+            ['*'],
+            null,
             'idem-wfd-credit-race-2',
             {
               branchId: BRANCH_A,
@@ -1918,9 +1925,9 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         customer.id,
         TENANT_A,
       );
-      expect(profileAfterSale.postedDebt).toBe('800000.00');
-      expect(profileAfterSale.heldCredit).toBe('0.00');
-      expect(profileAfterSale.availableCredit).toBe('200000.00');
+      expect(profileAfterSale.postedDebt).toBe(800000);
+      expect(profileAfterSale.heldCredit).toBe(0);
+      expect(profileAfterSale.availableCredit).toBe(200000);
 
       // Record Insight netSalesRevenue before debt collection to prove debt collection does not double-count sales revenue
       const today = new Date().toISOString().slice(0, 10);
@@ -1940,7 +1947,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       );
       expect(receivablesList.data.length).toBe(1);
       const receivable = receivablesList.data[0];
-      expect(receivable.outstandingAmount).toBe('800000.00');
+      expect(receivable.outstandingAmount).toBe(800000);
 
       const payment1 = await financeReceivables.recordReceivablePayment(
         receivable.id,
@@ -1948,13 +1955,13 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         ACTOR_OWNER,
         'idem-wfd-pay-300k',
         {
-          amount: '300000.00',
+          amount: 300000,
           paymentMethod: 'CASH',
           overpaymentPolicy: 'REJECT',
         },
         TENANT_A,
       );
-      expect(payment1.customerTotalDebtAfter).toBe('500000.00');
+      expect(payment1.customerTotalDebtAfter).toBe(500000);
 
       // Duplicate retry with same idempotencyKey -> no double collection
       const payment1Replay = await financeReceivables.recordReceivablePayment(
@@ -1963,14 +1970,14 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         ACTOR_OWNER,
         'idem-wfd-pay-300k',
         {
-          amount: '300000.00',
+          amount: 300000,
           paymentMethod: 'CASH',
           overpaymentPolicy: 'REJECT',
         },
         TENANT_A,
       );
       expect(payment1Replay.replayed).toBe(true);
-      expect(payment1Replay.customerTotalDebtAfter).toBe('500000.00');
+      expect(payment1Replay.customerTotalDebtAfter).toBe(500000);
 
       await drainAllOutboxes();
 
@@ -1978,8 +1985,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         customer.id,
         TENANT_A,
       );
-      expect(profileAfterPayment.postedDebt).toBe('500000.00');
-      expect(profileAfterPayment.availableCredit).toBe('500000.00');
+      expect(profileAfterPayment.postedDebt).toBe(500000);
+      expect(profileAfterPayment.availableCredit).toBe(500000);
 
       // Verify Insight sales revenue was NOT inflated by receivable debt collection
       const overviewAfterCollection =
@@ -2001,7 +2008,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         await expect(
           salesCheckout.checkout(
             ACTOR_OWNER,
-            ['owner'],
+            ['*'],
+            null,
             'idem-wfd-finance-outage',
             {
               branchId: BRANCH_A,
@@ -2035,7 +2043,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         baseUnit: 'PCS',
         createDefaultVariant: true,
         defaultSkuCode: 'SKU-RET-WFE',
-        defaultBasePrice: '200000.00',
+        defaultBasePrice: 200000,
       });
       const variant = product.variants![0];
       await drainAllOutboxes();
@@ -2049,9 +2057,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         {
           warehouseId: warehouse.id,
           sourceType: 'MANUAL',
-          items: [
-            { skuId: variant.skuCode, qty: '20.000', unitCost: '100000.00' },
-          ],
+          items: [{ skuId: variant.skuCode, qty: '20.000', unitCost: 100000 }],
         },
         'm8-wfe-rcv-1',
       );
@@ -2070,7 +2076,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       // Sell 5 units @ 200,000 VND = 1,000,000 VND (earns 100 loyalty points)
       const checkout = await salesCheckout.checkout(
         ACTOR_OWNER,
-        ['owner'],
+        ['*'],
+        null,
         'idem-wfe-sale-5',
         {
           branchId: BRANCH_A,
@@ -2093,11 +2100,14 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       ).toBe(100);
 
       // Fetch order details to get orderItemId
-      const orderDetail = await salesOrders.getOrderDetails(checkout.orderId!);
+      const orderDetail = await salesOrders.getOrderDetails(
+        checkout.orderId!,
+        null,
+      );
       const orderItemId = orderDetail.items[0].id;
 
       // Part 1: Return 2 units (RESTOCK) -> 400,000 VND refund, +2 stock, -40 loyalty points
-      const ret1 = await salesReturns.createReturn(ACTOR_OWNER, {
+      const ret1 = await salesReturns.createReturn(ACTOR_OWNER, null, {
         orderId: checkout.orderId!,
         warehouseId: warehouse.id,
         autoReceive: true,
@@ -2109,7 +2119,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           },
         ],
       });
-      expect(ret1.totalRefundAmount).toBe('400000.00');
+      expect(ret1.totalRefundAmount).toBe(400000);
       await drainAllOutboxes();
 
       expect(
@@ -2122,7 +2132,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       // Part 2: Concurrent conflicting returns — 3 units remain returnable, two concurrent requests each try to return 3 units
       const [concRet1, concRet2] = await Promise.allSettled([
         runAsTenant(TENANT_A, () =>
-          salesReturns.createReturn(ACTOR_OWNER, {
+          salesReturns.createReturn(ACTOR_OWNER, null, {
             orderId: checkout.orderId!,
             warehouseId: warehouse.id,
             autoReceive: true,
@@ -2130,7 +2140,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           }),
         ),
         runAsTenant(TENANT_A, () =>
-          salesReturns.createReturn(ACTOR_OWNER, {
+          salesReturns.createReturn(ACTOR_OWNER, null, {
             orderId: checkout.orderId!,
             warehouseId: warehouse.id,
             autoReceive: true,
@@ -2164,7 +2174,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       // Part 3: Refund provider timeout ambiguity -> RECONCILIATION_REQUIRED -> resolved without double payout
       const secondOrder = await salesCheckout.checkout(
         ACTOR_OWNER,
-        ['owner'],
+        ['*'],
+        null,
         'idem-wfe-sale-timeout-test',
         {
           branchId: BRANCH_A,
@@ -2182,7 +2193,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           orderId: secondOrder.orderId!,
           branchId: BRANCH_A,
           method: 'BANK_TRANSFER',
-          amount: '200000.00',
+          amount: 200000,
           autoApprove: true,
         },
         TENANT_A,
@@ -2223,7 +2234,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         baseUnit: 'PCS',
         createDefaultVariant: true,
         defaultSkuCode: 'SKU-OMNI-WFF',
-        defaultBasePrice: '300000.00',
+        defaultBasePrice: 300000,
       });
       const variant = product.variants![0];
       await drainAllOutboxes();
@@ -2237,9 +2248,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         {
           warehouseId: warehouse.id,
           sourceType: 'MANUAL',
-          items: [
-            { skuId: variant.skuCode, qty: '10.000', unitCost: '150000.00' },
-          ],
+          items: [{ skuId: variant.skuCode, qty: '10.000', unitCost: 150000 }],
         },
         'm8-wff-rcv-1',
       );
@@ -2490,7 +2499,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         baseUnit: 'PCS',
         createDefaultVariant: true,
         defaultSkuCode: 'SKU-INSIGHT-WFG',
-        defaultBasePrice: '500000.00',
+        defaultBasePrice: 500000,
       });
       const variant = product.variants![0];
       await drainAllOutboxes();
@@ -2504,9 +2513,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
         {
           warehouseId: warehouse.id,
           sourceType: 'MANUAL',
-          items: [
-            { skuId: variant.skuCode, qty: '10.000', unitCost: '250000.00' },
-          ],
+          items: [{ skuId: variant.skuCode, qty: '10.000', unitCost: 250000 }],
         },
         'm8-wfg-rcv-1',
       );
@@ -2517,7 +2524,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       pauseInsightConsumer = true;
       const saleRes = await salesCheckout.checkout(
         ACTOR_OWNER,
-        ['owner'],
+        ['*'],
+        null,
         'idem-wfg-sale-500k',
         {
           branchId: BRANCH_A,

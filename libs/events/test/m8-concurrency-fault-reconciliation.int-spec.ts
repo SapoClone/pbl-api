@@ -97,15 +97,12 @@ import { ProjectionsService } from '../../../apps/insight/src/modules/projection
 import { InsightRebuildService } from '../../../apps/insight/src/modules/rebuild/insight-rebuild.service';
 import { InsightReconciliationService } from '../../../apps/insight/src/modules/reconciliation/insight-reconciliation.service';
 import { InsightReportingService } from '../../../apps/insight/src/modules/reporting/insight-reporting.service';
-import { DailySalesEntity } from '../../../apps/insight/src/sales-summary/daily-sales.entity';
-import { SalesSummaryHandler } from '../../../apps/insight/src/sales-summary/sales-summary.handler';
 import { IntegrationEventsConsumer } from '../../../apps/integration/src/consumers/integration-events.consumer';
 import {
   IntegrationDeadLetterEventEntity,
   M6_INTEGRATION_ENTITIES,
 } from '../../../apps/integration/src/infrastructure/persistence/integration.entities';
 import { ProviderRateLimiterService } from '../../../apps/integration/src/infrastructure/rate-limiting/provider-rate-limiter.service';
-import { SalesOrderClient } from '../../../apps/integration/src/infrastructure/sales-client/sales-order.client';
 import { CreateM6IntegrationCore1791900000200 } from '../../../apps/integration/src/migrations/1791900000200-create-m6-integration-core';
 import { ConflictsService } from '../../../apps/integration/src/modules/conflicts/conflicts.service';
 import { ConnectionsService } from '../../../apps/integration/src/modules/connections/connections.service';
@@ -118,6 +115,7 @@ import { WebhooksService } from '../../../apps/integration/src/modules/webhooks/
 import { LazadaProviderAdapter } from '../../../apps/integration/src/providers/lazada/lazada.adapter';
 import { ProviderRegistryService } from '../../../apps/integration/src/providers/provider-registry.service';
 import { ShopeeProviderAdapter } from '../../../apps/integration/src/providers/shopee/shopee.adapter';
+import { InMemorySalesOrderClient } from '../../../apps/integration/test/support/in-memory-sales-order.client';
 import { BranchProjectionEntity as InventoryBranchProjectionEntity } from '../../../apps/inventory/src/branches/branch-projection.entity';
 import { BranchProjectionHandler as InventoryBranchProjectionHandler } from '../../../apps/inventory/src/branches/branch-projection.handler';
 import { CatalogSkuProjectionHandler } from '../../../apps/inventory/src/infrastructure/catalog-reference/catalog-sku-projection.handler';
@@ -151,6 +149,7 @@ import { CreateSalesTables1791800000000 } from '../../../apps/sales/src/migratio
 import { AddOrderIdempotency1791800000200 } from '../../../apps/sales/src/migrations/1791800000200-add-order-idempotency';
 import { CreateCheckoutWorkflow1791800000300 } from '../../../apps/sales/src/migrations/1791800000300-create-checkout-workflow';
 import { CreateM3SalesCore1791900000200 } from '../../../apps/sales/src/migrations/1791900000200-create-m3-sales-core';
+import { AllowOnAccountTender1792100000100 } from '../../../apps/sales/src/migrations/1792100000100-allow-on-account-tender';
 import { CheckoutService } from '../../../apps/sales/src/modules/checkout/checkout.service';
 import { FulfillmentService } from '../../../apps/sales/src/modules/fulfillment/fulfillment.service';
 import { M3OrdersService } from '../../../apps/sales/src/modules/orders/m3-orders.service';
@@ -269,7 +268,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
   let intShopeeAdapter: ShopeeProviderAdapter;
   let intLazadaAdapter: LazadaProviderAdapter;
   let intProviderRegistry: ProviderRegistryService;
-  let intSalesOrderClient: SalesOrderClient;
+  let intSalesOrderClient: InMemorySalesOrderClient;
   let intConnections: ConnectionsService;
   let intSkuMapping: SkuMappingService;
   let intOrderSync: OrderSyncService;
@@ -286,7 +285,6 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
   let insightReporting: InsightReportingService;
   let insightRebuild: InsightRebuildService;
   let insightReconciliation: InsightReconciliationService;
-  let insightSummaryHandler: SalesSummaryHandler;
   let insightAuditHandler: AuditHandler;
 
   // Fault injection toggles for Inventory S2S bridge
@@ -446,7 +444,6 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           case SALES_ORDER_COMPLETED.type:
             await insightConsumer.onSalesOrderCompleted(env, em);
             if (typeof env.payload?.totalAmount === 'number') {
-              await insightSummaryHandler.onOrderCompleted(env as never, em);
               await insightAuditHandler.onOrderCompleted(env as never, em);
             }
             break;
@@ -486,6 +483,8 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
   }
 
   beforeAll(async () => {
+    process.env.INTEGRATION_CREDENTIAL_MASTER_KEY =
+      'test-only-integration-master-key-0123456789';
     const outbox = new EventOutbox();
 
     // 1. Catalog
@@ -677,6 +676,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           AddOrderIdempotency1791800000200,
           CreateCheckoutWorkflow1791800000300,
           CreateM3SalesCore1791900000200,
+          AllowOnAccountTender1792100000100,
         ],
       }),
     );
@@ -977,7 +977,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
             items: list.map((l) => ({
               skuId: l.skuId,
               qty: l.qty,
-              unitCost: l.unitCost ?? '0.00',
+              unitCost: Number(l.unitCost ?? 0),
             })),
           },
           `ret-rcv-create:${params.returnId}`,
@@ -1043,12 +1043,13 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
       intShopeeAdapter,
       intLazadaAdapter,
     );
-    intSalesOrderClient = new SalesOrderClient(integrationDs);
+    intSalesOrderClient = new InMemorySalesOrderClient(integrationDs);
     intSalesOrderClient.setCanonicalSalesDelegate(async (cmd) => {
       return runAsTenant(cmd.tenantId, async () => {
         const created = await salesOrders.createOmnichannelOrder(
           ACTOR_OWNER,
-          ['owner'],
+          ['*'],
+          null,
           {
             branchId: cmd.branchId,
             warehouseId: cmd.warehouseId ?? undefined,
@@ -1132,7 +1133,6 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
     insightDs = await initializeDatabase(
       databaseOptions({
         entities: [
-          DailySalesEntity,
           AuditLogEntity,
           ...M7_INSIGHT_ENTITIES,
           ...PRODUCER_ENTITIES,
@@ -1162,7 +1162,6 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
       insightProjections,
       outbox,
     );
-    insightSummaryHandler = new SalesSummaryHandler();
     insightAuditHandler = new AuditHandler();
 
     // Seed Branch A (Tenant A) and Branch B (Tenant B)
@@ -1225,7 +1224,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
               baseUnit: 'PCS',
               createDefaultVariant: true,
               defaultSkuCode: 'SKU-RACE-C1',
-              defaultBasePrice: '100000.00',
+              defaultBasePrice: 100000,
             }),
           ),
           runAsTenant(TENANT_A, () =>
@@ -1234,7 +1233,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
               baseUnit: 'PCS',
               createDefaultVariant: true,
               defaultSkuCode: 'SKU-RACE-C1',
-              defaultBasePrice: '120000.00',
+              defaultBasePrice: 120000,
             }),
           ),
         ]);
@@ -1262,7 +1261,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
             warehouseId: wh.id,
             sourceType: 'MANUAL',
             items: [
-              { skuId: winnerVariant.id, qty: '10.000', unitCost: '50000.00' },
+              { skuId: winnerVariant.id, qty: '10.000', unitCost: 50000 },
             ],
           },
           'c2-rcv',
@@ -1290,12 +1289,13 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           isDefault: true,
         });
         await catalogPricing.upsertPriceListItems(pl.id, {
-          items: [{ variantId: winnerVariant.id, price: '180000.00' }],
+          items: [{ variantId: winnerVariant.id, price: 180000 }],
         });
 
         const chk = await salesCheckout.checkout(
           ACTOR_OWNER,
-          ['owner'],
+          ['*'],
+          null,
           'idem-c2-chk',
           {
             branchId: BRANCH_A,
@@ -1323,7 +1323,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           baseUnit: 'PCS',
           createDefaultVariant: true,
           defaultSkuCode: 'SKU-INV-C3-C7',
-          defaultBasePrice: '100000.00',
+          defaultBasePrice: 100000,
         });
         const variant = prod.variants![0];
         await drainAllOutboxes();
@@ -1343,7 +1343,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           {
             warehouseId: whMain.id,
             sourceType: 'MANUAL',
-            items: [{ skuId: variant.id, qty: '10.000', unitCost: '40000.00' }],
+            items: [{ skuId: variant.id, qty: '10.000', unitCost: 40000 }],
           },
           'c3-rcv-init',
         );
@@ -1395,7 +1395,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           {
             warehouseId: whMain.id,
             sourceType: 'MANUAL',
-            items: [{ skuId: variant.id, qty: '5.000', unitCost: '40000.00' }],
+            items: [{ skuId: variant.id, qty: '5.000', unitCost: 40000 }],
           },
           'c5-rcv-draft',
         );
@@ -1404,7 +1404,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
             invReceiving.postReceipt(rcv2.id, 'c5-rcv-post'),
           ),
           runAsTenant(TENANT_A, () =>
-            salesCheckout.checkout(ACTOR_OWNER, ['owner'], 'c5-chk-1', {
+            salesCheckout.checkout(ACTOR_OWNER, ['*'], null, 'c5-chk-1', {
               branchId: BRANCH_A,
               warehouseId: whMain.id,
               paymentMethod: 'CASH',
@@ -1442,7 +1442,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
         const [trfDispatch, chkRace7] = await Promise.allSettled([
           runAsTenant(TENANT_A, () => invTransfers.dispatchTransfer(trf.id)),
           runAsTenant(TENANT_A, () =>
-            salesCheckout.checkout(ACTOR_OWNER, ['owner'], 'c7-chk-race', {
+            salesCheckout.checkout(ACTOR_OWNER, ['*'], null, 'c7-chk-race', {
               branchId: BRANCH_A,
               warehouseId: whMain.id,
               paymentMethod: 'CASH',
@@ -1474,7 +1474,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           baseUnit: 'PCS',
           createDefaultVariant: true,
           defaultSkuCode: 'SKU-COM-C8-C14',
-          defaultBasePrice: '200000.00',
+          defaultBasePrice: 200000,
         });
         const variant = prod.variants![0];
         await drainAllOutboxes();
@@ -1488,7 +1488,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           {
             warehouseId: wh.id,
             sourceType: 'MANUAL',
-            items: [{ skuId: variant.id, qty: '50.000', unitCost: '80000.00' }],
+            items: [{ skuId: variant.id, qty: '50.000', unitCost: 80000 }],
           },
           'c8-rcv',
         );
@@ -1496,17 +1496,17 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
         await drainAllOutboxes();
 
         // Concurrency 8: POS shift close vs active checkout
-        const shift = await salesShifts.openShift(ACTOR_OWNER, {
+        const shift = await salesShifts.openShift(ACTOR_OWNER, null, {
           branchId: BRANCH_A,
           registerCode: 'REG-C8',
-          openingCash: '500000.00',
+          openingCash: 500000,
         });
-        await salesShifts.closeShift(shift.id, ACTOR_OWNER, {
-          actualCash: '500000.00',
+        await salesShifts.closeShift(shift.id, ACTOR_OWNER, null, {
+          actualCash: 500000,
           note: 'Closed before late checkout',
         });
         await expect(
-          salesCheckout.checkout(ACTOR_OWNER, ['owner'], 'c8-late-chk', {
+          salesCheckout.checkout(ACTOR_OWNER, ['*'], null, 'c8-late-chk', {
             branchId: BRANCH_A,
             warehouseId: wh.id,
             shiftId: shift.id,
@@ -1522,22 +1522,28 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
         });
 
         // Concurrency 9: Two concurrent checkouts using same single-use coupon (maxUses = 1)
-        const promo = await salesPromotions.createPromotion({
-          code: 'PROMO-C9',
-          name: 'Khuyen mai C9',
-          discountType: 'FIXED',
-          discountValue: 20000,
-          minOrderAmount: 100000,
-        });
-        await salesPromotions.createCoupon({
-          promotionId: promo.id,
-          code: 'COUPON-SINGLE-C9',
-          maxUses: 1,
-        });
+        const promo = await salesPromotions.createPromotion(
+          {
+            code: 'PROMO-C9',
+            name: 'Khuyen mai C9',
+            discountType: 'FIXED',
+            discountValue: 20000,
+            minOrderAmount: 100000,
+          },
+          null,
+        );
+        await salesPromotions.createCoupon(
+          {
+            promotionId: promo.id,
+            code: 'COUPON-SINGLE-C9',
+            maxUses: 1,
+          },
+          null,
+        );
 
         const [cpn1, cpn2] = await Promise.allSettled([
           runAsTenant(TENANT_A, () =>
-            salesCheckout.checkout(ACTOR_OWNER, ['owner'], 'c9-cpn-race-1', {
+            salesCheckout.checkout(ACTOR_OWNER, ['*'], null, 'c9-cpn-race-1', {
               branchId: BRANCH_A,
               warehouseId: wh.id,
               couponCode: 'COUPON-SINGLE-C9',
@@ -1549,7 +1555,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
             }),
           ),
           runAsTenant(TENANT_A, () =>
-            salesCheckout.checkout(ACTOR_OWNER, ['owner'], 'c9-cpn-race-2', {
+            salesCheckout.checkout(ACTOR_OWNER, ['*'], null, 'c9-cpn-race-2', {
               branchId: BRANCH_A,
               warehouseId: wh.id,
               couponCode: 'COUPON-SINGLE-C9',
@@ -1610,7 +1616,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
             returnId: randomUUID(),
             orderId: settledOrderId,
             branchId: BRANCH_A,
-            amount: '50000.00',
+            amount: 50000,
             method: 'CASH',
             idempotencyKey: 'c14-refund-idem-1',
             requestedBy: ACTOR_OWNER,
@@ -1642,7 +1648,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           baseUnit: 'PCS',
           createDefaultVariant: true,
           defaultSkuCode: 'SKU-OMNI-C16',
-          defaultBasePrice: '200000.00',
+          defaultBasePrice: 200000,
         });
         const variant = prod.variants![0];
         await drainAllOutboxes();
@@ -1723,7 +1729,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           baseUnit: 'PCS',
           createDefaultVariant: true,
           defaultSkuCode: 'SKU-FAULT-M8',
-          defaultBasePrice: '200000.00',
+          defaultBasePrice: 200000,
         });
         const variant = prod.variants![0];
         await drainAllOutboxes();
@@ -1737,7 +1743,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           {
             warehouseId: wh.id,
             sourceType: 'MANUAL',
-            items: [{ skuId: variant.id, qty: '20.000', unitCost: '90000.00' }],
+            items: [{ skuId: variant.id, qty: '20.000', unitCost: 90000 }],
           },
           'fault-rcv-1',
         );
@@ -1750,7 +1756,8 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           await expect(
             salesCheckout.checkout(
               ACTOR_OWNER,
-              ['owner'],
+              ['*'],
+              null,
               'idem-fault-1-inv-down',
               {
                 branchId: BRANCH_A,
@@ -1774,7 +1781,8 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
         simulateInventoryReserveResponseLostOnce = true;
         const recoveredChk = await salesCheckout.checkout(
           ACTOR_OWNER,
-          ['owner'],
+          ['*'],
+          null,
           'idem-fault-2-lost-resp',
           {
             branchId: BRANCH_A,
@@ -1805,7 +1813,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
             isDefault: true,
             variantId: variant.id,
             skuCode: variant.skuCode,
-            price: '350000.00',
+            price: 350000,
             currency: 'VND',
             aggregateVersion: 5,
             updatedAt: new Date(Date.now() + 5000).toISOString(),
@@ -1817,7 +1825,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           occurredAt: new Date(Date.now() - 5000).toISOString(),
           payload: {
             ...priceV5Env.payload,
-            price: '110000.00',
+            price: 110000,
             aggregateVersion: 2,
             updatedAt: new Date(Date.now() - 5000).toISOString(),
           },
@@ -1831,7 +1839,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
         const resolvedMap = await salesCatalogClient.resolveVariants([
           { variantId: variant.id },
         ]);
-        expect(resolvedMap.get(variant.id)?.unitPrice).toBe('350000.00');
+        expect(resolvedMap.get(variant.id)?.unitPrice).toBe(350000);
 
         // Fault 8 & Fault 10: Marketplace 429 rate-limit / terminal poison failure -> DLQ isolation in Integration
         const conn = await intConnections.createConnection(ACTOR_OWNER, {
@@ -1903,7 +1911,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           baseUnit: 'PCS',
           createDefaultVariant: true,
           defaultSkuCode: 'SKU-SHARED-001',
-          defaultBasePrice: '100000.00',
+          defaultBasePrice: 100000,
         });
         const whA = await invWarehouses.create({
           branchId: BRANCH_A,
@@ -1928,7 +1936,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           baseUnit: 'PCS',
           createDefaultVariant: true,
           defaultSkuCode: 'SKU-SHARED-001',
-          defaultBasePrice: '500000.00',
+          defaultBasePrice: 500000,
         });
         const whB = await invWarehouses.create({
           branchId: BRANCH_B,
@@ -1958,7 +1966,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
               {
                 skuId: tenantAData.variantA.id,
                 qty: '15.000',
-                unitCost: '50000.00',
+                unitCost: 50000,
               },
             ],
           },
@@ -1976,7 +1984,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
               {
                 skuId: tenantBData.variantB.id,
                 qty: '40.000',
-                unitCost: '200000.00',
+                unitCost: 200000,
               },
             ],
           },
@@ -2147,7 +2155,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           baseUnit: 'PCS',
           createDefaultVariant: true,
           defaultSkuCode: 'SKU-PERF-M8',
-          defaultBasePrice: '150000.00',
+          defaultBasePrice: 150000,
         });
         const variant = prod.variants![0];
         await drainAllOutboxes();
@@ -2161,9 +2169,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           {
             warehouseId: wh.id,
             sourceType: 'MANUAL',
-            items: [
-              { skuId: variant.id, qty: '500.000', unitCost: '70000.00' },
-            ],
+            items: [{ skuId: variant.id, qty: '500.000', unitCost: 70000 }],
           },
           'perf-rcv',
         );
@@ -2176,7 +2182,8 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           const t0 = performance.now();
           await salesCheckout.checkout(
             ACTOR_OWNER,
-            ['owner'],
+            ['*'],
+            null,
             `perf-seq-chk-${i + 1}`,
             {
               branchId: BRANCH_A,
