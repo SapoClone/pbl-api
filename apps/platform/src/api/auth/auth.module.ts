@@ -53,6 +53,6 @@ import { SessionService } from './session.service';
   ],
   controllers: [AuthController, JwksController],
   providers: [AuthService, RefreshTokenService, SessionService],
-  exports: [AuthService, SessionService],
+  exports: [AuthService, SessionService, RefreshTokenService],
 })
 export class AuthModule {}

@@ -177,6 +177,12 @@ Rules:
   without a branch filter returns only the allowed branches (`canAccessBranch`, `allowedBranches`,
   `@AllowedBranches()` from `@pbl/auth`). No assignment rows means every branch. A role, permission or branch change
   reaches a member at their next sign-in or refresh.
+- Platform admins are a separate identity ([ADR-0022](docs/decisions/0022-platform-admin-identity.md)): a
+  `platform_admin` row, tokens with `sub_type = platform_admin` and no `tid`, sign-in at
+  `/platform/api/v1/admin/auth/login`. Mark admin routes with `@RequirePlatformAdmin(...roles)` from `@pbl/auth`: the
+  guard refuses a store token there and an admin token everywhere else. Never widen `TenantScopedRepository` for an
+  admin; cross-tenant reads live in admin modules only. The first super admin comes from
+  `apps/platform/src/scripts/create-platform-admin.ts`, never from a migration or a seed.
 - Store users are accounts with a membership ([ADR-0019](docs/decisions/0019-store-users-are-accounts.md)); there is
   no separate staff identity.
 
@@ -389,9 +395,9 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
 
 ## Known open work (don't rediscover, don't depend on)
 
-- Deferred on purpose: staff invitations, forgot/reset/verify email, the platform-admin identity and `/admin` routes
-  (designed, not built: [ADR-0022](docs/decisions/0022-platform-admin-identity.md), Proposed, and
-  [its design](docs/specs/2026-11-02-platform-admin-design.md)),
+- Deferred on purpose: staff invitations, forgot/reset/verify email, the platform-admin routes beyond sign-in (stores,
+  plans, subscriptions, usage: [ADR-0022](docs/decisions/0022-platform-admin-identity.md) and
+  [its design](docs/specs/2026-11-02-platform-admin-design.md), the identity itself is built),
   real object storage for uploads (a local-disk adapter exists), a queue for catalog imports (they run in-process),
   PO edit/submit/VAT/payments, receipt `PATCH`, issue `submit`, shipping address capture on orders. Per-service lists:
   `docs/specs/2026-11-01-adopt-m1-m6/phase-4-*.md`; first-wave decisions of ours: [docs/specs/2026-10-29-first-wave/](docs/specs/2026-10-29-first-wave/README.md).

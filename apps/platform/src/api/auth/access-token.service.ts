@@ -75,6 +75,8 @@ export class AccessTokenService implements KeyResolver {
   async sign(data: {
     userId: string;
     sessionId: string;
+    /** `account` unless a platform admin signs in (ADR-0022); an admin token has no store */
+    subjectType?: AccessTokenSubjectType;
     tenantId?: string;
     roles?: string[];
     /** Permission codes of the member's role; `['*']` for the owner (ADR-0020) */
@@ -82,7 +84,7 @@ export class AccessTokenService implements KeyResolver {
     /** Branch ids the member may act in; `['*']` = every branch */
     branches?: string[];
   }): Promise<string> {
-    const subjectType: AccessTokenSubjectType = 'account';
+    const subjectType: AccessTokenSubjectType = data.subjectType ?? 'account';
     return this.jwtService.signAsync(
       {
         sub: data.userId,

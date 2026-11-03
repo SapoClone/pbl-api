@@ -1,6 +1,6 @@
 # ADR-0022: Platform admins are a separate identity with store-less tokens
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-02
 - **Scope:** `platform` (admin identity, auth, tenants, plans), `@pbl/auth` (guard), `krakend/krakend.json` (`/admin`
   routes), `pbl-web` (admin screens); extends [ADR-0004](0004-authentication-and-tokens.md) and
@@ -26,9 +26,11 @@ request, and every business read is scoped to that tenant; an admin works across
    `branches`.** `roles` carries the admin role. Refresh tokens are `refresh_token` rows with
    `subject_type = platform_admin` and no `tenant_id`; `/admin/auth/refresh` accepts only those, and `/auth/refresh`
    refuses them.
-3. **`@RequirePlatformAdmin(role?)` in `@pbl/auth` guards every admin route.** It accepts only
-   `sub_type = platform_admin` (and the role when given). Store routes keep refusing a token without `tid` (services
-   in `tenant: 'required'` mode, `@CurrentTenant()` in platform), so an admin token cannot act in a store.
+3. **`@RequirePlatformAdmin(...roles)` in `@pbl/auth` guards every admin route.** It accepts only
+   `sub_type = platform_admin` (and one of the roles when given; a handler's roles override its controller's).
+   The guard also **refuses a `platform_admin` token on every route that does not carry the decorator**, in every
+   service, so an admin token cannot act in a store (it would not otherwise: some account-level routes in platform
+   run without a store). Both directions are tested.
 4. **Admin routes live under `/<service>/api/v1/admin/...`** and are declared in KrakenD with the `auth/validator`
    block, like every protected route.
 5. **Cross-tenant data access happens only in admin modules, through a repository named for it** (`AdminRepository`),
@@ -36,10 +38,19 @@ request, and every business read is scoped to that tenant; an admin works across
    dedicated session flag after the guard has passed, with a SELECT-only policy, the pattern of
    `webhook_routing_select_policy`.
 6. **Every admin write emits an event that insight records in the audit log** (actor `platform_admin`, the target
-   tenant when there is one).
-7. **The first `super_admin` is created by a one-off command**, run like the platform migration task: email from an
-   argument, password from an SSM SecureString. It refuses to run when a `super_admin` exists, so running it twice is
-   harmless. Later admins are created by a `super_admin` with a set-password email.
+   tenant when there is one). Events and the audit log are scoped to a tenant today, so a platform-scope audit
+   (`tenant_id` null) needs its own design; it arrives with the first admin write (store management), not with the
+   sign-in.
+7. **The first `super_admin` is created by a one-off command**
+   (`apps/platform/src/scripts/create-platform-admin.ts`): email and name as arguments, the password from the
+   `PLATFORM_ADMIN_BOOTSTRAP_PASSWORD` environment variable only (so it stays out of the process list and the
+   repository), at least 12 characters from what the sign-in form accepts. It changes nothing and exits with code 2
+   when a `super_admin` exists (a disabled one counts), and takes an advisory lock, so running it twice, or twice at
+   once, is harmless. Later admins are created by a `super_admin` with a set-password email.
+9. **Sign-in answers the same `A001` (400) for an unknown email, a wrong password, a disabled admin and an admin
+   with no password yet**, after one Argon2 verification in every case; `A003` (400) while locked (5 failed attempts
+   lock for 15 minutes, as for accounts). Contract 04 listed `A002` for a disabled admin; revealing that is not worth
+   it, so `A002` is unused.
 8. **Locking a store** sets `tenant.status = suspended`, revokes the refresh-token families whose `tenant_id` is that
    store, and puts their sessions on the Redis deny-list. Membership already hides suspended stores from sign-in and
    store switching. Data is kept; reactivation restores access.

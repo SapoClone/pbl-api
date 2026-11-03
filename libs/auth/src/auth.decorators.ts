@@ -9,6 +9,7 @@ import {
   IS_PUBLIC,
   IS_TENANT_OPTIONAL,
   REQUIRED_PERMISSIONS,
+  REQUIRED_PLATFORM_ADMIN,
   REQUIRED_ROLES,
 } from './auth.constants';
 import { allowedBranches } from './auth.helpers';
@@ -34,6 +35,16 @@ export const RequireRoles = (...roles: string[]) =>
  */
 export const RequirePermission = (...codes: string[]) =>
   SetMetadata(REQUIRED_PERMISSIONS, codes);
+
+/**
+ * Marks a route or controller as a platform-admin route (ADR-0022): only a token with
+ * `sub_type = platform_admin` passes, and with roles given the admin must hold one of them (403 otherwise).
+ * A platform-admin token passes on no other route, and a store token passes on none of these: the two
+ * identities never mix. A handler's roles override its controller's. Admin tokens carry no store, so
+ * the store requirement does not apply.
+ */
+export const RequirePlatformAdmin = (...roles: string[]) =>
+  SetMetadata(REQUIRED_PLATFORM_ADMIN, roles);
 
 /** The verified caller (AuthUser), or one of its fields: @CurrentUser('id'). */
 export const CurrentUser = createParamDecorator(

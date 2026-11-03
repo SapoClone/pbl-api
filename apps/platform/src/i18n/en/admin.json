@@ -1,0 +1,6 @@
+{
+  "error": {
+    "wrong_credentials": "Wrong email or password",
+    "account_locked": "Too many failed sign-in attempts. The account is locked for 15 minutes"
+  }
+}

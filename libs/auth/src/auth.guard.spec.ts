@@ -9,6 +9,7 @@ import {
   AuthOptional,
   Public,
   RequirePermission,
+  RequirePlatformAdmin,
   RequireRoles,
   TenantOptional,
 } from './auth.decorators';
@@ -25,6 +26,13 @@ class Handlers {
   @RequirePermission('orders.create') createOrder() {}
   @RequirePermission('orders.create', 'pos.create') anyOf() {}
   @RequireRoles('owner') @RequirePermission('orders.create') both() {}
+}
+
+@RequirePlatformAdmin()
+class AdminHandlers {
+  anyAdmin() {}
+  @RequirePlatformAdmin('super_admin') superOnly() {}
+  @Public() login() {}
 }
 
 const user = (overrides: Partial<AuthUser> = {}): AuthUser => ({
@@ -227,6 +235,80 @@ describe('AuthGuard', () => {
       await expect(
         run('both', { ...base, roles: ['owner'], permissions: [] }),
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('@RequirePlatformAdmin() (ADR-0022)', () => {
+    const adminContext = (
+      handler: keyof AdminHandlers,
+      authorization = 'Bearer t',
+    ) => {
+      const request: Record<string, unknown> = {
+        headers: { authorization },
+      };
+      return {
+        getHandler: () => AdminHandlers.prototype[handler],
+        getClass: () => AdminHandlers,
+        switchToHttp: () => ({ getRequest: () => request }),
+      } as unknown as ExecutionContext;
+    };
+    const admin = (roles: string[] = ['admin']) =>
+      user({ subjectType: 'platform_admin', roles, permissions: [] });
+
+    it('accepts a platform-admin token without a store, even in required mode', async () => {
+      verifier.verify.mockResolvedValue(admin());
+      await expect(
+        guardFor('required').canActivate(adminContext('anyAdmin')),
+      ).resolves.toBe(true);
+    });
+
+    it('refuses a store token on an admin route (403)', async () => {
+      verifier.verify.mockResolvedValue(
+        user({ tenantId: 't1', roles: ['owner'], permissions: ['*'] }),
+      );
+      await expect(
+        guardFor('optional').canActivate(adminContext('anyAdmin')),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('refuses a platform-admin token on every other route (403)', async () => {
+      verifier.verify.mockResolvedValue(admin());
+      for (const handler of [
+        'plain',
+        'noTenant',
+        'maybe',
+        'ownerOnly',
+        'createOrder',
+      ] as const) {
+        const { ctx } = context(handler, 'Bearer t');
+        await expect(
+          guardFor('optional').canActivate(ctx),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+      }
+    });
+
+    it('lets a handler narrow the roles, and an admin of another role is refused', async () => {
+      verifier.verify.mockResolvedValue(admin(['admin']));
+      await expect(
+        guardFor('required').canActivate(adminContext('superOnly')),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      verifier.verify.mockResolvedValue(admin(['super_admin']));
+      await expect(
+        guardFor('required').canActivate(adminContext('superOnly')),
+      ).resolves.toBe(true);
+    });
+
+    it('still asks for a token (401) and leaves @Public() handlers open', async () => {
+      await expect(
+        guardFor('required').canActivate({
+          getHandler: () => AdminHandlers.prototype.anyAdmin,
+          getClass: () => AdminHandlers,
+          switchToHttp: () => ({ getRequest: () => ({ headers: {} }) }),
+        } as unknown as ExecutionContext),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(
+        guardFor('required').canActivate(adminContext('login', '')),
+      ).resolves.toBe(true);
     });
   });
 });

@@ -155,6 +155,49 @@ describe('AccessTokenService', () => {
     });
   });
 
+  describe('platform admin tokens (ADR-0022)', () => {
+    it('should sign sub_type platform_admin with the admin role and no store claims', async () => {
+      const claims = jwtService.decode(
+        await service.sign({
+          userId: 'admin-1',
+          sessionId: 'session-1',
+          subjectType: 'platform_admin',
+          roles: ['super_admin'],
+        }),
+      );
+
+      expect(claims).toMatchObject({
+        sub: 'admin-1',
+        sid: 'session-1',
+        sub_type: 'platform_admin',
+        roles: ['super_admin'],
+      });
+      for (const claim of ['tid', 'perms', 'branches']) {
+        expect(claims).not.toHaveProperty(claim);
+      }
+    });
+
+    it('should be read back by the shared verifier as a platform admin', async () => {
+      const verifier = new AccessTokenVerifier({
+        issuer: 'platform',
+        audience: 'pbl6',
+        keyResolver: service,
+      });
+      const token = await service.sign({
+        userId: 'admin-1',
+        sessionId: 'session-1',
+        subjectType: 'platform_admin',
+        roles: ['admin'],
+      });
+
+      await expect(verifier.verify(token)).resolves.toMatchObject({
+        id: 'admin-1',
+        subjectType: 'platform_admin',
+        roles: ['admin'],
+      });
+    });
+  });
+
   describe("getPublicKey (platform's KeyResolver)", () => {
     it('should return the public key for the current kid', async () => {
       await expect(service.getPublicKey('test-key-1')).resolves.toContain(

@@ -1,5 +1,8 @@
 import { registerDecorator, type ValidationOptions } from 'class-validator';
 
+/** What a password may contain: letters, digits and ! # $ % & * @ ^ (the sign-in forms validate with it). */
+export const PASSWORD_PATTERN = /^[\d!#$%&*@A-Z^a-z]*$/;
+
 export function IsPassword(
   validationOptions?: ValidationOptions,
 ): PropertyDecorator {
@@ -12,7 +15,7 @@ export function IsPassword(
       options: validationOptions,
       validator: {
         validate(value: string) {
-          return /^[\d!#$%&*@A-Z^a-z]*$/.test(value);
+          return PASSWORD_PATTERN.test(value);
         },
         defaultMessage() {
           return `$property is invalid`;
