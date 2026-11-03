@@ -9,8 +9,13 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   ALL_PERMISSIONS,
+  ChangedByType,
+  MembershipEventPayload,
   PLATFORM_BRANCH_CREATED,
+  PLATFORM_MEMBERSHIP_GRANTED,
+  PLATFORM_TENANT_CREATED,
   ROLE_CODES,
+  TenantCreatedPayload,
   WILDCARD_PERMISSION,
 } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
@@ -39,6 +44,7 @@ import {
 import { TenantEntity, TenantStatus } from './entities/tenant.entity';
 import { formatMemberCode } from './member-code';
 import { MembershipService } from './membership.service';
+import { nextTenantCode } from './tenant-code';
 
 @Injectable()
 export class TenantService {
@@ -71,11 +77,34 @@ export class TenantService {
     // Only an active account may open a store (it would otherwise get a session)
     const account = await this.dataSource.getRepository(AccountEntity).findOne({
       where: { id: accountId as AccountEntity['id'] },
-      select: ['id', 'status'],
+      select: ['id', 'status', 'email'],
     });
     if (account?.status !== AccountStatus.ACTIVE) {
       throw new UnauthorizedException();
     }
+    return this.createStore({
+      ownerAccountId: accountId,
+      ownerEmail: account.email,
+      actorId: accountId,
+      actorType: 'account',
+      dto,
+    });
+  }
+
+  /**
+   * The store, its five seeded roles, the owner membership and the default branch, atomically. The owner is the
+   * caller when a member opens a store, and another account when a platform admin does (ADR-0022); `actor` is who
+   * did it, for the audit trail. The owner must already be a checked, active account.
+   */
+  async createStore(input: {
+    ownerAccountId: string;
+    ownerEmail: string;
+    actorId: string;
+    actorType: ChangedByType;
+    dto: CreateTenantReqDto;
+    defaultBranchName?: string;
+  }): Promise<TenantEntity> {
+    const { ownerAccountId, ownerEmail, actorId, actorType, dto } = input;
     if (
       await this.tenantRepository.exists({
         where: { subdomain: dto.subdomain },
@@ -87,22 +116,23 @@ export class TenantService {
       return await this.dataSource.transaction(async (em) => {
         const tenant = await em.save(
           new TenantEntity({
+            code: await nextTenantCode(em),
             name: dto.name,
             subdomain: dto.subdomain,
             phone: dto.phone ?? null,
             email: dto.email ?? null,
             address: dto.address ?? null,
             status: TenantStatus.ACTIVE,
-            createdBy: accountId,
-            updatedBy: accountId,
+            createdBy: actorId,
+            updatedBy: actorId,
           }),
         );
-        // the five seeded roles of the store; its creator is the owner
+        // the five seeded roles of the store; its owner is the owner role
         const roles = await seedRoles(em, tenant.id);
         const ownerRole = roles.get(ROLE_CODES.OWNER)!;
         await em.save(
           new AccountTenantEntity({
-            accountId,
+            accountId: ownerAccountId,
             tenantId: tenant.id,
             role: ownerRole.code,
             roleId: ownerRole.id,
@@ -112,22 +142,39 @@ export class TenantService {
         );
         // Written with the raw EntityManager, not TenantScopedRepository: the
         // tenant was created just above, so no tenant exists in the request
-        // context yet (the caller's token has none) and the scoped repository
-        // would refuse to run. The tenantId is set explicitly from the new row.
+        // context yet (the caller's token has none, or none at all for an
+        // admin) and the scoped repository would refuse to run. The tenantId is
+        // set explicitly from the new row.
         const branch = await em.save(
           new BranchEntity({
             tenantId: tenant.id,
             code: DEFAULT_BRANCH.code,
-            name: DEFAULT_BRANCH.name,
+            name: input.defaultBranchName ?? DEFAULT_BRANCH.name,
             isWarehouse: true,
             status: BranchStatus.ACTIVE,
-            createdBy: accountId,
-            updatedBy: accountId,
+            createdBy: actorId,
+            updatedBy: actorId,
           }),
         );
-        // The default branch is a branch like any other: other services learn of
-        // it through the event. The caller's token has no store yet, so the
-        // tenant is the one just created.
+        // The store and its default branch are told to the other services as
+        // events, in this transaction. The caller's token has no store (an
+        // admin's never does), so the tenant is the one just created.
+        await this.outbox.add(
+          em,
+          PLATFORM_TENANT_CREATED,
+          {
+            id: tenant.id,
+            code: tenant.code,
+            name: tenant.name,
+            subdomain: tenant.subdomain,
+            status: tenant.status,
+            ownerAccountId,
+            ownerEmail,
+            createdBy: actorId,
+            createdByType: actorType,
+          } satisfies TenantCreatedPayload,
+          { tenantId: tenant.id },
+        );
         await this.outbox.add(
           em,
           PLATFORM_BRANCH_CREATED,
@@ -141,6 +188,20 @@ export class TenantService {
           },
           { tenantId: tenant.id },
         );
+        if (actorType === 'platform_admin') {
+          // someone other than the owner made the membership, so it is audited as a grant
+          await this.outbox.add(
+            em,
+            PLATFORM_MEMBERSHIP_GRANTED,
+            {
+              accountId: ownerAccountId,
+              email: ownerEmail,
+              role: ownerRole.code,
+              changedBy: actorId,
+            } satisfies MembershipEventPayload,
+            { tenantId: tenant.id },
+          );
+        }
         return tenant;
       });
     } catch (error) {

@@ -5,6 +5,10 @@
     "owner_role_locked": "Không thể đổi vai trò của chủ cửa hàng",
     "owner_protected": "Không thể khóa hoặc xóa chủ cửa hàng",
     "cannot_remove_self": "Bạn không thể tự khóa hoặc tự xóa mình",
-    "branch_not_found": "Chi nhánh không thuộc cửa hàng này"
+    "branch_not_found": "Chi nhánh không thuộc cửa hàng này",
+    "already_suspended": "Doanh nghiệp đã bị khóa",
+    "not_suspended": "Doanh nghiệp không bị khóa",
+    "owner_not_found": "Chưa có tài khoản với email này. Chủ doanh nghiệp cần đăng ký trước",
+    "owner_disabled": "Tài khoản với email này đã bị vô hiệu hóa nên không thể sở hữu doanh nghiệp"
   }
 }

@@ -63,6 +63,16 @@ export class SessionService {
     return familyIds.length;
   }
 
+  /**
+   * Ends every live session of a store, for all its members: their refresh tokens are revoked and their access
+   * tokens denied at once. Returns how many sessions were ended.
+   */
+  async revokeAllOfTenant(tenantId: string): Promise<number> {
+    const familyIds = await this.refreshTokens.revokeFamiliesOfTenant(tenantId);
+    await this.deny(familyIds);
+    return familyIds.length;
+  }
+
   private async deny(sessionIds: string[]): Promise<void> {
     const ttl = ms(
       this.configService.getOrThrow<string>('auth.expires', { infer: true }),

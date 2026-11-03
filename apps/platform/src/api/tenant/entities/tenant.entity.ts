@@ -24,6 +24,11 @@ export class TenantEntity extends AbstractEntity {
   @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_tenant_id' })
   id!: Uuid;
 
+  /** Readable platform-wide code (TN0001, ...), set when the store is created and never reused */
+  @Column({ type: 'varchar', length: 20 })
+  @Index('UQ_tenant_code', { unique: true })
+  code!: string;
+
   @Column({ type: 'varchar', length: 150 })
   name!: string;
 
@@ -42,6 +47,18 @@ export class TenantEntity extends AbstractEntity {
 
   @Column({ type: 'varchar', length: 20, default: TenantStatus.ACTIVE })
   status!: TenantStatus;
+
+  /** Why a platform admin suspended the store; null while it is active */
+  @Column({
+    name: 'suspended_reason',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+  })
+  suspendedReason!: string | null;
+
+  @Column({ name: 'suspended_at', type: 'timestamptz', nullable: true })
+  suspendedAt!: Date | null;
 
   @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', default: null })
   deletedAt: Date;

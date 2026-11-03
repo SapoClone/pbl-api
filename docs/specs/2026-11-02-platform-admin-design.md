@@ -1,6 +1,6 @@
 # Platform admin (M01): design
 
-Status: **Accepted** with [ADR-0022](../decisions/0022-platform-admin-identity.md); build PR 1 (admin identity) is done, the rest is not. Phase 1 of the
+Status: **Accepted** with [ADR-0022](../decisions/0022-platform-admin-identity.md); build PRs 1 (admin identity) and 2 (stores) are done, the rest is not. Phase 1 of the
 [SRS plan](2026-11-02-srs-implementation-plan.md). Endpoint shapes are in
 [contract 04](2026-10-28-api-contracts/04-platform-admin.md); this document decides what the contract leaves open
 and the order of the work.
@@ -59,11 +59,16 @@ current branch and member counts.
   loses the password (no admin password reset yet): a break-glass fix is done in the database.
 - **Admin sign-in.** As account sign-in: lockout after 5 failures, constant-time comparison, `platform.admin.logged_in`
   for the audit log.
-- **Create a store for an owner.** In one transaction: the owner account (created with no password, or the existing
-  account with that email), the tenant, the five seeded roles, the owner membership, the default branch (the
-  existing `TenantService.create` steps), the subscription and its `created` event, `tenant_usage`. Then an
-  `owner-invite` email on the mail queue (a new template in pbl-mail-service).
-- **Self-serve store creation** (`POST /tenants`) also starts a `free` subscription.
+- **Create a store for an owner.** In one transaction: the tenant (with its `TN` code), the five seeded roles, the
+  owner membership, the default branch (the same `TenantService.createStore` steps as self-serve creation), and the
+  events; later the subscription and its `created` event, `tenant_usage`. PR 2 requires the owner to have an active
+  account already (`T008` when there is none, `T009` when it is disabled); creating the account for a new owner with
+  an `owner-invite` email (a template in pbl-mail-service) comes with the set-password flow.
+- **Audit.** Every store action emits a tenant event (`platform.tenant.created`, `.updated`, `.status_changed`) in the
+  store's tenant with the admin as the actor and the values before and after; insight records it in that store's
+  audit log. A store owner therefore sees in their own audit log that a platform admin suspended or edited the
+  store. Actions that target no store (managing admins, plans) need a platform-scope audit, designed with them.
+- **Self-serve store creation** (`POST /tenants`) also gets a `TN` code and emits `platform.tenant.created`, and will start a `free` subscription (PR 3).
 - **Lock.** `tenant.status = suspended` with a reason; revoke refresh-token families with that `tenant_id`; deny-list
   their `sid`s; `platform.tenant.status_changed`. **Reactivate** reverses the status (`trial` while trialing).
 - **Change plan.** `change-plan/check` compares `tenant_usage` with the target plan's quotas; `change-plan` refuses
@@ -99,8 +104,10 @@ Codes as in contract 04 (`A001`–`A003`, `A010`, `A011`, `T002`, `T005`–`T007
 
 1. **Admin identity:** `platform_admin` and its migration, the bootstrap command, admin `login` / `refresh` /
    `logout` / `me`, `@RequirePlatformAdmin`, the KrakenD routes, the ADR accepted.
-2. **Stores:** admin list, detail, create for an owner, edit, lock and reactivate, with the session revocation and
-   the events. Needs the `owner-invite` template in pbl-mail-service (its own PR there).
+2. **Stores (done):** admin list, detail, create for an owner, edit, lock and reactivate, with the session
+   revocation and the events. Creating a store needs an owner who already has an account (they register first). Inviting
+   an owner who has none needs the set-password flow and an `owner-invite` template in pbl-mail-service: a later PR.
+   The plan, subscription and quota fields of the screens arrive with PRs 3 and 4.
 3. **Plans and subscriptions:** the tables, the seed and backfill, plan CRUD for `super_admin`, subscriptions list and
    detail, change plan, payments, the real plan in `GET /tenants/current/context`.
 4. **Usage and limits:** `tenant_usage`, enforcement in platform, the catalog projection and its check, the usage

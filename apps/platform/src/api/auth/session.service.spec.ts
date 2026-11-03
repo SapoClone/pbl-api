@@ -17,6 +17,7 @@ describe('SessionService', () => {
     listActive: jest.Mock;
     revokeFamily: jest.Mock;
     revokeActiveFamilies: jest.Mock;
+    revokeFamiliesOfTenant: jest.Mock;
   };
   let cache: { store: { set: jest.Mock } };
   let service: SessionService;
@@ -31,6 +32,7 @@ describe('SessionService', () => {
         ]),
       revokeFamily: jest.fn().mockResolvedValue(undefined),
       revokeActiveFamilies: jest.fn().mockResolvedValue(['f1', 'f2']),
+      revokeFamiliesOfTenant: jest.fn().mockResolvedValue(['f1', 'f2', 'f3']),
     };
     cache = { store: { set: jest.fn().mockResolvedValue(undefined) } };
     const config = { getOrThrow: jest.fn().mockReturnValue('15m') };
@@ -94,5 +96,18 @@ describe('SessionService', () => {
       exceptFamilyId: 'f9',
     });
     expect(cache.store.set).toHaveBeenCalledTimes(2);
+  });
+
+  it('ends every session of a store for all its members, denying each access token', async () => {
+    const ended = await service.revokeAllOfTenant('t1');
+
+    expect(ended).toBe(3);
+    expect(refreshTokens.revokeFamiliesOfTenant).toHaveBeenCalledWith('t1');
+    expect(cache.store.set).toHaveBeenCalledTimes(3);
+    expect(cache.store.set).toHaveBeenCalledWith(
+      expect.stringContaining('f3'),
+      true,
+      15 * 60_000,
+    );
   });
 });

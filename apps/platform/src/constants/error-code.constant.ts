@@ -23,6 +23,10 @@ export enum ErrorCode {
   T003 = 'tenant.error.owner_role_locked',
   T004 = 'tenant.error.cannot_remove_self',
   T005 = 'tenant.error.owner_protected',
+  T006 = 'tenant.error.already_suspended',
+  T007 = 'tenant.error.not_suspended',
+  T008 = 'tenant.error.owner_not_found',
+  T009 = 'tenant.error.owner_disabled',
   T023 = 'tenant.error.branch_not_found',
 
   // Role

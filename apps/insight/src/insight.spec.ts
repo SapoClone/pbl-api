@@ -190,6 +190,91 @@ describe('AuditHandler', () => {
     });
   });
 
+  describe('platform admin store events (ADR-0022)', () => {
+    it('records a store opened by an admin, with the admin as the actor', async () => {
+      await run(() =>
+        new AuditHandler().onTenantCreated(
+          envelope('platform.tenant.created', {
+            id: 't1',
+            code: 'TN0007',
+            name: 'Mộc Store',
+            subdomain: 'mocstore',
+            status: 'active',
+            ownerAccountId: 'a2',
+            ownerEmail: 'minh@mocstore.vn',
+            createdBy: 'admin-1',
+            createdByType: 'platform_admin',
+          }),
+          {} as never,
+        ),
+      );
+
+      expect(saved[0]).toMatchObject({
+        type: 'platform.tenant.created',
+        actorId: 'admin-1',
+        summary:
+          'Store TN0007 (Mộc Store) created for minh@mocstore.vn by a platform admin',
+      });
+    });
+
+    it('records an edit with the values before and after in the row data', async () => {
+      const changes = {
+        name: { from: 'Old', to: 'New' },
+        phone: { from: null, to: '0901234567' },
+      };
+      await run(() =>
+        new AuditHandler().onTenantUpdated(
+          envelope('platform.tenant.updated', {
+            id: 't1',
+            code: 'TN0007',
+            changes,
+            changedBy: 'admin-1',
+            changedByType: 'platform_admin',
+          }),
+          {} as never,
+        ),
+      );
+
+      expect(saved[0]).toMatchObject({
+        actorId: 'admin-1',
+        summary: 'Store TN0007 edited by a platform admin: name, phone',
+      });
+      expect((saved[0].data as { changes: unknown }).changes).toEqual(changes);
+    });
+
+    it('records a suspension with its reason, and a reactivation without one', async () => {
+      const change = (to: string, reason: string | null) =>
+        envelope('platform.tenant.status_changed', {
+          id: 't1',
+          code: 'TN0007',
+          from: to === 'suspended' ? 'active' : 'suspended',
+          to,
+          reason,
+          changedBy: 'admin-1',
+          changedByType: 'platform_admin',
+        });
+      await run(() =>
+        new AuditHandler().onTenantStatusChanged(
+          change('suspended', 'Vi phạm điều khoản'),
+          {} as never,
+        ),
+      );
+      await run(() =>
+        new AuditHandler().onTenantStatusChanged(
+          change('active', null),
+          {} as never,
+        ),
+      );
+
+      expect(saved[0].summary).toBe(
+        'Store TN0007 changed from active to suspended by a platform admin: Vi phạm điều khoản',
+      );
+      expect(saved[1].summary).toBe(
+        'Store TN0007 changed from suspended to active by a platform admin',
+      );
+    });
+  });
+
   it('records a completed order', async () => {
     await run(() =>
       new AuditHandler().onOrderCompleted(

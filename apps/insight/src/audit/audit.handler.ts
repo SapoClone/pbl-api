@@ -8,12 +8,21 @@ import {
   PLATFORM_ACCOUNT_LOGGED_IN,
   PLATFORM_MEMBERSHIP_GRANTED,
   PLATFORM_MEMBERSHIP_ROLE_CHANGED,
+  PLATFORM_TENANT_CREATED,
+  PLATFORM_TENANT_STATUS_CHANGED,
+  PLATFORM_TENANT_UPDATED,
   PurchaseOrderApprovedPayload,
   SALES_ORDER_COMPLETED,
+  TenantCreatedPayload,
+  TenantStatusChangedPayload,
+  TenantUpdatedPayload,
 } from '@pbl/contracts';
 import { OnEvent } from '@pbl/events';
 import { EntityManager } from 'typeorm';
 import { AuditLogEntity } from './audit-log.entity';
+
+const actor = (type: string) =>
+  type === 'platform_admin' ? 'a platform admin' : 'the store';
 
 /** Turns the events of other services into audit log rows, in the event's tenant */
 @Injectable()
@@ -59,6 +68,50 @@ export class AuditHandler {
       event,
       changedBy,
       `${email} changed from ${previousRole} to ${role}`,
+    );
+  }
+
+  /** A store was opened, by its owner or by a platform admin (the payload says which) */
+  @OnEvent(PLATFORM_TENANT_CREATED.type)
+  onTenantCreated(
+    event: EventEnvelope<TenantCreatedPayload>,
+    manager: EntityManager,
+  ): Promise<void> {
+    const { code, name, ownerEmail, createdBy, createdByType } = event.payload;
+    return this.record(
+      manager,
+      event,
+      createdBy,
+      `Store ${code} (${name}) created for ${ownerEmail} by ${actor(createdByType)}`,
+    );
+  }
+
+  /** The row keeps what changed, before and after, in `data.changes` */
+  @OnEvent(PLATFORM_TENANT_UPDATED.type)
+  onTenantUpdated(
+    event: EventEnvelope<TenantUpdatedPayload>,
+    manager: EntityManager,
+  ): Promise<void> {
+    const { code, changes, changedBy, changedByType } = event.payload;
+    return this.record(
+      manager,
+      event,
+      changedBy,
+      `Store ${code} edited by ${actor(changedByType)}: ${Object.keys(changes).join(', ')}`,
+    );
+  }
+
+  @OnEvent(PLATFORM_TENANT_STATUS_CHANGED.type)
+  onTenantStatusChanged(
+    event: EventEnvelope<TenantStatusChangedPayload>,
+    manager: EntityManager,
+  ): Promise<void> {
+    const { code, from, to, reason, changedBy, changedByType } = event.payload;
+    return this.record(
+      manager,
+      event,
+      changedBy,
+      `Store ${code} changed from ${from} to ${to} by ${actor(changedByType)}${reason ? `: ${reason}` : ''}`,
     );
   }
 

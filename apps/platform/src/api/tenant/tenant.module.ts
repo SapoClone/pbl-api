@@ -17,5 +17,6 @@ import { TenantService } from './tenant.service';
   ],
   controllers: [TenantController],
   providers: [TenantService, MemberService],
+  exports: [TenantService],
 })
 export class TenantModule {}
