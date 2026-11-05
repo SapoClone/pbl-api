@@ -26,6 +26,8 @@ import { ScreenShiftsController } from './modules/screen/screen-shifts.controlle
 import { ShiftViewService } from './modules/screen/shift-view.service';
 import { ShiftsController } from './modules/shifts/shifts.controller';
 import { ShiftsService } from './modules/shifts/shifts.service';
+import { StaffSalesController } from './modules/staff-sales/staff-sales.controller';
+import { StaffSalesService } from './modules/staff-sales/staff-sales.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
 
@@ -62,6 +64,7 @@ const services = [
   OrderQueryService,
   OrderActionsService,
   ShiftViewService,
+  StaffSalesService,
   ReferenceService,
 ];
 const stubs = new Map(services.map((s) => [s, stub()]));
@@ -83,6 +86,7 @@ const stubs = new Map(services.map((s) => [s, stub()]));
     ShiftsController,
     ReferenceController,
     ScreenShiftsController,
+    StaffSalesController,
     InternalOrdersController,
   ],
   providers: services.map((s) => ({ provide: s, useValue: stubs.get(s) })),
@@ -397,6 +401,12 @@ const ROUTES: Route[] = [
     perms: ['pos.create', 'pos.update'],
     body: { version: 1, closingCashActual: 0 },
   },
+  { method: 'get', path: '/api/v1/staff-sales', perms: ['reports.view'] },
+  {
+    method: 'get',
+    path: `/api/v1/staff-sales/${ID}/products`,
+    perms: ['reports.view'],
+  },
 ];
 
 describe('Sales permissions, route by route', () => {
@@ -446,7 +456,7 @@ describe('Sales permissions, route by route', () => {
     ].filter((p) => !perms.includes(p));
 
   it('covers every route of the controllers', () => {
-    expect(ROUTES.length).toBe(63);
+    expect(ROUTES.length).toBe(65);
   });
 
   describe.each(

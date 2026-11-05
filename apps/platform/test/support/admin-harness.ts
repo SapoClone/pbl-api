@@ -45,6 +45,7 @@ import { AddFinancePermissions1792400000000 } from '../../src/database/migration
 import { CreatePlatformAdmin1792600000000 } from '../../src/database/migrations/1792600000000-create-platform-admin';
 import { CreatePlanSubscriptionAndTenantAdminFields1792700000000 } from '../../src/database/migrations/1792700000000-create-plan-subscription-and-tenant-admin-fields';
 import { AddAccountCodeAndPlatformSetting1792900000000 } from '../../src/database/migrations/1792900000000-add-account-code-and-platform-setting';
+import { AddDutyToStaffSchedule1793000000000 } from '../../src/database/migrations/1793000000000-add-duty-to-staff-schedule';
 
 export type OutboxCall = [
   unknown,
@@ -109,6 +110,7 @@ export async function startAdminDb(prefix: string) {
     new IntroduceTenancy1791563000000(),
     new AddMemberStatusLoginLockoutSessions1792000000000(),
     new CreateBranchSettingAndStaffSchedule1792000000001(),
+    new AddDutyToStaffSchedule1793000000000(),
     new CreateRolePermissionAndMemberBranch1792300000000(),
     new AddFinancePermissions1792400000000(),
     new CreatePlatformAdmin1792600000000(),

@@ -30,6 +30,8 @@ import { ScreenShiftsController } from '../modules/screen/screen-shifts.controll
 import { ShiftViewService } from '../modules/screen/shift-view.service';
 import { ShiftsController } from '../modules/shifts/shifts.controller';
 import { ShiftsService } from '../modules/shifts/shifts.service';
+import { StaffSalesController } from '../modules/staff-sales/staff-sales.controller';
+import { StaffSalesService } from '../modules/staff-sales/staff-sales.service';
 import { OrderItemEntity } from './entities/order-item.entity';
 import { CheckoutWorkflowEntity, OrderEntity } from './entities/order.entity';
 import { OrdersController } from './orders.controller';
@@ -62,12 +64,14 @@ import { OrdersService } from './orders.service';
     PromotionsController,
     ReferenceController,
     ScreenShiftsController,
+    StaffSalesController,
     InternalOrdersController,
   ],
   providers: [
     OrderQueryService,
     OrderActionsService,
     ShiftViewService,
+    StaffSalesService,
     ReferenceService,
     OrdersService,
     M3OrdersService,

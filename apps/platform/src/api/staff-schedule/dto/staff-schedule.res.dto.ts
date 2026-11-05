@@ -4,6 +4,7 @@ import {
   StringFieldOptional,
 } from '@/decorators/field.decorators';
 import { Exclude, Expose } from 'class-transformer';
+import { StaffDuty } from '../staff-duty';
 
 @Exclude()
 export class StaffScheduleResDto {
@@ -15,4 +16,7 @@ export class StaffScheduleResDto {
   @NumberField({ int: true, min: 1, max: 7 }) @Expose() weekday: number;
   @StringField() @Expose() startTime: string;
   @StringField() @Expose() endTime: string;
+  @StringFieldOptional({ nullable: true }) @Expose() name: string | null;
+  @StringField() @Expose() duty: StaffDuty;
+  @StringFieldOptional({ nullable: true }) @Expose() note: string | null;
 }

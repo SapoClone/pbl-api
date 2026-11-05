@@ -40,7 +40,7 @@ back away from the target direction.
 
 ```
 apps/
-  platform/src/        auth · account · tenant · branch · staff schedules (TypeORM entities, i18n errors)
+  platform/src/        auth · account · tenant · branch · staff schedules with duties and who is on duty (TypeORM entities, i18n errors; [guide](docs/guides/work-shifts.md))
   catalog|customer|inventory|sales|finance|integration|insight/src/   own modules, entities and migrations on `@pbl/common` / `@pbl/events` (raw SQL qualified with `qualifiedTable`)
 libs/
   auth/src/            @pbl/auth — token verification, global AuthGuard, tenant context interceptor, Public/AuthOptional/CurrentUser
@@ -79,7 +79,7 @@ are copied there via an explicit asset `outDir`.
 - **platform**: auth, tenant, branch, staff, RBAC, subscription — **issues JWTs**
 - **catalog**: products, SKU, combos, price lists
 - **inventory** (core): stock per branch, reservations, ledger, receipts/issues, transfers, stock takes, suppliers, purchase orders
-- **sales** (core): channels, shifts, orders, payments (record and status), returns, promotions, coupons
+- **sales** (core): channels, shifts, orders (and who sold what: `/staff-sales`), payments (record and status), returns, promotions, coupons
 - **customer**: customers, groups, addresses, membership tiers, loyalty
 - **finance**: cash book, receivables/payables, shipping, COD reconciliation
 - **integration**: e-commerce marketplaces (Shopee/Lazada/TikTok), SKU mapping, webhooks
