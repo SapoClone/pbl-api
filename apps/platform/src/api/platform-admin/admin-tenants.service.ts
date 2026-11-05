@@ -28,6 +28,7 @@ import {
   SubscriptionEntity,
   SubscriptionStatus,
 } from '../subscription/entities/subscription.entity';
+import { expiryOf } from '../subscription/expiry';
 import { tableOf } from '../subscription/sql';
 import { AccountTenantEntity } from '../tenant/entities/account-tenant.entity';
 import { TenantEntity, TenantStatus } from '../tenant/entities/tenant.entity';
@@ -41,10 +42,6 @@ import {
   SuspendAdminTenantReqDto,
   UpdateAdminTenantReqDto,
 } from './dto/admin-tenant.req.dto';
-
-/** A subscription that ends within this many days is "expiring soon" (the design's amber badge) */
-export const EXPIRING_SOON_DAYS = 7;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type AdminTenantListItem = {
   id: string;
@@ -103,15 +100,6 @@ export function maskPhone(phone: string | null): string | null {
   const digits = phone.replace(/\D/g, '');
   if (digits.length < 6) return '•'.repeat(digits.length);
   return `${digits.slice(0, 3)} •••• •• ${digits.slice(-2)}`;
-}
-
-export function expiryOf(expiresAt: Date | null, now = new Date()) {
-  if (!expiresAt) return { isExpiringSoon: false, daysLeft: null };
-  const daysLeft = Math.ceil((expiresAt.getTime() - now.getTime()) / DAY_MS);
-  return {
-    isExpiringSoon: daysLeft <= EXPIRING_SOON_DAYS,
-    daysLeft,
-  };
 }
 
 /** Cross-tenant reads and writes of the platform admin (ADR-0022): stores, never through TenantScopedRepository */

@@ -7,54 +7,25 @@
 import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
-import { IT_DB, uniqueSchema } from '../../../libs/events/test/it-env';
-import { AccountEntity } from '../src/api/account/entities/account.entity';
-import { RefreshTokenEntity } from '../src/api/auth/entities/refresh-token.entity';
-import { BranchSettingEntity } from '../src/api/branch/entities/branch-setting.entity';
-import { BranchEntity } from '../src/api/branch/entities/branch.entity';
-import { AdminTenantsService } from '../src/api/platform-admin/admin-tenants.service';
 import {
   AdminTenantSort,
   AdminTenantStatus,
   ListAdminTenantsReqDto,
 } from '../src/api/platform-admin/dto/admin-tenant.req.dto';
-import { RolePermissionEntity } from '../src/api/role/entities/role-permission.entity';
-import { RoleEntity } from '../src/api/role/entities/role.entity';
 import { seedRoles } from '../src/api/role/role-seeding';
-import { StaffScheduleEntity } from '../src/api/staff-schedule/entities/staff-schedule.entity';
-import { PlanEntity } from '../src/api/subscription/entities/plan.entity';
-import { SubscriptionEventEntity } from '../src/api/subscription/entities/subscription-event.entity';
-import { SubscriptionPaymentEntity } from '../src/api/subscription/entities/subscription-payment.entity';
-import { SubscriptionEntity } from '../src/api/subscription/entities/subscription.entity';
-import { TenantUsageEntity } from '../src/api/subscription/entities/tenant-usage.entity';
-import { SubscriptionCoreService } from '../src/api/subscription/subscription-core.service';
-import { AccountTenantBranchEntity } from '../src/api/tenant/entities/account-tenant-branch.entity';
-import { AccountTenantEntity } from '../src/api/tenant/entities/account-tenant.entity';
-import { TenantEntity } from '../src/api/tenant/entities/tenant.entity';
-import { MembershipService } from '../src/api/tenant/membership.service';
-import { TenantService } from '../src/api/tenant/tenant.service';
-import { CreateUserTable1720105653064 } from '../src/database/migrations/1721488504685-create-user-table';
-import { CreateSessionTable1721550180313 } from '../src/database/migrations/1721550180313-create-session-table';
-import { CreatePostTable1722352657866 } from '../src/database/migrations/1722352657866-create-post-table';
-import { ReplaceSessionWithRefreshToken1791476400000 } from '../src/database/migrations/1791476400000-replace-session-with-refresh-token';
-import { IntroduceTenancy1791563000000 } from '../src/database/migrations/1791563000000-introduce-tenancy';
-import { AddMemberStatusLoginLockoutSessions1792000000000 } from '../src/database/migrations/1792000000000-add-member-status-login-lockout-sessions';
-import { CreateBranchSettingAndStaffSchedule1792000000001 } from '../src/database/migrations/1792000000001-create-branch-setting-and-staff-schedule';
-import { CreateRolePermissionAndMemberBranch1792300000000 } from '../src/database/migrations/1792300000000-create-role-permission-and-member-branch';
-import { AddFinancePermissions1792400000000 } from '../src/database/migrations/1792400000000-add-finance-permissions';
-import { CreatePlatformAdmin1792600000000 } from '../src/database/migrations/1792600000000-create-platform-admin';
 import { CreatePlanSubscriptionAndTenantAdminFields1792700000000 } from '../src/database/migrations/1792700000000-create-plan-subscription-and-tenant-admin-fields';
+import { startAdminDb } from './support/admin-harness';
 
 const ADMIN = randomUUID();
 
 describe('platform admin store management (Postgres)', () => {
-  const schema = uniqueSchema('admin_it');
+  let h: Awaited<ReturnType<typeof startAdminDb>>;
   let dataSource: DataSource;
-  let admin: AdminTenantsService;
-  const outbox = { add: jest.fn(async () => undefined) };
-  const sessions = { revokeAllOfTenant: jest.fn(async () => 2) };
+  let admin: typeof h.services.tenants;
+  const outbox = { add: undefined as unknown as jest.Mock };
+  const sessions = { revokeAllOfTenant: undefined as unknown as jest.Mock };
   const sql = <T = unknown>(text: string, params: unknown[] = []) =>
-    dataSource.query(text, params) as Promise<T>;
+    h.sql<T>(text, params);
 
   const OLD_T1 = randomUUID();
   const OLD_T2 = randomUUID();
@@ -68,70 +39,14 @@ describe('platform admin store management (Postgres)', () => {
     owner: { name: `Owner ${n}`, email: `owner${n}@x.vn` },
     ...over,
   });
-  const eventTypes = () =>
-    (outbox.add.mock.calls as unknown as [unknown, { type: string }][]).map(
-      (call) => call[1].type,
-    );
+  const eventTypes = () => h.outboxCalls().map((call) => call[1].type);
 
   beforeAll(async () => {
-    const root = new DataSource({
-      type: 'postgres',
-      host: IT_DB.host,
-      port: Number(IT_DB.port),
-      username: 'postgres',
-      password: 'postgres',
-      database: 'pbl',
-    });
-    await root.initialize();
-    await root.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
-    await root.query(`CREATE SCHEMA "${schema}"`);
-    await root.destroy();
-
-    dataSource = new DataSource({
-      type: 'postgres',
-      host: IT_DB.host,
-      port: Number(IT_DB.port),
-      username: 'postgres',
-      password: 'postgres',
-      database: 'pbl',
-      schema,
-      // the hand-written migrations use bare table names, as the TypeORM CLI run does
-      extra: { options: `-c search_path=${schema},public` },
-      entities: [
-        AccountEntity,
-        TenantEntity,
-        AccountTenantEntity,
-        BranchEntity,
-        RoleEntity,
-        RolePermissionEntity,
-        AccountTenantBranchEntity,
-        BranchSettingEntity,
-        StaffScheduleEntity,
-        RefreshTokenEntity,
-        PlanEntity,
-        SubscriptionEntity,
-        SubscriptionEventEntity,
-        SubscriptionPaymentEntity,
-        TenantUsageEntity,
-      ],
-    });
-    await dataSource.initialize();
-
-    const runner = dataSource.createQueryRunner();
-    for (const migration of [
-      new CreateUserTable1720105653064(),
-      new CreateSessionTable1721550180313(),
-      new CreatePostTable1722352657866(),
-      new ReplaceSessionWithRefreshToken1791476400000(),
-      new IntroduceTenancy1791563000000(),
-      new AddMemberStatusLoginLockoutSessions1792000000000(),
-      new CreateBranchSettingAndStaffSchedule1792000000001(),
-      new CreateRolePermissionAndMemberBranch1792300000000(),
-      new AddFinancePermissions1792400000000(),
-      new CreatePlatformAdmin1792600000000(),
-    ]) {
-      await migration.up(runner);
-    }
+    h = await startAdminDb('admin_it');
+    dataSource = h.dataSource;
+    admin = h.services.tenants;
+    outbox.add = h.outbox.add;
+    sessions.revokeAllOfTenant = h.sessions.revokeAllOfTenant;
 
     // two stores that exist before the migration under test (backfill check), the older one first
     await sql(
@@ -155,34 +70,10 @@ describe('platform admin store management (Postgres)', () => {
         [OLD_OWNER, tenantId, roles.get('owner')!.id],
       );
     }
-
-    await new CreatePlanSubscriptionAndTenantAdminFields1792700000000().up(
-      runner,
-    );
-    await runner.release();
-
-    const subscriptions = new SubscriptionCoreService(
-      dataSource.getRepository(PlanEntity),
-    );
-    const tenants = new TenantService(
-      dataSource.getRepository(TenantEntity),
-      dataSource,
-      {} as MembershipService,
-      outbox as never,
-      subscriptions,
-    );
-    admin = new AdminTenantsService(
-      dataSource,
-      tenants,
-      sessions as never,
-      outbox as never,
-    );
+    await h.applyPlanMigration();
   });
 
-  afterAll(async () => {
-    await dataSource.query(`DROP SCHEMA "${schema}" CASCADE`);
-    await dataSource.destroy();
-  });
+  afterAll(() => h.stop());
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -558,13 +449,9 @@ describe('platform admin store management (Postgres)', () => {
         subdomain: 'older',
         code: 'TN0001',
       });
-      const call = (
-        outbox.add.mock.calls as unknown as [
-          unknown,
-          { type: string },
-          { changes: unknown },
-        ][]
-      ).find((c) => c[1].type === 'platform.tenant.updated')!;
+      const call = h
+        .outboxCalls()
+        .find((c) => c[1].type === 'platform.tenant.updated')!;
       expect(call[2].changes).toEqual({
         name: { from: 'Older', to: 'Older Renamed' },
         phone: { from: null, to: '0987654321' },
@@ -693,13 +580,13 @@ describe('platform admin store management (Postgres)', () => {
       const tables = await sql<{ table_name: string }[]>(
         `SELECT table_name FROM information_schema.tables
          WHERE table_schema = $1 AND table_name IN ('plan','subscription','subscription_event','subscription_payment','tenant_usage')`,
-        [schema],
+        [h.schema],
       );
       expect(tables).toEqual([]);
       const columns = await sql<{ column_name: string }[]>(
         `SELECT column_name FROM information_schema.columns
          WHERE table_schema = $1 AND table_name = 'tenant' AND column_name IN ('code','suspended_reason','suspended_at')`,
-        [schema],
+        [h.schema],
       );
       expect(columns).toEqual([]);
       // the owner created without a password keeps their account, which nobody can sign in to

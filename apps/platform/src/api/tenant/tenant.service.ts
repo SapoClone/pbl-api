@@ -30,6 +30,11 @@ import { seedRoles } from '../role/role-seeding';
 import { STORE_TIMEZONE } from '../staff-schedule/staff-time.util';
 import { FREE_PLAN_CODE } from '../subscription/default-plans';
 import { SubscriptionActorType } from '../subscription/entities/subscription-event.entity';
+import {
+  CURRENT_SUBSCRIPTION_STATUSES,
+  SubscriptionEntity,
+} from '../subscription/entities/subscription.entity';
+import { expiryOf } from '../subscription/expiry';
 import { issueCode } from '../subscription/issue-code';
 import {
   SubscriptionActor,
@@ -229,8 +234,7 @@ export class TenantService {
   }
 
   /**
-   * The global chrome in one call. The plan is a `free` placeholder until
-   * subscriptions exist. `scope` is the caller's token: `permissions` (the
+   * The global chrome in one call, with the store's current plan. `scope` is the caller's token: `permissions` (the
    * owner's `*` is listed as every code) and the branches they may act in
    * (null = every branch), which limit the branch list and its count.
    */
@@ -242,7 +246,7 @@ export class TenantService {
       branches: null,
     },
   ): Promise<TenantContextResDto> {
-    const [tenant, membership, branches] = await Promise.all([
+    const [tenant, membership, branches, subscription] = await Promise.all([
       this.tenantRepository.findOneByOrFail({
         id: tenantId as TenantEntity['id'],
       }),
@@ -258,6 +262,10 @@ export class TenantService {
         },
         order: { createdAt: 'ASC', id: 'ASC' },
       }),
+      this.dataSource.getRepository(SubscriptionEntity).findOne({
+        where: { tenantId, status: In(CURRENT_SUBSCRIPTION_STATUSES) },
+        relations: { plan: true },
+      }),
     ]);
     // a token outlives a removal until its session is revoked; treat it as unknown
     if (!membership?.account) {
@@ -272,10 +280,11 @@ export class TenantService {
         status: tenant.status,
       },
       plan: {
-        code: 'free',
-        name: 'Free',
-        isExpiringSoon: false,
-        expiresAt: null,
+        code: subscription?.plan?.code ?? FREE_PLAN_CODE,
+        name: subscription?.plan?.name ?? 'Free',
+        isExpiringSoon: expiryOf(subscription?.expiresAt ?? null)
+          .isExpiringSoon,
+        expiresAt: subscription?.expiresAt ?? null,
       },
       branchCount: branches.length,
       me: {

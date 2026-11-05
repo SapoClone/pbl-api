@@ -4,6 +4,18 @@
 import { Path } from "nestjs-i18n";
 /* prettier-ignore */
 export type I18nTranslations = {
+    "admin": {
+        "error": {
+            "wrong_credentials": string;
+            "account_locked": string;
+        };
+    };
+    "branch": {
+        "error": {
+            "code_exists": string;
+            "last_branch": string;
+        };
+    };
     "common": {
         "validation": {
             "error": string;
@@ -11,6 +23,50 @@ export type I18nTranslations = {
         "error": {
             "internal_server_error": string;
             "entity_not_found": string;
+        };
+    };
+    "plan": {
+        "error": {
+            "not_active": string;
+            "code_exists": string;
+            "not_found": string;
+        };
+    };
+    "role": {
+        "error": {
+            "name_exists": string;
+            "owner_immutable": string;
+            "unknown_permission": string;
+            "seeded_not_deletable": string;
+            "in_use": string;
+            "not_found": string;
+            "unknown_for_member": string;
+            "owner_not_assignable": string;
+        };
+    };
+    "schedule": {
+        "error": {
+            "overlap": string;
+        };
+    };
+    "subscription": {
+        "error": {
+            "quota_exceeded": string;
+            "same_plan_same_period": string;
+            "payment_overlaps": string;
+        };
+    };
+    "tenant": {
+        "error": {
+            "subdomain_exists": string;
+            "member_exists": string;
+            "owner_role_locked": string;
+            "owner_protected": string;
+            "cannot_remove_self": string;
+            "branch_not_found": string;
+            "already_suspended": string;
+            "not_suspended": string;
+            "owner_account_disabled": string;
         };
     };
     "user": {
@@ -29,56 +85,6 @@ export type I18nTranslations = {
             "invalid_token": string;
             "account_locked": string;
             "current_password_wrong": string;
-        };
-    };
-    "tenant": {
-        "error": {
-            "subdomain_exists": string;
-            "member_exists": string;
-            "owner_role_locked": string;
-            "owner_protected": string;
-            "cannot_remove_self": string;
-            "branch_not_found": string;
-            "already_suspended": string;
-            "not_suspended": string;
-            "owner_account_disabled": string;
-        };
-    };
-    "role": {
-        "error": {
-            "name_exists": string;
-            "owner_immutable": string;
-            "unknown_permission": string;
-            "seeded_not_deletable": string;
-            "in_use": string;
-            "not_found": string;
-            "unknown_for_member": string;
-            "owner_not_assignable": string;
-        };
-    };
-    "branch": {
-        "error": {
-            "code_exists": string;
-            "last_branch": string;
-        };
-    };
-    "schedule": {
-        "error": {
-            "overlap": string;
-        };
-    };
-    "plan": {
-        "error": {
-            "not_active": string;
-            "code_exists": string;
-            "not_found": string;
-        };
-    };
-    "subscription": {
-        "error": {
-            "quota_exceeded": string;
-            "same_plan_same_period": string;
-            "payment_overlaps": string;
         };
     };
 };
