@@ -39,6 +39,9 @@ export type I18nTranslations = {
             "owner_protected": string;
             "cannot_remove_self": string;
             "branch_not_found": string;
+            "already_suspended": string;
+            "not_suspended": string;
+            "owner_account_disabled": string;
         };
     };
     "role": {
@@ -62,6 +65,20 @@ export type I18nTranslations = {
     "schedule": {
         "error": {
             "overlap": string;
+        };
+    };
+    "plan": {
+        "error": {
+            "not_active": string;
+            "code_exists": string;
+            "not_found": string;
+        };
+    };
+    "subscription": {
+        "error": {
+            "quota_exceeded": string;
+            "same_plan_same_period": string;
+            "payment_overlaps": string;
         };
     };
 };

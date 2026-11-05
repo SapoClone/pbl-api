@@ -161,6 +161,26 @@ export class RefreshTokenService {
     return familyIds;
   }
 
+  /** Revokes the live families of every account bound to one store (a lock), and returns their ids. */
+  async revokeActiveFamiliesOfTenant(tenantId: string): Promise<string[]> {
+    const rows = await this.repository.find({
+      where: {
+        subjectType: 'account',
+        tenantId: tenantId as Uuid,
+        revokedAt: IsNull(),
+      },
+      select: ['familyId'],
+    });
+    const familyIds = [...new Set(rows.map((row) => row.familyId))];
+    if (familyIds.length > 0) {
+      await this.repository.update(
+        { familyId: In(familyIds), revokedAt: IsNull() },
+        { revokedAt: new Date() },
+      );
+    }
+    return familyIds;
+  }
+
   private async handleReuse(row: RefreshTokenEntity): Promise<never> {
     this.logger.warn(
       `Refresh token reuse detected (family ${row.familyId}); revoking the family`,

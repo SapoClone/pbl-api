@@ -1,0 +1,7 @@
+{
+  "error": {
+    "not_active": "Gói dịch vụ này không khả dụng",
+    "code_exists": "Mã gói dịch vụ đã tồn tại",
+    "not_found": "Không tìm thấy gói dịch vụ"
+  }
+}

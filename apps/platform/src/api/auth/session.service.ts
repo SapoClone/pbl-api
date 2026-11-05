@@ -63,6 +63,14 @@ export class SessionService {
     return familyIds.length;
   }
 
+  /** Ends every live session bound to a store, whoever the member is (locking the store); returns how many. */
+  async revokeAllOfTenant(tenantId: string): Promise<number> {
+    const familyIds =
+      await this.refreshTokens.revokeActiveFamiliesOfTenant(tenantId);
+    await this.deny(familyIds);
+    return familyIds.length;
+  }
+
   private async deny(sessionIds: string[]): Promise<void> {
     const ttl = ms(
       this.configService.getOrThrow<string>('auth.expires', { infer: true }),

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "quota_exceeded": "Mức sử dụng của cửa hàng vượt hạn mức của gói mới",
+    "same_plan_same_period": "Cửa hàng đã dùng gói này trong kỳ này",
+    "payment_overlaps": "Đã có thanh toán cho một phần kỳ này"
+  }
+}

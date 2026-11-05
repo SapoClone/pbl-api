@@ -5,6 +5,9 @@
     "owner_role_locked": "The store owner role cannot be changed",
     "owner_protected": "The store owner cannot be locked or removed",
     "cannot_remove_self": "You cannot lock or remove yourself",
-    "branch_not_found": "The branch does not belong to this store"
+    "branch_not_found": "The branch does not belong to this store",
+    "already_suspended": "This store is already locked",
+    "not_suspended": "This store is not locked",
+    "owner_account_disabled": "The owner's account is disabled"
   }
 }

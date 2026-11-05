@@ -25,7 +25,13 @@ describe('TenantService.create', () => {
   let saved: unknown[];
   let savedRoles: RoleEntity[];
   let inserted: { roleId: string; permissionCode: string }[];
-  let em: { save: jest.Mock; insert: jest.Mock };
+  let em: {
+    save: jest.Mock;
+    insert: jest.Mock;
+    query: jest.Mock;
+    connection: unknown;
+  };
+  let subscriptions: { startFree: jest.Mock };
   let dataSource: { transaction: jest.Mock; getRepository: jest.Mock };
   let accountRepository: { findOne: jest.Mock };
   let service: TenantService;
@@ -35,6 +41,7 @@ describe('TenantService.create', () => {
     saved = [];
     savedRoles = [];
     outbox = { add: jest.fn().mockResolvedValue(undefined) };
+    subscriptions = { startFree: jest.fn().mockResolvedValue({}) };
     tenantRepository = { exists: jest.fn().mockResolvedValue(false) };
     inserted = [];
     em = {
@@ -55,6 +62,11 @@ describe('TenantService.create', () => {
       insert: jest.fn(async (_entity, rows) => {
         inserted.push(...rows);
       }),
+      // issueCode: the table name from the metadata, then the next number
+      connection: { getMetadata: () => ({ tablePath: 'tenant' }) },
+      query: jest.fn(async (sql: string) =>
+        sql.includes('MAX(') ? [{ next: 1 }] : [],
+      ),
     };
     accountRepository = {
       findOne: jest
@@ -70,6 +82,7 @@ describe('TenantService.create', () => {
       dataSource as unknown as DataSource,
       {} as MembershipService,
       outbox as never,
+      subscriptions as never,
     );
   });
 
@@ -80,6 +93,7 @@ describe('TenantService.create', () => {
     expect(tenant.id).toBe('t1');
     expect(saved[0]).toBeInstanceOf(TenantEntity);
     expect(saved[0]).toMatchObject({
+      code: 'TN0001',
       name: 'My Shop',
       subdomain: 'my-shop',
       status: 'active',
@@ -101,6 +115,11 @@ describe('TenantService.create', () => {
       name: 'Chi nhánh chính',
       isWarehouse: true,
       status: 'active',
+    });
+    // the store starts on the free plan, in the same transaction
+    expect(subscriptions.startFree).toHaveBeenCalledWith(em, 't1', {
+      type: 'account',
+      id: 'a1',
     });
   });
 
@@ -232,6 +251,7 @@ describe('TenantService (read and update)', () => {
       {} as DataSource,
       membershipService as unknown as MembershipService,
       { add: jest.fn() } as never,
+      {} as never,
     );
   });
 
@@ -354,6 +374,7 @@ describe('TenantService.getContext', () => {
       { findOneByOrFail: jest.fn().mockResolvedValue(tenant) } as never,
       dataSource as never,
       {} as MembershipService,
+      {} as never,
       {} as never,
     );
   });

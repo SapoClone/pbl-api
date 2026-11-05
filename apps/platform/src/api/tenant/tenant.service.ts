@@ -1,3 +1,4 @@
+import { SYSTEM_USER_ID } from '@/constants/app.constant';
 import { ErrorCode } from '@/constants/error-code.constant';
 import { ValidationException } from '@/exceptions/validation.exception';
 import { isUniqueViolation } from '@/utils/db-errors';
@@ -15,7 +16,7 @@ import {
 } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
 import { plainToInstance } from 'class-transformer';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import {
   AccountEntity,
   AccountStatus,
@@ -27,6 +28,13 @@ import {
 } from '../branch/entities/branch.entity';
 import { seedRoles } from '../role/role-seeding';
 import { STORE_TIMEZONE } from '../staff-schedule/staff-time.util';
+import { FREE_PLAN_CODE } from '../subscription/default-plans';
+import { SubscriptionActorType } from '../subscription/entities/subscription-event.entity';
+import { issueCode } from '../subscription/issue-code';
+import {
+  SubscriptionActor,
+  SubscriptionCoreService,
+} from '../subscription/subscription-core.service';
 import { CreateTenantReqDto } from './dto/create-tenant.req.dto';
 import { MembershipResDto } from './dto/membership.res.dto';
 import { TenantContextResDto } from './dto/tenant-context.res.dto';
@@ -48,6 +56,7 @@ export class TenantService {
     private readonly dataSource: DataSource,
     private readonly membershipService: MembershipService,
     private readonly outbox: EventOutbox,
+    private readonly subscriptions: SubscriptionCoreService,
   ) {}
 
   async listMine(accountId: string): Promise<MembershipResDto[]> {
@@ -84,65 +93,17 @@ export class TenantService {
       throw new ValidationException(ErrorCode.T001);
     }
     try {
-      return await this.dataSource.transaction(async (em) => {
-        const tenant = await em.save(
-          new TenantEntity({
-            name: dto.name,
-            subdomain: dto.subdomain,
-            phone: dto.phone ?? null,
-            email: dto.email ?? null,
-            address: dto.address ?? null,
-            status: TenantStatus.ACTIVE,
-            createdBy: accountId,
-            updatedBy: accountId,
-          }),
-        );
-        // the five seeded roles of the store; its creator is the owner
-        const roles = await seedRoles(em, tenant.id);
-        const ownerRole = roles.get(ROLE_CODES.OWNER)!;
-        await em.save(
-          new AccountTenantEntity({
-            accountId,
-            tenantId: tenant.id,
-            role: ownerRole.code,
-            roleId: ownerRole.id,
-            status: MemberStatus.ACTIVE,
-            code: formatMemberCode(1),
-          }),
-        );
-        // Written with the raw EntityManager, not TenantScopedRepository: the
-        // tenant was created just above, so no tenant exists in the request
-        // context yet (the caller's token has none) and the scoped repository
-        // would refuse to run. The tenantId is set explicitly from the new row.
-        const branch = await em.save(
-          new BranchEntity({
-            tenantId: tenant.id,
-            code: DEFAULT_BRANCH.code,
-            name: DEFAULT_BRANCH.name,
-            isWarehouse: true,
-            status: BranchStatus.ACTIVE,
-            createdBy: accountId,
-            updatedBy: accountId,
-          }),
-        );
-        // The default branch is a branch like any other: other services learn of
-        // it through the event. The caller's token has no store yet, so the
-        // tenant is the one just created.
-        await this.outbox.add(
-          em,
-          PLATFORM_BRANCH_CREATED,
-          {
-            id: branch.id,
-            code: branch.code,
-            name: branch.name,
-            isWarehouse: branch.isWarehouse,
-            status: branch.status,
-            updatedAt: (branch.updatedAt ?? new Date()).toISOString(),
-          },
-          { tenantId: tenant.id },
-        );
-        return tenant;
-      });
+      return await this.dataSource.transaction((em) =>
+        this.openStore(em, {
+          ownerAccountId: accountId,
+          actor: { type: SubscriptionActorType.ACCOUNT, id: accountId },
+          name: dto.name,
+          subdomain: dto.subdomain,
+          phone: dto.phone,
+          email: dto.email,
+          address: dto.address,
+        }),
+      );
     } catch (error) {
       // Two creations raced past the pre-check; the unique index decided
       if (isUniqueViolation(error, 'UQ_tenant_subdomain')) {
@@ -150,6 +111,96 @@ export class TenantService {
       }
       throw error;
     }
+  }
+
+  /**
+   * The steps that open a store, inside the caller's transaction: the store, its five seeded roles, the owner's
+   * membership, the default branch (and its event) and the first subscription. Self-serve creation and the platform
+   * admin's create share it; they differ in who the owner is, who acted and which plan the store starts on.
+   */
+  async openStore(
+    em: EntityManager,
+    input: {
+      ownerAccountId: string;
+      actor: SubscriptionActor;
+      name: string;
+      subdomain: string;
+      phone?: string | null;
+      email?: string | null;
+      address?: string | null;
+      defaultBranchName?: string;
+      planCode?: string;
+    },
+  ): Promise<TenantEntity> {
+    const actorId = input.actor.id ?? SYSTEM_USER_ID;
+    const tenant = await em.save(
+      new TenantEntity({
+        code: await issueCode(em, TenantEntity, 'TN', 4),
+        name: input.name,
+        subdomain: input.subdomain,
+        phone: input.phone ?? null,
+        email: input.email ?? null,
+        address: input.address ?? null,
+        status: TenantStatus.ACTIVE,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+    // the five seeded roles of the store; the owner holds the owner role
+    const roles = await seedRoles(em, tenant.id);
+    const ownerRole = roles.get(ROLE_CODES.OWNER)!;
+    await em.save(
+      new AccountTenantEntity({
+        accountId: input.ownerAccountId,
+        tenantId: tenant.id,
+        role: ownerRole.code,
+        roleId: ownerRole.id,
+        status: MemberStatus.ACTIVE,
+        code: formatMemberCode(1),
+      }),
+    );
+    // Written with the raw EntityManager, not TenantScopedRepository: the
+    // tenant was created just above, so no tenant exists in the request
+    // context yet (the caller's token has none) and the scoped repository
+    // would refuse to run. The tenantId is set explicitly from the new row.
+    const branch = await em.save(
+      new BranchEntity({
+        tenantId: tenant.id,
+        code: DEFAULT_BRANCH.code,
+        name: input.defaultBranchName ?? DEFAULT_BRANCH.name,
+        isWarehouse: true,
+        status: BranchStatus.ACTIVE,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+    if (input.planCode && input.planCode !== FREE_PLAN_CODE) {
+      await this.subscriptions.start(
+        em,
+        tenant.id,
+        input.planCode,
+        input.actor,
+      );
+    } else {
+      await this.subscriptions.startFree(em, tenant.id, input.actor);
+    }
+    // The default branch is a branch like any other: other services learn of
+    // it through the event. The caller's token has no store yet, so the
+    // tenant is the one just created.
+    await this.outbox.add(
+      em,
+      PLATFORM_BRANCH_CREATED,
+      {
+        id: branch.id,
+        code: branch.code,
+        name: branch.name,
+        isWarehouse: branch.isWarehouse,
+        status: branch.status,
+        updatedAt: (branch.updatedAt ?? new Date()).toISOString(),
+      },
+      { tenantId: tenant.id },
+    );
+    return tenant;
   }
 
   async getCurrent(tenantId: string): Promise<TenantResDto> {
