@@ -11,6 +11,7 @@ import {
 } from '@pbl/events';
 import { CATALOG_ENTITIES } from './infrastructure/persistence/catalog.entities';
 import { CreateCatalogTables1791900000200 } from './migrations/1791900000200-create-catalog-tables';
+import { CreateTenantPlanQuota1792800000000 } from './migrations/1792800000000-create-tenant-plan-quota';
 import { AttributesController } from './modules/attributes/attributes.controller';
 import { AttributesService } from './modules/attributes/attributes.service';
 import { BrandsController } from './modules/brands/brands.controller';
@@ -29,6 +30,8 @@ import {
 } from './modules/uploads/file-storage';
 import { UploadsController } from './modules/uploads/uploads.controller';
 import { UploadsService } from './modules/uploads/uploads.service';
+import { PlanQuotaHandler } from './quota/plan-quota.handler';
+import { PlanQuotaService } from './quota/plan-quota.service';
 
 @Module({
   // Every route requires a platform-issued access token unless @Public()
@@ -51,6 +54,7 @@ import { UploadsService } from './modules/uploads/uploads.service';
         ...PRODUCER_MIGRATIONS,
         ...CONSUMER_MIGRATIONS,
         CreateCatalogTables1791900000200,
+        CreateTenantPlanQuota1792800000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'catalog' }),
@@ -73,6 +77,8 @@ import { UploadsService } from './modules/uploads/uploads.service';
     PricingService,
     UploadsService,
     ImportsService,
+    PlanQuotaHandler,
+    PlanQuotaService,
     { provide: FILE_STORAGE, useFactory: createFileStorage },
   ],
 })

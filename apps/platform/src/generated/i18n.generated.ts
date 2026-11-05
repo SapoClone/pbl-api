@@ -32,6 +32,11 @@ export type I18nTranslations = {
             "not_found": string;
         };
     };
+    "quota": {
+        "error": {
+            "limit_reached": string;
+        };
+    };
     "role": {
         "error": {
             "name_exists": string;

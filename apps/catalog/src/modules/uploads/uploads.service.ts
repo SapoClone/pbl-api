@@ -15,6 +15,7 @@ import {
   UploadKind,
 } from '../../infrastructure/persistence/catalog.entities';
 import { toCatalogHttpException } from '../../presentation/catalog-http-error';
+import { PlanQuotaService } from '../../quota/plan-quota.service';
 import { FILE_STORAGE, FileStorage, publicUrlFor } from './file-storage';
 import {
   CreateImageUploadReqDto,
@@ -36,6 +37,7 @@ export class UploadsService {
   constructor(
     private readonly dataSource: DataSource,
     @Inject(FILE_STORAGE) private readonly storage: FileStorage,
+    private readonly quota: PlanQuotaService,
   ) {}
 
   private async create(
@@ -140,10 +142,13 @@ export class UploadsService {
             'UNPROCESSABLE',
           );
         }
+        await this.quota.assertCanStore(em, data.length);
         await this.storage.put(upload.storageKey, data, upload.contentType);
         upload.status = 'UPLOADED';
         upload.storedSize = data.length;
-        return scoped.save(upload);
+        const saved = await scoped.save(upload);
+        await this.quota.announceUsage(em);
+        return saved;
       });
       return { id: row.id, status: 'uploaded', size: row.storedSize ?? 0 };
     } catch (error) {

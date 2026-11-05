@@ -1,3 +1,5 @@
+import { CreateTenantPlanQuota1792800000000 } from '../src/migrations/1792800000000-create-tenant-plan-quota';
+import { PlanQuotaService } from '../src/quota/plan-quota.service';
 /**
  * Phase 4 screen endpoints against a real PostgreSQL (non-superuser role, RLS forced):
  * variant list/picker, summary, export, variant delete, uploads, imageIds, product imports.
@@ -114,6 +116,7 @@ describe('Catalog screen endpoints (real PostgreSQL, RLS)', () => {
           ...PRODUCER_MIGRATIONS,
           ...CONSUMER_MIGRATIONS,
           CreateCatalogTables1791900000200,
+          CreateTenantPlanQuota1792800000000,
         ],
       }),
     );
@@ -135,12 +138,17 @@ describe('Catalog screen endpoints (real PostgreSQL, RLS)', () => {
       TenantScopedRepository.forEntity(appDs, ProductEntity),
       TenantScopedRepository.forEntity(appDs, ProductVariantEntity),
       TenantScopedRepository.forEntity(appDs, UnitConversionEntity),
+      new PlanQuotaService(new EventOutbox()),
     );
     categories = new CategoriesService(
       appDs,
       TenantScopedRepository.forEntity(appDs, CategoryEntity),
     );
-    uploads = new UploadsService(appDs, storage);
+    uploads = new UploadsService(
+      appDs,
+      storage,
+      new PlanQuotaService(new EventOutbox()),
+    );
     imports = new ImportsService(appDs, products, storage);
   });
 
@@ -495,6 +503,50 @@ describe('Catalog screen endpoints (real PostgreSQL, RLS)', () => {
           imports.get((globalThis as { __importId?: string }).__importId!),
           404,
           'IMPORT_NOT_FOUND',
+        );
+      });
+    });
+  });
+
+  describe('plan limit on stored files', () => {
+    const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const setStorageLimitMb = (mb: number) =>
+      adminDs.query(
+        `INSERT INTO "${schema}"."tenant_plan_quota"
+           ("tenant_id","plan_code","quota_products","quota_storage_mb","source_changed_at")
+         VALUES ($1,'free',100,$2,now())`,
+        [C, mb],
+      );
+
+    it('refuses a file that does not fit (409 Q001) and counts only stored files', async () => {
+      await setStorageLimitMb(1);
+      await as(C, async () => {
+        const MB = 1024 * 1024;
+        await upload('image', 'image/png', Buffer.alloc(MB - 10, 1));
+        const pending = await uploads.createImageUpload({
+          fileName: 'big.png',
+          contentType: 'image/png',
+          size: 100,
+        });
+        await expectHttp(
+          uploads.storeContent(
+            pending.imageId,
+            'image/png',
+            Buffer.alloc(100, 1),
+          ),
+          409,
+          'Q001',
+        );
+        // a smaller file still fits in the 10 bytes left
+        const small = await uploads.createImageUpload({
+          fileName: 'small.png',
+          contentType: 'image/png',
+          size: 10,
+        });
+        await uploads.storeContent(
+          small.imageId,
+          'image/png',
+          Buffer.alloc(10, 1),
         );
       });
     });

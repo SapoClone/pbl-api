@@ -48,6 +48,7 @@ import {
   VariantAttributeValueEntity,
 } from '../../infrastructure/persistence/catalog.entities';
 import { toCatalogHttpException } from '../../presentation/catalog-http-error';
+import { PlanQuotaService } from '../../quota/plan-quota.service';
 import { csvRow } from './csv';
 import {
   CreateProductReqDto,
@@ -97,6 +98,7 @@ export class ProductsService {
     private readonly variantsRepo: TenantScopedRepository<ProductVariantEntity>,
     @InjectTenantRepository(UnitConversionEntity)
     private readonly unitsRepo: TenantScopedRepository<UnitConversionEntity>,
+    private readonly quota: PlanQuotaService,
   ) {}
 
   private toProductRes(
@@ -570,6 +572,7 @@ export class ProductsService {
 
       return await runInTenantTransaction(this.dataSource, async (em) => {
         await this.verifyCategoryAndBrand(em, dto.categoryId, dto.brandId);
+        await this.quota.assertCanAddProducts(em);
 
         const scopedProducts = TenantScopedRepository.forEntity(
           em,
@@ -659,6 +662,8 @@ export class ProductsService {
 
           createdVariants.push(this.toVariantRes(variant, []));
         }
+
+        await this.quota.announceUsage(em);
 
         return this.toProductRes(product, createdVariants, [
           this.toUnitRes(baseUnitConv),
@@ -1016,6 +1021,7 @@ export class ProductsService {
           aggregateVersion: saved.version,
           updatedAt: saved.updatedAt.toISOString(),
         });
+        await this.quota.announceUsage(em);
 
         return this.toProductRes(saved);
       });
@@ -1079,6 +1085,7 @@ export class ProductsService {
           aggregateVersion: product.version,
           updatedAt: product.updatedAt.toISOString(),
         });
+        await this.quota.announceUsage(em);
       });
     } catch (error) {
       toCatalogHttpException(error);

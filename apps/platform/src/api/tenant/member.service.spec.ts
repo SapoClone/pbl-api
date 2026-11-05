@@ -54,6 +54,7 @@ describe('MemberService', () => {
   let listBuilder: Record<string, jest.Mock>;
   let accounts: { findOne: jest.Mock };
   let outbox: { add: jest.Mock };
+  let quota: { assertCanAdd: jest.Mock };
   let service: MemberService;
   const errorCodeOf = (promise: Promise<unknown>) =>
     promise.catch((e) => e.getResponse().errorCode);
@@ -125,11 +126,13 @@ describe('MemberService', () => {
       ),
       transaction: jest.fn((work) => work(em)),
     };
+    quota = { assertCanAdd: jest.fn().mockResolvedValue(undefined) };
     service = new MemberService(
       dataSource as never,
       outbox as never,
       sessions as never,
       schedules as never,
+      quota as never,
     );
   });
 
@@ -705,6 +708,7 @@ describe('MemberService', () => {
         outbox as never,
         sessions as never,
         schedules as never,
+        quota as never,
       );
 
       const summary = await summaryService.summary('t1');

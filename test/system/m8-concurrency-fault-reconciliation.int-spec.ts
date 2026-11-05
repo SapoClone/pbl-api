@@ -1,3 +1,5 @@
+import { CreateTenantPlanQuota1792800000000 } from '../../apps/catalog/src/migrations/1792800000000-create-tenant-plan-quota';
+import { PlanQuotaService } from '../../apps/catalog/src/quota/plan-quota.service';
 /**
  * Milestone M8 — Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios),
  * Multi-Tenant Isolation Across 7 Schemas, 7 Cross-Service Reconciliation Pairs,
@@ -504,6 +506,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           ...PRODUCER_MIGRATIONS,
           ...CONSUMER_MIGRATIONS,
           CreateCatalogTables1791900000200,
+          CreateTenantPlanQuota1792800000000,
         ],
       }),
     );
@@ -524,6 +527,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
       TenantScopedRepository.forEntity(catalogDs, ProductEntity),
       TenantScopedRepository.forEntity(catalogDs, ProductVariantEntity),
       TenantScopedRepository.forEntity(catalogDs, UnitConversionEntity),
+      new PlanQuotaService(outbox),
     );
     catalogPricing = new PricingService(
       catalogDs,

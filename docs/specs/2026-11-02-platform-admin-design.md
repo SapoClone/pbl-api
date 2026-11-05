@@ -1,6 +1,6 @@
 # Platform admin (M01): design
 
-Status: **Accepted** with [ADR-0022](../decisions/0022-platform-admin-identity.md); build steps 1 to 3 are done and step 4 is half done (see [Build status](#build-status)). Phase 1 of the
+Status: **Accepted** with [ADR-0022](../decisions/0022-platform-admin-identity.md); build steps 1 to 4 are done (see [Build status](#build-status)). Phase 1 of the
 [SRS plan](2026-11-02-srs-implementation-plan.md). Endpoint shapes are in
 [contract 04](2026-10-28-api-contracts/04-platform-admin.md); this document decides what the contract leaves open
 and the order of the work.
@@ -115,7 +115,7 @@ Codes as in contract 04 (`A001`–`A003`, `A010`, `A011`, `T002`, `T005`–`T007
 | 1. Admin identity | Done (PR #33). |
 | 2. Stores | Done: list, detail, create for an owner, edit, lock, reactivate. Not done: the `owner-invite` email (needs a pbl-mail-service template and the set-password flow, so an owner created without a password cannot sign in yet). |
 | 3. Plans and subscriptions | Done: the tables, the seed and backfill, plan list/read/create/edit (`super_admin` writes), subscription list, detail, history, manual payments, change of plan with its check, and the real plan in `GET /tenants/current/context`. |
-| 4. Usage and limits | Half: the usage endpoints and the `tenant_usage` row exist (branches and members are counted live). Not done: enforcement in platform (`Q001`), the catalog projection and check, and the catalog events that fill products and storage. |
+| 4. Usage and limits | Done: the usage endpoints and `tenant_usage` (branches and members counted live); enforcement of branches and members in platform (`QuotaService`); catalog keeps `tenant_plan_quota` from `platform.subscription.changed` and `platform.plan.changed`, refuses a product or a stored file over the plan itself, and reports products and storage in `catalog.usage.changed`, which platform writes to `tenant_usage`. All answer 409 `Q001` with `details: { key, used, limit, planCode }`. |
 | 5. Screens | Branch `feature/web-admin-01` has the 23 screens on mock data; [the guide](../guides/platform-admin-api.md) maps its calls onto these endpoints. |
 
 Decisions taken while building, where the contract or this document left room:
@@ -132,6 +132,12 @@ Decisions taken while building, where the contract or this document left room:
 - **`platform.plan.changed` is emitted once per store on the plan**, because events carry a tenant and a plan has none;
   nothing is emitted when a plan is created. Insight subscribes to the three tenant events only (this matches what
   pbl-infra already applies); plan and subscription events have no consumer yet.
+- **Plan limits.** Archived and soft-deleted products do not count; stored files do (images and import files, by their
+  stored size); members count whatever their status, branches count unless deleted. A store with no row in catalog's
+  `tenant_plan_quota` (older than the events) is not limited until its next plan event; every new store announces its
+  first plan. Catalog's usage event carries absolute numbers, and platform ignores one measured before the row's last
+  update. Two adds of the same store are serialised by an advisory lock, so both cannot pass at limit - 1.
+- **Platform consumes events now**: its data source has the inbox table, and pbl-infra has a queue for it.
 - **Accounts may have no password** (`account.password` is nullable) so an admin can create an owner who has not set one;
   sign-in treats it like a wrong password.
 - **Error codes keep the repository's numbering** (`T001` subdomain taken; new `T006` to `T008`, `P001` to `P003`,

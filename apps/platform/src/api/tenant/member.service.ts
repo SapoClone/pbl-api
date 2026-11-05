@@ -31,6 +31,7 @@ import {
   StaffScheduleService,
   TodayShift,
 } from '../staff-schedule/staff-schedule.service';
+import { QuotaService } from '../subscription/quota.service';
 import { ListMemberReqDto } from './dto/list-member.req.dto';
 import { MemberDetailResDto } from './dto/member-detail.res.dto';
 import { MemberRoleInput } from './dto/member-role-input';
@@ -63,6 +64,7 @@ export class MemberService {
     private readonly outbox: EventOutbox,
     private readonly sessions: SessionService,
     private readonly schedules: StaffScheduleService,
+    private readonly quota: QuotaService,
   ) {}
 
   async list(
@@ -244,6 +246,7 @@ export class MemberService {
         if (existing) {
           throw new ValidationException(ErrorCode.T002);
         }
+        await this.quota.assertCanAdd(em, tenantId, 'users');
         const role = await this.resolveRole(em, tenantId, roleInput);
         const branches = await this.assertBranches(em, tenantId, branchIds);
         const saved = await em.save(

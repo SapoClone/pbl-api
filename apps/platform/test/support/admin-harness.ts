@@ -21,7 +21,9 @@ import { SubscriptionEventEntity } from '../../src/api/subscription/entities/sub
 import { SubscriptionPaymentEntity } from '../../src/api/subscription/entities/subscription-payment.entity';
 import { SubscriptionEntity } from '../../src/api/subscription/entities/subscription.entity';
 import { TenantUsageEntity } from '../../src/api/subscription/entities/tenant-usage.entity';
+import { QuotaService } from '../../src/api/subscription/quota.service';
 import { SubscriptionCoreService } from '../../src/api/subscription/subscription-core.service';
+import { UsageHandler } from '../../src/api/subscription/usage.handler';
 import { AccountTenantBranchEntity } from '../../src/api/tenant/entities/account-tenant-branch.entity';
 import { AccountTenantEntity } from '../../src/api/tenant/entities/account-tenant.entity';
 import { TenantEntity } from '../../src/api/tenant/entities/tenant.entity';
@@ -113,6 +115,7 @@ export async function startAdminDb(prefix: string) {
   const sessions = { revokeAllOfTenant: jest.fn(async () => 2) };
   const subscriptions = new SubscriptionCoreService(
     dataSource.getRepository(PlanEntity),
+    outbox as never,
   );
   const tenantService = new TenantService(
     dataSource.getRepository(TenantEntity),
@@ -144,6 +147,8 @@ export async function startAdminDb(prefix: string) {
       plans: new AdminPlansService(dataSource, outbox as never),
       subscriptions: new AdminSubscriptionsService(dataSource, outbox as never),
       usage: new AdminUsageService(dataSource),
+      quota: new QuotaService(),
+      usageHandler: new UsageHandler(),
     },
     outboxCalls: () => outbox.add.mock.calls as unknown as OutboxCall[],
     async stop() {

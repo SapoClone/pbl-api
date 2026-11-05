@@ -36,6 +36,9 @@ export enum ErrorCode {
   S011 = 'subscription.error.same_plan_same_period',
   S012 = 'subscription.error.payment_overlaps',
 
+  // Plan limit reached (409): the store must move to a bigger plan
+  Q001 = 'quota.error.limit_reached',
+
   // Role
   R001 = 'role.error.name_exists',
   R002 = 'role.error.owner_immutable',

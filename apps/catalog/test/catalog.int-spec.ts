@@ -1,3 +1,5 @@
+import { CreateTenantPlanQuota1792800000000 } from '../src/migrations/1792800000000-create-tenant-plan-quota';
+import { PlanQuotaService } from '../src/quota/plan-quota.service';
 /**
  * Real PostgreSQL Integration, Concurrency, Row-Level Security (non-superuser role),
  * Outbox Event, and End-to-End Business Demo Test Suite for M1 Catalog Core.
@@ -88,6 +90,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           ...PRODUCER_MIGRATIONS,
           ...CONSUMER_MIGRATIONS,
           CreateCatalogTables1791900000200,
+          CreateTenantPlanQuota1792800000000,
         ],
       }),
     );
@@ -130,6 +133,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
       TenantScopedRepository.forEntity(appDs, ProductEntity),
       TenantScopedRepository.forEntity(appDs, ProductVariantEntity),
       TenantScopedRepository.forEntity(appDs, UnitConversionEntity),
+      new PlanQuotaService(outbox),
     );
     pricingService = new PricingService(
       appDs,
@@ -145,7 +149,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
     await adminDs?.destroy();
   });
 
-  it('creates all 15 Catalog domain tables with RLS enabled and forced', async () => {
+  it('creates all 16 Catalog domain tables with RLS enabled and forced', async () => {
     const rlsRows: {
       relname: string;
       relrowsecurity: boolean;
@@ -174,6 +178,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
       'product_imports',
       'product_variants',
       'products',
+      'tenant_plan_quota',
       'unit_conversions',
       'uploads',
       'variant_attribute_values',
@@ -758,6 +763,83 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           .count({ where: { tenantId: rollbackTenant } });
         expect(outboxAfter).toBe(outboxBefore);
       });
+    });
+  });
+
+  describe('Plan limits (products)', () => {
+    const tenant = 'f0f0f0f0-f0f0-4f0f-8f0f-f0f0f0f0f0f0';
+    const setLimit = (quotaProducts: number) =>
+      adminDs.query(
+        `INSERT INTO "${schema}"."tenant_plan_quota"
+           ("tenant_id","plan_code","quota_products","quota_storage_mb","source_changed_at")
+         VALUES ($1,'free',$2,1024,now())
+         ON CONFLICT ("tenant_id") DO UPDATE SET "quota_products" = EXCLUDED."quota_products"`,
+        [tenant, quotaProducts],
+      );
+    const create = (name: string) =>
+      asTenant(tenant, () => productsService.createProduct({ name }));
+    const usageEvents = () =>
+      adminDs
+        .getRepository(OutboxEventEntity)
+        .find({ where: { tenantId: tenant, type: 'catalog.usage.changed' } });
+
+    it('creates without limit while no plan is known for the store', async () => {
+      await create('No plan 1');
+      await create('No plan 2');
+    });
+
+    it('refuses the product over the limit with 409 Q001 and the facts for the upgrade hint', async () => {
+      await setLimit(3); // two products exist already
+      await create('Third');
+      const error = await create('Fourth').catch((e) => e);
+      expect(error).toBeInstanceOf(HttpException);
+      expect(error.getStatus()).toBe(409);
+      expect(error.getResponse()).toMatchObject({
+        errorCode: 'Q001',
+        details: { key: 'products', used: 3, limit: 3, planCode: 'free' },
+      });
+    });
+
+    it('does not count archived products', async () => {
+      const [first] = await asTenant(tenant, () =>
+        productsService.listProducts({
+          page: 1,
+          limit: 10,
+          q: 'No plan 1',
+          sort: 'createdAt',
+          order: 'ASC',
+        }),
+      ).then((r) => r.items);
+      await asTenant(tenant, () =>
+        productsService.updateProductStatus(first.id, { status: 'ARCHIVED' }),
+      );
+      await create('Fits again');
+    });
+
+    it('tells platform what the store uses, in the same transaction as the change', async () => {
+      const events = await usageEvents();
+      const last = events
+        .map(
+          (e) =>
+            e.payload.payload as {
+              products: number;
+              storageMb: number;
+              measuredAt: string;
+            },
+        )
+        .sort((a, b) => a.measuredAt.localeCompare(b.measuredAt))
+        .pop();
+      expect(events.length).toBeGreaterThan(0);
+      expect(last).toMatchObject({ products: 3, storageMb: 0 });
+    });
+
+    it('is serialised: two creates at limit - 1 let exactly one through', async () => {
+      await setLimit(4); // three used
+      const results = await Promise.allSettled([
+        create('Race A'),
+        create('Race B'),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     });
   });
 });
