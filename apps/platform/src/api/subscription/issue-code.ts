@@ -1,4 +1,5 @@
 import { EntityManager, EntityTarget, ObjectLiteral } from 'typeorm';
+import { tableOf } from './sql';
 
 /**
  * The next `<prefix><number>` code of a table (TN0001, SUB-0001, PAY-00001). Issued by the application, not a sequence,
@@ -11,7 +12,7 @@ export async function issueCode(
   prefix: string,
   digits: number,
 ): Promise<string> {
-  const table = em.connection.getMetadata(entity).tablePath;
+  const table = tableOf(em, entity);
   await em.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
     `code:${table}`,
   ]);

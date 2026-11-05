@@ -8,8 +8,13 @@ import {
   PLATFORM_ACCOUNT_LOGGED_IN,
   PLATFORM_MEMBERSHIP_GRANTED,
   PLATFORM_MEMBERSHIP_ROLE_CHANGED,
+  PLATFORM_TENANT_CREATED,
+  PLATFORM_TENANT_STATUS_CHANGED,
+  PLATFORM_TENANT_UPDATED,
   PurchaseOrderApprovedPayload,
   SALES_ORDER_COMPLETED,
+  TenantEventPayload,
+  TenantStatusChangedPayload,
 } from '@pbl/contracts';
 import { OnEvent } from '@pbl/events';
 import { EntityManager } from 'typeorm';
@@ -59,6 +64,49 @@ export class AuditHandler {
       event,
       changedBy,
       `${email} changed from ${previousRole} to ${role}`,
+    );
+  }
+
+  @OnEvent(PLATFORM_TENANT_CREATED.type)
+  onTenantCreated(
+    event: EventEnvelope<TenantEventPayload>,
+    manager: EntityManager,
+  ): Promise<void> {
+    const { code, name, actor } = event.payload;
+    return this.record(
+      manager,
+      event,
+      actor.id,
+      `Store ${code} (${name}) was created`,
+    );
+  }
+
+  @OnEvent(PLATFORM_TENANT_UPDATED.type)
+  onTenantUpdated(
+    event: EventEnvelope<TenantEventPayload>,
+    manager: EntityManager,
+  ): Promise<void> {
+    const { code, actor, changes } = event.payload;
+    const fields = Object.keys(changes ?? {}).join(', ');
+    return this.record(
+      manager,
+      event,
+      actor.id,
+      `Store ${code} was edited${fields ? ` (${fields})` : ''}`,
+    );
+  }
+
+  @OnEvent(PLATFORM_TENANT_STATUS_CHANGED.type)
+  onTenantStatusChanged(
+    event: EventEnvelope<TenantStatusChangedPayload>,
+    manager: EntityManager,
+  ): Promise<void> {
+    const { from, to, reason, changedBy } = event.payload;
+    return this.record(
+      manager,
+      event,
+      changedBy.id,
+      `Store changed from ${from} to ${to}${reason ? `: ${reason}` : ''}`,
     );
   }
 

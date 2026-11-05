@@ -30,6 +30,87 @@ export const PLATFORM_BRANCH_UPDATED = {
   version: 1,
 } as const satisfies EventDefinition;
 
+// ---- platform admin (store management, plans and subscriptions; contract 04)
+
+export const PLATFORM_TENANT_CREATED = {
+  type: 'platform.tenant.created',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_TENANT_UPDATED = {
+  type: 'platform.tenant.updated',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_TENANT_STATUS_CHANGED = {
+  type: 'platform.tenant.status_changed',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_PLAN_CHANGED = {
+  type: 'platform.plan.changed',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_SUBSCRIPTION_CHANGED = {
+  type: 'platform.subscription.changed',
+  version: 1,
+} as const satisfies EventDefinition;
+
+/** The actor of an admin write; `platform_admin` for the admin area, `account` for a store owner, `system` for a job */
+export interface PlatformActor {
+  type: 'platform_admin' | 'account' | 'system';
+  id: string | null;
+}
+
+export interface TenantEventPayload {
+  id: string;
+  code: string;
+  name: string;
+  subdomain: string;
+  status: string;
+  /** ISO 8601 */
+  updatedAt: string;
+  actor: PlatformActor;
+  /** `platform.tenant.updated`: the fields that changed, before and after */
+  changes?: Record<string, { from: unknown; to: unknown }>;
+}
+
+export interface TenantStatusChangedPayload {
+  tenantId: string;
+  from: string;
+  to: string;
+  reason: string | null;
+  changedBy: PlatformActor;
+}
+
+/** The limits of a plan; `storageMb` is megabytes */
+export interface PlanQuotas {
+  branches: number;
+  users: number;
+  products: number;
+  storageMb: number;
+}
+
+export interface PlanChangedPayload {
+  planId: string;
+  code: string;
+  name: string;
+  priceMonthly: number;
+  status: string;
+  quotas: PlanQuotas;
+  updatedAt: string;
+  actor: PlatformActor;
+}
+
+export interface SubscriptionChangedPayload {
+  subscriptionId: string;
+  tenantId: string;
+  eventType: 'created' | 'renewed' | 'upgraded' | 'downgraded';
+  fromPlan: string | null;
+  toPlan: string;
+  /** ISO 8601, null for a plan that does not expire */
+  expiresAt: string | null;
+  quotas: PlanQuotas;
+  actor: PlatformActor;
+}
+
 export interface BranchEventPayload {
   id: string;
   code: string;
