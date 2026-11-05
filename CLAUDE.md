@@ -26,8 +26,8 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 | Area | Today | Target (build toward this) |
 |---|---|---|
 | Services | All eight have business logic. `platform`, `insight` and the RBAC libraries are ours; `catalog`, `inventory`, `sales`, `customer`, `finance` and `integration` are the M1-M6 stack of contributor dhtphu05, adopted as the base and converted to our permissions, branch scope and integer VND (see "M1-M6 base" below and [docs/specs/2026-11-01-adopt-m1-m6/](docs/specs/2026-11-01-adopt-m1-m6/phase-1.md)) | 8 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md), [ADR-0010](docs/decisions/0010-eight-services.md)) |
-| Tenancy | Implemented (P0): stores, branches, `tid` in tokens, `@CurrentTenant()` ([ADR-0008](docs/decisions/0008-tenancy.md)). Roles and permissions (RBAC) are built: see Auth | Plans/subscriptions |
-| Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
+| Tenancy | Implemented (P0): stores, branches, `tid` in tokens, `@CurrentTenant()` ([ADR-0008](docs/decisions/0008-tenancy.md)). Roles and permissions (RBAC) are built: see Auth. Plans, subscriptions and usage are built on the admin side (`/admin/tenants`, `/plans`, `/subscriptions`, `/usage`); quota enforcement is not | Quota enforcement (`Q001`) |
+| Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`, `platform_admin`, `plan`, `subscription` (+ `_event`, `_payment`) and `tenant_usage`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every client-facing endpoint of every service + each service's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
 | Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles`/`perms`/`branches`; routes use `@RequirePermission` and branch scope ([ADR-0020](docs/decisions/0020-permissions-and-branch-scope.md), [guide](docs/guides/permissions.md)) | Short access-token TTL (the deny-list stays: every service uses it) ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
 | Events | Built locally (P1): outbox → relay → ElasticMQ queue → consumer with an inbox, retry, DLQ and redrive, in `@pbl/events`; first events: platform branch/login/role events and `sales.order.completed`, consumed by sales, inventory, customer (spend and loyalty points) and insight ([guide](docs/guides/events.md)). The email queue stays separate ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | Production transport: outbox → SNS → SQS ([ADR-0007](docs/decisions/0007-event-bus.md)); the SNS adapter is written and unit-tested, never run against AWS |
@@ -395,9 +395,11 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
 
 ## Known open work (don't rediscover, don't depend on)
 
-- Deferred on purpose: staff invitations, forgot/reset/verify email, the platform-admin routes beyond sign-in (stores,
-  plans, subscriptions, usage: [ADR-0022](docs/decisions/0022-platform-admin-identity.md) and
-  [its design](docs/specs/2026-11-02-platform-admin-design.md), the identity itself is built),
+- Deferred on purpose: staff invitations, forgot/reset/verify email, the rest of the platform admin (stores, plans,
+  subscriptions and usage are built: [guide](docs/guides/platform-admin-api.md); still to build: quota enforcement,
+  accounts and admins, settings, support sessions, and the insight and integration admin read models:
+  [ADR-0022](docs/decisions/0022-platform-admin-identity.md) and
+  [its design](docs/specs/2026-11-02-platform-admin-design.md)),
   real object storage for uploads (a local-disk adapter exists), a queue for catalog imports (they run in-process),
   PO edit/submit/VAT/payments, receipt `PATCH`, issue `submit`, shipping address capture on orders. Per-service lists:
   `docs/specs/2026-11-01-adopt-m1-m6/phase-4-*.md`; first-wave decisions of ours: [docs/specs/2026-10-29-first-wave/](docs/specs/2026-10-29-first-wave/README.md).
