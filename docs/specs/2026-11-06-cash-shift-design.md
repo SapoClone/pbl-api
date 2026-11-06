@@ -1,7 +1,7 @@
 # Cash shifts: the drawer, the count and the shortage (design)
 
 - **Date:** 6 November 2026
-- **Status:** Proposed. The rules come from the business owner (6 November 2026); the code state is the unmerged stack on `main`.
+- **Status:** Accepted by the business owner on 6 November 2026 (with the answers in section 2); the code state is the unmerged stack on `main`.
 - **Written for:** the business owner and the people who will build it. Plain language first, then the data and the API.
 - **Settles:** decisions D22 to D27 of [the business rules review](../business-rules/README.md) and defects 4 to 12 in it.
 
@@ -25,10 +25,10 @@ cash, part QR) only the cash part counts.
 | # | Decision |
 |---|---|
 | 1 | A new branch automatically gets one default warehouse, and a sale always uses its own branch's warehouse. |
-| 2 | Every POS sale belongs to an open shift. There is a place to manage shifts. There is no default cashier (access is by permission, not by role name): when selling, the cashier picks from the shifts that are open and available. |
+| 2 | Every POS sale belongs to an open shift. There is a place to manage shifts. There is no default cashier (access is by permission, not by role name): when selling, the cashier picks from the shifts that are open and available. **The cashier of the order is the signed-in user** using the cashier feature, not the person who opened the shift. |
 | 3 | A paid plan past its end date gets 7 days of grace, then drops to `free` limits (data kept, new adds blocked). |
 | 4 | A branch cannot be deleted or deactivated while it has stock, an open shift or a pending transfer, and the refusal must list **every** reason. |
-| 5 | The cash-drawer rules below. |
+| 5 | The cash-drawer rules below. The numbers are **configurable** per store. The approver's role and process are written down (section 5.1). The **planned times** of a shift can be edited, so the rules can be shown in a demo (section 5.2). The other settings keep their defaults. **No offline POS feature.** |
 
 ## 3. What exists today, and the gap
 
@@ -81,21 +81,28 @@ One row per cash movement. Append-only: a mistake is a reversing entry, never an
 | `reason` | Required for pay-in, pay-out, refund and shortage; a code plus text |
 | `order_id`, `return_id`, `tender_id` | The source, when there is one |
 | `staff_id` | Who handled the cash (the seller, the refunding cashier, the person who put money in) |
-| `occurred_at`, `recorded_at` | When it happened and when it reached the server (they differ for an offline sale) |
+| `occurred_at`, `recorded_at` | When it happened and when it reached the server (set by the server: entries are never back-dated) |
 | `source_key` | Unique per tenant: makes a retried sale or refund write exactly one entry |
 
 `expected = opening float + sum(entry.amount)` over the shift's entries except the shortage and overage entries, which
 close the gap rather than open it.
 
-### 4.3 Tenant settings (per store)
+### 4.3 Store settings (all configurable)
+
+Kept by sales in `cash_setting`, one row per store, read and changed with `GET` and `PATCH /sales/api/v1/cash-settings`
+(`settings.view`, `settings.update`). Every number below is a setting, not a constant.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `cash.toleranceVnd` | 10,000 | A variance within ± this closes at once with a note |
-| `cash.approvalAboveVnd` | the tolerance | Above this, a manager must approve; between the two a reason is enough |
-| `cash.responsibility` | `none` | `none`, `cashier_deduction` or `store_loss`: who bears a shortage |
-| `cash.maxOpenHours` | 16 | A shift open longer is flagged to the manager |
-| `cash.denominations` | 500k, 200k, 100k, 50k, 20k, 10k, 5k, 2k, 1k | The count form |
+| `toleranceVnd` | 10,000 | A variance within ± this closes at once with a note |
+| `approvalAboveVnd` | 10,000 (the tolerance) | Above this, a manager must approve. Set it higher than the tolerance to have a band where a reason is enough |
+| `responsibility` | `none` | `none` (just recorded), `cashier_deduction` or `store_loss`: who bears a shortage |
+| `maxOpenHours` | 16 | A shift open longer is flagged to the manager |
+| `maxOpeningFloatVnd` | 5,000,000 | An opening float above this needs a note |
+| `denominations` | 500k, 200k, 100k, 50k, 20k, 10k, 5k, 2k, 1k | The notes on the count form; no coins |
+
+The numbers must be whole VND, `toleranceVnd` at most `approvalAboveVnd`, and the settings apply to shifts that close after
+the change (a shift keeps the values it was closed with).
 
 ## 5. The life of a shift
 
@@ -121,8 +128,43 @@ OPEN ──(cashier counts)──► PENDING_CLOSE ──► CLOSED             
 
 A POS sale **must** carry a shift (400 `SHIFT_REQUIRED` otherwise). The cashier picks from the shifts that are open at their
 branch; the list is `GET /pos/shifts/available`. Permission decides who may sell, not a "default cashier" and not the weekly
-schedule. A shared drawer is allowed, because each entry carries the staff who handled the cash: the variance is one number
-for the drawer, and the shift report shows each person's cash in and out, so a shortage can be traced.
+schedule.
+
+**The cashier of the order is the signed-in user**, always: `orders.created_by` and the staff on the cash entry are the
+caller, never the shift's opener. The shift only says **which drawer** the cash goes into. A shared drawer is therefore
+allowed: the variance is one number for the drawer, and the shift report shows each person's cash in and out, so a shortage
+can be traced to who handled the cash. The same holds for the refund, whose cashier is the person refunding.
+
+### 5.1 The approver: role and process
+
+The approver is a manager who decides whether a shift with a large difference may close. **Who:** a member with the permission
+`pos.approve` (new; the owner and the branch manager have it by default; the owner can give it to a custom role). The approver
+must be in scope of the shift's branch and **cannot be the person who counted** the drawer.
+
+**The process:**
+1. The cashier counts and presses close. The variance is above `approvalAboveVnd`, so the cashier must choose a reason and may
+   add a note; the shift becomes `PENDING_APPROVAL`. The register stays blocked, the shift stays in the list under "waiting
+   for approval", and managers of the branch see it first.
+2. The approver opens the shift and sees the opening float, every entry with who made it, the count by denomination, the
+   expected cash, the variance and the reason.
+3. The approver **approves** (the shift closes and the shortage or overage entry is written, with the approver and the time)
+   or **sends it back for a recount** with a note (the shift returns to `OPEN`, the count is kept in the history, nothing is
+   written). There is no way to approve by editing a number.
+4. Every step (count, request, approve, send back, close) is recorded with who and when.
+
+Within the tolerance no approval is needed; between the tolerance and `approvalAboveVnd` a reason is enough.
+
+### 5.2 Editing the times of a shift (for the demo)
+
+Two times can be changed, and neither touches money:
+- The **scheduled shifts** (`PATCH /platform/api/v1/staff-schedules/{id}`, already there) can be edited at any time, so a shift
+  can be made to start or end in the next minutes.
+- A shift has a **planned end** (`planned_end_at`, set at open from the schedule when there is one, otherwise from
+  `maxOpenHours`). A manager can edit it while the shift is open (`PATCH /pos/shifts/{id}` with `plannedEndAt`, `pos.update`),
+  and the open-too-long flag is computed against it. Lowering `maxOpenHours` in the settings does the same for every shift.
+
+What stays fixed: entries are never back-dated, a closed shift is never edited, and `occurred_at` is the server's time. To
+show an overdue shift in a demo, move the planned end into the past; to show approval, set the tolerance low.
 
 ## 6. Edge cases, and the rule for each
 
@@ -130,12 +172,12 @@ for the drawer, and the shift report shows each person's cash in and out, so a s
 |---|---|
 | Refund of an order paid in an earlier shift | The cash leaves the current drawer: the entry goes in the **refunding cashier's open shift**, chosen by the server (never by the client). With no open shift the cash refund is refused (409 `SHIFT_REQUIRED`). A refund is paid only after the return is approved. |
 | Split payment (cash and QR) | One `CASH_SALE` entry for the cash part (tendered minus change). The QR part is not an entry. |
-| Offline POS | The app queues sales with a client-generated `source_key` and `occurred_at`, and syncs later. **Close waits** for them: the app must flush its queue before it asks to close, and the server answers `PENDING_CLOSE` and refuses to compute until the app confirms the queue is empty. A sale that reaches the server after the close is refused for that shift and the app files it in the current open shift marked `lateSync`. |
 | Cashier forgets to close | A shift open longer than `cash.maxOpenHours` is flagged to the manager. It is never auto-closed. A manager may close it, with the variance recorded against the shift. |
 | Overage | The same flow with a positive variance. It is flagged separately, because it often means a sale was not recorded. |
 | Employee leaves with a shift open | The member cannot be removed while they have an open shift. |
 | Retry of the same sale or refund | The same `source_key` writes one entry. |
-| Large opening float | An opening float above a limit needs a note (the limit is a setting). |
+| Large opening float | An opening float above `maxOpeningFloatVnd` needs a note. |
+| Offline POS | **Out of scope**: there is no offline POS feature. The rules about queued sales are not built. |
 
 ## 7. API (sketch)
 
@@ -176,17 +218,13 @@ code), `SHIFT_HAS_OPEN_DRAFTS` (400, the contract's `S022`), `VARIANCE_REASON_RE
   counter, that a `CASH_SHORTAGE` entry of -50,000 exists and is linked to the shift, that finance journals it once, and that
   a late entry and a second close answer 409.
 - **Concurrency**: two refunds or two closes at once write one result; a retried sale writes one entry.
-- **Offline**: queued sales that sync before the close count; one that arrives after it goes to the current shift as `lateSync`.
 - **Migration**: a shift open at upgrade time gets one synthetic entry for its existing totals, so its expected cash is unchanged.
 
-## 10. Open questions
+## 10. Questions settled by the owner (6 November 2026)
 
-1. **Shared drawer.** The rule above lets a cashier sell into a shift a colleague opened, and traces the cash by staff. Do you
-   want that, or must a cashier sell only into a shift they opened themselves?
-2. **Tolerance numbers.** I used ±10,000đ as the tolerance and the same figure for approval. Do you want a lower band where a
-   reason is enough but approval is not needed (for example 10,000 to 50,000)?
-3. **Who approves.** A new permission `pos.approve`, held by the owner and the branch manager. Correct?
-4. **Responsibility default.** `none` (just recorded), unless the store chooses cashier deduction or store loss. Correct?
-5. **Open-too-long limit.** 16 hours. Right for your shops?
-6. **Offline.** Is the mobile POS going to sell offline in the first release? If not, the offline rules wait.
-7. **Denominations.** The nine VND notes listed above, no coins. Correct?
+1. **Shared drawer:** yes, a cashier picks from the available shifts, and the cashier of the order is the signed-in user.
+2. **Tolerance numbers:** configurable per store (section 4.3), with a separate approval threshold so a middle band is possible.
+3. **Approver:** the role and process are written in section 5.1 (`pos.approve`; owner and branch manager by default).
+4. **Responsibility, open-too-long limit, denominations:** keep the defaults (`none`, 16 hours, nine VND notes), recorded in the settings.
+5. **Offline:** no offline feature.
+6. **Shift times:** editable, for the demo (section 5.2).
