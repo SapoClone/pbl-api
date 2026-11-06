@@ -1,7 +1,7 @@
 # Screen API contracts (OmniRetail Figma → pbl-api)
 
 - **Date:** 2026-10-28
-- **Status:** Draft for review
+- **Status:** Draft for review. Build status on 6 November 2026: sections 01 to 03 and 05 are built as the first-wave and M1 to M6 work records; section 04 is built for admin identity, stores, accounts, admins, plans, subscriptions, usage and settings (31 of its 52 endpoints; see its *Build status*), and not for the insight and integration admin views or support sessions. Plan limits answer 409 `Q001` (sections 01 and 02), and work shifts add duties to staff schedules and `/staff-sales` (sections 01 and 03).
 - **Inputs:**
   - Figma file `Adh6JTPmk5VF5vLCSpzqYV`, pages Web Tenant, web admin, app.
   - The ERD in [`pbl-infra/docs/erd_viewer.html`](../../../pbl-infra/docs/erd_viewer.html), extended on 2026-10-28. New fields carry the note `FIGMA`.
@@ -208,7 +208,7 @@ The order fits the [roadmap](2026-10-10-catalog-commerce-roadmap.md). Each step 
 5. **Sales (P5):** order lifecycle on the three status axes, manual orders, payments, returns, registers, shifts, POS checkout.
 6. **Insight (P6):** hourly / channel / product summaries, dashboard KPIs, attention feed, notifications.
 7. **Integration:** channel connections, OAuth, SKU mapping, sync jobs. This is roadmap "deferred"; the design pulls it in.
-8. **Platform admin** (D3): admin identity, then tenants, plans and subscriptions, then insight read models, then support sessions. Needs the admin ADRs listed in [04](2026-10-28-api-contracts/04-platform-admin.md).
+8. **Platform admin** (D3): admin identity, then tenants, plans and subscriptions (built), accounts, admins and settings (built), then insight read models, then support sessions. Needs the admin ADRs listed in [04](2026-10-28-api-contracts/04-platform-admin.md).
 
 ### ADRs this spec implies
 - **Store user identity:** Account + AccountTenant vs Staff (D1).

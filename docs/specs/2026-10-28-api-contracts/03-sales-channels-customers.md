@@ -328,6 +328,24 @@ Product lookups for POS and manual orders use the catalog and stock endpoints in
 - **Errors:** `S022` 400 when draft invoices are still open (lists their ids); 409.
 - **Events:** `sales.shift.closed` (`finance` posts to the cash book).
 
+### GET /sales/api/v1/staff-sales
+- **Status:** built. Not in the design: it answers "who sold what" for the work-shift management ([guide](../../guides/work-shifts.md)).
+- **Auth:** `reports.view`, inside the caller's branches (a `branchId` outside them is 404).
+- **Query:** `branchId`, `shiftId` (one register session), `from`, `to` (days counted in UTC+7, `to` included, or datetimes), `channelType=POS|ALL` (default `POS`).
+- **Response:** 200
+  ```json
+  { "data": [ { "staffId": "…", "ordersCount": 12, "itemsSold": 31, "revenue": 4820000,
+                "firstSaleAt": "2026-11-05T01:12:00.000Z", "lastSaleAt": "2026-11-05T09:40:00.000Z" } ],
+    "totals": { "ordersCount": 12, "itemsSold": 31, "revenue": 4820000 } }
+  ```
+  Completed orders only, grouped by who rang them up (`orders.created_by`), best seller first. `revenue` is the grand total in integer VND; returns are not netted. Rows carry staff ids: names come from `GET /platform/api/v1/members`.
+
+### GET /sales/api/v1/staff-sales/{staffId}/products
+- **Status:** built.
+- **Auth:** `reports.view`, branch scope as above.
+- **Query:** as the list.
+- **Response:** 200 `{ "staffId": "…", "data": [ { "productId", "variantId", "sku", "name", "variantLabel", "quantity", "revenue", "ordersCount" } ] }`, best sellers first; `revenue` is after discounts.
+
 ---
 
 ## Integration

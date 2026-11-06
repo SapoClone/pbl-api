@@ -151,7 +151,7 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
 - **Errors:**
   - 400 `T020`: expired or revoked.
   - 400 `T021`: a signed-in email differs from the invitation.
-  - 400 `T022`: the store's user quota is reached (Plan quota `max_users`).
+  - 409 `Q001`: the store's user limit is reached (`details: { key: "users", used, limit, planCode }`; built, replaces `T022`).
 - **Events:** `platform.membership.granted`
 
 ## My account
@@ -208,7 +208,7 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
   ```
 
 ### POST /platform/api/v1/tenants
-- **Status:** `change`. Return 201; generate `code`; start a Free (or trial) subscription; take the default branch name from the body.
+- **Status:** `change`; built. Return 201; generate `code`; start a `free` subscription (announced with `platform.subscription.changed`); take the default branch name from the body.
 - **Screens:** Register store (missing)
 - **Auth:** token (no `tid` needed)
 - **Body:**
@@ -240,7 +240,7 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
 - **Events:** `platform.tenant.updated` (new)
 
 ### GET /platform/api/v1/tenants/current/context
-- **Status:** `new`. One call that feeds the global chrome, so screens don't need several requests.
+- **Status:** built. One call that feeds the global chrome, so screens don't need several requests. `plan` is the store's real current subscription (a store with none is on `free`).
 - **Screens:** sidebar store card ("Mộc Store · GÓI PRO · 2 chi nhánh"), top bar (branch switcher, user, role) on every tenant screen
 - **Auth:** tenant
 - **Response:** 200
@@ -275,7 +275,7 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
 - **Response:** 201, the branch object
 - **Errors:**
   - 400 `B001`: code exists.
-  - 400 `B003`: branch quota reached (the message names the plan limit, e.g. "2/2").
+  - 409 `Q001`: branch limit reached (`details: { key: "branches", used, limit, planCode }`; the message names the limit; built, replaces `B003`).
 - **Events:** `platform.branch.created` (exists)
 
 ### GET /platform/api/v1/branches/{id}
@@ -398,7 +398,7 @@ D1 assumption: staff are `Account` + `AccountTenant`, and `AccountTenant` gains 
 - **Errors:**
   - 400 `T002`: already a member.
   - 404: no account with that email.
-  - 400 `T022`: user quota reached.
+  - 409 `Q001`: user limit reached (built, replaces `T022`).
 
 ## Invitations (store side)
 
@@ -422,7 +422,7 @@ D1 assumption: staff are `Account` + `AccountTenant`, and `AccountTenant` gains 
 - **Errors:**
   - 400 `T002`: already a member.
   - 400 `T025`: a pending invitation already exists for this email.
-  - 400 `T022`: user quota reached.
+  - 409 `Q001`: user limit reached (built, replaces `T022`).
   - 400 `T023`: a branch is not in the tenant.
 - **Events:** SQS email `staff-invitation` (new template, link valid 7 days); `platform.invitation.created` (new)
 

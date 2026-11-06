@@ -123,3 +123,17 @@ If `inventory` is down, `sales` refuses the sale with 503 `S005`.
 - Events are at least once and not globally ordered.
 - There is no replay tool beyond the DLQ redrive; a projection that drifts is rebuilt by
   hand.
+
+## Events of the platform admin and plan limits
+
+| Event | Producer | Consumers | Why |
+|---|---|---|---|
+| `platform.tenant.created`, `.updated`, `.status_changed` | platform | insight (audit log of the store) | an admin creates, edits, locks or reactivates a store |
+| `platform.plan.changed` | platform (once per store on the plan, because an event carries a store) | catalog | an admin edits a plan's limits |
+| `platform.subscription.changed` | platform (also when a store opens, as `created`) | catalog | the store's plan, with its limits |
+| `catalog.usage.changed` | catalog (product create, status change, delete, file stored) | platform | products and stored megabytes, as absolute numbers, written to `tenant_usage` |
+
+Catalog keeps the limits in `tenant_plan_quota` and refuses a product or a file over the plan itself (409 `Q001`), so
+a create never waits on a call to platform. Platform became an event consumer for this (inbox table, `UsageHandler`),
+which needed a queue in pbl-infra (`events-topology.json` is generated from `topology.ts`; pbl-infra#12). Events of
+admin actions that belong to no store are not emitted yet (see [the platform admin guide](platform-admin-api.md)).

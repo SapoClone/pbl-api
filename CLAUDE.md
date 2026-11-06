@@ -406,7 +406,7 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
 
 - Events: the SNS adapter, the Terraform for topics/queues and the SNS-to-SQS subscription do not
   exist or have never run against AWS (checklist in [docs/deploy-actions.md](docs/deploy-actions.md)).
-  No replay tool beyond the DLQ redrive. Only branch, login, membership and order events exist.
+  No replay tool beyond the DLQ redrive. Beyond the M1-M6 services' own events, platform emits branch, login, membership, store, plan and subscription events and catalog emits `catalog.usage.changed` ([guide](docs/guides/events.md)).
 - Inventory keys stock by warehouse and SKU/variant (their model); branch views sum a branch's warehouses and exclude
   the central and quarantine ones. Order creation and payments need an `Idempotency-Key` header (a retry returns the
   first order, 200 + `Idempotency-Replayed`).
