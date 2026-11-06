@@ -2,6 +2,8 @@
   "error": {
     "quota_exceeded": "The store's usage exceeds the limits of the new plan",
     "same_plan_same_period": "The store is already on this plan for this period",
-    "payment_overlaps": "A payment already covers part of this period"
+    "payment_overlaps": "A payment already covers part of this period",
+    "payment_not_allowed": "A payment cannot be recorded on a free or closed subscription",
+    "payment_note_required": "The amount differs from the plan price times the months: add a note"
   }
 }

@@ -37,6 +37,8 @@ export enum ErrorCode {
   S010 = 'subscription.error.quota_exceeded',
   S011 = 'subscription.error.same_plan_same_period',
   S012 = 'subscription.error.payment_overlaps',
+  S013 = 'subscription.error.payment_not_allowed',
+  S014 = 'subscription.error.payment_note_required',
 
   // Plan limit reached (409): the store must move to a bigger plan
   Q001 = 'quota.error.limit_reached',

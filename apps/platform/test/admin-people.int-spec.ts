@@ -266,6 +266,7 @@ describe('platform admin accounts, admins and settings (Postgres)', () => {
     });
 
     it('promotes an admin, then lets the other super admin demote them', async () => {
+      h.sessions.revokeAllOfAdmin.mockClear();
       expect(
         await h.services.admins.update(superId, adminId, {
           role: PlatformAdminRole.SUPER_ADMIN,
@@ -276,6 +277,9 @@ describe('platform admin accounts, admins and settings (Postgres)', () => {
           role: PlatformAdminRole.ADMIN,
         }),
       ).toMatchObject({ role: 'admin' });
+      // demoting ends the sessions at once: a token minted as super admin must not outlive the role (D36)
+      expect(h.sessions.revokeAllOfAdmin).toHaveBeenCalledTimes(1);
+      expect(h.sessions.revokeAllOfAdmin).toHaveBeenCalledWith(adminId);
     });
 
     it('refuses to demote or disable yourself (A011)', async () => {
@@ -377,6 +381,7 @@ describe('platform admin accounts, admins and settings (Postgres)', () => {
           senderName: 'Omniretail',
           senderEmail: 'no-reply@omniretail.vn',
         },
+        billing: { graceDays: 7 },
       });
     });
 

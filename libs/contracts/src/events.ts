@@ -102,7 +102,18 @@ export interface PlanChangedPayload {
 export interface SubscriptionChangedPayload {
   subscriptionId: string;
   tenantId: string;
-  eventType: 'created' | 'renewed' | 'upgraded' | 'downgraded';
+  /**
+   * `past_due`: a paid plan ran past its end date and is in grace (limits unchanged); `expired`: the grace ended and the
+   * store fell back to `free`; `resync`: the current plan re-announced (backfill, nothing changed).
+   */
+  eventType:
+    | 'created'
+    | 'renewed'
+    | 'upgraded'
+    | 'downgraded'
+    | 'past_due'
+    | 'expired'
+    | 'resync';
   fromPlan: string | null;
   toPlan: string;
   /** ISO 8601, null for a plan that does not expire */

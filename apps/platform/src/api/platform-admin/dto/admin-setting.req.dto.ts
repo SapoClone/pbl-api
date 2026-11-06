@@ -62,6 +62,12 @@ export class EmailSettingsReqDto {
   senderEmail?: string;
 }
 
+export class BillingSettingsReqDto {
+  /** Days a paid plan keeps its limits after it ended, before it falls back to `free` (0 = no grace) */
+  @NumberFieldOptional({ int: true, min: 0, max: 60 })
+  graceDays?: number;
+}
+
 /** Any subset of the settings: a group or a key that is left out is not touched */
 export class UpdateSettingsReqDto {
   @ClassFieldOptional(() => GeneralSettingsReqDto)
@@ -72,4 +78,7 @@ export class UpdateSettingsReqDto {
 
   @ClassFieldOptional(() => EmailSettingsReqDto)
   email?: EmailSettingsReqDto;
+
+  @ClassFieldOptional(() => BillingSettingsReqDto)
+  billing?: BillingSettingsReqDto;
 }

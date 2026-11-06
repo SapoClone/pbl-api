@@ -32,6 +32,7 @@ import {
   PlatformAdminStatus,
 } from '../src/api/platform-admin/entities/platform-admin.entity';
 import { PlatformAdminAuthService } from '../src/api/platform-admin/platform-admin-auth.service';
+import { PlatformSettingReader } from '../src/api/platform-setting/platform-setting.reader';
 import { CacheKey } from '../src/constants/cache.constant';
 import { CreateUserTable1720105653064 } from '../src/database/migrations/1721488504685-create-user-table';
 import { CreateSessionTable1721550180313 } from '../src/database/migrations/1721550180313-create-session-table';
@@ -188,6 +189,7 @@ describe('platform admin (Postgres, real guard)', () => {
       controllers: [AdminAuthController, StoreProbeController],
       providers: [
         PlatformAdminAuthService,
+        PlatformSettingReader,
         { provide: AccessTokenService, useValue: tokens },
         {
           provide: RefreshTokenService,

@@ -71,7 +71,12 @@ export class SubscriptionCoreService implements OnApplicationBootstrap {
     tenantId: string,
     planCode: string,
     actor: SubscriptionActor,
-    options: { allowHidden?: boolean } = {},
+    options: {
+      allowHidden?: boolean;
+      /** What the plan event says: `created` for a store's first plan, `expired` for the fall back to `free` */
+      eventType?: 'created' | 'expired';
+      fromPlan?: string | null;
+    } = {},
   ): Promise<SubscriptionEntity> {
     const plan = await em.findOneBy(PlanEntity, { code: planCode });
     if (!plan || (!options.allowHidden && plan.status !== PlanStatus.ACTIVE)) {
@@ -130,8 +135,8 @@ export class SubscriptionCoreService implements OnApplicationBootstrap {
       {
         subscriptionId: subscription.id,
         tenantId,
-        eventType: 'created',
-        fromPlan: null,
+        eventType: options.eventType ?? 'created',
+        fromPlan: options.fromPlan ?? null,
         toPlan: plan.code,
         expiresAt: expiresAt ? expiresAt.toISOString() : null,
         quotas: {

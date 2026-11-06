@@ -52,6 +52,16 @@ import { PlatformAdminEntity } from './entities/platform-admin.entity';
 
 const CURRENT = `('trialing', 'active', 'past_due')`;
 const HISTORY_ON_DETAIL = 20;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The months a payment period covers: its days over 30.4375, rounded, at least 1 (1 Nov to 1 Dec is 1; a year is 12) */
+export function monthsOf(periodStart: string, periodEnd: string): number {
+  const days =
+    (Date.parse(`${periodEnd}T00:00:00Z`) -
+      Date.parse(`${periodStart}T00:00:00Z`)) /
+    DAY_MS;
+  return Math.max(1, Math.round(days / 30.4375));
+}
 
 /** A day in the store's time zone (UTC+7, no daylight saving): its first and last instants */
 const startOfDay = (day: string) => new Date(`${day}T00:00:00.000+07:00`);
@@ -282,6 +292,21 @@ export class AdminSubscriptionsService {
     const actor: PlatformActor = { type: 'platform_admin', id: adminId };
     return this.dataSource.transaction(async (em) => {
       const sub = await this.lockSubscription(em, id);
+      const plan = await em.findOneByOrFail(PlanEntity, {
+        id: sub.planId as PlanEntity['id'],
+      });
+      // a free or closed subscription takes no payment, and a closed one is never reopened (D33)
+      if (
+        plan.priceMonthly === 0 ||
+        !(CURRENT_SUBSCRIPTION_STATUSES as string[]).includes(sub.status)
+      ) {
+        throw new ValidationException(ErrorCode.S013);
+      }
+      const expected =
+        plan.priceMonthly * monthsOf(dto.periodStart, dto.periodEnd);
+      if (dto.amount !== expected && !dto.note?.trim()) {
+        throw new ValidationException(ErrorCode.S014);
+      }
       const t = this.tables(em);
       const [overlap] = await em.query(
         `SELECT 1 FROM ${t.payment} WHERE "subscription_id" = $1 AND "status" = 'paid'
@@ -306,9 +331,6 @@ export class AdminSubscriptionsService {
       );
       const newExpiry = endOfDay(dto.periodEnd);
       if (!sub.expiresAt || newExpiry > sub.expiresAt) {
-        const plan = await em.findOneByOrFail(PlanEntity, {
-          id: sub.planId as PlanEntity['id'],
-        });
         sub.expiresAt = newExpiry;
         sub.status = SubscriptionStatus.ACTIVE;
         sub.updatedBy = adminId;
@@ -406,6 +428,36 @@ export class AdminSubscriptionsService {
       return sub.id;
     });
     return this.get(subscriptionId);
+  }
+
+  /**
+   * Announces every store's current plan again (`platform.subscription.changed`, eventType `resync`), so catalog's limits
+   * and every other projection match platform. Safe to run any number of times; it changes no subscription. Part of a
+   * deploy: it fills the `tenant_plan_quota` rows of stores that predate the events (D7).
+   */
+  async resync(): Promise<{ count: number }> {
+    const t = this.tables();
+    const rows: { id: string }[] = await this.dataSource.query(
+      `SELECT "id" FROM ${t.subscription} WHERE "status" IN ${CURRENT} ORDER BY "code"`,
+    );
+    const actor: PlatformActor = { type: 'system', id: null };
+    for (const row of rows) {
+      await this.dataSource.transaction(async (em) => {
+        const sub = await em.findOneBy(SubscriptionEntity, {
+          id: row.id as SubscriptionEntity['id'],
+        });
+        if (
+          !sub ||
+          !(CURRENT_SUBSCRIPTION_STATUSES as string[]).includes(sub.status)
+        )
+          return;
+        const plan = await em.findOneByOrFail(PlanEntity, {
+          id: sub.planId as PlanEntity['id'],
+        });
+        await this.emitChanged(em, sub, 'resync', plan.code, plan, actor);
+      });
+    }
+    return { count: rows.length };
   }
 
   // ---- helpers
