@@ -370,8 +370,17 @@ export class StocktakeService {
 
         const snapVersion = BigInt(String(item.snapshotVersion));
 
-        // 1. Check for stale snapshot (concurrent stock mutation while counting)
-        if (currentVersion !== snapVersion && !dto?.forceRebase) {
+        // 1. Check for stale snapshot: the on-hand quantity moved while
+        // counting. D21: only on hand counts. A hold or release changes the
+        // version of the balance but not what is on the shelf, so it does
+        // not make a count stale. `forceRebase` is part of the approve
+        // endpoint, which already needs `inventory.approve`.
+        const snapshotOnHandMilli = parseQtyToMilli(
+          String(item.snapshotOnHandQty),
+          true,
+          false,
+        );
+        if (currentOnHandMilli !== snapshotOnHandMilli && !dto?.forceRebase) {
           throw new InventoryDomainError(
             InventoryDomainErrorCode.STOCKTAKE_STALE_SNAPSHOT,
             `Stock for SKU ${item.skuId} changed while counting (snapshot version ${snapVersion.toString()}, current version ${currentVersion.toString()}). Re-count or pass forceRebase=true.`,

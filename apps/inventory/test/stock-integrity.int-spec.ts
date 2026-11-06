@@ -25,6 +25,7 @@ import { AddWarehouseStockBalances1791900000100 } from '../src/migrations/179190
 import { CreateM2InventoryCore1791900000200 } from '../src/migrations/1791900000200-create-m2-inventory-core';
 import { AllowReservationExpirySelect1792500000000 } from '../src/migrations/1792500000000-allow-reservation-expiry-select';
 import { StockIntegrity1793000000600 } from '../src/migrations/1793000000600-stock-integrity';
+import { IssuingService } from '../src/modules/issuing/issuing.service';
 import { ProcurementService } from '../src/modules/procurement/procurement.service';
 import { ReceivingService } from '../src/modules/receiving/receiving.service';
 import { StocktakeService } from '../src/modules/stocktake/stocktake.service';
@@ -53,6 +54,7 @@ describe('stock integrity (Postgres)', () => {
   let transfers: TransfersService;
   let stocktake: StocktakeService;
   let procurement: ProcurementService;
+  let issuing: IssuingService;
   let reservations: ReservationsService;
   let orderHandler: OrderCompletedHandler;
   const as = <T>(work: () => Promise<T>) =>
@@ -145,6 +147,7 @@ describe('stock integrity (Postgres)', () => {
     transfers = new TransfersService(dataSource, outbox);
     stocktake = new StocktakeService(dataSource, outbox);
     procurement = new ProcurementService(dataSource, receiving, outbox);
+    issuing = new IssuingService(dataSource, outbox);
     reservations = new ReservationsService(dataSource, 15, outbox);
     orderHandler = new OrderCompletedHandler(reservations);
   });
@@ -744,6 +747,125 @@ describe('stock integrity (Postgres)', () => {
           }),
         ),
       ).rejects.toMatchObject({ status: 409 });
+    });
+  });
+
+  describe('below-minimum alert on every crossing (D21)', () => {
+    const belowMin = async () =>
+      (
+        await dataSource.query(
+          `SELECT count(*)::int AS n FROM ${t('outbox_event')} WHERE "type" = 'inventory.stock.below_min'`,
+        )
+      )[0].n as number;
+    const setMin = (wh: string, min: string) =>
+      dataSource.query(
+        `INSERT INTO ${t('stock_threshold')} (id, tenant_id, warehouse_id, sku_id, min_qty)
+         VALUES ($1, $2, $3, $4, $5::numeric(18,3))`,
+        [randomUUID(), TENANT, wh, SKU_A, min],
+      );
+    const issue = (wh: string, qty: string) =>
+      as(() =>
+        issuing.createIssue({
+          warehouseId: wh,
+          reasonCode: 'MANUAL_WITHDRAWAL',
+          autoPost: true,
+          items: [{ skuId: SKU_A, qty }],
+        }),
+      );
+
+    it('fires once per crossing, stays quiet while below, and re-arms when stock rises back', async () => {
+      const wh = await addWarehouse('WM', BRANCH_1);
+      await stockIn(wh, SKU_A, '10.000');
+      await setMin(wh, '5.000');
+      await issue(wh, '3.000'); // 7: above the minimum
+      expect(await belowMin()).toBe(0);
+      await issue(wh, '3.000'); // 4: crossing
+      expect(await belowMin()).toBe(1);
+      await issue(wh, '1.000'); // 3: already below, quiet
+      expect(await belowMin()).toBe(1);
+      await stockIn(wh, SKU_A, '10.000'); // 13: back above
+      await issue(wh, '9.000'); // 4: crosses again
+      expect(await belowMin()).toBe(2);
+    });
+
+    it('fires when a hold for a sale or a transfer dispatch crosses', async () => {
+      const wh = await addWarehouse('WM2', BRANCH_1);
+      const other = await addWarehouse('WM3', BRANCH_1);
+      await stockIn(wh, SKU_A, '10.000');
+      await setMin(wh, '5.000');
+      await as(() =>
+        reservations.reserveWarehouseStock(randomUUID(), {
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: randomUUID(),
+          lines: [{ warehouseId: wh, skuId: SKU_A, qty: '6.000' }],
+        }),
+      );
+      expect(await belowMin()).toBe(1);
+      // available is 4 (below): a dispatch while below does not fire again
+      const draft = await as(() =>
+        transfers.createTransfer({
+          fromWarehouseId: wh,
+          toWarehouseId: other,
+          items: [{ skuId: SKU_A, qty: '1.000' }],
+        }),
+      );
+      await as(() => transfers.dispatchTransfer(draft.id));
+      expect(await belowMin()).toBe(1);
+
+      const wh2 = await addWarehouse('WM4', BRANCH_1);
+      await stockIn(wh2, SKU_A, '10.000');
+      await setMin(wh2, '8.000');
+      const d2 = await as(() =>
+        transfers.createTransfer({
+          fromWarehouseId: wh2,
+          toWarehouseId: other,
+          items: [{ skuId: SKU_A, qty: '4.000' }],
+        }),
+      );
+      await as(() => transfers.dispatchTransfer(d2.id));
+      expect(await belowMin()).toBe(2);
+    });
+  });
+
+  describe('stock take (D21)', () => {
+    it('does not go stale because of a hold, but does when on hand moves', async () => {
+      const wh = await addWarehouse('WT', BRANCH_1);
+      await stockIn(wh, SKU_A, '10.000');
+      const take = await as(() =>
+        stocktake.createStocktake({ warehouseId: wh, skuIds: [SKU_A] }),
+      );
+      await as(() =>
+        stocktake.recordCounts(take.id, {
+          counts: [{ skuId: SKU_A, countedQty: '9.000' }],
+        }),
+      );
+      // a hold changes the balance version but not what is on the shelf
+      await as(() =>
+        reservations.reserveWarehouseStock(randomUUID(), {
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: randomUUID(),
+          lines: [{ warehouseId: wh, skuId: SKU_A, qty: '2.000' }],
+        }),
+      );
+      // sales are not frozen while a take is open
+      const approved = await as(() => stocktake.approveStocktake(take.id));
+      expect(approved.status).toBe('APPROVED');
+      expect((await balance(wh, SKU_A)).onHand).toBe('9.000');
+
+      const take2 = await as(() =>
+        stocktake.createStocktake({ warehouseId: wh, skuIds: [SKU_A] }),
+      );
+      await as(() =>
+        stocktake.recordCounts(take2.id, {
+          counts: [{ skuId: SKU_A, countedQty: '8.000' }],
+        }),
+      );
+      await stockIn(wh, SKU_A, '1.000');
+      await expect(
+        as(() => stocktake.approveStocktake(take2.id)),
+      ).rejects.toMatchObject({ code: 'STOCKTAKE_STALE_SNAPSHOT' });
     });
   });
 });

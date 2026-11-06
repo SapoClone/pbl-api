@@ -11,6 +11,7 @@ import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import { lockStockBalance } from '../../common/balance-lock';
+import { emitBelowMinOnCrossing } from '../../common/below-min';
 import {
   assertCanCancelStockTransfer,
   assertCanDispatchStockTransfer,
@@ -253,6 +254,24 @@ export class TransfersService {
           currentAvgUnitCost: srcBal.avgUnitCost,
           deductedBaseQty: qtyStr,
         });
+
+        // D21: alert once when the dispatch takes available stock under the minimum
+        {
+          const availBefore =
+            parseQtyToMilli(srcBal.onHandQty, true, false) -
+            parseQtyToMilli(srcBal.reservedQty, true, false);
+          await emitBelowMinOnCrossing(
+            em,
+            this.outbox,
+            prefix,
+            tenantId,
+            header.from_warehouse_id,
+            item.skuId,
+            availBefore,
+            availBefore - parseQtyToMilli(qtyStr, false, false),
+            occurredAt,
+          );
+        }
 
         // 1. Deduct from source warehouse on_hand_qty
         await em.query(

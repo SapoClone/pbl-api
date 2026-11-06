@@ -37,6 +37,7 @@ import {
 import { EventOutbox, qualifiedTable } from '@pbl/events';
 import { createHash, randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { emitBelowMinOnCrossing } from '../common/below-min';
 import { RESERVATION_TTL_MINUTES } from '../config/inventory.config';
 import {
   computeValuationAfterDeduction,
@@ -748,6 +749,20 @@ export class ReservationsService {
             parseDecimalToMilli(String(updated[0].availableAfter)),
           ),
         });
+        // D21: a hold that takes available stock under the minimum alerts once
+        const availableAfter = parseDecimalToMilli(
+          String(updated[0].availableAfter),
+        );
+        await emitBelowMinOnCrossing(
+          em,
+          this.outbox,
+          prefix,
+          tenantId,
+          line.warehouseId,
+          line.skuId,
+          availableAfter + line.qtyMilli,
+          availableAfter,
+        );
       }
 
       if (this.outbox) {

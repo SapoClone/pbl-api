@@ -572,6 +572,10 @@ export class StockTakeEntity {
   @Column({ type: 'varchar', length: 20, default: 'DRAFT' })
   status!: 'DRAFT' | 'COUNTING' | 'APPROVED' | 'CANCELLED';
 
+  /**
+   * Stored but unused (D21): a stock take does NOT freeze sales or other
+   * movements. A count that went stale is caught on approval instead.
+   */
   @Column({ name: 'freeze_movement', type: 'boolean', default: false })
   freezeMovement!: boolean;
 
