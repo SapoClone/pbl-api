@@ -316,6 +316,17 @@ export interface SalesShiftEventPayload {
   actualCash?: number;
   /** Integer VND, negative when the drawer is short */
   variance?: number;
+  /** Cash session close (additive): reason code of a variance above the tolerance */
+  varianceReason?: string | null;
+  varianceNote?: string | null;
+  /** none | cashier_deduction | store_loss, copied from the store setting at close */
+  responsibility?: string | null;
+  /** Who counted the drawer, who asked to close and who approved (null within the tolerance) */
+  countedBy?: string | null;
+  closedBy?: string | null;
+  approvedBy?: string | null;
+  /** The CASH_SHORTAGE or CASH_OVERAGE entry the close wrote (null when the drawer matched) */
+  varianceEntryId?: string | null;
   occurredAt: string;
 }
 

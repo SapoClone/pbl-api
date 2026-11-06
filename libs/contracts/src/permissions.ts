@@ -8,7 +8,7 @@ export const PERMISSION_CATALOG = {
   products: ['view', 'create', 'update', 'delete'],
   inventory: ['view', 'create', 'update', 'delete', 'approve'],
   orders: ['view', 'create', 'update', 'delete', 'approve'],
-  pos: ['view', 'create', 'update'],
+  pos: ['view', 'create', 'update', 'approve'],
   channels: ['view', 'create', 'update', 'delete'],
   customers: ['view', 'create', 'update', 'delete'],
   purchasing: ['view', 'create', 'update', 'delete', 'approve'],
