@@ -41,7 +41,8 @@ calls of the `feature/web-admin-01` branch map onto it, and what is still missin
 | `GET /admin/subscriptions`                          | 11 Thuê bao               | `q`, `planCode`, `status`, `isExpiringSoon`, `tenantId`; `counts`                       |
 | `GET /admin/subscriptions/{id}`                     | 12 Chi tiết thuê bao      | current payment and the last 20 history entries                                         |
 | `GET /admin/subscriptions/{id}/events`              | 12 (history paging)       |                                                                                         |
-| `POST /admin/subscriptions/{id}/payments`           | record payment            | a period that runs past the expiry renews the subscription                              |
+| `POST /admin/subscriptions/{id}/payments`           | record payment            | a period that runs past the expiry renews the subscription (also one in grace); 400 `S013` on `free` or a closed subscription, 400 `S014` when `amount` is not price x months and there is no `note` |
+| `POST /admin/subscriptions/resync`                  | (deploy step)             | `super_admin`; re-announces every current plan so catalog has the limits of stores that predate the events |
 | `POST /admin/subscriptions/change-plan/check`       | 13 Gán / Đổi gói          | dry run: usage against the new limits                                                   |
 | `POST /admin/subscriptions/change-plan`             | 13                        | refused when over the new limits                                                        |
 | `GET /admin/usage`, `GET /admin/usage/{tenantId}`   | 14 Hạn mức                | `warning=normal\|near_limit\|at_limit`; fullest first                                   |
@@ -56,7 +57,8 @@ calls of the `feature/web-admin-01` branch map onto it, and what is still missin
 Error codes the screens will want: `tenant.error.subdomain_exists` (T001), `tenant.error.already_suspended` (T006),
 `tenant.error.not_suspended` (T007), `tenant.error.owner_account_disabled` (T008), `plan.error.not_active` (P001),
 `plan.error.code_exists` (P002), `subscription.error.quota_exceeded` (S010; the message names the key and the numbers),
-`subscription.error.same_plan_same_period` (S011), `subscription.error.payment_overlaps` (S012). These keep this
+`subscription.error.same_plan_same_period` (S011), `subscription.error.payment_overlaps` (S012), `subscription.error.payment_not_allowed` (S013),
+`subscription.error.payment_note_required` (S014). These keep this
 repository's numbering, which differs from contract 04 where an old code was already taken (T001 is the subdomain,
 `S001` is a schedule overlap).
 
@@ -96,8 +98,23 @@ them until their endpoints exist. Other gaps in what is built:
 - **A new admin has no way to set a password but the one the super admin types.** Contract 04 queues a set-password
   email; there is no email flow for admins, so `POST /admin/admins` takes an optional `password` (same policy as the
   bootstrap command: 12 characters or more of letters, digits and `!#$%&*@^`). Without it the admin cannot sign in.
-- **Settings are stored and validated, not applied.** The sign-in lockout still uses 5 attempts and 15 minutes
-  (contract 04 says so for now); the reset-link and audit-retention values wait for the flows that need them.
+- **Settings:** `security.lockoutMaxAttempts` / `lockoutWindowMinutes` now drive both sign-ins (never under 3
+  attempts, cached 30 seconds) and `billing.graceDays` (default 7) drives the expiry job; the reset-link and
+  audit-retention values still wait for the flows that need them.
+- **Plans expire.** A job in platform (every 10 minutes, one instance at a time through a Postgres advisory lock) moves
+  a paid subscription past its end date to `past_due`, keeps the paid limits for `billing.graceDays` days, then closes it
+  (`expired`) and starts `free` with no end date. Nothing is deleted. A payment in the grace renews the same
+  subscription; after the fall back to `free`, renewing is a change of plan. **Trials are not offered**: `counts.trial`
+  is always 0 and the web hides the trial tab.
+- **Deploy step: resync plans.** After deploying catalog's plan projection, run
+  `POST /platform/api/v1/admin/subscriptions/resync` (super admin) or the task
+  `node dist/apps/platform/apps/platform/src/scripts/resync-plans.js`, once and again whenever a service that
+  consumes plan events is added. Until then a store that predates the events has no limits in catalog (fail open,
+  one WARN per store in catalog's log). It is safe to repeat.
+- **Suspension reaches the other services** through `platform.tenant.status_changed`: sales and integration keep a
+  `tenant_status` projection; the internal order intake answers 403 `TENANT_SUSPENDED`, marketplace webhooks 503
+  `TENANT_SUSPENDED` (the marketplace retries) and the sync worker skips the store's jobs. A store suspended before
+  these services were deployed is not known to them until its next status event.
 - **Accounts have no verified-email state yet**, so `status=pending_verification` matches nothing and
   `isEmailVerified` is not in the detail.
 - **No events for admin actions** (`platform.admin.created`, `platform.settings.changed`, `...sessions_revoked`): they

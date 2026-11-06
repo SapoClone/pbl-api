@@ -1,5 +1,6 @@
 import {
   DynamicModule,
+  Logger,
   Module,
   ModuleMetadata,
   OnApplicationShutdown,
@@ -23,6 +24,26 @@ class SessionRevocationShutdown implements OnApplicationShutdown {
   async onApplicationShutdown() {
     await this.revocation?.close();
   }
+}
+
+/** Environments where a missing deny-list is a misconfiguration, not a local shortcut */
+const STRICT_ENVIRONMENTS = ['production', 'staging'];
+
+/**
+ * Without REDIS_HOST the service cannot see the sessions platform ended (logout, suspended store, disabled or demoted
+ * admin), so those tokens keep working until they expire. Locally that is fine; anywhere real it is logged as an ERROR
+ * at start-up so it cannot go unnoticed.
+ */
+export function warnIfRevocationMissing(
+  revocation: RedisSessionRevocation | null,
+  nodeEnv: string | undefined,
+): boolean {
+  if (revocation || !STRICT_ENVIRONMENTS.includes(nodeEnv ?? '')) return false;
+  new Logger('PblAuthModule').error(
+    'REDIS_HOST is not set: this service does not check the session deny-list, so ended sessions (logout, suspended store, ' +
+      'disabled or demoted admin) keep working until their access token expires. Set REDIS_HOST.',
+  );
+  return true;
 }
 
 interface PblAuthAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
@@ -73,13 +94,16 @@ export class PblAuthModule {
         {
           provide: SESSION_REVOCATION,
           inject: [ConfigService],
-          useFactory: (config: ConfigService) =>
-            RedisSessionRevocation.fromEnv({
+          useFactory: (config: ConfigService) => {
+            const revocation = RedisSessionRevocation.fromEnv({
               host: config.get<string>('REDIS_HOST'),
               port: config.get<string>('REDIS_PORT'),
               password: config.get<string>('REDIS_PASSWORD'),
               tls: config.get<string>('REDIS_TLS_ENABLED'),
-            }),
+            });
+            warnIfRevocationMissing(revocation, config.get<string>('NODE_ENV'));
+            return revocation;
+          },
         },
         {
           provide: SessionRevocationShutdown,

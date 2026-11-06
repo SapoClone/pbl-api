@@ -2,6 +2,8 @@
   "error": {
     "quota_exceeded": "Mức sử dụng của cửa hàng vượt hạn mức của gói mới",
     "same_plan_same_period": "Cửa hàng đã dùng gói này trong kỳ này",
-    "payment_overlaps": "Đã có thanh toán cho một phần kỳ này"
+    "payment_overlaps": "Đã có thanh toán cho một phần kỳ này",
+    "payment_not_allowed": "Không thể ghi nhận thanh toán cho gói miễn phí hoặc gói đã đóng",
+    "payment_note_required": "Số tiền khác giá gói nhân số tháng: hãy nhập ghi chú"
   }
 }

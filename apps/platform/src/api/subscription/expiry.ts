@@ -10,3 +10,6 @@ export function expiryOf(expiresAt: Date | null, now = new Date()) {
     daysLeft,
   };
 }
+
+/** Fallback of the platform setting `billing.graceDays` (D31): days a paid plan keeps its limits after it ended */
+export const GRACE_DAYS = 7;

@@ -34,6 +34,8 @@ import { ShiftsController } from '../modules/shifts/shifts.controller';
 import { ShiftsService } from '../modules/shifts/shifts.service';
 import { StaffSalesController } from '../modules/staff-sales/staff-sales.controller';
 import { StaffSalesService } from '../modules/staff-sales/staff-sales.service';
+import { TenantStatusHandler } from '../tenant-status/tenant-status.handler';
+import { TenantStatusService } from '../tenant-status/tenant-status.service';
 import { OrderItemEntity } from './entities/order-item.entity';
 import { CheckoutWorkflowEntity, OrderEntity } from './entities/order.entity';
 import { OrdersController } from './orders.controller';
@@ -89,6 +91,8 @@ import { OrdersService } from './orders.service';
     CustomerLoyaltyClient,
     FinanceCreditClient,
     BranchProjectionHandler,
+    TenantStatusHandler,
+    TenantStatusService,
     InventoryClient,
   ],
   exports: [

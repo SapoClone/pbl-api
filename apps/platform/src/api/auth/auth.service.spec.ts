@@ -14,6 +14,7 @@ import {
   AccountEntity,
   AccountStatus,
 } from '../account/entities/account.entity';
+import { PlatformSettingReader } from '../platform-setting/platform-setting.reader';
 import { MembershipService } from '../tenant/membership.service';
 import { AccessTokenService } from './access-token.service';
 import { AuthService } from './auth.service';
@@ -49,6 +50,7 @@ describe('AuthService', () => {
   >;
   let accessTokenServiceValue: { sign: jest.Mock };
   let outboxValue: { add: jest.Mock };
+  let settingsValue: { lockout: jest.Mock };
   let dataSourceValue: { transaction: jest.Mock };
   let sessionServiceValue: { revokeAll: jest.Mock };
   let membershipServiceValue: {
@@ -97,6 +99,11 @@ describe('AuthService', () => {
     };
 
     accessTokenServiceValue = { sign: jest.fn() };
+    settingsValue = {
+      lockout: jest
+        .fn()
+        .mockResolvedValue({ maxAttempts: 5, windowMs: 15 * 60 * 1000 }),
+    };
     outboxValue = { add: jest.fn().mockResolvedValue(undefined) };
     dataSourceValue = {
       transaction: jest.fn(async (work: (em: object) => unknown) => work({})),
@@ -141,6 +148,7 @@ describe('AuthService', () => {
         { provide: getDataSourceToken(), useValue: dataSourceValue },
         { provide: EventOutbox, useValue: outboxValue },
         { provide: SessionService, useValue: sessionServiceValue },
+        { provide: PlatformSettingReader, useValue: settingsValue },
       ],
     }).compile();
 
@@ -595,6 +603,23 @@ describe('AuthService', () => {
         '"failed_login_count" + 1 >= :max',
       );
       expect(set.lockedUntil()).toContain(':lockedUntil');
+    });
+
+    it('uses the lockout numbers of the platform settings', async () => {
+      settingsValue.lockout.mockResolvedValue({
+        maxAttempts: 8,
+        windowMs: 30 * 60 * 1000,
+      });
+      (verifyPassword as jest.Mock).mockResolvedValue(false);
+      const before = Date.now();
+
+      await expect(login()).rejects.toThrow(UnauthorizedException);
+
+      const params = queryBuilder.setParameters.mock.calls[0][0];
+      expect(params.max).toBe(8);
+      expect(params.lockedUntil.getTime()).toBeGreaterThanOrEqual(
+        before + 30 * 60 * 1000,
+      );
     });
 
     it('does not count a failure for an unknown email', async () => {

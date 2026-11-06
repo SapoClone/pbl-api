@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { PlatformSettingEntity } from '../platform-setting/entities/platform-setting.entity';
+import { GRACE_DAYS } from '../subscription/expiry';
 import { UpdateSettingsReqDto } from './dto/admin-setting.req.dto';
 
 export type PlatformSettings = {
@@ -20,6 +21,8 @@ export type PlatformSettings = {
     auditRetentionMonths: number;
   };
   email: { senderName: string; senderEmail: string };
+  /** `graceDays`: days a paid plan keeps its limits after its end date, before it falls back to `free` */
+  billing: { graceDays: number };
 };
 
 /** What a setting is until an admin changes it (contract 04, "System settings") */
@@ -43,12 +46,14 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
     senderName: 'Omniretail',
     senderEmail: 'no-reply@omniretail.vn',
   },
+  billing: { graceDays: GRACE_DAYS },
 };
 
 /**
  * The settings of the whole platform, one `platform_setting` row per key (`general.timezone`). A key without a row has
- * its default, so nothing is seeded. Stored and validated, not yet read by the services they describe: the sign-in
- * lockout still uses its constants (contract 04), and the other values wait for the flows they belong to.
+ * its default, so nothing is seeded. Read at run time: `security.lockoutMaxAttempts` and `lockoutWindowMinutes` (both sign-ins, minimum 3 attempts,
+ * through `PlatformSettingReader`, cached 30 s) and `billing.graceDays` (the expiry job). The other values wait for the
+ * flows they belong to.
  */
 @Injectable()
 export class AdminSettingsService {

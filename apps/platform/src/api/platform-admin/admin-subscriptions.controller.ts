@@ -41,6 +41,17 @@ export class AdminSubscriptionsController {
     return this.subscriptions.list(query);
   }
 
+  @RequirePlatformAdmin('super_admin')
+  @ApiAuth({
+    summary:
+      'Announce every store plan again so catalog and other services match (super admin; part of a deploy)',
+  })
+  @Post('resync')
+  @HttpCode(HttpStatus.OK)
+  resync(): Promise<{ count: number }> {
+    return this.subscriptions.resync();
+  }
+
   // declared before ':id' routes: the literal paths below must not be read as an id
   @ApiAuth({
     summary: 'Dry run of a change of plan: usage against the new limits',

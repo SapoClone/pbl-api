@@ -139,9 +139,10 @@ export class AdminAdminsService {
       admin.role = role;
       admin.status = status;
       admin.updatedBy = callerId;
-      return { saved: await em.save(admin), disabled };
+      return { saved: await em.save(admin), endSessions: disabled || demoted };
     });
-    if (result.disabled) await this.sessions.revokeAllOfAdmin(id);
+    // disabling or demoting ends the admin's sessions at once, so the old token's powers do not outlive the change (D36)
+    if (result.endSessions) await this.sessions.revokeAllOfAdmin(id);
     return this.toItem(result.saved);
   }
 

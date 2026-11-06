@@ -8,6 +8,7 @@ import { BranchBlockersService } from '../internal/branch-blockers.service';
 import { LazadaProviderAdapter } from '../providers/lazada/lazada.adapter';
 import { ProviderRegistryService } from '../providers/provider-registry.service';
 import { ShopeeProviderAdapter } from '../providers/shopee/shopee.adapter';
+import { TenantStatusHandler } from '../tenant-status/tenant-status.handler';
 import { BranchScopeService } from './branch-scope/branch-scope.service';
 import { ConflictsController } from './conflicts/conflicts.controller';
 import { ConflictsService } from './conflicts/conflicts.service';
@@ -55,6 +56,7 @@ import { WebhooksService } from './webhooks/webhooks.service';
     ConflictsService,
     ReconciliationService,
     IntegrationEventsConsumer,
+    TenantStatusHandler,
   ],
   exports: [
     ProviderRateLimiterService,

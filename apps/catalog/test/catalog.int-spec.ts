@@ -7,7 +7,11 @@ import { PlanQuotaService } from '../src/quota/plan-quota.service';
  * Run with: `pnpm test:int` or `npx jest --config libs/events/test/jest-int.json apps/catalog/test/catalog.int-spec.ts`
  */
 import { HttpException } from '@nestjs/common';
-import { RequestContext, TenantScopedRepository } from '@pbl/common';
+import {
+  RequestContext,
+  runInTenantTransaction,
+  TenantScopedRepository,
+} from '@pbl/common';
 import {
   CATALOG_PRICE_CHANGED,
   CATALOG_PRODUCT_CREATED,
@@ -18,17 +22,20 @@ import {
 import {
   CONSUMER_ENTITIES,
   CONSUMER_MIGRATIONS,
+  databaseOptions,
   EventOutbox,
+  initializeDatabase,
   OutboxEventEntity,
   PRODUCER_ENTITIES,
   PRODUCER_MIGRATIONS,
-  databaseOptions,
-  initializeDatabase,
   provisionServiceRole,
 } from '@pbl/events';
 import { DataSource } from 'typeorm';
 import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
-import { CatalogErrorCode } from '../src/domain/catalog-domain';
+import {
+  CatalogDomainError,
+  CatalogErrorCode,
+} from '../src/domain/catalog-domain';
 import {
   AttributeEntity,
   AttributeValueEntity,
@@ -840,6 +847,62 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
         create('Race B'),
       ]);
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    });
+  });
+  describe('Plan limits (storage)', () => {
+    const tenant = 'f1f1f1f1-f1f1-4f1f-8f1f-f1f1f1f1f1f1';
+    const MB = 1024 * 1024;
+    const quota = () => new PlanQuotaService(new EventOutbox());
+    const addUpload = (status: string, kind: string, bytes: number) =>
+      adminDs.query(
+        `INSERT INTO "${schema}"."uploads"
+           ("tenant_id","kind","file_name","content_type","declared_size","stored_size","storage_key","status","expires_at")
+         VALUES ($1,$2,'f','image/png',$3,$3,'k-' || gen_random_uuid(),$4, now() + interval '1 day')`,
+        [tenant, kind, bytes, status],
+      );
+    const store = (bytes: number) =>
+      asTenant(tenant, () =>
+        runInTenantTransaction(appDs, (em) =>
+          quota().assertCanStore(em, bytes),
+        ),
+      );
+
+    beforeAll(async () => {
+      await adminDs.query(
+        `INSERT INTO "${schema}"."tenant_plan_quota"
+           ("tenant_id","plan_code","quota_products","quota_storage_mb","source_changed_at")
+         VALUES ($1,'free',100,10,now())`,
+        [tenant],
+      );
+    });
+
+    it('counts UPLOADED and ATTACHED files (images and imports), not PENDING ones', async () => {
+      await addUpload('PENDING', 'IMAGE', 5 * MB);
+      await addUpload('UPLOADED', 'IMAGE', 4 * MB);
+      await addUpload('ATTACHED', 'IMAGE', 3 * MB);
+      await addUpload('ATTACHED', 'IMPORT', 2 * MB);
+      // 9 MB kept of 10 MB: 1 MB fits, 2 MB does not
+      await store(1 * MB);
+      const error = await store(2 * MB).catch((e) => e);
+      expect(error).toBeInstanceOf(CatalogDomainError);
+      expect(error).toMatchObject({
+        code: 'Q001',
+        details: { key: 'storageGb', planCode: 'free' },
+      });
+    });
+
+    it('announces the same figure as the usage', async () => {
+      await asTenant(tenant, () =>
+        runInTenantTransaction(appDs, (em) => quota().announceUsage(em)),
+      );
+      const events = await adminDs
+        .getRepository(OutboxEventEntity)
+        .find({ where: { tenantId: tenant, type: 'catalog.usage.changed' } });
+      expect(
+        events.map(
+          (e) => (e.payload.payload as { storageMb: number }).storageMb,
+        ),
+      ).toContain(9);
     });
   });
 });

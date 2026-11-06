@@ -71,6 +71,8 @@ export type I18nTranslations = {
             "quota_exceeded": string;
             "same_plan_same_period": string;
             "payment_overlaps": string;
+            "payment_not_allowed": string;
+            "payment_note_required": string;
         };
     };
     "tenant": {
