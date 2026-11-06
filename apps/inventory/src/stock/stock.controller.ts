@@ -3,15 +3,17 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  GoneException,
+  Headers,
   HttpCode,
   HttpStatus,
-  Optional,
   Post,
   Query,
   ValidationPipe,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiHeader,
   ApiOperation,
   ApiQuery,
   ApiResponse,
@@ -29,11 +31,7 @@ import { CreateStockReceiptDto } from '../modules/receiving/receiving.dto';
 import { ReceivingService } from '../modules/receiving/receiving.service';
 import { rethrowInventoryHttpError } from '../presentation/inventory-http-error';
 import { WarehouseScopeService } from '../scope/warehouse-scope';
-import {
-  ListStockReqDto,
-  ReceiveStockBalanceDto,
-  StockReceiptReqDto,
-} from './dto/stock.dto';
+import { ListStockReqDto } from './dto/stock.dto';
 import { Page, StockRes, StockService } from './stock.service';
 
 const polymorphicPipe = new ValidationPipe({
@@ -50,57 +48,56 @@ export class StockController {
   constructor(
     private readonly stock: StockService,
     private readonly scope: WarehouseScopeService,
-    @Optional() private readonly receiving?: ReceivingService,
+    private readonly receiving: ReceivingService,
   ) {}
 
   @Post('stock-receipts')
   @HttpCode(HttpStatus.CREATED)
   @RequirePermission('inventory.create')
   @ApiOperation({
-    summary:
-      'Create a warehouse stock receipt document (M2) or receive branch stock (P1)',
+    summary: 'Create a warehouse stock receipt document',
     description:
-      'Creates a DRAFT M2 warehouse stock receipt document when warehouseId is provided, or increments legacy P1 branch on-hand stock when branchId is provided.',
+      'Creates a DRAFT stock receipt for `warehouseId`; with `autoPost` (needs inventory.approve) it is posted at once. Honours `Idempotency-Key`: the same key returns the same receipt and posts nothing twice. Stock never enters without a document (D15): the older branch receive (`branchId`) answers 410.',
   })
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
   @ApiResponse({
     status: HttpStatus.CREATED,
-    description: 'Created stock receipt document or updated branch stock rows',
+    description: 'Created stock receipt document',
+  })
+  @ApiResponse({
+    status: HttpStatus.GONE,
+    description: 'The older branch receive without a document was removed',
   })
   async receive(
     @Body() body: Record<string, unknown>,
     @AllowedBranches() branches: string[] | null,
     @CurrentUser() user: AuthUser,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<unknown> {
-    if (
-      body &&
-      typeof body === 'object' &&
-      'warehouseId' in body &&
-      this.receiving
-    ) {
-      const dto = (await polymorphicPipe.transform(body, {
-        type: 'body',
-        metatype: CreateStockReceiptDto,
-      })) as CreateStockReceiptDto;
-      try {
-        // an auto-posted receipt moves stock at once: that is an approval
-        if (dto.autoPost && !hasPermission(user, 'inventory.approve')) {
-          throw new ForbiddenException(
-            'inventory.approve is required to autoPost',
-          );
-        }
-        await this.scope.assertWarehouse(branches, dto.warehouseId);
-        return await this.receiving.createReceipt(dto);
-      } catch (error) {
-        rethrowInventoryHttpError(error);
-      }
+    if (!body || typeof body !== 'object' || !('warehouseId' in body)) {
+      throw new GoneException({
+        errorCode: 'DIRECT_STOCK_ENTRY_REMOVED',
+        code: 'DIRECT_STOCK_ENTRY_REMOVED',
+        message:
+          'Stock is received through a stock receipt document: send warehouseId and items',
+      });
     }
-
     const dto = (await polymorphicPipe.transform(body, {
       type: 'body',
-      metatype: StockReceiptReqDto,
-    })) as StockReceiptReqDto;
-    this.scope.assertBranch(branches, dto.branchId);
-    return this.stock.receive(dto);
+      metatype: CreateStockReceiptDto,
+    })) as CreateStockReceiptDto;
+    try {
+      // an auto-posted receipt moves stock at once: that is an approval
+      if (dto.autoPost && !hasPermission(user, 'inventory.approve')) {
+        throw new ForbiddenException(
+          'inventory.approve is required to autoPost',
+        );
+      }
+      await this.scope.assertWarehouse(branches, dto.warehouseId);
+      return await this.receiving.createReceipt(dto, idempotencyKey);
+    } catch (error) {
+      rethrowInventoryHttpError(error);
+    }
   }
 
   @Get('stock')
@@ -120,26 +117,6 @@ export class StockController {
   ): Promise<Page<StockRes>> {
     if (query.branchId) this.scope.assertBranch(branches, query.branchId);
     return this.stock.list(query, branches);
-  }
-
-  @Post('stock-balances/receipts')
-  @HttpCode(HttpStatus.CREATED)
-  @RequirePermission('inventory.create')
-  @ApiOperation({
-    summary: 'Receive warehouse stock balance',
-    description:
-      'Receives decimal(12,3) stock into a warehouse for a product variant and emits inventory.stock.changed.',
-  })
-  @ApiResponse({
-    status: HttpStatus.CREATED,
-    description: 'Updated warehouse stock balance',
-  })
-  async receiveStockBalance(
-    @Body() dto: ReceiveStockBalanceDto,
-    @AllowedBranches() branches: string[] | null,
-  ) {
-    await this.scope.assertWarehouse(branches, dto.warehouseId);
-    return this.stock.receiveStockBalance(dto);
   }
 
   @Get('stock-balances')

@@ -226,28 +226,6 @@ export const MICROSERVICE_SWAGGER_SCHEMAS: SchemasObject = {
       createdAt: { type: 'string', format: 'date-time' },
     },
   },
-  ReceiveStockBalanceDto: {
-    type: 'object',
-    required: ['warehouseId', 'variantId', 'sku', 'qty'],
-    properties: {
-      warehouseId: {
-        type: 'string',
-        format: 'uuid',
-        example: '22222222-2222-4222-8222-222222222222',
-      },
-      variantId: {
-        type: 'string',
-        format: 'uuid',
-        example: '33333333-3333-4333-8333-333333333333',
-      },
-      sku: { type: 'string', maxLength: 64, example: 'SKU-TSHIRT-BLK-M' },
-      qty: {
-        type: 'string',
-        example: '25.000',
-        description: 'Positive decimal(12,3) quantity string',
-      },
-    },
-  },
   StockBalanceRes: {
     type: 'object',
     required: [
@@ -823,34 +801,6 @@ export const MICROSERVICE_SWAGGER_PATHS: PathsObject = {
                 type: 'array',
                 items: { $ref: '#/components/schemas/WarehouseRes' },
               },
-            },
-          },
-        },
-      },
-    },
-  },
-  '/inventory/api/v1/stock-balances/receipts': {
-    post: {
-      tags: ['Inventory — Stock & Warehouses'],
-      summary: 'Receive warehouse stock balance (decimal 12,3)',
-      description:
-        'Increments decimal(12,3) warehouse stock balance (`qty_on_hand`) for a product variant and emits `inventory.stock.changed` via outbox. Direct service path: `POST /api/v1/stock-balances/receipts` (Inventory :3000).',
-      operationId: 'InventoryStockController_receiveStockBalance',
-      security: [{ bearer: [] }],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/ReceiveStockBalanceDto' },
-          },
-        },
-      },
-      responses: {
-        '201': {
-          description: 'Updated warehouse stock balance',
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/StockBalanceRes' },
             },
           },
         },

@@ -667,18 +667,15 @@ describe('inventory (Postgres)', () => {
         }),
       );
       warehouseId = warehouse.id;
+      // stock enters through a receipt document (D15)
       await as(TENANT_A, () =>
-        stock.receiveStockBalance({
+        receivingService.createReceipt({
           warehouseId,
-          skuId: SKU_ID_1,
-          qty: '5.000',
-        }),
-      );
-      await as(TENANT_A, () =>
-        stock.receiveStockBalance({
-          warehouseId,
-          skuId: SKU_ID_2,
-          qty: '2.000',
+          autoPost: true,
+          items: [
+            { skuId: SKU_ID_1, qty: '5.000' },
+            { skuId: SKU_ID_2, qty: '2.000' },
+          ],
         }),
       );
     });
