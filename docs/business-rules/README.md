@@ -184,6 +184,8 @@ serialised by a lock. Disabling an admin ends their sessions.
 
 ## 5. Decisions for you
 
+The answers given so far are in the [decision log](decisions.md); the cash-drawer rules have their own [design](../specs/2026-11-06-cash-shift-design.md).
+
 Answer **yes/no, a number, or "use your default"**. The default is what I would build. Where a number is asked, my
 suggestion is in the default. The left column is the item in section 3 it settles. Source ids point into the reports.
 
