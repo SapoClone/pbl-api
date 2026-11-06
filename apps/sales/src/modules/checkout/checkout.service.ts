@@ -20,6 +20,7 @@ import {
   TenderInputLine,
   TenderMethod,
   ValidatedTenderSummary,
+  cashSaleDrawerAmount,
   formatQtyMillis,
   parseQtyMillis,
   validateOrderTenders,
@@ -50,6 +51,7 @@ import {
 } from '../../presentation/access';
 import { PosService } from '../pos/pos.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { recordCashEntry } from '../shifts/cash-ledger';
 import { ConfirmCheckoutPaymentDto, PosCheckoutDto } from './checkout.dto';
 
 export interface SagaQuoteMetadata {
@@ -281,21 +283,6 @@ export class CheckoutService {
           tenantId,
         ]);
 
-        // Re-check shift is still OPEN inside transaction
-        if (dto.shiftId) {
-          const shiftRows = await em.query(
-            `SELECT status FROM ${prefix}"pos_shifts" WHERE tenant_id = $1 AND id = $2 FOR SHARE`,
-            [tenantId, dto.shiftId],
-          );
-          if (shiftRows.length === 0 || shiftRows[0].status !== 'OPEN') {
-            throw new SalesDomainError(
-              SalesDomainErrorCode.SHIFT_NOT_OPEN,
-              `POS shift ${dto.shiftId} is not OPEN`,
-              409,
-            );
-          }
-        }
-
         // Atomically claim coupon before calling Inventory so concurrent checkouts cannot over-redeem a coupon
         if (quote.couponCode) {
           const afterOrderDisc =
@@ -345,7 +332,26 @@ export class CheckoutService {
           createdAt: new Date(),
           updatedAt: new Date(),
         });
-        return em.save(CheckoutWorkflowEntity, wf);
+        const saved = await em.save(CheckoutWorkflowEntity, wf);
+
+        // Re-check the shift is still OPEN, with the workflow row already written: the share lock is
+        // taken last, so it never waits on a concurrent writer of the same workflow while holding the
+        // shift (a close, or a cash entry, needs the shift row for update and so waits for this commit
+        // and then sees the workflow).
+        if (dto.shiftId) {
+          const shiftRows = await em.query(
+            `SELECT status FROM ${prefix}"pos_shifts" WHERE tenant_id = $1 AND id = $2 FOR SHARE`,
+            [tenantId, dto.shiftId],
+          );
+          if (shiftRows.length === 0 || shiftRows[0].status !== 'OPEN') {
+            throw new SalesDomainError(
+              SalesDomainErrorCode.SHIFT_NOT_OPEN,
+              `POS shift ${dto.shiftId} is not OPEN`,
+              409,
+            );
+          }
+        }
+        return saved;
       });
     } catch (error) {
       if (
@@ -569,6 +575,24 @@ export class CheckoutService {
 
     const quote = wf.quoteJson as PersistedQuoteJson;
     const prevTenders = wf.tendersJson as ValidatedTenderSummary;
+    // Non-cash money is confirmed on the word of the caller only with a payment reference (a gateway
+    // verification is out of scope: docs/business-rules/built-c.md). `actorId` is recorded as confirmedBy
+    // on every tender when the order is finalized.
+    const reference = dto.externalRef?.trim();
+    const missingReference = prevTenders.tenders.some(
+      (t) =>
+        t.method !== 'CASH' &&
+        t.status !== 'CONFIRMED' &&
+        !t.externalRef?.trim() &&
+        !reference,
+    );
+    if (missingReference) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.PAYMENT_REFERENCE_REQUIRED,
+        'A payment reference (externalRef) is required to confirm a non-cash payment',
+        400,
+      );
+    }
     const confirmedTenders: ValidatedTenderSummary = {
       ...prevTenders,
       totalConfirmed: prevTenders.totalAllocated,
@@ -577,7 +601,7 @@ export class CheckoutService {
       tenders: prevTenders.tenders.map((t) => ({
         ...t,
         status: 'CONFIRMED',
-        externalRef: t.externalRef ?? dto.externalRef ?? 'CONFIRMED-CALLBACK',
+        externalRef: t.externalRef?.trim() || reference || null,
       })),
     };
 
@@ -1605,16 +1629,19 @@ export class CheckoutService {
       });
       await em.save(OrderStatusHistoryEntity, historyEntity);
 
-      // Update POS shift cash_sales_total and expected_cash if cash was collected
-      if (wf.shiftId && tenderSummary.totalCashSales > 0) {
-        await em.query(
-          `UPDATE ${prefix}"pos_shifts"
-           SET cash_sales_total = cash_sales_total + $3::bigint,
-               expected_cash = expected_cash + $3::bigint,
-               version = version + 1
-           WHERE tenant_id = $1 AND id = $2`,
-          [tenantId, wf.shiftId, tenderSummary.totalCashSales],
-        );
+      // The cash part of the payment (tendered minus change; card, QR and transfer never) is one entry
+      // in the drawer the cashier picked. The cashier is the signed-in user, never the shift's opener.
+      const drawerCash = cashSaleDrawerAmount(tenderSummary.tenders);
+      if (wf.shiftId && drawerCash > 0) {
+        await recordCashEntry(em, {
+          tenantId,
+          shiftId: wf.shiftId,
+          kind: 'CASH_SALE',
+          amount: drawerCash,
+          orderId,
+          staffId: wf.createdBy,
+          sourceKey: `sale:${orderId}`,
+        });
       }
 
       // Mark POS draft as CONVERTED if checkout originated from a draft
@@ -1771,7 +1798,15 @@ export class CheckoutService {
         );
       }
 
-      if (shiftId) {
+      if (!shiftId) {
+        // every POS sale belongs to an open shift of its branch (online and manual orders do not come here)
+        throw new SalesDomainError(
+          SalesDomainErrorCode.SHIFT_REQUIRED,
+          'A POS sale needs a shift: pick one from GET /pos/shifts/available',
+          400,
+        );
+      }
+      {
         const shiftRows = await em.query(
           `SELECT status, branch_id FROM ${prefix}"pos_shifts" WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
           [tenantId, shiftId],

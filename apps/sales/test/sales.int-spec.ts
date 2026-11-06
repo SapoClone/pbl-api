@@ -37,6 +37,7 @@ import { CreateSalesTables1791800000000 } from '../src/migrations/1791800000000-
 import { AddOrderIdempotency1791800000200 } from '../src/migrations/1791800000200-add-order-idempotency';
 import { CreateCheckoutWorkflow1791800000300 } from '../src/migrations/1791800000300-create-checkout-workflow';
 import { CreateM3SalesCore1791900000200 } from '../src/migrations/1791900000200-create-m3-sales-core';
+import { CashShiftSession1792200000100 } from '../src/migrations/1792200000100-cash-shift-session';
 import { CheckoutService } from '../src/modules/checkout/checkout.service';
 import { FulfillmentService } from '../src/modules/fulfillment/fulfillment.service';
 import { M3OrdersService } from '../src/modules/orders/m3-orders.service';
@@ -86,6 +87,7 @@ describe('sales (Postgres)', () => {
   let m3OrdersService: M3OrdersService;
   let returnsService: ReturnsService;
   let fulfillmentService: FulfillmentService;
+  let defaultShiftId: string;
 
   /** What inventory answers: null means the stock was held */
   const inventory = {
@@ -194,6 +196,7 @@ describe('sales (Postgres)', () => {
           AddOrderIdempotency1791800000200,
           CreateCheckoutWorkflow1791800000300,
           CreateM3SalesCore1791900000200,
+          CashShiftSession1792200000100,
         ],
       }),
     });
@@ -223,6 +226,15 @@ describe('sales (Postgres)', () => {
       inventory as never,
       outbox,
     );
+    const realCheckout = checkoutService.checkout.bind(checkoutService);
+    jest
+      .spyOn(checkoutService, 'checkout')
+      .mockImplementation((staff, perms, scope, key, body) =>
+        realCheckout(staff, perms, scope, key, {
+          ...body,
+          shiftId: body.shiftId ?? defaultShiftId,
+        }),
+      );
     returnsService = new ReturnsService(dataSource, inventory as never, outbox);
     fulfillmentService = new FulfillmentService(
       dataSource,
@@ -285,6 +297,10 @@ describe('sales (Postgres)', () => {
       receiptId: randomUUID(),
     }));
 
+    // the cash entries are append-only (no DELETE): TRUNCATE is the test cleanup
+    await dataSource.query(
+      `TRUNCATE "${schema}"."pos_shift_cash_entry", "${schema}"."cash_setting"`,
+    );
     for (const table of [
       'coupon_usages',
       'coupons',
@@ -309,6 +325,18 @@ describe('sales (Postgres)', () => {
       await dataSource.query(`DELETE FROM "${schema}"."${table}"`);
     }
     await learnBranch(TENANT_A, BRANCH_A);
+    // A POS sale needs a shift (SHIFT_REQUIRED). These suites predate that rule: sales that name no
+    // shift go into this default drawer (its own register, so tests that open REG-01 still can).
+    defaultShiftId = (
+      await as(TENANT_A, () =>
+        shiftsService.openShift(ACCOUNT, ALL, {
+          branchId: BRANCH_A,
+          registerCode: 'DEFAULT-REG',
+          openingCash: 0,
+        }),
+      )
+    ).id;
+    await dataSource.query(`DELETE FROM "${schema}"."outbox_event"`);
     await seedCatalogVariant(TENANT_A, {
       variantId: VARIANT_A,
       productId: PRODUCT_A,
@@ -1331,6 +1359,8 @@ describe('sales (Postgres)', () => {
           branchId: BRANCH_A,
           registerCode: 'POS-BIG',
           openingCash: 5_000_000_000,
+          // above maxOpeningFloatVnd a note is required (cash design 4.3)
+          note: 'float for the money test',
         }),
       );
       expect(big.openingCash).toBe(5_000_000_000);

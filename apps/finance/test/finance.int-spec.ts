@@ -808,6 +808,56 @@ describe('Finance M5 Core (Real PostgreSQL Integration, Concurrency & Fault-Inje
     expect(res.reconciliation.reconciliationIssueId).toBeTruthy();
   });
 
+  it('Test M2: sales.shift.closed of the cash session (extended payload) is journaled once, even when delivered twice', async () => {
+    const shiftId = randomUUID();
+    const envelope = {
+      id: randomUUID(),
+      type: 'sales.shift.closed',
+      version: 1,
+      occurredAt: new Date().toISOString(),
+      tenantId: TENANT_A,
+      actor: null,
+      traceId: 'it',
+      payload: {
+        shiftId,
+        code: 'CA-CASH-1',
+        branchId: BRANCH_A,
+        staffId: ACTOR_MAKER,
+        status: 'CLOSED',
+        openingCash: 1000000,
+        expectedCash: 1180000,
+        actualCash: 1130000,
+        variance: -50000,
+        varianceReason: 'miscounted_change',
+        varianceNote: null,
+        responsibility: 'none',
+        countedBy: ACTOR_MAKER,
+        closedBy: randomUUID(),
+        approvedBy: randomUUID(),
+        varianceEntryId: randomUUID(),
+        occurredAt: new Date().toISOString(),
+      },
+    } as never;
+    await runAsTenant(TENANT_A, () =>
+      reconciliationService.onSalesShiftClosed(envelope),
+    );
+    await runAsTenant(TENANT_A, () =>
+      reconciliationService.onSalesShiftClosed(envelope),
+    );
+    const recon = await dataSource.query(
+      `SELECT variance_amount, variance_journal_id FROM "${schema}"."shift_cash_reconciliations" WHERE shift_id = $1`,
+      [shiftId],
+    );
+    expect(recon).toHaveLength(1);
+    expect(Number(recon[0].variance_amount)).toBe(-50000);
+    expect(recon[0].variance_journal_id).toBeTruthy();
+    const journals = await dataSource.query(
+      `SELECT 1 FROM "${schema}"."financial_journals" WHERE idempotency_key = $1`,
+      [`shift-jnl:${shiftId}`],
+    );
+    expect(journals).toHaveLength(1);
+  });
+
   it('Test V: money is stored as bigint, round-trips as a number above 2^31, and rejects fractions', async () => {
     const supplierId = randomUUID();
     const big = 5_000_000_000;

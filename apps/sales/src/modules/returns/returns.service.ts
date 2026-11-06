@@ -37,6 +37,7 @@ import { inventoryStockKey } from '../../inventory/stock-key';
 import { OrderItemEntity } from '../../orders/entities/order-item.entity';
 import { OrderEntity } from '../../orders/entities/order.entity';
 import { BranchScope, branchAllowed } from '../../presentation/access';
+import { findCallersOpenShift, recordCashEntry } from '../shifts/cash-ledger';
 import {
   CreateRefundRequestDto,
   CreateReturnDto,
@@ -156,8 +157,8 @@ export class ReturnsService {
         code,
         orderId: order.id,
         branchId: order.branchId,
-        warehouseId: dto.warehouseId ?? order.warehouseId ?? null,
-        shiftId: dto.shiftId ?? order.shiftId ?? null,
+        warehouseId: order.warehouseId ?? null,
+        shiftId: order.shiftId ?? null,
         status: initialStatus,
         totalRefundAmount: calculated.totalRefundAmount,
         inventoryReceiptId: null,
@@ -214,9 +215,21 @@ export class ReturnsService {
     });
 
     if (dto.autoReceive) {
-      return this.receiveReturn(createdReturnId, actorId, scope, {
-        warehouseId: dto.warehouseId,
-      });
+      try {
+        return await this.receiveReturn(createdReturnId, actorId, scope, {
+          warehouseId: dto.warehouseId,
+        });
+      } catch (error) {
+        // no resolvable warehouse: the return stays APPROVED and needs action, it is not an error here
+        if (
+          !(
+            error instanceof SalesDomainError &&
+            error.code === SalesDomainErrorCode.RETURN_WAREHOUSE_UNRESOLVED
+          )
+        ) {
+          throw error;
+        }
+      }
     }
 
     return this.getReturnById(createdReturnId, scope);
@@ -331,94 +344,97 @@ export class ReturnsService {
     return this.getReturnById(returnId, scope);
   }
 
+  /**
+   * Receive a return: the goods go back to the warehouse of the ORIGINAL sale (resolved from the order,
+   * never from the request) at the original line cost. The return row is locked before inventory is
+   * called and the receipt carries an idempotency key per return, so two simultaneous receives restock
+   * once. A return with goods to restock and no resolvable warehouse stays APPROVED (409
+   * RETURN_WAREHOUSE_UNRESOLVED): it is never marked COMPLETED. The restock call uses the service
+   * identity, so a cashier who may receive their own branch's return needs no inventory permission.
+   */
   async receiveReturn(
     returnId: string,
     actorId: string,
     scope: BranchScope,
-    dto: ReceiveReturnDto,
+    // `warehouseId` is accepted for old clients and ignored: the original sale's warehouse is used
+    _dto: ReceiveReturnDto,
   ) {
     const tenantId = TenantContext.require();
     const prefix = getSchemaPrefix(this.dataSource);
-
-    const { ret, items, order } = await this.dataSource.transaction(
-      async (em) => {
-        await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
-          tenantId,
-        ]);
-        const r = await em.getRepository(SalesReturnEntity).findOne({
-          where: { id: returnId, tenantId },
-        });
-        if (!r || !branchAllowed(scope, r.branchId)) {
-          throw new SalesDomainError(
-            SalesDomainErrorCode.RETURN_NOT_FOUND,
-            `Return ${returnId} not found`,
-            404,
-          );
-        }
-        const lineItems = await em.getRepository(SalesReturnItemEntity).find({
-          where: { returnId: r.id, tenantId },
-        });
-        const o = await em.getRepository(OrderEntity).findOne({
-          where: { id: r.orderId, tenantId },
-        });
-        return { ret: r, items: lineItems, order: o };
-      },
-    );
-
-    if (ret.status === 'COMPLETED' || ret.status === 'RECEIVED') {
-      return this.getReturnById(returnId, scope);
-    }
-    if (ret.status === 'REJECTED') {
-      throw new SalesDomainError(
-        SalesDomainErrorCode.RETURN_NOT_ELIGIBLE,
-        'Cannot receive a REJECTED return',
-        409,
-      );
-    }
-
-    const warehouseId =
-      dto.warehouseId ?? ret.warehouseId ?? order?.warehouseId ?? null;
-
-    // Restock items with disposition === 'RESTOCK' via Inventory S2S HTTP outside DB transaction
-    const restockLines = items.filter((i) => i.disposition === 'RESTOCK');
-    let inventoryReceiptId = ret.inventoryReceiptId;
-
-    if (restockLines.length > 0 && warehouseId && !inventoryReceiptId) {
-      const qtyBySku = new Map<string, bigint>();
-      for (const rl of restockLines) {
-        const skuKey = inventoryStockKey(rl.variantId, rl.skuCode);
-        const prev = qtyBySku.get(skuKey) ?? 0n;
-        qtyBySku.set(skuKey, prev + parseQtyMillis(rl.returnQty));
-      }
-
-      const receiptRes = await this.inventoryClient.receiveReturnedStock({
-        warehouseId,
-        returnId: ret.id,
-        code: `PN-${ret.code}`,
-        items: Array.from(qtyBySku.entries()).map(([skuId, millis]) => ({
-          skuId,
-          qty: formatQtyMillis(millis),
-          unitCost: 0,
-        })),
-      });
-      inventoryReceiptId = receiptRes.receiptId;
-    }
 
     await this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
         tenantId,
       ]);
-
       const lockedRet = await em.getRepository(SalesReturnEntity).findOne({
         where: { id: returnId, tenantId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (
-        !lockedRet ||
-        lockedRet.status === 'COMPLETED' ||
-        lockedRet.status === 'RECEIVED'
-      ) {
+      if (!lockedRet || !branchAllowed(scope, lockedRet.branchId)) {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.RETURN_NOT_FOUND,
+          `Return ${returnId} not found`,
+          404,
+        );
+      }
+      if (lockedRet.status === 'COMPLETED' || lockedRet.status === 'RECEIVED') {
         return;
+      }
+      if (lockedRet.status === 'REJECTED') {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.RETURN_NOT_ELIGIBLE,
+          'Cannot receive a REJECTED return',
+          409,
+        );
+      }
+      if (lockedRet.status === 'REQUESTED') {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.RETURN_NOT_ELIGIBLE,
+          'A return must be approved before it is received',
+          409,
+        );
+      }
+      const items = await em.getRepository(SalesReturnItemEntity).find({
+        where: { returnId: lockedRet.id, tenantId },
+      });
+      const order = await em.getRepository(OrderEntity).findOne({
+        where: { id: lockedRet.orderId, tenantId },
+      });
+      const warehouseId = order?.warehouseId ?? null;
+      const restockLines = items.filter((i) => i.disposition === 'RESTOCK');
+      let inventoryReceiptId = lockedRet.inventoryReceiptId;
+
+      if (restockLines.length > 0 && !inventoryReceiptId) {
+        if (!warehouseId) {
+          throw new SalesDomainError(
+            SalesDomainErrorCode.RETURN_WAREHOUSE_UNRESOLVED,
+            `Return ${lockedRet.code} cannot be restocked: the original sale has no warehouse. It stays approved until it is resolved`,
+            409,
+            { returnId: lockedRet.id, orderId: lockedRet.orderId },
+          );
+        }
+        const costRows: { id: string; unit_cost_snapshot: string }[] =
+          await em.query(
+            `SELECT id, unit_cost_snapshot FROM ${prefix}"order_items"
+             WHERE tenant_id = $1 AND order_id = $2`,
+            [tenantId, lockedRet.orderId],
+          );
+        const costByItem = new Map(
+          costRows.map((r) => [r.id, toMoney(r.unit_cost_snapshot ?? 0)]),
+        );
+        // the row lock is held across this call: a second receive waits, then finds the return completed
+        const receiptRes = await this.inventoryClient.receiveReturnedStock({
+          warehouseId,
+          returnId: lockedRet.id,
+          code: `PN-${lockedRet.code}`,
+          idempotencyKey: `return-receipt:${lockedRet.id}`,
+          items: restockLines.map((rl) => ({
+            skuId: inventoryStockKey(rl.variantId, rl.skuCode),
+            qty: formatQtyMillis(parseQtyMillis(rl.returnQty)),
+            unitCost: costByItem.get(rl.orderItemId) ?? 0,
+          })),
+        });
+        inventoryReceiptId = receiptRes.receiptId;
       }
 
       lockedRet.warehouseId = warehouseId;
@@ -429,12 +445,9 @@ export class ReturnsService {
       lockedRet.updatedAt = new Date();
       await em.save(SalesReturnEntity, lockedRet);
 
-      // Check if all items of the order have now been returned
       const orderItems: OrderItemEntity[] = await em
         .getRepository(OrderItemEntity)
-        .find({
-          where: { orderId: lockedRet.orderId, tenantId },
-        });
+        .find({ where: { orderId: lockedRet.orderId, tenantId } });
       const allReturned = orderItems.every((oi) => {
         const soldMillis = parseQtyMillis(oi.qty ?? oi.quantity);
         const retMillis =
@@ -443,13 +456,10 @@ export class ReturnsService {
             : 0n;
         return retMillis >= soldMillis;
       });
-
       if (allReturned) {
         await em.query(
           `UPDATE ${prefix}"orders"
-           SET fulfillment_status = 'RETURNED',
-               version = version + 1,
-               updated_at = now()
+           SET fulfillment_status = 'RETURNED', version = version + 1, updated_at = now()
            WHERE tenant_id = $1 AND id = $2`,
           [tenantId, lockedRet.orderId],
         );
@@ -478,7 +488,6 @@ export class ReturnsService {
     dto: CreateRefundRequestDto,
   ): Promise<RefundRequestEntity> {
     const tenantId = TenantContext.require();
-    const prefix = getSchemaPrefix(this.dataSource);
     const idempotencyKey = (
       headerIdempotencyKey ??
       dto.idempotencyKey ??
@@ -492,24 +501,6 @@ export class ReturnsService {
         tenantId,
       ]);
 
-      // Idempotency check
-      const existing = await em.getRepository(RefundRequestEntity).findOne({
-        where: { tenantId, idempotencyKey },
-      });
-      if (existing) {
-        const owner = await em.getRepository(SalesReturnEntity).findOne({
-          where: { id: existing.returnId, tenantId },
-        });
-        if (!owner || !branchAllowed(scope, owner.branchId)) {
-          throw new SalesDomainError(
-            SalesDomainErrorCode.RETURN_NOT_FOUND,
-            `Return ${returnId} not found`,
-            404,
-          );
-        }
-        return existing;
-      }
-
       const ret = await em.getRepository(SalesReturnEntity).findOne({
         where: { id: returnId, tenantId },
         lock: { mode: 'pessimistic_write' },
@@ -521,10 +512,30 @@ export class ReturnsService {
           404,
         );
       }
-      if (ret.status === 'REJECTED') {
+
+      // Idempotency check (after the return lock: two simultaneous requests with one key write one)
+      const existing = await em.getRepository(RefundRequestEntity).findOne({
+        where: { tenantId, idempotencyKey },
+      });
+      if (existing) {
+        if (existing.returnId !== ret.id) {
+          throw new SalesDomainError(
+            SalesDomainErrorCode.IDEMPOTENCY_CONFLICT,
+            'Idempotency-Key was already used for another return',
+            409,
+          );
+        }
+        return existing;
+      }
+      // a refund waits for an approved return (REQUESTED and REJECTED are refused)
+      if (
+        !['APPROVED', 'RECEIVED', 'REFUND_REQUESTED', 'COMPLETED'].includes(
+          ret.status,
+        )
+      ) {
         throw new SalesDomainError(
           SalesDomainErrorCode.RETURN_NOT_ELIGIBLE,
-          'Cannot request refund for a REJECTED return',
+          `Cannot request a refund for a ${ret.status} return: it must be approved first`,
           409,
         );
       }
@@ -566,6 +577,15 @@ export class ReturnsService {
         );
       }
 
+      // one refund request per return (UQ_refund_requests_return): say so instead of failing on the index
+      if (existingForReturn.length > 0) {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.REFUND_ALREADY_REQUESTED,
+          `Return ${ret.code} already has a refund request`,
+          409,
+        );
+      }
+
       const orderPaidVnd = parseVndAmount(
         order.paidAmount ?? order.totalAmount,
         true,
@@ -580,7 +600,12 @@ export class ReturnsService {
       }
 
       const method = dto.method ?? 'CASH';
-      const shiftId = dto.shiftId ?? ret.shiftId ?? order.shiftId ?? null;
+      // A cash refund leaves the REFUNDING cashier's own open shift, chosen here, never by the client
+      // (409 SHIFT_REQUIRED without one). A non-cash refund touches no drawer.
+      const shiftId =
+        method === 'CASH'
+          ? await findCallersOpenShift(em, tenantId, actorId, ret.branchId)
+          : null;
       const now = new Date();
       // Cash refunds at the POS drawer are settled immediately; non-cash refunds are PENDING for Finance M4
       const refundStatus = method === 'CASH' ? 'CONFIRMED' : 'PENDING';
@@ -636,16 +661,18 @@ export class ReturnsService {
       });
       await em.save(OrderStatusHistoryEntity, history);
 
-      // Update POS shift cash_refunds_total and expected_cash if CASH refund on a shift
-      if (shiftId && method === 'CASH' && requestedVnd > 0n) {
-        await em.query(
-          `UPDATE ${prefix}"pos_shifts"
-           SET cash_refunds_total = cash_refunds_total + $3::bigint,
-               expected_cash = expected_cash - $3::bigint,
-               version = version + 1
-           WHERE tenant_id = $1 AND id = $2`,
-          [tenantId, shiftId, vndNumber(requestedVnd)],
-        );
+      if (shiftId && requestedVnd > 0n) {
+        await recordCashEntry(em, {
+          tenantId,
+          shiftId,
+          kind: 'CASH_REFUND',
+          amount: -vndNumber(requestedVnd),
+          reason: 'return_refund',
+          orderId: order.id,
+          returnId: ret.id,
+          staffId: actorId,
+          sourceKey: `refund:${refundReq.id}`,
+        });
       }
 
       await this.outbox.add(em, SALES_REFUND_REQUESTED, {

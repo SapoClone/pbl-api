@@ -59,6 +59,7 @@ import {
   WarehouseReservationsController,
 } from './stock/reservations.controller';
 import { ReservationsService } from './stock/reservations.service';
+import { ReturnReceiptsController } from './stock/return-receipts.controller';
 import { StockController } from './stock/stock.controller';
 import { StockService } from './stock/stock.service';
 
@@ -120,6 +121,7 @@ import { StockService } from './stock/stock.service';
     ReservationsController,
     WarehouseReservationsController,
     BranchBlockersController,
+    ReturnReceiptsController,
   ],
   providers: [
     BranchBlockersService,

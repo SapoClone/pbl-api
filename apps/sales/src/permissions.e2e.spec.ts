@@ -24,6 +24,11 @@ import { OrderQueryService } from './modules/screen/order-query.service';
 import { OrderViewsController } from './modules/screen/order-views.controller';
 import { ScreenShiftsController } from './modules/screen/screen-shifts.controller';
 import { ShiftViewService } from './modules/screen/shift-view.service';
+import {
+  CashReportsController,
+  CashReportsService,
+} from './modules/shifts/cash-reports.controller';
+import { CashSettingsService } from './modules/shifts/cash-settings.service';
 import { ShiftsController } from './modules/shifts/shifts.controller';
 import { ShiftsService } from './modules/shifts/shifts.service';
 import { StaffSalesController } from './modules/staff-sales/staff-sales.controller';
@@ -62,6 +67,8 @@ const services = [
   PromotionsService,
   ReturnsService,
   ShiftsService,
+  CashReportsService,
+  CashSettingsService,
   OrderQueryService,
   OrderActionsService,
   ShiftViewService,
@@ -86,6 +93,7 @@ const stubs = new Map(services.map((s) => [s, stub()]));
     PromotionsController,
     ReturnsController,
     ShiftsController,
+    CashReportsController,
     ReferenceController,
     ScreenShiftsController,
     StaffSalesController,
@@ -321,6 +329,50 @@ const ROUTES: Route[] = [
   },
   { method: 'get', path: '/api/v1/pos/shifts', perms: ['pos.view'] },
   { method: 'get', path: `/api/v1/pos/shifts/${ID}`, perms: ['pos.view'] },
+  // the cash session
+  {
+    method: 'get',
+    path: '/api/v1/pos/shifts/available',
+    perms: ['pos.view'],
+  },
+  {
+    method: 'post',
+    path: `/api/v1/pos/shifts/${ID}/count`,
+    perms: ['pos.update'],
+    body: { denominations: { '500000': 1 } },
+  },
+  {
+    method: 'post',
+    path: `/api/v1/pos/shifts/${ID}/approve-close`,
+    perms: ['pos.approve'],
+    body: {},
+  },
+  {
+    method: 'post',
+    path: `/api/v1/pos/shifts/${ID}/reject-close`,
+    perms: ['pos.approve'],
+    body: { note: 'count again' },
+  },
+  {
+    method: 'post',
+    path: `/api/v1/pos/shifts/${ID}/cash-entries`,
+    perms: ['pos.update'],
+    body: { kind: 'PAY_OUT', amount: 50000, reason: 'supplier_payment' },
+  },
+  {
+    method: 'patch',
+    path: `/api/v1/pos/shifts/${ID}`,
+    perms: ['pos.update'],
+    body: { plannedEndAt: '2026-11-07T10:00:00.000Z' },
+  },
+  { method: 'get', path: '/api/v1/cash-shortages', perms: ['reports.view'] },
+  { method: 'get', path: '/api/v1/cash-settings', perms: ['settings.view'] },
+  {
+    method: 'patch',
+    path: '/api/v1/cash-settings',
+    perms: ['settings.update'],
+    body: { toleranceVnd: 20000 },
+  },
   // screen contract (phase 4)
   { method: 'get', path: '/api/v1/orders/summary', perms: ['orders.view'] },
   { method: 'get', path: '/api/v1/orders/export', perms: ['orders.view'] },
@@ -455,10 +507,11 @@ describe('Sales permissions, route by route', () => {
       'pos.view',
       'pos.create',
       'pos.update',
+      'pos.approve',
     ].filter((p) => !perms.includes(p));
 
   it('covers every route of the controllers', () => {
-    expect(ROUTES.length).toBe(65);
+    expect(ROUTES.length).toBe(74);
   });
 
   describe.each(
@@ -861,7 +914,7 @@ describe('Sales permissions, route by route', () => {
     it('passes it to the shift routes', async () => {
       const shifts = stubs.get(ShiftsService) as unknown as {
         listShifts: jest.Mock;
-        getById: jest.Mock;
+        getDetail: jest.Mock;
       };
       await request(url())
         .get('/api/v1/pos/shifts')
@@ -874,7 +927,7 @@ describe('Sales permissions, route by route', () => {
         .get(`/api/v1/pos/shifts/${ID}`)
         .set('Authorization', bearer(['pos.view'], [B2]))
         .expect(200);
-      expect(shifts.getById).toHaveBeenLastCalledWith(ID, [B2]);
+      expect(shifts.getDetail).toHaveBeenLastCalledWith(ID, [B2]);
     });
   });
 });

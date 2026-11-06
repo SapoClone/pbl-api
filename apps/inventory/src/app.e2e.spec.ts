@@ -35,6 +35,7 @@ import {
   ReservationsService,
   StockShortageError,
 } from './stock/reservations.service';
+import { ReturnReceiptsController } from './stock/return-receipts.controller';
 import { StockController } from './stock/stock.controller';
 import { StockService } from './stock/stock.service';
 
@@ -243,6 +244,7 @@ const reserveBody = {
     ProcurementController,
     ReservationsController,
     WarehouseReservationsController,
+    ReturnReceiptsController,
   ],
   providers: [
     { provide: WarehouseScopeService, useValue: fakeScope },
@@ -790,6 +792,52 @@ describe('Inventory service bootstrap', () => {
         .post(`/internal/v1/reservations/${ORDER}/release`)
         .set(h)
         .expect(200);
+    });
+
+    it('posts a return receipt for the service identity: token, tenant and key required, RETURN and autoPost forced', async () => {
+      process.env.INTERNAL_S2S_TOKEN = TOKEN;
+      receiving.createReceipt.mockClear();
+      const body = {
+        warehouseId: WH_A,
+        sourceType: 'MANUAL',
+        autoPost: false,
+        items: [{ skuId: SKU_ID, qty: '1.000', unitCost: 65000 }],
+      };
+      await request(url())
+        .post('/internal/v1/return-receipts')
+        .set('Authorization', bearer())
+        .set('Idempotency-Key', 'return-receipt:r1')
+        .send(body)
+        .expect(401);
+      const h = { 'x-internal-token': TOKEN };
+      await request(url())
+        .post('/internal/v1/return-receipts')
+        .set({ ...h, 'Idempotency-Key': 'k' })
+        .send(body)
+        .expect(400);
+      await request(url())
+        .post('/internal/v1/return-receipts')
+        .set({ ...h, 'X-Tenant-Id': TENANT })
+        .send(body)
+        .expect(400);
+      expect(receiving.createReceipt).not.toHaveBeenCalled();
+      await request(url())
+        .post('/internal/v1/return-receipts')
+        .set({
+          ...h,
+          'X-Tenant-Id': TENANT,
+          'Idempotency-Key': 'return-receipt:r1',
+        })
+        .send(body)
+        .expect(201);
+      expect(receiving.createReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          warehouseId: WH_A,
+          sourceType: 'RETURN',
+          autoPost: true,
+        }),
+        'return-receipt:r1',
+      );
     });
 
     it('also guards the legacy internal routes', async () => {
