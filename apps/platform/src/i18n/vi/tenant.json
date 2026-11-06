@@ -8,6 +8,8 @@
     "branch_not_found": "Chi nhánh không thuộc cửa hàng này",
     "already_suspended": "Cửa hàng này đã bị khóa",
     "not_suspended": "Cửa hàng này không bị khóa",
-    "owner_account_disabled": "Tài khoản chủ cửa hàng đã bị vô hiệu hóa"
+    "owner_account_disabled": "Tài khoản chủ cửa hàng đã bị vô hiệu hóa",
+    "store_limit": "Một tài khoản chỉ được sở hữu tối đa 3 cửa hàng",
+    "member_blocked": "Chưa thể xóa thành viên này. Xem các lý do"
   }
 }

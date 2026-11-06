@@ -45,4 +45,8 @@ export class CreateTenantReqDto {
 
   @StringFieldOptional({ maxLength: 255, nullable: true })
   address?: string | null;
+
+  /** D10: the name of the first branch; `Chi nhánh chính` when omitted */
+  @StringFieldOptional({ maxLength: 150 })
+  defaultBranchName?: string;
 }

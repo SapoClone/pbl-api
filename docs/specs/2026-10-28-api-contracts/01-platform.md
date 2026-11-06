@@ -218,8 +218,10 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
   ```
   `defaultBranchName` is optional (default "Chi nhánh chính").
 - **Response:** 201: `{ "tenant": { …TenantRes }, "accessToken": "…", "refreshToken": "…", "tokenExpires": … }`
-- **Errors:** 400 `T001`: subdomain exists.
-- **Events:** `platform.tenant.created` (new), `platform.branch.created`
+- **Errors:**
+  - 400 `T001`: subdomain exists.
+  - 400 `T009`: the account already owns the maximum number of stores (3, counted from its owner memberships; `MAX_STORES_PER_ACCOUNT` in `tenant.service.ts`; D11). A platform admin opening a store for an owner is not limited by it.
+- **Events:** `platform.tenant.created` (also on this self-serve path, same payload as the admin one, written in the transaction; D10), `platform.branch.created`
 
 ### GET /platform/api/v1/tenants/current
 - **Status:** `change`. Add `code` and a `subscription` summary.
@@ -275,7 +277,8 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
 - **`isWarehouse` is informational (D1).** Whether a branch has a warehouse no longer depends on it: inventory creates one default `BRANCH` warehouse for every active branch from `platform.branch.created` / `platform.branch.updated`, and nothing may depend on `isWarehouse` (the column and the field stay for display and for clients that send them; it is neither needed for, nor enough for, stock or sales). The contract is in `02-catalog-inventory.md`, "Inventory: warehouses".
 - **Response:** 201, the branch object
 - **Errors:**
-  - 400 `B001`: code exists.
+  - 400 `B001`: code exists, **or the code belonged to a deleted branch** (a branch code is never reused; D8).
+  - 403 `B008`: the caller's token sees only some branches. Only the owner and members who see every branch create, change or delete branches (D9). Branch settings stay open to a scoped member for their own branches.
   - 409 `Q001`: branch limit reached (`details: { key: "branches", used, limit, planCode }`; the message names the limit; built, replaces `B003`).
 - **Events:** `platform.branch.created` (exists)
 
@@ -288,17 +291,37 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
 ### PATCH /platform/api/v1/branches/{id}
 - **Status:** `exists`
 - **Auth:** tenant, owner
-- **Body:** any of `name`, `address`, `phone`, `isWarehouse`, `status` (`active` | `inactive`)
+- **Body:** any of `name`, `address`, `phone`, `isWarehouse`, `status` (`active` | `inactive`). `code` may be sent only with its current value: the code is fixed after creation (D8).
 - **Response:** 200, the branch object
+- **Errors:**
+  - 400 `B007`: `code` differs from the branch's code.
+  - 400 `B002`: deactivating the last active branch (when that is the only reason; otherwise it is one of the reasons of `B005`).
+  - 403 `B008`: the caller sees only some branches (D9).
+  - 409 `B005`: deactivating (`status: "inactive"`) is refused, see below. Inactive branches still count toward the plan limit.
+  - 503 `B009`: a service that owns branch data could not be asked, so nothing changed (the message names the service).
 - **Events:** `platform.branch.updated` (exists)
 
+**`B005` body (D4).** Deactivating and deleting a branch ask every service that owns branch-bound data (inventory, sales, integration; finance reports nothing, see [the guide](../../guides/branch-guard.md)) and platform itself, and the refusal lists **every** reason, not the first:
+```json
+{ "statusCode": 409, "errorCode": "B005", "message": "Chưa thể ngừng hoạt động hoặc xóa chi nhánh này. Xem các lý do",
+  "details": { "reasons": [
+    { "service": "inventory", "code": "INVENTORY_PENDING_TRANSFERS", "message": "Chi nhánh còn 3 phiếu chuyển kho chưa hoàn tất", "count": 3, "samples": ["TR-0001"] },
+    { "service": "sales", "code": "SALES_OPEN_SHIFTS", "message": "Chi nhánh còn 1 ca bán hàng chưa đóng", "count": 1, "samples": ["CA-0007"] },
+    { "service": "platform", "code": "PLATFORM_MEMBER_WITHOUT_BRANCH", "message": "1 thành viên sẽ không còn chi nhánh nào: Lan", "count": 1, "samples": ["…"] } ] } }
+```
+Reason codes: `INVENTORY_STOCK_ON_HAND`, `INVENTORY_ACTIVE_HOLDS`, `INVENTORY_PENDING_TRANSFERS`, `INVENTORY_DRAFT_RECEIPTS`, `INVENTORY_DRAFT_ISSUES`, `INVENTORY_STOCKTAKES_IN_PROGRESS`, `SALES_OPEN_SHIFTS`, `SALES_UNFINISHED_ORDERS`, `SALES_CHECKOUTS_IN_FLIGHT`, `SALES_ACTIVE_POS_DRAFTS`, `INTEGRATION_LIVE_CONNECTIONS`, `B002` (last active branch, deactivation only), `PLATFORM_MEMBER_WITHOUT_BRANCH` (delete only). A service that cannot be reached fails the call with 503 `B009` (fail closed).
+
 ### DELETE /platform/api/v1/branches/{id}
-- **Status:** `change`. Return 204.
-- **Auth:** tenant, owner
+- **Status:** `change`; built. Return 204. Soft delete: the branch's code stays taken.
+- **Auth:** tenant, `settings.update`, and a token that sees every branch (D9)
 - **Response:** 204
+- **Rules (D4, D38):** the branch must be `inactive` first; no service may hold anything for it (stock, holds, transfers, documents in progress, open shifts, unfinished orders, checkouts, POS drafts, live channel connections); the delete would not leave a member with no branch at all. In the same transaction the branch is removed from every member's branches; the members who lost it have their sessions ended after the commit (a member who sees every branch is not touched). Branches added to a member reach them at their next refresh.
 - **Errors:**
-  - 400 `B002`: last branch.
-  - 400 `B004`: the branch must be inactive first.
+  - 400 `B004`: the branch must be inactive first (checked before anything is asked).
+  - 403 `B008`: the caller sees only some branches.
+  - 409 `B005`: blocked, with `details.reasons` (above).
+  - 503 `B009`: a service could not be asked.
+- **Events:** `platform.branch.updated` with `status: "deleted"`
 
 ### GET /platform/api/v1/branches/{id}/settings
 - **Status:** `new` (ERD `BranchSetting`)
@@ -315,6 +338,7 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
 - **Auth:** tenant, owner
 - **Body:** any field of the GET response except `branchId`. `invoiceTemplateCode` is one of `receipt_80mm` | `receipt_58mm`; `allowedPaymentMethods` uses the D5 enum.
 - **Response:** 200, the settings object
+- **Errors:** 409 `B006`: another branch of the store already uses this `invoicePrefix` (compared case-insensitively; D12). Branches that never saved settings carry the default `HD` and are not compared.
 - **Events:** `platform.branch_settings.updated` (new; POS reads payment methods from it)
 
 ## Staff (store members)
@@ -388,7 +412,10 @@ D1 assumption: staff are `Account` + `AccountTenant`, and `AccountTenant` gains 
 - **Status:** `new`. Removes the membership; the account stays.
 - **Auth:** `staff.delete`
 - **Response:** 204
-- **Errors:** 400 `T003`: can't remove the owner.
+- **Errors:**
+  - 400 `T003`: can't remove the owner.
+  - 409 `T010`: the member has an open POS shift (D5), with `details: { reasons: [{ service: "sales", code: "SALES_MEMBER_OPEN_SHIFT", message, count, samples }] }`. Locking a member stays allowed.
+  - 503 `B009`: sales could not be asked, so nothing was removed.
 - **Events:** `platform.membership.revoked` (new)
 
 ### POST /platform/api/v1/tenants/current/members

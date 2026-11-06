@@ -8,6 +8,8 @@
     "branch_not_found": "この支店はこの店舗に属していません",
     "already_suspended": "この店舗は既にロックされています",
     "not_suspended": "この店舗はロックされていません",
-    "owner_account_disabled": "オーナーのアカウントは無効です"
+    "owner_account_disabled": "オーナーのアカウントは無効です",
+    "store_limit": "1つのアカウントが所有できる店舗は最大3つです",
+    "member_blocked": "このメンバーはまだ削除できません。理由を確認してください"
   }
 }
