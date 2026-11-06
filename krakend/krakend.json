@@ -522,6 +522,1338 @@
       }
     },
     {
+      "endpoint": "/platform/api/v1/admin/tenants",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/tenants",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/tenants",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/tenants",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/tenants/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/tenants/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/tenants/{id}",
+      "method": "PATCH",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/tenants/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/tenants/{id}/suspend",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/tenants/{id}/suspend",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/tenants/{id}/reactivate",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/tenants/{id}/reactivate",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/plans",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/plans",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/plans",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/plans",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/plans/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/plans/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/plans/{id}",
+      "method": "PATCH",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/plans/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/subscriptions",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/subscriptions",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/subscriptions/{id}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/subscriptions/{id}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/subscriptions/{id}/events",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/subscriptions/{id}/events",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/subscriptions/{id}/payments",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/subscriptions/{id}/payments",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/subscriptions/change-plan/check",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/subscriptions/change-plan/check",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/subscriptions/change-plan",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/subscriptions/change-plan",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/usage",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/usage",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "endpoint": "/platform/api/v1/admin/usage/{tenantId}",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Accept-Language",
+        "x-lang",
+        "X-User-Id",
+        "X-Session-Id",
+        "X-Subject-Type",
+        "X-Tenant-Id",
+        "X-Roles",
+        "X-Request-Id"
+      ],
+      "input_query_strings": [
+        "*"
+      ],
+      "backend": [
+        {
+          "url_pattern": "/api/v1/admin/usage/{tenantId}",
+          "encoding": "no-op",
+          "host": [
+            "http://platform:3000"
+          ],
+          "extra_config": {
+            "qos/circuit-breaker": {
+              "name": "platform-cb",
+              "interval": 60,
+              "timeout": 10,
+              "max_errors": 5,
+              "log_status_change": true
+            }
+          }
+        }
+      ],
+      "extra_config": {
+        "auth/validator": {
+          "alg": "RS256",
+          "jwk_url": "http://platform:3000/.well-known/jwks.json",
+          "disable_jwk_security": true,
+          "cache": true,
+          "cache_duration": 900,
+          "issuer": "platform",
+          "audience": [
+            "pbl6"
+          ],
+          "propagate_claims": [
+            [
+              "sub",
+              "X-User-Id"
+            ],
+            [
+              "sid",
+              "X-Session-Id"
+            ],
+            [
+              "sub_type",
+              "X-Subject-Type"
+            ],
+            [
+              "tid",
+              "X-Tenant-Id"
+            ],
+            [
+              "roles",
+              "X-Roles"
+            ]
+          ]
+        }
+      }
+    },
+    {
       "endpoint": "/platform/api/v1/auth/switch-tenant",
       "method": "POST",
       "output_encoding": "no-op",

@@ -5,6 +5,9 @@
     "owner_role_locked": "Không thể đổi vai trò của chủ cửa hàng",
     "owner_protected": "Không thể khóa hoặc xóa chủ cửa hàng",
     "cannot_remove_self": "Bạn không thể tự khóa hoặc tự xóa mình",
-    "branch_not_found": "Chi nhánh không thuộc cửa hàng này"
+    "branch_not_found": "Chi nhánh không thuộc cửa hàng này",
+    "already_suspended": "Cửa hàng này đã bị khóa",
+    "not_suspended": "Cửa hàng này không bị khóa",
+    "owner_account_disabled": "Tài khoản chủ cửa hàng đã bị vô hiệu hóa"
   }
 }

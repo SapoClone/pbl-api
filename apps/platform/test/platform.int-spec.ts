@@ -42,6 +42,7 @@ import { AddMemberStatusLoginLockoutSessions1792000000000 } from '../src/databas
 import { CreateBranchSettingAndStaffSchedule1792000000001 } from '../src/database/migrations/1792000000001-create-branch-setting-and-staff-schedule';
 import { CreateRolePermissionAndMemberBranch1792300000000 } from '../src/database/migrations/1792300000000-create-role-permission-and-member-branch';
 import { AddFinancePermissions1792400000000 } from '../src/database/migrations/1792400000000-add-finance-permissions';
+import { CreatePlanSubscriptionAndTenantAdminFields1792700000000 } from '../src/database/migrations/1792700000000-create-plan-subscription-and-tenant-admin-fields';
 
 describe('platform (Postgres)', () => {
   const schema = uniqueSchema('platform_it');
@@ -572,6 +573,26 @@ describe('platform RBAC (Postgres)', () => {
       expect(await codesOf(T1, 'accountant')).toHaveLength(7);
     });
 
+    it('gives every store a code, a free subscription and a usage row (platform admin migration)', async () => {
+      const runner = migrator.createQueryRunner();
+      await new CreatePlanSubscriptionAndTenantAdminFields1792700000000().up(
+        runner,
+      );
+      await runner.release();
+      const rows = await mig<{ code: string; plan: string }[]>(
+        `SELECT t."code", p."code" AS plan FROM "tenant" t
+         JOIN "subscription" s ON s."tenant_id" = t."id" AND s."status" = 'active'
+         JOIN "plan" p ON p."id" = s."plan_id"
+         JOIN "tenant_usage" u ON u."tenant_id" = t."id"
+         ORDER BY t."code"`,
+      );
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.map((r) => r.code)).toEqual(
+        rows.map((_r, i) => `TN${String(i + 1).padStart(4, '0')}`),
+      );
+      expect(new Set(rows.map((r) => r.plan))).toEqual(new Set(['free']));
+    });
+
     it('points every member at the role of its own store that replaces the legacy one, and rewrites the text', async () => {
       const rows = await mig<
         {
@@ -944,6 +965,7 @@ describe('platform RBAC (Postgres)', () => {
       await service.transaction(async (em) => {
         await em.insert(TenantEntity, {
           id: tenantId as TenantEntity['id'],
+          code: 'TN9001',
           name: 'New',
           subdomain: 'new-store',
           createdBy: 't',
@@ -971,6 +993,7 @@ describe('platform RBAC (Postgres)', () => {
         service.transaction(async (em) => {
           await em.insert(TenantEntity, {
             id: failed as TenantEntity['id'],
+            code: 'TN9002',
             name: 'Failed',
             subdomain: 'failed-store',
             createdBy: 't',

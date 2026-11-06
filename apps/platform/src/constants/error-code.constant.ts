@@ -23,7 +23,18 @@ export enum ErrorCode {
   T003 = 'tenant.error.owner_role_locked',
   T004 = 'tenant.error.cannot_remove_self',
   T005 = 'tenant.error.owner_protected',
+  T006 = 'tenant.error.already_suspended',
+  T007 = 'tenant.error.not_suspended',
+  T008 = 'tenant.error.owner_account_disabled',
   T023 = 'tenant.error.branch_not_found',
+
+  // Plan and subscription (platform admin)
+  P001 = 'plan.error.not_active',
+  P002 = 'plan.error.code_exists',
+  P003 = 'plan.error.not_found',
+  S010 = 'subscription.error.quota_exceeded',
+  S011 = 'subscription.error.same_plan_same_period',
+  S012 = 'subscription.error.payment_overlaps',
 
   // Role
   R001 = 'role.error.name_exists',

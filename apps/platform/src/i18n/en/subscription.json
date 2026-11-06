@@ -1,0 +1,7 @@
+{
+  "error": {
+    "quota_exceeded": "The store's usage exceeds the limits of the new plan",
+    "same_plan_same_period": "The store is already on this plan for this period",
+    "payment_overlaps": "A payment already covers part of this period"
+  }
+}

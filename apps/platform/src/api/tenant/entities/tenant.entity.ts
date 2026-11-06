@@ -24,6 +24,11 @@ export class TenantEntity extends AbstractEntity {
   @PrimaryGeneratedColumn('uuid', { primaryKeyConstraintName: 'PK_tenant_id' })
   id!: Uuid;
 
+  /** Human-readable code (TN0001), issued by the application (see `issueCode`) */
+  @Column({ type: 'varchar', length: 10 })
+  @Index('UQ_tenant_code', { unique: true })
+  code!: string;
+
   @Column({ type: 'varchar', length: 150 })
   name!: string;
 
@@ -42,6 +47,17 @@ export class TenantEntity extends AbstractEntity {
 
   @Column({ type: 'varchar', length: 20, default: TenantStatus.ACTIVE })
   status!: TenantStatus;
+
+  @Column({
+    name: 'suspended_reason',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+  })
+  suspendedReason!: string | null;
+
+  @Column({ name: 'suspended_at', type: 'timestamptz', nullable: true })
+  suspendedAt!: Date | null;
 
   @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', default: null })
   deletedAt: Date;

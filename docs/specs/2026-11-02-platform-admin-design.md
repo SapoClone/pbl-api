@@ -1,6 +1,6 @@
 # Platform admin (M01): design
 
-Status: **Accepted** with [ADR-0022](../decisions/0022-platform-admin-identity.md); build PR 1 (admin identity) is done, the rest is not. Phase 1 of the
+Status: **Accepted** with [ADR-0022](../decisions/0022-platform-admin-identity.md); build steps 1 to 3 are done and step 4 is half done (see [Build status](#build-status)). Phase 1 of the
 [SRS plan](2026-11-02-srs-implementation-plan.md). Endpoint shapes are in
 [contract 04](2026-10-28-api-contracts/04-platform-admin.md); this document decides what the contract leaves open
 and the order of the work.
@@ -107,6 +107,36 @@ Codes as in contract 04 (`A001`–`A003`, `A010`, `A011`, `T002`, `T005`–`T007
    endpoints.
 5. **Screens (pbl-web):** an `/admin` route tree with its own sign-in, then businesses, plans, subscriptions and usage
    (Figma `40:*`).
+
+## Build status
+
+| Step | State |
+|---|---|
+| 1. Admin identity | Done (PR #33). |
+| 2. Stores | Done: list, detail, create for an owner, edit, lock, reactivate. Not done: the `owner-invite` email (needs a pbl-mail-service template and the set-password flow, so an owner created without a password cannot sign in yet). |
+| 3. Plans and subscriptions | Done: the tables, the seed and backfill, plan list/read/create/edit (`super_admin` writes), subscription list, detail, history, manual payments, change of plan with its check, and the real plan in `GET /tenants/current/context`. |
+| 4. Usage and limits | Half: the usage endpoints and the `tenant_usage` row exist (branches and members are counted live). Not done: enforcement in platform (`Q001`), the catalog projection and check, and the catalog events that fill products and storage. |
+| 5. Screens | Branch `feature/web-admin-01` has the 23 screens on mock data; [the guide](../guides/platform-admin-api.md) maps its calls onto these endpoints. |
+
+Decisions taken while building, where the contract or this document left room:
+
+- **Store code.** `tenant.code` (`TN0001`) is a column, as in contract 04; the data model table above omitted it. Codes
+  of stores, subscriptions (`SUB-0001`) and payments (`PAY-00001`) are issued by the application under an advisory
+  lock, not by database sequences or defaults, so the entity-synchronised local stack gets them too.
+- **One subscription row per store, changed in place.** A change of plan updates the row (plan, period) and appends a
+  `subscription_event`; contract 04 shows one history across plan changes. The partial unique index still allows closed
+  rows if a later flow needs them.
+- **Plans are seeded twice on purpose**: the migration seeds them, and an empty `plan` table is filled at startup (the
+  local stack never runs migrations). An existing plan table is never touched.
+- **Storage** is `quota_storage_mb` (integer) in the table and gigabytes with decimals in the API.
+- **`platform.plan.changed` is emitted once per store on the plan**, because events carry a tenant and a plan has none;
+  nothing is emitted when a plan is created. Insight subscribes to the three tenant events only (this matches what
+  pbl-infra already applies); plan and subscription events have no consumer yet.
+- **Accounts may have no password** (`account.password` is nullable) so an admin can create an owner who has not set one;
+  sign-in treats it like a wrong password.
+- **Error codes keep the repository's numbering** (`T001` subdomain taken; new `T006` to `T008`, `P001` to `P003`,
+  `S010` to `S012`), because contract 04's `T002` and `S001` were already used for other errors.
+- **`created_by` of a store opened by an admin** is the admin's id (a `platform_admin`, not an account).
 
 ## Acceptance criteria
 

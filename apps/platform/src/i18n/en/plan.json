@@ -1,0 +1,7 @@
+{
+  "error": {
+    "not_active": "This plan is not available",
+    "code_exists": "This plan code is already used",
+    "not_found": "Plan not found"
+  }
+}

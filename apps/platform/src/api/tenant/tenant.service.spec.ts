@@ -14,6 +14,7 @@ import {
 } from '../account/entities/account.entity';
 import { BranchEntity, BranchStatus } from '../branch/entities/branch.entity';
 import { RoleEntity } from '../role/entities/role.entity';
+import { SubscriptionEntity } from '../subscription/entities/subscription.entity';
 import { AccountTenantEntity } from './entities/account-tenant.entity';
 import { TenantEntity, TenantStatus } from './entities/tenant.entity';
 import { MembershipService } from './membership.service';
@@ -25,7 +26,13 @@ describe('TenantService.create', () => {
   let saved: unknown[];
   let savedRoles: RoleEntity[];
   let inserted: { roleId: string; permissionCode: string }[];
-  let em: { save: jest.Mock; insert: jest.Mock };
+  let em: {
+    save: jest.Mock;
+    insert: jest.Mock;
+    query: jest.Mock;
+    connection: unknown;
+  };
+  let subscriptions: { startFree: jest.Mock };
   let dataSource: { transaction: jest.Mock; getRepository: jest.Mock };
   let accountRepository: { findOne: jest.Mock };
   let service: TenantService;
@@ -35,6 +42,7 @@ describe('TenantService.create', () => {
     saved = [];
     savedRoles = [];
     outbox = { add: jest.fn().mockResolvedValue(undefined) };
+    subscriptions = { startFree: jest.fn().mockResolvedValue({}) };
     tenantRepository = { exists: jest.fn().mockResolvedValue(false) };
     inserted = [];
     em = {
@@ -55,6 +63,11 @@ describe('TenantService.create', () => {
       insert: jest.fn(async (_entity, rows) => {
         inserted.push(...rows);
       }),
+      // issueCode: the table name from the metadata, then the next number
+      connection: { getMetadata: () => ({ tablePath: 'tenant' }) },
+      query: jest.fn(async (sql: string) =>
+        sql.includes('MAX(') ? [{ next: 1 }] : [],
+      ),
     };
     accountRepository = {
       findOne: jest
@@ -70,6 +83,7 @@ describe('TenantService.create', () => {
       dataSource as unknown as DataSource,
       {} as MembershipService,
       outbox as never,
+      subscriptions as never,
     );
   });
 
@@ -80,6 +94,7 @@ describe('TenantService.create', () => {
     expect(tenant.id).toBe('t1');
     expect(saved[0]).toBeInstanceOf(TenantEntity);
     expect(saved[0]).toMatchObject({
+      code: 'TN0001',
       name: 'My Shop',
       subdomain: 'my-shop',
       status: 'active',
@@ -101,6 +116,11 @@ describe('TenantService.create', () => {
       name: 'Chi nhánh chính',
       isWarehouse: true,
       status: 'active',
+    });
+    // the store starts on the free plan, in the same transaction
+    expect(subscriptions.startFree).toHaveBeenCalledWith(em, 't1', {
+      type: 'account',
+      id: 'a1',
     });
   });
 
@@ -232,6 +252,7 @@ describe('TenantService (read and update)', () => {
       {} as DataSource,
       membershipService as unknown as MembershipService,
       { add: jest.fn() } as never,
+      {} as never,
     );
   });
 
@@ -327,6 +348,7 @@ describe('TenantService.getContext', () => {
     });
   let membershipRepo: { findOne: jest.Mock };
   let branchRepo: { find: jest.Mock };
+  let subscriptionRepo: { findOne: jest.Mock };
   let service: TenantService;
 
   beforeEach(() => {
@@ -345,9 +367,14 @@ describe('TenantService.getContext', () => {
         }),
       ]),
     };
+    subscriptionRepo = { findOne: jest.fn().mockResolvedValue(null) };
     const dataSource = {
       getRepository: jest.fn((entity) =>
-        entity === AccountTenantEntity ? membershipRepo : branchRepo,
+        entity === AccountTenantEntity
+          ? membershipRepo
+          : entity === SubscriptionEntity
+            ? subscriptionRepo
+            : branchRepo,
       ),
     };
     service = new TenantService(
@@ -355,10 +382,11 @@ describe('TenantService.getContext', () => {
       dataSource as never,
       {} as MembershipService,
       {} as never,
+      {} as never,
     );
   });
 
-  it('returns the store card, the free plan placeholder, my role and the branches', async () => {
+  it('returns the store card, the free plan when the store has no subscription row, my role and the branches', async () => {
     const context = await service.getContext('t1', 'a1');
 
     expect(context).toEqual({
@@ -396,6 +424,27 @@ describe('TenantService.getContext', () => {
       ],
       permissions: [],
       timezone: 'Asia/Ho_Chi_Minh',
+    });
+  });
+
+  it('returns the plan of the current subscription, and whether it ends soon', async () => {
+    const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    subscriptionRepo.findOne.mockResolvedValue({
+      expiresAt,
+      plan: { code: 'pro', name: 'Pro' },
+    });
+
+    const context = await service.getContext('t1', 'a1');
+
+    expect(context.plan).toEqual({
+      code: 'pro',
+      name: 'Pro',
+      isExpiringSoon: true,
+      expiresAt,
+    });
+    expect(subscriptionRepo.findOne.mock.calls[0][0]).toMatchObject({
+      where: { tenantId: 't1' },
+      relations: { plan: true },
     });
   });
 

@@ -32,8 +32,9 @@ export class AccountEntity extends AbstractEntity {
   @Index('UQ_account_email', { where: '"deleted_at" IS NULL', unique: true })
   email!: string;
 
-  @Column({ type: 'varchar' })
-  password!: string;
+  /** Null for an owner created by an admin who has not set a password yet: sign-in refuses it like a wrong one */
+  @Column({ type: 'varchar', nullable: true })
+  password!: string | null;
 
   @Column({ type: 'varchar', length: 100, default: '' })
   name!: string;
