@@ -1,4 +1,8 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { TenantContext } from '@pbl/common';
 import { InventoryClient } from './inventory.client';
 
@@ -191,6 +195,51 @@ describe('InventoryClient', () => {
       http.post.mockResolvedValue({ status: 201, data: {} });
       await client.reserve('o1', 'b1', lines);
       expect(headersOf(http.post)).toEqual({});
+    });
+  });
+
+  describe('resolveSaleWarehouse (D2)', () => {
+    it('asks inventory for the branch warehouse and passes a named warehouse along', async () => {
+      http.get.mockResolvedValue({
+        status: 200,
+        data: { id: 'w1', code: 'CN01', name: 'Default' },
+      });
+      await expect(
+        client.resolveSaleWarehouse('b1', 'w9'),
+      ).resolves.toMatchObject({ id: 'w1' });
+      expect(http.get).toHaveBeenCalledWith(
+        '/internal/v1/branches/b1/sale-warehouse',
+        expect.objectContaining({ params: { warehouseId: 'w9' } }),
+        expect.anything(),
+      );
+    });
+
+    it.each([
+      'BRANCH_HAS_NO_WAREHOUSE',
+      'WAREHOUSE_NOT_IN_BRANCH',
+      'WAREHOUSE_INACTIVE',
+    ])('maps a 409 %s to a precise 409, not a 503', async (errorCode) => {
+      http.get.mockResolvedValue({
+        status: 409,
+        data: { errorCode, message: 'm' },
+      });
+      const error = await client.resolveSaleWarehouse('b1').catch((e) => e);
+      expect(error).toBeInstanceOf(ConflictException);
+      expect(error.getResponse()).toMatchObject({ errorCode });
+    });
+
+    it('maps a 404 to 404 WAREHOUSE_NOT_FOUND and a 5xx to the 503 of an unreachable inventory', async () => {
+      http.get.mockResolvedValue({
+        status: 404,
+        data: { errorCode: 'WAREHOUSE_NOT_FOUND' },
+      });
+      await expect(
+        client.resolveSaleWarehouse('b1', 'w'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      http.get.mockResolvedValue({ status: 500, data: {} });
+      await expect(client.resolveSaleWarehouse('b1')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
     });
   });
 });

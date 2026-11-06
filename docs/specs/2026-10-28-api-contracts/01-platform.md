@@ -272,6 +272,7 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
 - **Status:** `change`. Return 201; enforce the plan quota `max_branches`.
 - **Auth:** tenant, owner
 - **Body:** `{ "name": "Chi nhánh Quận 7", "code": "CN02", "address": "…", "phone": "…", "isWarehouse": false }`
+- **`isWarehouse` is informational (D1).** Whether a branch has a warehouse no longer depends on it: inventory creates one default `BRANCH` warehouse for every active branch from `platform.branch.created` / `platform.branch.updated`, and nothing may depend on `isWarehouse` (the column and the field stay for display and for clients that send them; it is neither needed for, nor enough for, stock or sales). The contract is in `02-catalog-inventory.md`, "Inventory: warehouses".
 - **Response:** 201, the branch object
 - **Errors:**
   - 400 `B001`: code exists.

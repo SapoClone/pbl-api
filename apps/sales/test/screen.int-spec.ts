@@ -88,6 +88,7 @@ describe('sales screen contract (Postgres)', () => {
   const inventory = {
     reserve: jest.fn(async (): Promise<unknown> => null),
     release: jest.fn(async () => undefined),
+    resolveSaleWarehouse: jest.fn(),
     reserveWarehouseStock: jest.fn(),
     getWarehouseReservation: jest.fn(),
     getWarehouseReservationByKey: jest.fn(),
@@ -268,6 +269,14 @@ describe('sales screen contract (Postgres)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // inventory resolves a sale's warehouse: the one named, else the branch's default
+    inventory.resolveSaleWarehouse.mockImplementation(
+      async (_branchId: string, warehouseId?: string) => ({
+        id: warehouseId ?? WAREHOUSE_A,
+        code: 'WH',
+        name: 'Warehouse',
+      }),
+    );
     inventory.reserveWarehouseStock.mockImplementation(
       async (key: string, req: { lines: unknown[] }) => ({
         status: 'HELD',

@@ -57,8 +57,10 @@ export class PosCheckoutDto {
   @IsUUID()
   branchId!: string;
 
+  /** Optional: a sale uses its own branch's warehouse; a value is validated, never trusted (D2) */
+  @IsOptional()
   @IsUUID()
-  warehouseId!: string;
+  warehouseId?: string;
 
   @IsOptional()
   @IsUUID()

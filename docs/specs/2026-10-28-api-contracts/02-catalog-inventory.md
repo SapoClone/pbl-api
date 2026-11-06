@@ -232,6 +232,55 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
 
 ---
 
+## Inventory: warehouses
+
+Stock lives in warehouses, keyed by warehouse and variant. A warehouse has a `kind`: `BRANCH` (belongs to one branch and counts in that branch's stock), `CENTRAL` or `QUARANTINE` (belong to no branch and count in no branch view). Built in workstream A (D1, D2, D13, D14); the rules are tested in `apps/inventory/test/branch-warehouse.int-spec.ts`.
+
+- **Every active branch has exactly one default `BRANCH` warehouse.** Inventory consumes `platform.branch.created` and `platform.branch.updated` and, in the same transaction as its branch projection, creates one (`kind` `BRANCH`, `isDefault` true, code from the branch code upper-cased and made unique in the store with `-2`, `-3`, ..., name from the branch name). It is idempotent by branch id and serialised per branch, so a redelivered or concurrent event creates nothing twice; a partial unique index `UQ_warehouse_default_per_branch` on `(tenant_id, branch_id) WHERE kind = 'BRANCH' AND is_default` backs it. A branch that is `inactive` or `deleted` creates nothing; when a branch stops being active, its `BRANCH` warehouses that hold no on-hand, reserved or in-transit stock become `INACTIVE` (those with stock are left alone: platform refuses to switch off a branch that has stock, D4), and when the branch is active again its default warehouse is re-activated. A migration backfills every active branch that has none and repairs branches with two defaults or none.
+- **`isWarehouse` of the branch is informational.** Nothing in inventory depends on it (`branch_projection.is_warehouse` is kept, unused). See `01-platform.md`.
+
+### GET /inventory/api/v1/warehouses · GET /inventory/api/v1/warehouses/{id}
+- **Status:** `exists`. The list takes `status`, `kind`, `branchId`; a member limited to some branches sees only the warehouses of those branches (a warehouse with no branch is for unrestricted members). A warehouse outside the caller's branches answers 404.
+- **Auth:** `inventory.view`.
+
+### POST /inventory/api/v1/warehouses
+- **Status:** `change`. It was an upsert on the code (a branch-limited manager could take over another branch's warehouse). It is now a plain insert.
+- **Auth:** `inventory.create`. A member limited to some branches creates `BRANCH` warehouses of those branches only; anything else (another branch, `CENTRAL`, `QUARANTINE`) answers 404.
+- **Body:** `{ "code": "WH-Q3-2", "name": "…", "kind": "BRANCH", "branchId": "…", "address": "…", "isDefault": false }` (`kind` defaults to `BRANCH`; the code is upper-cased).
+- **Rules:**
+  - A `BRANCH` warehouse needs `branchId` of a branch that is known to inventory and `active`; `CENTRAL` and `QUARANTINE` must not name a branch.
+  - The first `BRANCH` warehouse of a branch becomes its default whatever `isDefault` says; `isDefault: true` on a later one moves the default to it.
+  - A code that already exists in the store is refused and nothing is changed.
+- **Response:** 201, the warehouse.
+- **Errors:**
+
+  | Code | Status | Meaning |
+  |---|---|---|
+  | `WAREHOUSE_CODE_CONFLICT` | 409 | The code exists (in this store, any branch) |
+  | `WAREHOUSE_BRANCH_INVALID` | 400 | `BRANCH` without `branchId`, or `CENTRAL`/`QUARANTINE` with one |
+  | `BRANCH_NOT_FOUND` | 404 | The branch is unknown to inventory |
+  | `BRANCH_NOT_ACTIVE` | 409 | The branch is inactive or deleted |
+
+### PATCH /inventory/api/v1/warehouses/{id}
+- **Status:** `change`.
+- **Auth:** `inventory.update`. The caller's branches are checked on the existing warehouse and on the target branch, including `branchId: null` (a limited member never owns a null branch): 404.
+- **Body:** any of `name`, `address`, `isDefault`, `status` (`ACTIVE` | `INACTIVE`), `branchId`, `kind`.
+- **Rules:**
+  - `branchId` or `kind` can change only while the warehouse holds no stock (on hand, reserved or in transit), no `HELD` reservation and no open transfer; the 409 lists every reason in `details.reasons` (`NON_ZERO_STOCK_BALANCE`, `ACTIVE_RESERVATIONS`, `PENDING_TRANSFERS`, `DEFAULT_WAREHOUSE`). A `BRANCH` warehouse can be moved to another active branch but never detached (`branchId: null`, or `kind` away from `BRANCH`).
+  - A branch always has one default. `isDefault: false` on the default is refused; make another warehouse the default first (that unsets this one). The default cannot be deactivated or moved while its branch is active. An `INACTIVE` warehouse cannot be a default.
+  - Deactivating a warehouse that holds stock, holds or transfers is refused as before (`WAREHOUSE_HAS_PENDING_OPERATIONS`, `details.reason`).
+- **Errors:** `WAREHOUSE_BRANCH_LOCKED` 409 (move, re-kind or detach refused, `details.reasons`), `WAREHOUSE_IS_DEFAULT` 409, `WAREHOUSE_INACTIVE` 409, `WAREHOUSE_BRANCH_INVALID` 400, `WAREHOUSE_HAS_PENDING_OPERATIONS` 409, `BRANCH_NOT_ACTIVE` 409.
+
+### Stock views by branch
+`GET /stock`, `/stock/summary`, `/stock/lookup`, `/stock/export` and the branch figures sum the stock of a branch's **`BRANCH` warehouses** (`warehouse.kind = 'BRANCH'` and `branch_id`), never "warehouses with a branch id". Central and quarantine stock appears in no branch figure, even for data that still carries a `branch_id`.
+
+### Internal: which warehouse a sale uses
+A sale always takes its stock from **its own branch's warehouse**. Both routes are internal (not in `krakend.json`, `x-internal-token`, tenant from `X-Tenant-Id` after the token is valid).
+
+- `GET /internal/v1/branches/{branchId}/sale-warehouse[?warehouseId=…]`: answers `{ id, code, name }`, the branch's default `BRANCH` warehouse, or the named one when it is an active `BRANCH` warehouse of that branch. Sales calls it before it claims anything.
+- `POST /internal/v1/reservations` now takes `branchId` (required when `callerService` is `sales`, else 400 `BRANCH_REQUIRED`); a line's `warehouseId` is optional. A line without one uses the branch's default warehouse; a named one is checked the same way. The idempotency hash covers `branchId` when sent and the lines as sent, so a replay returns the same reservation even if the default warehouse changed since.
+- **Errors (both routes):** `BRANCH_HAS_NO_WAREHOUSE` 409 (the branch has no active default warehouse), `WAREHOUSE_NOT_IN_BRANCH` 409 (the warehouse is another branch's, `CENTRAL` or `QUARANTINE`), `WAREHOUSE_INACTIVE` 409, `WAREHOUSE_NOT_FOUND` 404. Central and quarantine warehouses are never used for sales.
+
 ## Inventory: stock
 
 ### GET /inventory/api/v1/stock
@@ -623,6 +672,13 @@ The current behaviour, where a receipt is applied immediately, is replaced by an
 | `I011` | supplier still in use (open POs or debt) |
 | `I012` | PO not editable in its status |
 | `I013` | payment over the remaining amount |
+| `WAREHOUSE_CODE_CONFLICT` | warehouse code exists (409) |
+| `WAREHOUSE_BRANCH_INVALID` | warehouse kind and `branchId` disagree (400) |
+| `WAREHOUSE_BRANCH_LOCKED` | move, re-kind or detach refused (409, `details.reasons`) |
+| `WAREHOUSE_IS_DEFAULT` | default warehouse of a branch cannot be unset, deactivated or moved alone (409) |
+| `WAREHOUSE_NOT_IN_BRANCH` | a sale named a warehouse that is not a `BRANCH` warehouse of its branch (409) |
+| `BRANCH_HAS_NO_WAREHOUSE` | the branch has no active default warehouse (409) |
+| `BRANCH_NOT_FOUND` / `BRANCH_NOT_ACTIVE` | warehouse create or move into an unknown or inactive branch (404 / 409) |
 
 Messages are added in `en`, `vi`, and `jp`.
 

@@ -91,6 +91,7 @@ describe('sales (Postgres)', () => {
   const inventory = {
     reserve: jest.fn(async (): Promise<unknown> => null),
     release: jest.fn(async () => undefined),
+    resolveSaleWarehouse: jest.fn(),
     reserveWarehouseStock: jest.fn(),
     getWarehouseReservation: jest.fn(),
     getWarehouseReservationByKey: jest.fn(),
@@ -237,6 +238,14 @@ describe('sales (Postgres)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // inventory resolves a sale's warehouse: the one named, else the branch's default
+    inventory.resolveSaleWarehouse.mockImplementation(
+      async (_branchId: string, warehouseId?: string) => ({
+        id: warehouseId ?? WAREHOUSE_A,
+        code: 'WH',
+        name: 'Warehouse',
+      }),
+    );
     inventory.reserve.mockResolvedValue(null);
     inventory.reserveWarehouseStock.mockImplementation(
       async (
@@ -1385,6 +1394,93 @@ describe('sales (Postgres)', () => {
         );
       expect(events[0].payload.payload.grandTotal).toBe(details.grandTotal);
       expect(typeof events[0].payload.payload.subtotal).toBe('number');
+    });
+  });
+
+  describe('a sale uses its own branch warehouse (D2)', () => {
+    const NEW_BRANCH_WAREHOUSE = '88888888-8888-4888-8888-888888888888';
+    const pos = (over: Record<string, unknown> = {}) => ({
+      branchId: BRANCH_A,
+      lines: [{ variantId: VARIANT_A, qty: 1 }],
+      paymentMethod: 'CASH',
+      ...over,
+    });
+    const run = (key: string, body: Record<string, unknown>) =>
+      as(TENANT_A, () =>
+        checkoutService.checkout(ACCOUNT, ['*'], ALL, key, body as never),
+      );
+    const workflows = () =>
+      dataSource.getRepository(CheckoutWorkflowEntity).find();
+
+    it('a new branch can sell with no warehouseId: inventory resolves it and the workflow keeps it', async () => {
+      inventory.resolveSaleWarehouse.mockResolvedValue({
+        id: NEW_BRANCH_WAREHOUSE,
+        code: 'CN01',
+        name: 'Default',
+      });
+      const outcome = await run(randomUUID(), pos());
+      expect(inventory.resolveSaleWarehouse).toHaveBeenCalledWith(
+        BRANCH_A,
+        undefined,
+      );
+      expect(outcome.warehouseId).toBe(NEW_BRANCH_WAREHOUSE);
+      const reserveCall = inventory.reserveWarehouseStock.mock.calls[0][1];
+      expect(reserveCall.branchId).toBe(BRANCH_A);
+      expect(reserveCall.lines[0].warehouseId).toBe(NEW_BRANCH_WAREHOUSE);
+      expect((await workflows())[0].warehouseId).toBe(NEW_BRANCH_WAREHOUSE);
+    });
+
+    it('a client-supplied warehouseId is validated, and a foreign, central or quarantine one is refused before anything is created', async () => {
+      for (const code of ['WAREHOUSE_NOT_IN_BRANCH', 'WAREHOUSE_INACTIVE']) {
+        inventory.resolveSaleWarehouse.mockRejectedValueOnce(
+          new ConflictException({ errorCode: code, message: code }),
+        );
+        const error = await run(
+          randomUUID(),
+          pos({ warehouseId: randomUUID() }),
+        ).catch((e) => e);
+        expect(error.getStatus()).toBe(409);
+        expect(error.getResponse()).toMatchObject({ errorCode: code });
+      }
+      expect(inventory.resolveSaleWarehouse).toHaveBeenCalledWith(
+        BRANCH_A,
+        expect.any(String),
+      );
+      expect(inventory.reserveWarehouseStock).not.toHaveBeenCalled();
+      expect(await workflows()).toHaveLength(0);
+      expect(await dataSource.getRepository(OrderEntity).count()).toBe(0);
+    });
+
+    it('a branch with no warehouse answers 409 BRANCH_HAS_NO_WAREHOUSE, not a 503 or out of stock', async () => {
+      inventory.resolveSaleWarehouse.mockRejectedValueOnce(
+        new ConflictException({
+          errorCode: 'BRANCH_HAS_NO_WAREHOUSE',
+          message: 'no warehouse',
+        }),
+      );
+      const error = await run(randomUUID(), pos()).catch((e) => e);
+      expect(error.getStatus()).toBe(409);
+      expect(error.getResponse()).toMatchObject({
+        errorCode: 'BRANCH_HAS_NO_WAREHOUSE',
+      });
+      expect(inventory.reserveWarehouseStock).not.toHaveBeenCalled();
+    });
+
+    it('a manual order confirms from the branch warehouse without a warehouseId', async () => {
+      const created = await as(TENANT_A, () =>
+        m3OrdersService.createOmnichannelOrder(ACCOUNT, ['*'], ALL, {
+          branchId: BRANCH_A,
+          channelType: 'MANUAL',
+          lines: [{ variantId: VARIANT_A, qty: 1 }],
+          autoConfirm: true,
+        } as never),
+      );
+      expect(created.orderStatus).toBe('CONFIRMED');
+      expect(inventory.resolveSaleWarehouse).toHaveBeenCalledWith(
+        BRANCH_A,
+        null,
+      );
+      expect(created.warehouseId).toBe(WAREHOUSE_A);
     });
   });
 });

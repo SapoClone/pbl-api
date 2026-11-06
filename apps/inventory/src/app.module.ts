@@ -11,6 +11,7 @@ import {
 } from '@pbl/events';
 import { BranchProjectionEntity } from './branches/branch-projection.entity';
 import { BranchProjectionHandler } from './branches/branch-projection.handler';
+import { BranchWarehouseController } from './branches/branch-warehouse.controller';
 import {
   readReservationTtlMinutes,
   RESERVATION_TTL_MINUTES,
@@ -21,6 +22,7 @@ import { CreateInventoryTables1791900000000 } from './migrations/1791900000000-c
 import { AddWarehouseStockBalances1791900000100 } from './migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from './migrations/1791900000200-create-m2-inventory-core';
 import { AllowReservationExpirySelect1792500000000 } from './migrations/1792500000000-allow-reservation-expiry-select';
+import { DefaultBranchWarehouse1792700000000 } from './migrations/1792700000000-default-branch-warehouse';
 import { DocumentsController } from './modules/documents/documents.controller';
 import { DocumentsService } from './modules/documents/documents.service';
 import { IssuingController } from './modules/issuing/issuing.controller';
@@ -87,6 +89,7 @@ import { StockService } from './stock/stock.service';
         AddWarehouseStockBalances1791900000100,
         CreateM2InventoryCore1791900000200,
         AllowReservationExpirySelect1792500000000,
+        DefaultBranchWarehouse1792700000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'inventory' }),
@@ -103,6 +106,7 @@ import { StockService } from './stock/stock.service';
     StockViewsController,
     StockController,
     WarehousesController,
+    BranchWarehouseController,
     StockQueryController,
     ReceivingController,
     IssuingController,

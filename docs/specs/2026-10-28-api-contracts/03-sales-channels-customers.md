@@ -109,6 +109,12 @@ Product lookups for POS and manual orders use the catalog and stock endpoints in
   | `S011` | 400 | Payments below `totalAmount` on `completed` POS |
   | `S012` | 400 | Variant inactive or not sold on this channel |
   | `S013` | 400 | Customer is required for `cod` |
+  | `BRANCH_HAS_NO_WAREHOUSE` | 409 | The order's branch has no active default warehouse (D1/D2) |
+  | `WAREHOUSE_NOT_IN_BRANCH` | 409 | A client-supplied `warehouseId` is not a `BRANCH` warehouse of the order's branch (another branch's, central or quarantine) |
+  | `WAREHOUSE_INACTIVE` | 409 | The named warehouse is inactive |
+  | `WAREHOUSE_NOT_FOUND` | 404 | The named warehouse does not exist |
+
+  **Warehouse of a sale (D2, workstream A).** `warehouseId` is optional on every sale route (POS checkout, `POST /orders/checkouts`, omnichannel and manual orders, `POST /orders/{id}/confirm` and the draft PATCH): a sale always uses **its own branch's warehouse**. Sales sends the order's `branchId`; inventory resolves the branch's default `BRANCH` warehouse (`GET /internal/v1/branches/{branchId}/sale-warehouse`) and sales stores the resolved id on the checkout workflow and the order (the responses still carry `warehouseId`). A `warehouseId` that is sent is **validated, never trusted**: it must be an active `BRANCH` warehouse of that branch. The check runs before a coupon, loyalty hold or credit authorisation is claimed, and a refusal creates nothing and keeps inventory's own code (`BRANCH_HAS_NO_WAREHOUSE`, `WAREHOUSE_NOT_IN_BRANCH`, ...) with its 409, not a 503 or `S004`. A new branch can sell as soon as its default warehouse exists (the branch event creates it); a manual order confirmed without a `warehouseId` takes the same default. A fulfillment ships from the warehouse the order reserved from; another `warehouseId` is 409 `WAREHOUSE_NOT_IN_BRANCH`. The older branch-and-SKU-code hold (`POST /internal/reservations`) is unchanged and retires with D16.
 
 - **Events:**
   - Emitted: `sales.order.created`; `sales.order.confirmed` when reserved; `sales.order.completed` (exists, gains `variantId`, `customerId`, `channelId`, `costAmount`); `sales.payment.recorded` per payment.

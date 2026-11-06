@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   Logger,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import {
@@ -95,6 +96,62 @@ export class InventoryClient {
     // 400, 401, 403 ...: sales cannot go on, and a retry will not change it
     throw this.failed(
       new Error(`inventory answered ${response.status}`),
+      false,
+    );
+  }
+
+  /**
+   * Asks inventory which warehouse a sale of `branchId` takes its stock from (D2): the
+   * branch's own default BRANCH warehouse, or `warehouseId` when it is a BRANCH warehouse
+   * of that branch. A refusal is a precise 409 (`BRANCH_HAS_NO_WAREHOUSE`,
+   * `WAREHOUSE_NOT_IN_BRANCH`, `WAREHOUSE_INACTIVE`) or 404 (`WAREHOUSE_NOT_FOUND`),
+   * not a generic 503 or "out of stock". Called before anything is claimed.
+   */
+  async resolveSaleWarehouse(
+    branchId: string,
+    warehouseId?: string | null,
+  ): Promise<{ id: string; code: string; name: string }> {
+    this.assertClosed();
+    let response;
+    try {
+      response = await this.http.get<{
+        id: string;
+        code: string;
+        name: string;
+        errorCode?: string;
+        message?: string;
+      }>(
+        `/internal/v1/branches/${encodeURIComponent(branchId)}/sale-warehouse`,
+        {
+          timeout: TIMEOUT_MS,
+          headers: this.internalHeaders(),
+          params: warehouseId ? { warehouseId } : undefined,
+          validateStatus: (status) => status < 500,
+        },
+        this.asTenant(),
+      );
+    } catch (error) {
+      throw this.failed(error);
+    }
+    if (response.status === 200) {
+      this.failures = 0;
+      return response.data;
+    }
+    if (response.status === 409 || response.status === 404) {
+      this.failures = 0;
+      const errorCode = response.data?.errorCode ?? 'WAREHOUSE_NOT_IN_BRANCH';
+      const body = {
+        errorCode,
+        message:
+          response.data?.message ??
+          'The branch warehouse for this sale could not be resolved',
+      };
+      throw response.status === 404
+        ? new NotFoundException(body)
+        : new ConflictException(body);
+    }
+    throw this.failed(
+      new Error(`inventory sale-warehouse answered ${response.status}`),
       false,
     );
   }

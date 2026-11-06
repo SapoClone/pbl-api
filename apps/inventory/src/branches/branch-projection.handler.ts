@@ -8,6 +8,10 @@ import {
 import { OnEvent } from '@pbl/events';
 import { EntityManager } from 'typeorm';
 import { BranchProjectionEntity } from './branch-projection.entity';
+import {
+  deactivateEmptyBranchWarehouses,
+  ensureDefaultBranchWarehouse,
+} from './default-warehouse';
 
 /** Keeps `branch_projection` in step with the branch events of platform */
 @Injectable()
@@ -45,6 +49,11 @@ export class BranchProjectionHandler {
       BranchProjectionEntity,
     );
     const sourceUpdatedAt = new Date(branch.updatedAt);
+    // events of one branch run one after the other, so two first deliveries cannot
+    // both insert the projection row or the default warehouse
+    await manager.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+      `branch_default_wh:${event.tenantId}:${branch.id}`,
+    ]);
     const existing = await projections.findOne({
       where: { branchId: branch.id },
     });
@@ -55,6 +64,7 @@ export class BranchProjectionHandler {
       this.logger.debug(`Ignoring a stale event for branch ${branch.id}`);
       return;
     }
+    const wasActive = existing?.status === 'active';
     await projections.save(
       Object.assign(existing ?? new BranchProjectionEntity(), {
         branchId: branch.id,
@@ -66,5 +76,17 @@ export class BranchProjectionHandler {
         syncedAt: new Date(),
       }),
     );
+    // D1: an active branch always has its default BRANCH warehouse, made in the
+    // same transaction as the projection so a redelivery cannot leave one without
+    if (branch.status === 'active') {
+      await ensureDefaultBranchWarehouse(
+        manager,
+        event.tenantId,
+        branch,
+        !wasActive,
+      );
+    } else {
+      await deactivateEmptyBranchWarehouses(manager, event.tenantId, branch.id);
+    }
   }
 }

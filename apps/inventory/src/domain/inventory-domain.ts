@@ -5,6 +5,18 @@ export const InventoryDomainErrorCode = {
   WAREHOUSE_INACTIVE: 'WAREHOUSE_INACTIVE',
   WAREHOUSE_CODE_CONFLICT: 'WAREHOUSE_CODE_CONFLICT',
   WAREHOUSE_HAS_PENDING_OPERATIONS: 'WAREHOUSE_HAS_PENDING_OPERATIONS',
+  /** A BRANCH warehouse names no branch, or a CENTRAL/QUARANTINE one names one (D14) */
+  WAREHOUSE_BRANCH_INVALID: 'WAREHOUSE_BRANCH_INVALID',
+  /** PATCH tried to move, re-kind or detach a warehouse that cannot be (D13) */
+  WAREHOUSE_BRANCH_LOCKED: 'WAREHOUSE_BRANCH_LOCKED',
+  /** The default warehouse of a branch cannot be unset, deactivated or moved without naming another (D14) */
+  WAREHOUSE_IS_DEFAULT: 'WAREHOUSE_IS_DEFAULT',
+  /** A sale named a warehouse that is not a BRANCH warehouse of the sale's branch (D2) */
+  WAREHOUSE_NOT_IN_BRANCH: 'WAREHOUSE_NOT_IN_BRANCH',
+  /** The branch has no active default warehouse yet (D1/D2) */
+  BRANCH_HAS_NO_WAREHOUSE: 'BRANCH_HAS_NO_WAREHOUSE',
+  BRANCH_NOT_FOUND: 'BRANCH_NOT_FOUND',
+  BRANCH_NOT_ACTIVE: 'BRANCH_NOT_ACTIVE',
   SKU_NOT_FOUND: 'SKU_NOT_FOUND',
   SKU_NOT_SELLABLE: 'SKU_NOT_SELLABLE',
   STOCK_BALANCE_NOT_FOUND: 'STOCK_BALANCE_NOT_FOUND',

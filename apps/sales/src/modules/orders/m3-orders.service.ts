@@ -150,6 +150,17 @@ export class M3OrdersService {
       allowPriceOverride: options.allowPriceOverride,
     });
 
+    // D2: a named warehouse must be a BRANCH warehouse of this branch; none is resolved
+    // when the order is confirmed
+    const namedWarehouseId = dto.warehouseId
+      ? (
+          await this.inventoryClient.resolveSaleWarehouse(
+            dto.branchId,
+            dto.warehouseId,
+          )
+        ).id
+      : null;
+
     const initialStatus: CommercialOrderStatus = dto.initialStatus ?? 'PENDING';
     const paymentStatus: OrderPaymentStatus = 'UNPAID';
     const fulfillmentStatus: OrderFulfillmentStatus = 'UNFULFILLED';
@@ -206,7 +217,7 @@ export class M3OrdersService {
           tenantId,
           code,
           branchId: dto.branchId,
-          warehouseId: dto.warehouseId ?? null,
+          warehouseId: namedWarehouseId,
           channelType: dto.channelType,
           channelId: dto.channelId ?? null,
           sourceConnectionId: dto.sourceConnectionId?.trim() ?? null,
@@ -337,14 +348,14 @@ export class M3OrdersService {
     const outcome = options.tolerateShortage
       ? { shortageDetected: false, shortages: [] as unknown[] }
       : {};
-    if (dto.autoConfirm && dto.warehouseId) {
+    if (dto.autoConfirm) {
       try {
         const confirmed = await this.confirmOrder(
           createdOrderId,
           actorId,
           scope,
           {
-            warehouseId: dto.warehouseId,
+            warehouseId: namedWarehouseId ?? undefined,
           },
         );
         return { ...confirmed, replayed: false, ...outcome };
@@ -580,14 +591,13 @@ export class M3OrdersService {
     );
     preConfirmAgg.assertCanConfirm();
 
-    const warehouseId = dto.warehouseId ?? order.warehouseId;
-    if (!warehouseId) {
-      throw new SalesDomainError(
-        SalesDomainErrorCode.VALIDATION_ERROR,
-        'warehouseId is required to confirm order and reserve stock',
-        422,
-      );
-    }
+    // D2: the order's own branch warehouse; a client-supplied id is validated, not trusted
+    const warehouseId = (
+      await this.inventoryClient.resolveSaleWarehouse(
+        order.branchId,
+        dto.warehouseId ?? order.warehouseId,
+      )
+    ).id;
 
     // Reserve stock in Inventory outside DB transaction
     const qtyBySku = new Map<string, bigint>();
@@ -607,6 +617,7 @@ export class M3OrdersService {
         callerService: 'sales',
         sourceRefType: 'ORDER',
         sourceRefId: orderId,
+        branchId: order.branchId,
         lines: Array.from(qtyBySku.entries()).map(([skuId, millis]) => ({
           warehouseId,
           skuId,
