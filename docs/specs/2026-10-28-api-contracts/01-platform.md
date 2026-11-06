@@ -512,13 +512,20 @@ D1 assumption: staff are `Account` + `AccountTenant`, and `AccountTenant` gains 
 - **Status:** `new` (ERD `StaffSchedule`)
 - **Screens:** Ca làm việc tab (missing); 13:2646 column "Ca làm việc"
 - **Auth:** `staff.view`
-- **Query:** `?branchId=…&accountId=…&weekday=1`
-- **Response:** 200: `{ "data": [ { "id": "…", "accountId": "…", "staffName": "Trần Bảo Linh", "branchId": "…", "branchName": "Quận 3", "weekday": 1, "startTime": "08:00", "endTime": "16:00" } ] }`
+- **Query:** `?branchId=…&accountId=…&weekday=1&duty=cashier`
+- **Response:** 200: `{ "data": [ { "id": "…", "accountId": "…", "staffName": "Trần Bảo Linh", "branchId": "…", "branchName": "Quận 3", "weekday": 1, "startTime": "08:00", "endTime": "16:00", "name": "Ca sáng", "duty": "cashier", "note": null } ] }`
+  - `duty` is what the member is in charge of: `shift_lead`, `cashier`, `sales` (the default), `warehouse`, `delivery`, `other`. See [work shifts](../../guides/work-shifts.md).
+
+### GET /platform/api/v1/staff-schedules/on-duty
+- **Status:** `new`
+- **Auth:** `staff.view`, branch scope as the list
+- **Query:** `?branchId=…&at=2026-11-05T01:00:00.000Z` (`at` is now when left out)
+- **Response:** 200: `{ "at": "…", "data": [ …StaffSchedule ] }`: the shifts running at that moment (end excluded), shift leads first
 
 ### POST /platform/api/v1/staff-schedules
 - **Status:** `new`
 - **Auth:** `staff.update`
-- **Body:** `{ "accountId": "…", "branchId": "…", "weekdays": [1,2,3,4,5], "startTime": "08:00", "endTime": "16:00" }`. Creates one row per weekday.
+- **Body:** `{ "accountId": "…", "branchId": "…", "weekdays": [1,2,3,4,5], "startTime": "08:00", "endTime": "16:00", "name": "Ca sáng", "duty": "cashier", "note": "Quầy 1" }`. Creates one row per weekday; `name`, `duty` and `note` are optional (`duty` defaults to `sales`).
 - **Response:** 201: `{ "data": [ …StaffSchedule ] }`
 - **Errors:**
   - 400 `S001`: overlaps an existing shift for that person.
@@ -527,7 +534,7 @@ D1 assumption: staff are `Account` + `AccountTenant`, and `AccountTenant` gains 
 ### PATCH /platform/api/v1/staff-schedules/{id}
 - **Status:** `new`
 - **Auth:** `staff.update`
-- **Body:** `{ "startTime": "14:00", "endTime": "22:00" }`
+- **Body:** any of `{ "startTime": "14:00", "endTime": "22:00", "name": null, "duty": "shift_lead", "note": "…" }`
 - **Response:** 200
 - **Errors:** 400 `S001`
 

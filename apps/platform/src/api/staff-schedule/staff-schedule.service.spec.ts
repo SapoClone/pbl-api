@@ -2,6 +2,7 @@ import { ErrorCode } from '@/constants/error-code.constant';
 import { NotFoundException } from '@nestjs/common';
 import { TenantContext } from '@pbl/common';
 import { StaffScheduleEntity } from './entities/staff-schedule.entity';
+import { StaffDuty } from './staff-duty';
 import { StaffScheduleService } from './staff-schedule.service';
 
 const shift = (overrides: Partial<StaffScheduleEntity> = {}) =>
@@ -296,6 +297,121 @@ describe('StaffScheduleService', () => {
         { branchId: 'b1', label: '13:00–17:00', isOnShift: false },
       ]);
       expect(today.get('a2')?.[0].isOnShift).toBe(false);
+    });
+  });
+
+  describe('duty', () => {
+    it('stores a name, a duty and a note, trimmed, and defaults the duty to sales', async () => {
+      const dto = {
+        accountId: 'a1',
+        branchId: 'b1',
+        weekdays: [1],
+        startTime: '08:00',
+        endTime: '16:00',
+      };
+      await inTenant(() =>
+        service.create('o', {
+          ...dto,
+          name: ' Ca sáng ',
+          duty: StaffDuty.CASHIER,
+          note: ' Quầy 1 ',
+        }),
+      );
+      expect(schedules.save.mock.calls[0][0][0]).toMatchObject({
+        name: 'Ca sáng',
+        duty: 'cashier',
+        note: 'Quầy 1',
+      });
+      await inTenant(() => service.create('o', dto));
+      expect(schedules.save.mock.calls[1][0][0]).toMatchObject({
+        name: null,
+        duty: 'sales',
+        note: null,
+      });
+    });
+
+    it('changes only what the patch names, and clears a name with null', async () => {
+      schedules.findOne.mockResolvedValue(
+        shift({ name: 'Ca sáng', duty: StaffDuty.SALES, note: 'x' }),
+      );
+      await inTenant(() =>
+        service.update('o', 's1', { duty: StaffDuty.SHIFT_LEAD, name: null }),
+      );
+      expect(schedules.save.mock.calls[0][0]).toMatchObject({
+        name: null,
+        duty: 'shift_lead',
+        note: 'x',
+        startTime: '08:00',
+      });
+    });
+  });
+
+  describe('onDuty', () => {
+    // 2026-11-05 is a Thursday: 01:00Z is 08:00 in Ho Chi Minh City
+    const at = new Date('2026-11-05T01:00:00.000Z');
+    const rows = [
+      shift({ id: 'r1' as never, accountId: 'a1', duty: StaffDuty.SALES }),
+      shift({
+        id: 'r2' as never,
+        accountId: 'a2',
+        duty: StaffDuty.SHIFT_LEAD,
+        startTime: '07:00:00',
+        endTime: '15:00:00',
+      }),
+      shift({
+        id: 'r3' as never,
+        accountId: 'a3',
+        duty: StaffDuty.CASHIER,
+        startTime: '16:00:00',
+        endTime: '22:00:00',
+      }),
+      shift({
+        id: 'r4' as never,
+        accountId: 'a4',
+        duty: StaffDuty.WAREHOUSE,
+        startTime: '06:00:00',
+        endTime: '08:00:00',
+      }),
+    ];
+
+    beforeEach(() => {
+      schedules.find.mockResolvedValue(rows);
+      accounts.find.mockResolvedValue([
+        { id: 'a1', name: 'Linh' },
+        { id: 'a2', name: 'Minh' },
+      ]);
+    });
+
+    it('asks for the weekday of the moment in the store timezone', async () => {
+      await inTenant(() => service.onDuty({ at }));
+      expect(schedules.find.mock.calls[0][0].where).toEqual({ weekday: 4 });
+    });
+
+    it('keeps the shifts running at that minute (end excluded), shift leads first', async () => {
+      const result = await inTenant(() => service.onDuty({ at }));
+      expect(result.at).toBe('2026-11-05T01:00:00.000Z');
+      expect(result.data.map((r) => [r.staffName, r.duty])).toEqual([
+        ['Minh', 'shift_lead'],
+        ['Linh', 'sales'],
+      ]);
+    });
+
+    it('is empty outside every shift', async () => {
+      const night = new Date('2026-11-05T18:00:00.000Z'); // 01:00 next day
+      expect(
+        (await inTenant(() => service.onDuty({ at: night }))).data,
+      ).toEqual([]);
+    });
+
+    it('filters by branch and answers 404 for a branch outside the scope', async () => {
+      await inTenant(() => service.onDuty({ at, branchId: 'b1' }, ['b1']));
+      expect(schedules.find.mock.calls[0][0].where).toEqual({
+        weekday: 4,
+        branchId: 'b1',
+      });
+      await expect(
+        inTenant(() => service.onDuty({ at, branchId: 'b2' }, ['b1'])),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

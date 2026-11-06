@@ -46,6 +46,7 @@ import {
 } from '../src/modules/screen/order-query.service';
 import { ShiftViewService } from '../src/modules/screen/shift-view.service';
 import { ShiftsService } from '../src/modules/shifts/shifts.service';
+import { StaffSalesService } from '../src/modules/staff-sales/staff-sales.service';
 import { ListOrdersReqDto } from '../src/orders/dto/list-orders.req.dto';
 import { OrderItemEntity } from '../src/orders/entities/order-item.entity';
 import {
@@ -1646,6 +1647,241 @@ describe('sales screen contract (Postgres)', () => {
       });
       // no line carries a cost in the catalog projection: costAmount is omitted, not zero
       expect('costAmount' in e).toBe(false);
+    });
+  });
+
+  describe('staff sales (who sold what)', () => {
+    const TENANT_C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const S1 = '51515151-5151-4515-8515-515151515151';
+    const S2 = '52525252-5252-4525-8525-525252525252';
+    const S3 = '53535353-5353-4535-8535-535353535353';
+    const SHIFT_X = '61616161-6161-4616-8616-616161616161';
+    const SHIFT_Y = '62626262-6262-4626-8626-626262626262';
+    const PA = '71717171-7171-4717-8717-717171717171';
+    const PB = '72727272-7272-4727-8727-727272727272';
+    let staffSales: StaffSalesService;
+    const C = <T>(work: () => Promise<T>) => as(TENANT_C, work);
+
+    const order = async (o: {
+      code: string;
+      staff: string;
+      branch: string;
+      total: number;
+      at: string;
+      shift?: string;
+      status?: string;
+      channel?: string;
+      lines: [string, string, string, number, number][]; // sku, product, name, qty, net
+    }) => {
+      const id = randomUUID();
+      await sql(
+        `INSERT INTO $S.orders (id, tenant_id, code, branch_id, status, payment_method, total_amount, item_count,
+           created_by, order_status, channel_type, grand_total, shift_id, created_at)
+         VALUES ($1, $2, $3, $4, 'completed', 'cash', $5, $6, $7, $8, $9, $5, $10, $11)`,
+        [
+          id,
+          TENANT_C,
+          o.code,
+          o.branch,
+          o.total,
+          o.lines.length,
+          o.staff,
+          o.status ?? 'COMPLETED',
+          o.channel ?? 'POS',
+          o.shift ?? null,
+          o.at,
+        ],
+      );
+      for (const [sku, product, name, qty, net] of o.lines) {
+        await sql(
+          `INSERT INTO $S.order_items (id, tenant_id, order_id, sku, name, quantity, unit_price, line_total,
+             product_id, variant_id, qty, base_qty, line_net)
+           VALUES ($1, $2, $3, $4, $5, $6::int, $7, $8, $9, $9, $6::numeric, $6::numeric, $8)`,
+          [
+            randomUUID(),
+            TENANT_C,
+            id,
+            sku,
+            name,
+            qty,
+            Math.round(net / qty),
+            net,
+            product,
+          ],
+        );
+      }
+    };
+
+    // the file's own beforeEach empties the tables, so each test seeds again
+    beforeEach(async () => {
+      staffSales = new StaffSalesService(dataSource);
+      // 2026-11-04 10:00 and 15:00 in UTC+7, 2026-11-05 09:00
+      await order({
+        code: 'S-1',
+        staff: S1,
+        branch: BRANCH_A,
+        total: 300000,
+        at: '2026-11-04T03:00:00Z',
+        shift: SHIFT_X,
+        lines: [
+          ['SKU-A', PA, 'Ao thun', 2, 200000],
+          ['SKU-B', PB, 'Quan jean', 1, 100000],
+        ],
+      });
+      await order({
+        code: 'S-2',
+        staff: S1,
+        branch: BRANCH_A,
+        total: 120000,
+        at: '2026-11-04T08:00:00Z',
+        lines: [['SKU-A', PA, 'Ao thun', 1, 120000]],
+      });
+      await order({
+        code: 'S-3',
+        staff: S2,
+        branch: BRANCH_C,
+        total: 50000,
+        at: '2026-11-05T02:00:00Z',
+        shift: SHIFT_Y,
+        lines: [['SKU-B', PB, 'Quan jean', 1, 50000]],
+      });
+      await order({
+        code: 'S-4',
+        staff: S2,
+        branch: BRANCH_C,
+        total: 999000,
+        at: '2026-11-05T03:00:00Z',
+        status: 'CANCELLED',
+        lines: [['SKU-A', PA, 'Ao thun', 9, 999000]],
+      });
+      await order({
+        code: 'S-5',
+        staff: S3,
+        branch: BRANCH_A,
+        total: 70000,
+        at: '2026-11-05T04:00:00Z',
+        channel: 'MARKETPLACE',
+        lines: [['SKU-B', PB, 'Quan jean', 1, 70000]],
+      });
+    });
+
+    it('groups completed POS orders by who rang them up, best seller first, with totals', async () => {
+      const r = await C(() => staffSales.byStaff({}, ALL));
+      expect(r.data).toEqual([
+        {
+          staffId: S1,
+          ordersCount: 2,
+          itemsSold: 4,
+          revenue: 420000,
+          firstSaleAt: '2026-11-04T03:00:00.000Z',
+          lastSaleAt: '2026-11-04T08:00:00.000Z',
+        },
+        {
+          staffId: S2,
+          ordersCount: 1,
+          itemsSold: 1,
+          revenue: 50000,
+          firstSaleAt: '2026-11-05T02:00:00.000Z',
+          lastSaleAt: '2026-11-05T02:00:00.000Z',
+        },
+      ]);
+      expect(r.totals).toEqual({
+        ordersCount: 3,
+        itemsSold: 5,
+        revenue: 470000,
+      });
+    });
+
+    it('never counts a cancelled order, and counts online orders only when asked', async () => {
+      const all = await C(() =>
+        staffSales.byStaff({ channelType: 'ALL' }, ALL),
+      );
+      expect(all.data.map((x) => x.staffId)).toEqual([S1, S3, S2]);
+      expect(all.data.find((x) => x.staffId === S2)!.revenue).toBe(50000);
+    });
+
+    it('narrows to one shift, one branch or a period counted in UTC+7', async () => {
+      const shift = await C(() =>
+        staffSales.byStaff({ shiftId: SHIFT_X }, ALL),
+      );
+      expect(shift.data).toHaveLength(1);
+      expect(shift.data[0]).toMatchObject({
+        staffId: S1,
+        ordersCount: 1,
+        revenue: 300000,
+      });
+      const branch = await C(() =>
+        staffSales.byStaff({ branchId: BRANCH_C }, ALL),
+      );
+      expect(branch.data.map((x) => x.staffId)).toEqual([S2]);
+      // 2026-11-05 starts at 2026-11-04T17:00Z: the 15:00 sale of the 4th is out, S2's 09:00 sale of the 5th is in
+      const day = await C(() =>
+        staffSales.byStaff({ from: '2026-11-05', to: '2026-11-05' }, ALL),
+      );
+      expect(day.data.map((x) => x.staffId)).toEqual([S2]);
+      const first = await C(() =>
+        staffSales.byStaff({ from: '2026-11-04', to: '2026-11-04' }, ALL),
+      );
+      expect(first.data.map((x) => x.staffId)).toEqual([S1]);
+    });
+
+    it('stays inside the caller`s branches, and a branch outside them is a 404', async () => {
+      const scoped = await C(() => staffSales.byStaff({}, [BRANCH_C]));
+      expect(scoped.data.map((x) => x.staffId)).toEqual([S2]);
+      await expect(
+        C(() => staffSales.byStaff({ branchId: BRANCH_A }, [BRANCH_C])),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        C(() => staffSales.productsOf(S1, { branchId: BRANCH_A }, [BRANCH_C])),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('lists what one staff member sold, product by product', async () => {
+      const r = await C(() => staffSales.productsOf(S1, {}, ALL));
+      expect(r).toEqual({
+        staffId: S1,
+        data: [
+          {
+            productId: PA,
+            variantId: PA,
+            sku: 'SKU-A',
+            name: 'Ao thun',
+            variantLabel: null,
+            quantity: 3,
+            revenue: 320000,
+            ordersCount: 2,
+          },
+          {
+            productId: PB,
+            variantId: PB,
+            sku: 'SKU-B',
+            name: 'Quan jean',
+            variantLabel: null,
+            quantity: 1,
+            revenue: 100000,
+            ordersCount: 1,
+          },
+        ],
+      });
+      const inShift = await C(() =>
+        staffSales.productsOf(S1, { shiftId: SHIFT_X }, ALL),
+      );
+      expect(inShift.data.map((x) => [x.sku, x.quantity])).toEqual([
+        ['SKU-A', 2],
+        ['SKU-B', 1],
+      ]);
+      expect((await C(() => staffSales.productsOf(S3, {}, ALL))).data).toEqual(
+        [],
+      );
+    });
+
+    it('keeps tenants apart', async () => {
+      expect(
+        (await as(TENANT_B, () => staffSales.byStaff({}, ALL))).data,
+      ).toEqual([]);
+      expect(
+        (await as(TENANT_B, () => staffSales.productsOf(S1, {}, ALL))).data,
+      ).toEqual([]);
     });
   });
 });

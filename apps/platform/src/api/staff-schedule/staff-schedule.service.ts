@@ -13,10 +13,14 @@ import { AccountEntity } from '../account/entities/account.entity';
 import { BranchEntity } from '../branch/entities/branch.entity';
 import { AccountTenantEntity } from '../tenant/entities/account-tenant.entity';
 import { CreateStaffScheduleReqDto } from './dto/create-staff-schedule.req.dto';
-import { ListStaffScheduleReqDto } from './dto/list-staff-schedule.req.dto';
+import {
+  ListStaffScheduleReqDto,
+  OnDutyReqDto,
+} from './dto/list-staff-schedule.req.dto';
 import { StaffScheduleResDto } from './dto/staff-schedule.res.dto';
 import { UpdateStaffScheduleReqDto } from './dto/update-staff-schedule.req.dto';
 import { StaffScheduleEntity } from './entities/staff-schedule.entity';
+import { StaffDuty } from './staff-duty';
 import { storeNow, toHm, toMinutes } from './staff-time.util';
 
 /** A member's shift today, as the staff list shows it. */
@@ -58,6 +62,7 @@ export class StaffScheduleService {
             : {}),
         ...(query.accountId ? { accountId: query.accountId } : {}),
         ...(query.weekday ? { weekday: query.weekday } : {}),
+        ...(query.duty ? { duty: query.duty } : {}),
       },
       order: { weekday: 'ASC', startTime: 'ASC', id: 'ASC' },
     });
@@ -97,6 +102,9 @@ export class StaffScheduleService {
               weekday,
               startTime: dto.startTime,
               endTime: dto.endTime,
+              name: dto.name?.trim() || null,
+              duty: dto.duty ?? StaffDuty.SALES,
+              note: dto.note?.trim() || null,
               createdBy: actorId,
               updatedBy: actorId,
             }),
@@ -126,6 +134,9 @@ export class StaffScheduleService {
     );
     row.startTime = startTime;
     row.endTime = endTime;
+    if (dto.name !== undefined) row.name = dto.name?.trim() || null;
+    if (dto.duty !== undefined) row.duty = dto.duty;
+    if (dto.note !== undefined) row.note = dto.note?.trim() || null;
     row.updatedBy = actorId;
     const [saved] = await this.present([await this.schedules.save(row)]);
     return saved;
@@ -159,6 +170,46 @@ export class StaffScheduleService {
       byAccount.set(row.accountId, shifts);
     }
     return byAccount;
+  }
+
+  /**
+   * Who is on shift at a moment (now by default) and what each one is in charge of, in the store's timezone: the
+   * answer to "who runs the floor right now". Shift leads first, then by branch and start.
+   */
+  async onDuty(
+    query: OnDutyReqDto,
+    allowed: string[] | null = null,
+  ): Promise<{ at: string; data: StaffScheduleResDto[] }> {
+    if (allowed && query.branchId && !allowed.includes(query.branchId)) {
+      throw new NotFoundException();
+    }
+    const at = query.at ?? new Date();
+    const { weekday, minutes } = storeNow(at);
+    const rows = (
+      await this.schedules.find({
+        where: {
+          weekday,
+          ...(query.branchId
+            ? { branchId: query.branchId }
+            : allowed
+              ? { branchId: In(allowed) as never }
+              : {}),
+        },
+        order: { startTime: 'ASC', id: 'ASC' },
+      })
+    ).filter(
+      (row) =>
+        toMinutes(row.startTime) <= minutes && minutes < toMinutes(row.endTime),
+    );
+    const data = await this.present(rows);
+    const rank = (duty: string) => (duty === StaffDuty.SHIFT_LEAD ? 0 : 1);
+    data.sort(
+      (a, b) =>
+        rank(a.duty) - rank(b.duty) ||
+        (a.branchName ?? '').localeCompare(b.branchName ?? '') ||
+        a.startTime.localeCompare(b.startTime),
+    );
+    return { at: at.toISOString(), data };
   }
 
   /** Every shift of one member, for the staff detail. */
@@ -238,6 +289,9 @@ export class StaffScheduleService {
         weekday: row.weekday,
         startTime: toHm(row.startTime),
         endTime: toHm(row.endTime),
+        name: row.name,
+        duty: row.duty,
+        note: row.note,
       }),
     );
   }

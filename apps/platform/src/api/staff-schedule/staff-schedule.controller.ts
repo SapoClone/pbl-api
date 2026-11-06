@@ -22,7 +22,10 @@ import {
   RequirePermission,
 } from '@pbl/auth';
 import { CreateStaffScheduleReqDto } from './dto/create-staff-schedule.req.dto';
-import { ListStaffScheduleReqDto } from './dto/list-staff-schedule.req.dto';
+import {
+  ListStaffScheduleReqDto,
+  OnDutyReqDto,
+} from './dto/list-staff-schedule.req.dto';
 import { StaffScheduleResDto } from './dto/staff-schedule.res.dto';
 import { UpdateStaffScheduleReqDto } from './dto/update-staff-schedule.req.dto';
 import { StaffScheduleService } from './staff-schedule.service';
@@ -54,6 +57,21 @@ export class StaffScheduleController {
 
   @ApiAuth({
     type: StaffScheduleResDto,
+    summary:
+      'Who is on shift at a moment (now by default) and what each is in charge of (staff.view)',
+  })
+  @RequirePermission('staff.view')
+  @Get('on-duty')
+  async onDuty(
+    @CurrentTenant() _tenantId: string,
+    @Query() query: OnDutyReqDto,
+    @AllowedBranches() allowed: string[] | null,
+  ): Promise<{ at: string; data: StaffScheduleResDto[] }> {
+    return this.service.onDuty(query, allowed);
+  }
+
+  @ApiAuth({
+    type: StaffScheduleResDto,
     summary: 'Create a shift, one row per weekday (staff.update)',
     statusCode: HttpStatus.CREATED,
   })
@@ -72,7 +90,7 @@ export class StaffScheduleController {
 
   @ApiAuth({
     type: StaffScheduleResDto,
-    summary: 'Change the times of a shift (staff.update)',
+    summary: 'Change the times, name, duty or note of a shift (staff.update)',
   })
   @ApiParam({ name: 'id', type: 'String' })
   @RequirePermission('staff.update')

@@ -43,6 +43,7 @@ import { CreateBranchSettingAndStaffSchedule1792000000001 } from '../src/databas
 import { CreateRolePermissionAndMemberBranch1792300000000 } from '../src/database/migrations/1792300000000-create-role-permission-and-member-branch';
 import { AddFinancePermissions1792400000000 } from '../src/database/migrations/1792400000000-add-finance-permissions';
 import { CreatePlanSubscriptionAndTenantAdminFields1792700000000 } from '../src/database/migrations/1792700000000-create-plan-subscription-and-tenant-admin-fields';
+import { AddDutyToStaffSchedule1793000000000 } from '../src/database/migrations/1793000000000-add-duty-to-staff-schedule';
 
 describe('platform (Postgres)', () => {
   const schema = uniqueSchema('platform_it');
@@ -309,10 +310,24 @@ describe('platform (Postgres)', () => {
     await expect(shift(2, '16:00', '08:00')).rejects.toThrow(
       /CHK_staff_schedule_time/,
     );
+
+    // the duty migration: a shift that exists is a sales shift, and a duty outside the list is refused
+    const dutyRunner = dataSource.createQueryRunner();
+    await new AddDutyToStaffSchedule1793000000000().up(dutyRunner);
+    await dutyRunner.release();
+    expect(
+      await sql(`SELECT "name","duty","note" FROM "staff_schedule"`),
+    ).toEqual([{ name: null, duty: 'sales', note: null }]);
+    await expect(
+      sql(`UPDATE "staff_schedule" SET "duty" = 'janitor'`),
+    ).rejects.toThrow(/CHK_staff_schedule_duty/);
+    await sql(`UPDATE "staff_schedule" SET "duty" = 'shift_lead'`);
   });
 
   it('runs the migrations down again', async () => {
     const runner = dataSource.createQueryRunner();
+    await new AddDutyToStaffSchedule1793000000000().down(runner);
+    await expect(sql(`SELECT "duty" FROM "staff_schedule"`)).rejects.toThrow();
     await new CreateBranchSettingAndStaffSchedule1792000000001().down(runner);
     await new AddMemberStatusLoginLockoutSessions1792000000000().down(runner);
     await runner.release();
