@@ -17,6 +17,8 @@ import {
 } from './config/inventory.config';
 import { CatalogSkuProjectionHandler } from './infrastructure/catalog-reference/catalog-sku-projection.handler';
 import { M2_INVENTORY_ENTITIES } from './infrastructure/persistence/inventory.entities';
+import { BranchBlockersController } from './internal/branch-blockers.controller';
+import { BranchBlockersService } from './internal/branch-blockers.service';
 import { CreateInventoryTables1791900000000 } from './migrations/1791900000000-create-inventory-tables';
 import { AddWarehouseStockBalances1791900000100 } from './migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from './migrations/1791900000200-create-m2-inventory-core';
@@ -111,8 +113,10 @@ import { StockService } from './stock/stock.service';
     ProcurementController,
     ReservationsController,
     WarehouseReservationsController,
+    BranchBlockersController,
   ],
   providers: [
+    BranchBlockersService,
     WarehouseScopeService,
     StockService,
     WarehousesService,

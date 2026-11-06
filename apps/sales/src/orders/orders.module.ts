@@ -7,6 +7,8 @@ import { CatalogClient } from '../infrastructure/catalog-client/catalog.client';
 import { CustomerLoyaltyClient } from '../infrastructure/customer-client/customer-loyalty.client';
 import { FinanceCreditClient } from '../infrastructure/finance-client/finance-credit.client';
 import { M3_SALES_ENTITIES } from '../infrastructure/persistence/sales.entities';
+import { BranchBlockersController } from '../internal/branch-blockers.controller';
+import { BranchBlockersService } from '../internal/branch-blockers.service';
 import { InternalOrdersController } from '../internal/internal-orders.controller';
 import { InventoryClient } from '../inventory/inventory.client';
 import { CheckoutController } from '../modules/checkout/checkout.controller';
@@ -66,8 +68,10 @@ import { OrdersService } from './orders.service';
     ScreenShiftsController,
     StaffSalesController,
     InternalOrdersController,
+    BranchBlockersController,
   ],
   providers: [
+    BranchBlockersService,
     OrderQueryService,
     OrderActionsService,
     ShiftViewService,
