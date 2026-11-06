@@ -53,10 +53,12 @@ describe('TenantStatusHandler', () => {
 
 describe('TenantStatusService', () => {
   const service = (rows: { status: string }[]) =>
-    new TenantStatusService({
-      options,
-      query: jest.fn(async () => rows),
-    } as unknown as DataSource);
+    new TenantStatusService(
+      Object.assign(Object.create(DataSource.prototype), {
+        options,
+        query: jest.fn(async () => rows),
+      }) as DataSource,
+    );
 
   it('lets an active store and a store with no row through (fail open)', async () => {
     await expect(

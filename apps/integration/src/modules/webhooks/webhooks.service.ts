@@ -108,7 +108,7 @@ export class WebhooksService {
       }
 
       // A suspended store takes no webhooks (D35). 503, not 4xx: the marketplace retries later, so nothing is lost
-      if (await isTenantSuspended(this.dataSource, conn.tenantId)) {
+      if (await isTenantSuspended(em, conn.tenantId)) {
         this.logger.warn(
           `Rejected a webhook for suspended tenant ${conn.tenantId} (connection ${conn.id})`,
         );

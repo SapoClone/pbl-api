@@ -1,17 +1,18 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { qualifiedTable } from '@pbl/events';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 
 /** The answer a suspended store gets from every entry point that accepts work from outside a user session (D35) */
 export const TENANT_SUSPENDED = 'TENANT_SUSPENDED';
 
 /** True when the projection says the store is suspended; no row means active (fail open) */
 export async function isTenantSuspended(
-  dataSource: DataSource,
+  source: DataSource | EntityManager,
   tenantId: string,
 ): Promise<boolean> {
-  const rows: { status: string }[] = await dataSource.query(
-    `SELECT "status" FROM ${qualifiedTable(dataSource, 'tenant_status')} WHERE "tenant_id" = $1`,
+  const connection = source instanceof DataSource ? source : source.connection;
+  const rows: { status: string }[] = await source.query(
+    `SELECT "status" FROM ${qualifiedTable(connection, 'tenant_status')} WHERE "tenant_id" = $1`,
     [tenantId],
   );
   return rows[0]?.status === 'suspended';
