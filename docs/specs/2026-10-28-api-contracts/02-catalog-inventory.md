@@ -173,13 +173,39 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
 - **Response 200:** `{ data: [{ "variantId", "productId", "name", "label", "skuCode", "barcode", "imageUrl", "price", "avgCostPrice", "category": {id,name} }], pagination }`
 
 ### POST /catalog/api/v1/uploads/images
-- **Status:** new.
+- **Status:** new; built (S3 presigned uploads, workstream E). Guide: [uploads](../../guides/uploads.md).
 - **Screens:** 51:2, image dropzone.
 - **Auth:** `products.create` or `products.update`.
-- **Body:** `{ "fileName": "binh-xanh.jpg", "contentType": "image/jpeg", "size": 812345 }`. Allowed types are `image/png` and `image/jpeg`, up to 5 MB.
-- **Response 201:** `{ "imageId": "…", "uploadUrl": "https://<bucket>.s3…?X-Amz-…", "uploadHeaders": { "Content-Type": "image/jpeg" }, "publicUrl": "https://static.<domain>/t/<tenant>/p/<imageId>.jpg", "expiresAt": "…" }`
-- **Flow:** the client `PUT`s the file to `uploadUrl` within 15 minutes, then sends `imageId` in `POST/PATCH /products`. Images never attached to a product are deleted after 24 h.
-- **Errors:** 422 for a wrong type or size; 409 `Q001` (`details.key` is `storageGb`) when the plan's storage limit is reached. Checked when the bytes are stored, not when the upload is registered; built, replaces `C005`.
+- **Body:** `{ "fileName": "binh-xanh.jpg", "contentType": "image/jpeg", "size": 812345 }`. Allowed types are `image/png` and `image/jpeg`, 1 byte up to 5 MB.
+- **Response 201:** `{ "imageId": "…", "uploadUrl": "https://<bucket>.s3.<region>.amazonaws.com/t/<tenant>/p/<imageId>.jpg?X-Amz-…", "uploadHeaders": { "Content-Type": "image/jpeg" }, "publicUrl": "https://static.<domain>/t/<tenant>/p/<imageId>.jpg", "expiresAt": "…" }`
+  - `uploadUrl` is a presigned `PUT` valid 15 minutes. It signs `Content-Type` and `Content-Length`, so S3 refuses (403) another type or size than declared. The client sends `uploadHeaders` unchanged; the body must be exactly `size` bytes.
+  - `publicUrl` is built from `UPLOADS_PUBLIC_BASE_URL` (the CloudFront domain), else the bucket URL. The object key is built by the server (`t/<tenant>/p/<imageId>.<ext>`); a client never sends a key. The response never carries credentials.
+- **Flow (three steps):**
+  1. `POST /uploads/images` registers the upload (status `pending`).
+  2. The client `PUT`s the file straight to `uploadUrl`. The API never receives the bytes when the driver is `s3`.
+  3. The client calls `POST /uploads/{imageId}/complete`, then sends `imageId` in `POST/PATCH /products` (`imageIds`).
+- **Errors:** 422 for a wrong type or size; 409 `Q001` (`details: { key: "storageGb", used, limit, planCode }`) when `used + size` would pass the plan's storage limit, answered **before** the URL is issued. Every kept file counts toward `used`, attached images included (D34).
+- **Cleanup:** a job every 10 minutes deletes `pending` uploads past `expiresAt` and `uploaded` images never attached to a product for 24 hours, from S3 and the table. Removing an image from a product (or deleting the product) deletes its object and gives the bytes back to the plan (best effort, logged).
+
+### POST /catalog/api/v1/uploads/imports
+- **Status:** new; built (same flow as images).
+- **Auth:** `products.create`.
+- **Body:** `{ "fileName": "san-pham.csv", "contentType": "text/csv", "size": 20480 }` (up to 5 MB).
+- **Response 201:** `{ "uploadId": "…", "uploadUrl": "…", "uploadHeaders": { "Content-Type": "text/csv" }, "expiresAt": "…" }`. Key `t/<tenant>/imports/<uploadId>.csv`; there is no public URL for a CSV.
+- **Errors:** as images (422, 409 `Q001`). After the `PUT`, call `POST /uploads/{uploadId}/complete`, then `POST /product-imports`.
+
+### POST /catalog/api/v1/uploads/{id}/complete
+- **Status:** new; built.
+- **Auth:** `products.create` or `products.update`.
+- **Body:** none.
+- **Response 200:** `{ "id": "…", "status": "uploaded", "size": 812345, "publicUrl": "…" }` (`publicUrl` for images only). The API sends `HEAD` for the object: it must exist with the declared content type and 1 to `size` bytes. The upload becomes `uploaded`, counts toward the plan, and catalog reports the new usage to platform. Idempotent: calling it again for an uploaded or attached file returns the same body.
+- **Errors:** 400 `UPLOAD_INVALID` when the object is missing, or its type or size differs from the declaration (the object is deleted); 404 `UPLOAD_NOT_FOUND` for an unknown id or another store's upload; 409 `Q001` if the store filled up in between.
+
+### PUT /catalog/api/v1/uploads/{id}/content
+- **Status:** built, **local driver only** (`UPLOADS_DRIVER=local`, development and tests): the bytes go through the API and `uploadUrl` points here. Under `UPLOADS_DRIVER=s3` it answers 404 `UPLOAD_NOT_FOUND`.
+
+### Product images and the stored link
+`images` on a product is `[{ "key", "url", "sortOrder" }]`. For images attached with `imageIds`, `url` is the S3 or CloudFront link (`publicUrl`), never an API path; `key` is the object key. Attaching needs status `uploaded` and checks the object still exists (400 `UPLOAD_INVALID` otherwise). `images` sent directly (without `imageIds`) is stored as given and is not backed by an upload.
 
 ### GET /catalog/api/v1/categories
 - **Status:** new.
@@ -224,7 +250,7 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
 - **Status:** new.
 - **Screens:** 13:325, button Nhập file (import file).
 - **Auth:** `products.create`.
-- **Body:** `{ "uploadId": "…" }`. The file is uploaded first through a presigned URL, like images but with type `text/csv`.
+- **Body:** `{ "uploadId": "…" }`. The file is uploaded first with `POST /uploads/imports`, a presigned `PUT` and `POST /uploads/{id}/complete`.
 - **Response:**
   - POST returns 202 `{ "id", "status": "processing" }`.
   - GET returns `{ "id", "status": "processing|completed|failed", "created": 40, "updated": 8, "errors": [{ "row": 12, "message": "SKU trùng: MC-LG-300-K" }] }`.
