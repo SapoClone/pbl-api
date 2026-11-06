@@ -224,6 +224,8 @@ function normalizeCreateWarehouseReservationPayload(
     sourceRefType,
     sourceRefId,
     ttlSeconds,
+    // D19: only an explicit `true` makes a hold that never expires
+    ...((raw.noExpiry ?? raw.no_expiry) === true ? { noExpiry: true } : {}),
     lines,
   };
 }

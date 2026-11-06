@@ -37,6 +37,8 @@ import {
   StockReservationItemEntity,
   WAREHOUSE_STOCK_ENTITIES,
 } from '../src/stock/entities/stock.entities';
+import { OrderCompletedHandler } from '../src/stock/order-completed.handler';
+import { ReservationsService } from '../src/stock/reservations.service';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const BRANCH_1 = '1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a';
@@ -51,6 +53,8 @@ describe('stock integrity (Postgres)', () => {
   let transfers: TransfersService;
   let stocktake: StocktakeService;
   let procurement: ProcurementService;
+  let reservations: ReservationsService;
+  let orderHandler: OrderCompletedHandler;
   const as = <T>(work: () => Promise<T>) =>
     RequestContext.run({ tenantId: TENANT, requestId: 'it' }, work);
   const t = (name: string) => `"${schema}"."${name}"`;
@@ -141,6 +145,8 @@ describe('stock integrity (Postgres)', () => {
     transfers = new TransfersService(dataSource, outbox);
     stocktake = new StocktakeService(dataSource, outbox);
     procurement = new ProcurementService(dataSource, receiving, outbox);
+    reservations = new ReservationsService(dataSource, 15, outbox);
+    orderHandler = new OrderCompletedHandler(reservations);
   });
 
   afterAll(async () => {
@@ -163,6 +169,10 @@ describe('stock integrity (Postgres)', () => {
       'supplier',
       'stock_threshold',
       'catalog_sku_projection',
+      'inventory_ledger',
+      'stock_item',
+      'stock_reservation_item',
+      'stock_reservation',
       'warehouse_reservation_line',
       'warehouse_reservation',
       'stock_balance',
@@ -603,6 +613,137 @@ describe('stock integrity (Postgres)', () => {
         ),
       ).rejects.toThrow(/append-only/);
       expect(await ledger(wh, SKU_A)).toHaveLength(1);
+    });
+  });
+
+  describe('the older stock store and warehouse orders (D16)', () => {
+    const completedEvent = (orderId: string) =>
+      ({
+        tenantId: TENANT,
+        payload: {
+          orderId,
+          code: 'DH-1',
+          branchId: BRANCH_1,
+          totalAmount: 1,
+          itemCount: 1,
+          paymentMethod: 'cash',
+          createdBy: randomUUID(),
+          completedAt: new Date().toISOString(),
+          items: [{ sku: 'AO-01', name: 'Ao', quantity: 1, unitPrice: 1 }],
+        },
+      }) as never;
+    const shortfallRows = async () =>
+      (
+        await dataSource.query(
+          `SELECT count(*)::int AS n FROM ${t('inventory_ledger')} WHERE ref_type = 'sale_shortfall'`,
+        )
+      )[0].n as number;
+
+    it('skips an order whose stock was held in the warehouse flow: no spurious sale_shortfall row', async () => {
+      const wh = await addWarehouse('WS', BRANCH_1);
+      await stockIn(wh, SKU_A, '5.000');
+      const orderId = randomUUID();
+      await as(() =>
+        reservations.reserveWarehouseStock(randomUUID(), {
+          callerService: 'sales',
+          sourceRefType: 'ORDER',
+          sourceRefId: orderId,
+          lines: [{ warehouseId: wh, skuId: SKU_A, qty: '2.000' }],
+        }),
+      );
+      await as(() =>
+        dataSource.transaction((em) =>
+          orderHandler.onCompleted(completedEvent(orderId), em),
+        ),
+      );
+      expect(await shortfallRows()).toBe(0);
+    });
+
+    it('still deducts an older-store order that has no warehouse reservation', async () => {
+      await as(() =>
+        dataSource.transaction((em) =>
+          orderHandler.onCompleted(completedEvent(randomUUID()), em),
+        ),
+      );
+      // nothing in stock and no hold: the older path records the gap
+      expect(await shortfallRows()).toBe(1);
+    });
+  });
+
+  describe('holds that do not expire (D19)', () => {
+    it('keeps a no-expiry hold through the expiry sweep and commits it later', async () => {
+      const wh = await addWarehouse('WH19', BRANCH_1);
+      await stockIn(wh, SKU_A, '5.000');
+      const hold = (noExpiry: boolean) =>
+        as(() =>
+          reservations.reserveWarehouseStock(randomUUID(), {
+            callerService: 'sales',
+            sourceRefType: 'ORDER',
+            sourceRefId: randomUUID(),
+            ...(noExpiry ? { noExpiry: true } : {}),
+            lines: [{ warehouseId: wh, skuId: SKU_A, qty: '1.000' }],
+          }),
+        );
+      const forever = (await hold(true)).reservation;
+      const timed = (await hold(false)).reservation;
+      expect(forever.expiresAt).toBeNull();
+      expect(timed.expiresAt).not.toBeNull();
+      await dataSource.query(
+        `UPDATE ${t('warehouse_reservation')} SET expires_at = now() - interval '1 hour' WHERE id = $1`,
+        [timed.reservationId],
+      );
+      // a year later the sweep still leaves the no-expiry hold alone
+      await reservations.expireDueWarehouseReservationsOfAllTenants();
+      const states = await as(async () => [
+        (await reservations.getWarehouseReservation(forever.reservationId))
+          .state,
+        (await reservations.getWarehouseReservation(timed.reservationId)).state,
+      ]);
+      expect(states).toEqual(['HELD', 'EXPIRED']);
+      expect((await balance(wh, SKU_A)).reserved).toBe('1.000');
+
+      const committed = await as(() =>
+        reservations.commitWarehouseReservation(forever.reservationId),
+      );
+      expect(committed.state).toBe('COMMITTED');
+      expect(committed.expiresAt).toBeNull();
+      expect(await balance(wh, SKU_A)).toMatchObject({
+        onHand: '4.000',
+        reserved: '0.000',
+      });
+    });
+
+    it('replays a no-expiry hold with the same key and refuses the same key with an expiry', async () => {
+      const wh = await addWarehouse('WH19B', BRANCH_1);
+      await stockIn(wh, SKU_A, '5.000');
+      const key = randomUUID();
+      const orderId = randomUUID();
+      const req = {
+        callerService: 'sales' as const,
+        sourceRefType: 'ORDER' as const,
+        sourceRefId: orderId,
+        noExpiry: true,
+        lines: [{ warehouseId: wh, skuId: SKU_A, qty: '1.000' }],
+      };
+      const first = await as(() =>
+        reservations.reserveWarehouseStock(key, req),
+      );
+      const again = await as(() =>
+        reservations.reserveWarehouseStock(key, req),
+      );
+      expect(again.replayed).toBe(true);
+      expect(again.reservation.reservationId).toBe(
+        first.reservation.reservationId,
+      );
+      expect((await balance(wh, SKU_A)).reserved).toBe('1.000');
+      await expect(
+        as(() =>
+          reservations.reserveWarehouseStock(key, {
+            ...req,
+            noExpiry: undefined,
+          }),
+        ),
+      ).rejects.toMatchObject({ status: 409 });
     });
   });
 });

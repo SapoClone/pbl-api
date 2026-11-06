@@ -149,6 +149,7 @@ export function hashReservationRequest(
         callerService: req.callerService,
         sourceRefType: req.sourceRefType,
         sourceRefId: req.sourceRefId,
+        ...(req.noExpiry ? { noExpiry: true } : {}),
         lines: normalizedLines.map((l) => [l.warehouseId, l.skuId, l.qty]),
       }),
     )
@@ -650,7 +651,12 @@ export class ReservationsService {
 
       const reservationId = randomUUID();
       const now = new Date();
-      const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
+      // D19: no expiry (NULL) for a confirmed order that is not shipped yet;
+      // `expires_at < now()` is never true for NULL, so the expiry job and
+      // the lazy expiry skip such holds.
+      const expiresAt = req.noExpiry
+        ? null
+        : new Date(now.getTime() + ttlSeconds * 1000);
 
       await em.query(
         `
@@ -676,7 +682,7 @@ export class ReservationsService {
           requestSha256,
           req.sourceRefType,
           req.sourceRefId,
-          expiresAt.toISOString(),
+          expiresAt ? expiresAt.toISOString() : null,
           now.toISOString(),
         ],
       );
@@ -750,7 +756,7 @@ export class ReservationsService {
           sourceRefType: req.sourceRefType,
           sourceRefId: req.sourceRefId,
           state: 'HELD',
-          expiresAt: expiresAt.toISOString(),
+          expiresAt: expiresAt ? expiresAt.toISOString() : null,
           lines: normalizedLines.map((l) => ({
             warehouseId: l.warehouseId,
             skuId: l.skuId,
@@ -768,7 +774,7 @@ export class ReservationsService {
           sourceRefType: req.sourceRefType,
           sourceRefId: req.sourceRefId,
           state: 'HELD',
-          expiresAt: expiresAt.toISOString(),
+          expiresAt: expiresAt ? expiresAt.toISOString() : null,
           createdAt: now.toISOString(),
           lines: lineResults,
         },
@@ -1450,7 +1456,7 @@ export class ReservationsService {
       sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
       sourceRefId: string;
       state: WarehouseReservationState;
-      expiresAt: Date | string;
+      expiresAt: Date | string | null;
       createdAt: Date | string;
     },
   ): Promise<WarehouseReservationResponse> {
@@ -1483,9 +1489,11 @@ export class ReservationsService {
       sourceRefId: header.sourceRefId,
       state: header.state,
       expiresAt:
-        header.expiresAt instanceof Date
-          ? header.expiresAt.toISOString()
-          : new Date(header.expiresAt).toISOString(),
+        header.expiresAt === null || header.expiresAt === undefined
+          ? null
+          : header.expiresAt instanceof Date
+            ? header.expiresAt.toISOString()
+            : new Date(header.expiresAt).toISOString(),
       createdAt:
         header.createdAt instanceof Date
           ? header.createdAt.toISOString()

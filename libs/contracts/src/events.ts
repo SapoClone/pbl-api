@@ -384,7 +384,8 @@ export interface ReservationConfirmedPayload {
   sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
   sourceRefId: string;
   state: 'HELD';
-  expiresAt: string;
+  /** `null` for a hold that does not expire (D19) */
+  expiresAt: string | null;
   lines: {
     warehouseId: string;
     skuId: string;
@@ -532,6 +533,11 @@ export interface CreateWarehouseReservationRequest {
   sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
   sourceRefId: string;
   ttlSeconds?: number;
+  /**
+   * D19: the hold never expires (a confirmed order that is not shipped yet).
+   * Wins over `ttlSeconds`; released by cancel, committed by fulfilment.
+   */
+  noExpiry?: boolean;
   lines: WarehouseReservationLineInput[];
 }
 
@@ -552,7 +558,8 @@ export interface WarehouseReservationResponse {
   sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
   sourceRefId: string;
   state: WarehouseReservationState;
-  expiresAt: string;
+  /** `null` for a hold created with `noExpiry` */
+  expiresAt: string | null;
   createdAt: string;
   lines: WarehouseReservationLineResult[];
 }
