@@ -1,4 +1,5 @@
 import { CreateTenantPlanQuota1792800000000 } from '../src/migrations/1792800000000-create-tenant-plan-quota';
+import { AllowUploadCleanupSelect1793300000000 } from '../src/migrations/1793300000000-allow-upload-cleanup-select';
 import { PlanQuotaService } from '../src/quota/plan-quota.service';
 /**
  * Phase 4 screen endpoints against a real PostgreSQL (non-superuser role, RLS forced):
@@ -38,6 +39,20 @@ import {
   publicUrlFor,
 } from '../src/modules/uploads/file-storage';
 import { UploadsService } from '../src/modules/uploads/uploads.service';
+
+/** Behaves like the S3 adapter: bytes arrive out of band (`arrive`), the API only HEADs, presigns and deletes. */
+class FakeDirectStorage extends InMemoryFileStorage {
+  override readonly direct = true;
+  override async presignPut(key: string, contentType: string, size?: number) {
+    return {
+      url: `https://bucket.s3.fake/${key}?X-Amz-Signature=sig&len=${size}`,
+      headers: { 'Content-Type': contentType },
+    };
+  }
+  override publicUrl(key: string) {
+    return `https://static.example.com/${key}`;
+  }
+}
 
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -117,6 +132,7 @@ describe('Catalog screen endpoints (real PostgreSQL, RLS)', () => {
           ...CONSUMER_MIGRATIONS,
           CreateCatalogTables1791900000200,
           CreateTenantPlanQuota1792800000000,
+          AllowUploadCleanupSelect1793300000000,
         ],
       }),
     );
@@ -139,6 +155,7 @@ describe('Catalog screen endpoints (real PostgreSQL, RLS)', () => {
       TenantScopedRepository.forEntity(appDs, ProductVariantEntity),
       TenantScopedRepository.forEntity(appDs, UnitConversionEntity),
       new PlanQuotaService(new EventOutbox()),
+      storage,
     );
     categories = new CategoriesService(
       appDs,
@@ -518,22 +535,18 @@ describe('Catalog screen endpoints (real PostgreSQL, RLS)', () => {
         [C, mb],
       );
 
-    it('refuses a file that does not fit (409 Q001) and counts only stored files', async () => {
+    it('refuses a file that does not fit (409 Q001) before issuing the upload URL', async () => {
       await setStorageLimitMb(1);
       await as(C, async () => {
         const MB = 1024 * 1024;
         await upload('image', 'image/png', Buffer.alloc(MB - 10, 1));
-        const pending = await uploads.createImageUpload({
-          fileName: 'big.png',
-          contentType: 'image/png',
-          size: 100,
-        });
+        // refused before any URL is issued (declared size does not fit)
         await expectHttp(
-          uploads.storeContent(
-            pending.imageId,
-            'image/png',
-            Buffer.alloc(100, 1),
-          ),
+          uploads.createImageUpload({
+            fileName: 'big.png',
+            contentType: 'image/png',
+            size: 100,
+          }),
           409,
           'Q001',
         );
@@ -549,6 +562,195 @@ describe('Catalog screen endpoints (real PostgreSQL, RLS)', () => {
           Buffer.alloc(10, 1),
         );
       });
+    });
+  });
+
+  describe('direct (presigned) uploads', () => {
+    const D = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const E = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const direct = new FakeDirectStorage();
+    let svc: UploadsService;
+    let prods: ProductsService;
+    const row = (id: string) =>
+      adminDs.query(`SELECT * FROM "${schema}"."uploads" WHERE id = $1`, [id]);
+
+    beforeAll(() => {
+      const quota = new PlanQuotaService(new EventOutbox());
+      svc = new UploadsService(appDs, direct, quota);
+      prods = new ProductsService(
+        appDs,
+        new EventOutbox(),
+        TenantScopedRepository.forEntity(appDs, ProductEntity),
+        TenantScopedRepository.forEntity(appDs, ProductVariantEntity),
+        TenantScopedRepository.forEntity(appDs, UnitConversionEntity),
+        quota,
+        direct,
+      );
+    });
+
+    it('issues a presigned URL and an S3 link, completes, attaches; product stores the link', async () => {
+      await as(D, async () => {
+        const m = await svc.createImageUpload({
+          fileName: 'a.png',
+          contentType: 'image/png',
+          size: 4,
+        });
+        expect(m.uploadUrl).toContain('X-Amz-Signature');
+        expect(m.publicUrl).toBe(
+          `https://static.example.com/t/${D}/p/${m.imageId}.png`,
+        );
+        // not uploaded yet
+        await expectHttp(svc.complete(m.imageId), 400, 'UPLOAD_INVALID');
+        // the API does not take bytes under a direct store
+        await expectHttp(
+          svc.storeContent(m.imageId, 'image/png', Buffer.from('abcd')),
+          404,
+          'UPLOAD_NOT_FOUND',
+        );
+        await direct.put(
+          `t/${D}/p/${m.imageId}.png`,
+          Buffer.from('abcd'),
+          'image/png',
+        );
+        const done = await svc.complete(m.imageId);
+        expect(done).toMatchObject({ status: 'uploaded', size: 4 });
+        // idempotent
+        expect(await svc.complete(m.imageId)).toEqual(done);
+        const p = await prods.createProduct({
+          name: 'S3 prod',
+          imageIds: [m.imageId],
+        });
+        expect(p.images[0].url).toBe(m.publicUrl);
+        expect(p.images[0].key).toBe(`t/${D}/p/${m.imageId}.png`);
+        // removing the image releases the row and the object
+        await prods.updateProduct(p.id, { imageIds: [] });
+        expect((await row(m.imageId)).length).toBe(0);
+        expect(await direct.head(`t/${D}/p/${m.imageId}.png`)).toBeNull();
+      });
+    });
+
+    it('rejects a wrong size or type at complete (400) and removes the object', async () => {
+      await as(D, async () => {
+        const big = await svc.createImageUpload({
+          fileName: 'b.png',
+          contentType: 'image/png',
+          size: 3,
+        });
+        await direct.put(
+          `t/${D}/p/${big.imageId}.png`,
+          Buffer.from('abcdef'),
+          'image/png',
+        );
+        await expectHttp(svc.complete(big.imageId), 400, 'UPLOAD_INVALID');
+        expect(await direct.head(`t/${D}/p/${big.imageId}.png`)).toBeNull();
+        const bad = await svc.createImageUpload({
+          fileName: 'c.png',
+          contentType: 'image/png',
+          size: 3,
+        });
+        await direct.put(
+          `t/${D}/p/${bad.imageId}.png`,
+          Buffer.from('abc'),
+          'text/html',
+        );
+        await expectHttp(svc.complete(bad.imageId), 400, 'UPLOAD_INVALID');
+      });
+    });
+
+    it('hides an upload from another tenant (404) and refuses attaching a missing object', async () => {
+      let id = '';
+      await as(D, async () => {
+        const m = await svc.createImageUpload({
+          fileName: 'd.png',
+          contentType: 'image/png',
+          size: 1,
+        });
+        id = m.imageId;
+        await direct.put(`t/${D}/p/${id}.png`, Buffer.from('x'), 'image/png');
+        await svc.complete(id);
+      });
+      await as(E, () => expectHttp(svc.complete(id), 404, 'UPLOAD_NOT_FOUND'));
+      await as(D, async () => {
+        await direct.delete(`t/${D}/p/${id}.png`);
+        await expectHttp(
+          prods.createProduct({ name: 'Ghost', imageIds: [id] }),
+          400,
+          'UPLOAD_INVALID',
+        );
+      });
+    });
+
+    it('refuses with 409 Q001 before issuing the URL when the file cannot fit', async () => {
+      await adminDs.query(
+        `INSERT INTO "${schema}"."tenant_plan_quota"
+           ("tenant_id","plan_code","quota_products","quota_storage_mb","source_changed_at")
+         VALUES ($1,'free',100,1,now())`,
+        [E],
+      );
+      await as(E, async () => {
+        await svc
+          .createImageUpload({
+            fileName: 'f.png',
+            contentType: 'image/png',
+            size: 5 * 1024 * 1024,
+          })
+          .then(
+            () => {
+              throw new Error('should have been refused');
+            },
+            (e: unknown) => {
+              expect((e as HttpException).getStatus()).toBe(409);
+              expect(
+                (
+                  (e as HttpException).getResponse() as {
+                    details: { key: string };
+                  }
+                ).details.key,
+              ).toBe('storageGb');
+            },
+          );
+      });
+    });
+
+    it('cleanup deletes expired PENDING uploads and week-old unattached UPLOADED images', async () => {
+      let pendingId = '';
+      let staleId = '';
+      let freshId = '';
+      await as(D, async () => {
+        const mk = async () => {
+          const m = await svc.createImageUpload({
+            fileName: 'z.png',
+            contentType: 'image/png',
+            size: 1,
+          });
+          await direct.put(
+            `t/${D}/p/${m.imageId}.png`,
+            Buffer.from('x'),
+            'image/png',
+          );
+          return m.imageId;
+        };
+        pendingId = await mk();
+        staleId = await mk();
+        freshId = await mk();
+        await svc.complete(staleId);
+        await svc.complete(freshId);
+      });
+      await adminDs.query(
+        `UPDATE "${schema}"."uploads" SET expires_at = now() - interval '1 minute' WHERE id = $1`,
+        [pendingId],
+      );
+      await adminDs.query(
+        `UPDATE "${schema}"."uploads" SET updated_at = now() - interval '25 hours' WHERE id = $1`,
+        [staleId],
+      );
+      const removed = await svc.cleanupUnused();
+      expect(removed).toBeGreaterThanOrEqual(2);
+      expect((await row(pendingId)).length).toBe(0);
+      expect((await row(staleId)).length).toBe(0);
+      expect(await direct.head(`t/${D}/p/${staleId}.png`)).toBeNull();
+      expect((await row(freshId)).length).toBe(1);
+      expect(await direct.head(`t/${D}/p/${freshId}.png`)).not.toBeNull();
     });
   });
 });
