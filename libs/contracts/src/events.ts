@@ -519,7 +519,8 @@ export type WarehouseReservationState =
   | 'EXPIRED';
 
 export interface WarehouseReservationLineInput {
-  warehouseId: string;
+  /** Optional when the request names a `branchId`: the branch's default BRANCH warehouse is used (D2) */
+  warehouseId?: string;
   skuId: string;
   qty: string;
 }
@@ -528,6 +529,8 @@ export interface CreateWarehouseReservationRequest {
   callerService: 'sales' | 'inventory' | 'integration';
   sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
   sourceRefId: string;
+  /** The branch of the sale (required for `callerService: 'sales'`); a named warehouse must be its BRANCH warehouse */
+  branchId?: string;
   ttlSeconds?: number;
   lines: WarehouseReservationLineInput[];
 }

@@ -205,24 +205,35 @@ function normalizeCreateWarehouseReservationPayload(
           'Each reservation line requires a valid UUID skuId (or sku_id)',
       });
     }
-    if (!warehouseId || !UUID_REGEX.test(String(warehouseId))) {
+    if (
+      (warehouseId !== undefined && !UUID_REGEX.test(String(warehouseId))) ||
+      (!warehouseId && !(raw.branchId ?? raw.branch_id))
+    ) {
       throw new BadRequestException({
         errorCode: 'INVALID_WAREHOUSE_ID',
         message:
-          'Each reservation line requires a valid UUID warehouseId (or warehouse_id)',
+          'A reservation line needs a valid UUID warehouseId (or warehouse_id), or the request a branchId',
       });
     }
     return {
       skuId: String(skuId),
-      warehouseId: String(warehouseId),
+      warehouseId: warehouseId ? String(warehouseId) : undefined,
       qty,
     };
   });
 
+  const branchId = raw.branchId ?? raw.branch_id;
+  if (branchId !== undefined && !UUID_REGEX.test(String(branchId))) {
+    throw new BadRequestException({
+      errorCode: 'INVALID_BRANCH_ID',
+      message: 'branchId must be a valid UUID',
+    });
+  }
   return {
     callerService,
     sourceRefType,
     sourceRefId,
+    branchId: branchId ? String(branchId) : undefined,
     ttlSeconds,
     lines,
   };

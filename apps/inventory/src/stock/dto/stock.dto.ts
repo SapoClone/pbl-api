@@ -104,12 +104,13 @@ export class ListStockReqDto {
 }
 
 export class WarehouseReservationLineDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     example: '77777777-7777-4777-8777-777777777777',
   })
+  @IsOptional()
   @IsUUID()
-  warehouseId!: string;
+  warehouseId?: string;
 
   @ApiProperty({
     format: 'uuid',
@@ -148,6 +149,11 @@ export class CreateWarehouseReservationDto {
   })
   @IsUUID()
   sourceRefId!: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 
   @ApiPropertyOptional({ default: 900, minimum: 30, maximum: 86400 })
   @IsOptional()

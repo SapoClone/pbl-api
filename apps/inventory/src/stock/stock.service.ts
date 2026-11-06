@@ -13,7 +13,6 @@ import { DataSource, EntityManager, In } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
 import { applyWarehouseScope, WarehouseScope } from '../scope/warehouse-scope';
 import {
-  CreateWarehouseDto,
   ListStockReqDto,
   ReceiveStockBalanceDto,
   StockReceiptReqDto,
@@ -160,39 +159,6 @@ export class StockService {
     const schema = (em.connection?.options as { schema?: string } | undefined)
       ?.schema;
     return schema ? `"${schema}".` : '';
-  }
-
-  async createWarehouse(dto: CreateWarehouseDto) {
-    return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
-      const prefix = this.schemaPrefix(em);
-      const id = randomUUID();
-      const rows = await em.query(
-        `
-        INSERT INTO ${prefix}"warehouse" (
-          id, tenant_id, branch_id, code, name, is_default, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE')
-        ON CONFLICT (tenant_id, code) DO UPDATE
-        SET name = EXCLUDED.name, branch_id = EXCLUDED.branch_id, updated_at = now()
-        RETURNING
-          id,
-          tenant_id AS "tenantId",
-          branch_id AS "branchId",
-          code,
-          name,
-          is_default AS "isDefault",
-          status
-        `,
-        [
-          id,
-          tenantId,
-          dto.branchId,
-          dto.code,
-          dto.name,
-          dto.isDefault ?? false,
-        ],
-      );
-      return rows[0];
-    });
   }
 
   async listWarehouses() {

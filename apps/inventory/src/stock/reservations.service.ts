@@ -37,6 +37,7 @@ import {
 import { EventOutbox, qualifiedTable } from '@pbl/events';
 import { createHash, randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { resolveBranchWarehouse } from '../branches/branch-warehouse';
 import { RESERVATION_TTL_MINUTES } from '../config/inventory.config';
 import {
   computeValuationAfterDeduction,
@@ -114,13 +115,13 @@ export function normalizeReservationLines(
         message: 'Reservation line quantity must be strictly greater than zero',
       });
     }
-    const key = `${line.warehouseId}:${line.skuId}`;
+    const key = `${line.warehouseId ?? ''}:${line.skuId}`;
     const existing = merged.get(key);
     if (existing) {
       existing.qtyMilli += qtyMilli;
     } else {
       merged.set(key, {
-        warehouseId: line.warehouseId,
+        warehouseId: line.warehouseId ?? '',
         skuId: line.skuId,
         qtyMilli,
       });
@@ -149,6 +150,8 @@ export function hashReservationRequest(
         callerService: req.callerService,
         sourceRefType: req.sourceRefType,
         sourceRefId: req.sourceRefId,
+        // only when named, so the hash of a request without a branch is unchanged
+        ...(req.branchId ? { branchId: req.branchId } : {}),
         lines: normalizedLines.map((l) => [l.warehouseId, l.skuId, l.qty]),
       }),
     )
@@ -540,8 +543,20 @@ export class ReservationsService {
       });
     }
 
-    const normalizedLines = normalizeReservationLines(req.lines);
-    const requestSha256 = hashReservationRequest(req, normalizedLines);
+    const inputLines = normalizeReservationLines(req.lines);
+    const requestSha256 = hashReservationRequest(req, inputLines);
+    if (req.callerService === 'sales' && !req.branchId) {
+      throw new BadRequestException({
+        errorCode: 'BRANCH_REQUIRED',
+        message: 'branchId is required: a sale uses its own branch warehouse',
+      });
+    }
+    if (!req.branchId && inputLines.some((l) => !l.warehouseId)) {
+      throw new BadRequestException({
+        errorCode: 'BRANCH_REQUIRED',
+        message: 'A line without warehouseId needs the request branchId',
+      });
+    }
     const ttlSeconds = req.ttlSeconds ?? DEFAULT_TTL_SECONDS;
 
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
@@ -587,6 +602,31 @@ export class ReservationsService {
           existing,
         );
         return { reservation, replayed: true };
+      }
+
+      // D2: a sale takes its stock from its own branch's BRANCH warehouse; the
+      // default one when a line names none, else the named one must be that branch's
+      let normalizedLines = inputLines;
+      if (req.branchId) {
+        const resolved = new Map<string, string>();
+        for (const l of inputLines) {
+          if (!resolved.has(l.warehouseId)) {
+            const wh = await resolveBranchWarehouse(
+              em,
+              tenantId,
+              req.branchId,
+              l.warehouseId || null,
+            );
+            resolved.set(l.warehouseId, wh.id);
+          }
+        }
+        normalizedLines = normalizeReservationLines(
+          inputLines.map((l) => ({
+            warehouseId: resolved.get(l.warehouseId)!,
+            skuId: l.skuId,
+            qty: l.qty,
+          })),
+        );
       }
 
       const uniqueWarehouseIds = Array.from(
