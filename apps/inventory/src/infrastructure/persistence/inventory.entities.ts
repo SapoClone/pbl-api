@@ -472,6 +472,20 @@ export class StockTransferEntity {
   @Column({ name: 'received_at', type: 'timestamptz', nullable: true })
   receivedAt!: Date | null;
 
+  @Column({ name: 'cancelled_by', type: 'varchar', length: 64, nullable: true })
+  cancelledBy!: string | null;
+
+  @Column({ name: 'cancelled_at', type: 'timestamptz', nullable: true })
+  cancelledAt!: Date | null;
+
+  @Column({
+    name: 'cancel_reason',
+    type: 'varchar',
+    length: 300,
+    nullable: true,
+  })
+  cancelReason!: string | null;
+
   @Column({ name: 'created_by', type: 'varchar', length: 64, nullable: true })
   createdBy!: string | null;
 

@@ -226,7 +226,7 @@ describe('InventoryDomain (M2 pure unit tests)', () => {
       expect(() => assertValidStockTransferWarehouses('wh-1', 'wh-1')).toThrow(
         InventoryDomainError,
       );
-      expect(() => assertCanDispatchStockTransfer('IN_TRANSIT')).toThrow(
+      expect(() => assertCanDispatchStockTransfer('DISPATCHED')).toThrow(
         InventoryDomainError,
       );
 

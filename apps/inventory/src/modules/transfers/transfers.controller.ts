@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -17,10 +18,17 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { AllowedBranches, RequirePermission } from '@pbl/auth';
+import {
+  AllowedBranches,
+  CurrentUser,
+  hasPermission,
+  RequirePermission,
+  type AuthUser,
+} from '@pbl/auth';
 import { rethrowInventoryHttpError } from '../../presentation/inventory-http-error';
 import { WarehouseScopeService } from '../../scope/warehouse-scope';
 import {
+  CancelStockTransferDto,
   CreateStockTransferDto,
   ReceiveStockTransferDto,
 } from './transfers.dto';
@@ -48,11 +56,15 @@ export class TransfersController {
   async create(
     @Body() dto: CreateStockTransferDto,
     @AllowedBranches() branches: string[] | null,
+    @CurrentUser() user: AuthUser,
   ) {
     try {
-      // a transfer starts at a source warehouse the member may use
+      // D18: the member needs branch scope on BOTH ends (404 otherwise)
       await this.scope.assertWarehouse(branches, dto.fromWarehouseId);
-      return await this.transfers.createTransfer(dto);
+      await this.scope.assertWarehouse(branches, dto.toWarehouseId);
+      return await this.transfers.createTransfer(dto, {
+        canApprove: hasPermission(user, 'inventory.approve'),
+      });
     } catch (error) {
       rethrowInventoryHttpError(error);
     }
@@ -144,11 +156,49 @@ export class TransfersController {
   async receive(
     @Param('id', new ParseUUIDPipe()) id: string,
     @AllowedBranches() branches: string[] | null,
+    @CurrentUser() user: AuthUser,
     @Body() dto?: ReceiveStockTransferDto,
   ) {
     try {
+      // closing a discrepancy writes the loss off: a manager's decision (D17)
+      if (
+        dto?.resolveDiscrepancy &&
+        !hasPermission(user, 'inventory.approve')
+      ) {
+        throw new ForbiddenException({
+          errorCode: 'PERMISSION_DENIED',
+          code: 'PERMISSION_DENIED',
+          message: 'inventory.approve is required to resolve a discrepancy',
+        });
+      }
       await this.scope.assertTransfer(branches, id, 'to');
       return await this.transfers.receiveTransfer(id, dto);
+    } catch (error) {
+      rethrowInventoryHttpError(error);
+    }
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('inventory.approve')
+  @ApiOperation({
+    summary: 'Cancel a DRAFT, DISPATCHED or PARTIALLY_RECEIVED stock transfer',
+    description:
+      'Units not yet received return to the source warehouse at the dispatch cost (reversing ledger entry TRANSFER_CANCEL and an inventory.stock.changed event); units already received stay. Status becomes CANCELLED.',
+  })
+  @ApiParam({ name: 'id', description: 'Stock transfer UUID' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Cancelled stock transfer',
+  })
+  async cancel(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @AllowedBranches() branches: string[] | null,
+    @Body() dto?: CancelStockTransferDto,
+  ) {
+    try {
+      await this.scope.assertTransfer(branches, id, 'from');
+      return await this.transfers.cancelTransfer(id, dto?.reason);
     } catch (error) {
       rethrowInventoryHttpError(error);
     }

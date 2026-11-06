@@ -108,3 +108,11 @@ export class ReceiveStockTransferDto {
   @IsBoolean()
   resolveDiscrepancy?: boolean;
 }
+
+export class CancelStockTransferDto {
+  @ApiPropertyOptional({ maxLength: 300 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
+}

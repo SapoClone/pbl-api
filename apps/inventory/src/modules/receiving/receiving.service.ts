@@ -9,6 +9,7 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { lockStockBalance } from '../../common/balance-lock';
 import {
   computeWeightedAverageCostOnReceipt,
   convertToBaseQtyMilli,
@@ -198,6 +199,24 @@ export class ReceivingService {
     return this.loadReceiptResponse(em, prefix, tenantId, receiptId);
   }
 
+  /** The receipt already created under this key, or null (replay lookup) */
+  async findReceiptByKeyInTx(
+    em: EntityManager,
+    tenantId: string,
+    idempotencyKey: string | undefined,
+  ) {
+    const key = idempotencyKey?.trim();
+    if (!key) return null;
+    const prefix = schemaPrefix(em);
+    const rows = await em.query(
+      `SELECT id FROM ${prefix}"stock_receipt"
+       WHERE tenant_id = $1 AND idempotency_key = $2 LIMIT 1`,
+      [tenantId, key],
+    );
+    if (rows.length === 0) return null;
+    return this.loadReceiptResponse(em, prefix, tenantId, rows[0].id);
+  }
+
   async postReceipt(receiptId: string, idempotencyKey?: string) {
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       return this.postReceiptInTx(em, tenantId, receiptId, idempotencyKey);
@@ -272,6 +291,10 @@ export class ReceivingService {
 
     for (const item of items) {
       await assertCatalogSkuEligible(em, prefix, tenantId, item.skuId);
+
+      // A balance that does not exist yet has no row to lock: serialise
+      // first receipts of the same SKU first (defect: lost stock)
+      await lockStockBalance(em, tenantId, header.warehouse_id, item.skuId);
 
       // Lock existing stock_balance row if present
       const existingBalances = await em.query(

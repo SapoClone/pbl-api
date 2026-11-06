@@ -9,6 +9,7 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { lockStockBalance } from '../../common/balance-lock';
 import {
   formatMilliToQty,
   InventoryDomainError,
@@ -337,6 +338,7 @@ export class StocktakeService {
         );
         const countedStr = formatMilliToQty(countedMilli);
 
+        await lockStockBalance(em, tenantId, header.warehouse_id, item.skuId);
         const balRows = await em.query(
           `
           SELECT
