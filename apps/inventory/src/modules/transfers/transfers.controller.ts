@@ -28,7 +28,6 @@ import {
 import { rethrowInventoryHttpError } from '../../presentation/inventory-http-error';
 import { WarehouseScopeService } from '../../scope/warehouse-scope';
 import {
-  CancelStockTransferDto,
   CreateStockTransferDto,
   ReceiveStockTransferDto,
 } from './transfers.dto';
@@ -173,32 +172,6 @@ export class TransfersController {
       }
       await this.scope.assertTransfer(branches, id, 'to');
       return await this.transfers.receiveTransfer(id, dto);
-    } catch (error) {
-      rethrowInventoryHttpError(error);
-    }
-  }
-
-  @Post(':id/cancel')
-  @HttpCode(HttpStatus.OK)
-  @RequirePermission('inventory.approve')
-  @ApiOperation({
-    summary: 'Cancel a DRAFT, DISPATCHED or PARTIALLY_RECEIVED stock transfer',
-    description:
-      'Units not yet received return to the source warehouse at the dispatch cost (reversing ledger entry TRANSFER_CANCEL and an inventory.stock.changed event); units already received stay. Status becomes CANCELLED.',
-  })
-  @ApiParam({ name: 'id', description: 'Stock transfer UUID' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Cancelled stock transfer',
-  })
-  async cancel(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @AllowedBranches() branches: string[] | null,
-    @Body() dto?: CancelStockTransferDto,
-  ) {
-    try {
-      await this.scope.assertTransfer(branches, id, 'from');
-      return await this.transfers.cancelTransfer(id, dto?.reason);
     } catch (error) {
       rethrowInventoryHttpError(error);
     }

@@ -25,6 +25,7 @@ import { CreateInventoryTables1791900000000 } from '../src/migrations/1791900000
 import { AddWarehouseStockBalances1791900000100 } from '../src/migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from '../src/migrations/1791900000200-create-m2-inventory-core';
 import { AllowReservationExpirySelect1792500000000 } from '../src/migrations/1792500000000-allow-reservation-expiry-select';
+import { StockIntegrity1793000000600 } from '../src/migrations/1793000000600-stock-integrity';
 import { IssuingService } from '../src/modules/issuing/issuing.service';
 import { ProcurementService } from '../src/modules/procurement/procurement.service';
 import { ReceivingService } from '../src/modules/receiving/receiving.service';
@@ -157,6 +158,7 @@ describe('inventory (Postgres)', () => {
           AddWarehouseStockBalances1791900000100,
           CreateM2InventoryCore1791900000200,
           AllowReservationExpirySelect1792500000000,
+          StockIntegrity1793000000600,
         ],
       }),
     );
@@ -203,7 +205,6 @@ describe('inventory (Postgres)', () => {
       'catalog_sku_projection',
       'warehouse_reservation_line',
       'warehouse_reservation',
-      'stock_balance_ledger',
       'stock_balance',
       'warehouse',
       'outbox_event',
@@ -215,6 +216,8 @@ describe('inventory (Postgres)', () => {
     ]) {
       await dataSource.query(`DELETE FROM ${table(name)}`);
     }
+    // the ledger is append-only (trigger): a reset is a TRUNCATE
+    await dataSource.query(`TRUNCATE ${table('stock_balance_ledger')}`);
     await learnBranch(TENANT_A);
   });
 
