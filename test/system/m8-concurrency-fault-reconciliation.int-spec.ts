@@ -9,6 +9,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   EventEnvelope,
   RequestContext,
+  TenantContext,
   TenantScopedRepository,
 } from '@pbl/common';
 import {
@@ -120,6 +121,7 @@ import { ShopeeProviderAdapter } from '../../apps/integration/src/providers/shop
 import { InMemorySalesOrderClient } from '../../apps/integration/test/support/in-memory-sales-order.client';
 import { BranchProjectionEntity as InventoryBranchProjectionEntity } from '../../apps/inventory/src/branches/branch-projection.entity';
 import { BranchProjectionHandler as InventoryBranchProjectionHandler } from '../../apps/inventory/src/branches/branch-projection.handler';
+import { resolveBranchWarehouse } from '../../apps/inventory/src/branches/branch-warehouse';
 import { CatalogSkuProjectionHandler } from '../../apps/inventory/src/infrastructure/catalog-reference/catalog-sku-projection.handler';
 import { M2_INVENTORY_ENTITIES } from '../../apps/inventory/src/infrastructure/persistence/inventory.entities';
 import { CreateInventoryTables1791900000000 } from '../../apps/inventory/src/migrations/1791900000000-create-inventory-tables';
@@ -892,6 +894,15 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
     const realInventoryBridge = {
       reserve: async () => null,
       release: async () => undefined,
+      resolveSaleWarehouse: (branchId: string, warehouseId?: string) =>
+        inventoryDs.transaction((em) =>
+          resolveBranchWarehouse(
+            em,
+            TenantContext.require(),
+            branchId,
+            warehouseId,
+          ),
+        ),
       reserveWarehouseStock: async (idempotencyKey: string, req: any) => {
         if (simulateInventoryDown) {
           throw new Error('Inventory service unavailable (503)');
@@ -1363,6 +1374,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           'c4-rsv-race',
           {
             callerService: 'sales',
+            branchId: BRANCH_A,
             sourceRefType: 'ORDER',
             sourceRefId: randomUUID(),
             ttlSeconds: 1,

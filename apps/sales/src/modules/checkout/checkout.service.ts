@@ -96,7 +96,7 @@ export function hashPosCheckoutPayload(dto: PosCheckoutDto): string {
     .update(
       JSON.stringify({
         branchId: dto.branchId,
-        warehouseId: dto.warehouseId,
+        warehouseId: dto.warehouseId ?? null,
         shiftId: dto.shiftId ?? null,
         customerId: dto.customerId ?? null,
         orderDiscountType: dto.orderDiscountType ?? 'NONE',
@@ -191,6 +191,14 @@ export class CheckoutService {
 
     // Step 1: Pre-flight validation (branch active, shift open, Catalog price waterfall, discount authority, tenders)
     await this.validateBranchAndShift(tenantId, dto.branchId, dto.shiftId);
+
+    // D2: the sale takes its stock from its own branch's warehouse; inventory resolves the
+    // branch default, or validates the id the client named (a foreign, central or quarantine
+    // warehouse is a 409), before anything is claimed
+    const saleWarehouse = await this.inventoryClient.resolveSaleWarehouse(
+      dto.branchId,
+      dto.warehouseId,
+    );
 
     const redeemPoints = Math.trunc(Number(dto.redeemLoyaltyPoints ?? 0));
     if (redeemPoints > 0 && !dto.customerId) {
@@ -309,7 +317,7 @@ export class CheckoutService {
           idempotencyKey,
           requestSha256,
           branchId: dto.branchId,
-          warehouseId: dto.warehouseId,
+          warehouseId: saleWarehouse.id,
           paymentMethod: primaryPaymentMethod,
           customerName: dto.customerName ?? 'Walk-in Customer',
           linesJson: quote.lines.map((l) => ({
@@ -1193,6 +1201,7 @@ export class CheckoutService {
           callerService: 'sales',
           sourceRefType: 'ORDER',
           sourceRefId: workflow.id,
+          branchId: workflow.branchId,
           lines: rsvLines,
         },
       );

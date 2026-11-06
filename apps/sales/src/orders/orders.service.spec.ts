@@ -478,6 +478,11 @@ describe('OrdersService', () => {
 
       const invClient = {
         ...inventory,
+        resolveSaleWarehouse: jest
+          .fn()
+          .mockImplementation(async (_b: string, w?: string) => ({
+            id: w ?? 'w1',
+          })),
         reserveWarehouseStock: jest.fn().mockResolvedValue({
           status: 'HELD',
           replayed: false,
@@ -554,6 +559,11 @@ describe('OrdersService', () => {
 
       const invClient = {
         ...inventory,
+        resolveSaleWarehouse: jest
+          .fn()
+          .mockImplementation(async (_b: string, w?: string) => ({
+            id: w ?? 'w1',
+          })),
         reserveWarehouseStock: jest
           .fn()
           .mockRejectedValueOnce(new ServiceUnavailableException('timeout'))
