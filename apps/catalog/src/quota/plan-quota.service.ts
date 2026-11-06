@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { TenantContext, TenantScopedRepository } from '@pbl/common';
 import {
   CATALOG_USAGE_CHANGED,
@@ -23,6 +23,10 @@ const MB = 1024 * 1024;
  */
 @Injectable()
 export class PlanQuotaService {
+  private readonly logger = new Logger(PlanQuotaService.name);
+  /** Tenants already warned about: one WARN per store and process, not one per request */
+  private readonly warnedNoRow = new Set<string>();
+
   constructor(private readonly outbox: EventOutbox) {}
 
   async assertCanAddProducts(em: EntityManager, adding = 1): Promise<void> {
@@ -71,9 +75,24 @@ export class PlanQuotaService {
     await em.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
       `quota:${TenantContext.require()}:${key}`,
     ]);
-    return TenantScopedRepository.forEntity(em, TenantPlanQuotaEntity).findOne({
-      where: {},
-    });
+    const quota = await TenantScopedRepository.forEntity(
+      em,
+      TenantPlanQuotaEntity,
+    ).findOne({ where: {} });
+    if (!quota) this.warnNoRow(TenantContext.require());
+    return quota;
+  }
+
+  /**
+   * A store with no `tenant_plan_quota` row stays unlimited (fail-open) until platform's plan event reaches us; the
+   * `POST /platform/api/v1/admin/subscriptions/resync` call closes the gap for stores that predate the events.
+   */
+  private warnNoRow(tenantId: string): void {
+    if (this.warnedNoRow.has(tenantId)) return;
+    this.warnedNoRow.add(tenantId);
+    this.logger.warn(
+      `Tenant ${tenantId} has no plan quota row: its limits are not enforced until platform resyncs plans`,
+    );
   }
 
   private productsUsed(em: EntityManager): Promise<number> {
@@ -91,7 +110,8 @@ export class PlanQuotaService {
       .createQueryBuilder(UploadEntity, 'u')
       .select('COALESCE(SUM(u.storedSize), 0)', 'bytes')
       .where('u.tenantId = :tenantId', { tenantId: TenantContext.require() })
-      .andWhere(`u.status = 'UPLOADED'`)
+      // every stored file counts until it is deleted: attached images and import files too (D34)
+      .andWhere(`u.status IN ('UPLOADED', 'ATTACHED')`)
       .getRawOne<{ bytes: string }>();
     return Number(row?.bytes ?? 0);
   }
