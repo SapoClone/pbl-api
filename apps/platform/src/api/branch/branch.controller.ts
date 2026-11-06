@@ -1,5 +1,7 @@
 import { OffsetPaginatedDto } from '@/common/dto/offset-pagination/paginated.dto';
+import { ErrorCode } from '@/constants/error-code.constant';
 import { ApiAuth } from '@/decorators/http.decorators';
+import { ForbiddenCodeException } from '@/exceptions/coded.exception';
 import {
   Body,
   Controller,
@@ -76,8 +78,10 @@ export class BranchController {
   create(
     @CurrentTenant() _tenantId: string, // 403 without a selected store
     @CurrentUser('id') accountId: string,
+    @AllowedBranches() allowed: string[] | null,
     @Body() dto: CreateBranchReqDto,
   ): Promise<BranchResDto> {
+    this.assertUnrestricted(allowed);
     return this.branchService.create(accountId, dto);
   }
 
@@ -104,9 +108,11 @@ export class BranchController {
     @CurrentTenant() _tenantId: string, // 403 without a selected store
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() allowed: string[] | null,
     @Body() dto: UpdateBranchReqDto,
   ): Promise<BranchResDto> {
     this.assertInScope(user, id);
+    this.assertUnrestricted(allowed);
     return this.branchService.update(user.id, id, dto);
   }
 
@@ -121,8 +127,10 @@ export class BranchController {
     @CurrentTenant() _tenantId: string, // 403 without a selected store
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
+    @AllowedBranches() allowed: string[] | null,
   ): Promise<void> {
     this.assertInScope(user, id);
+    this.assertUnrestricted(allowed);
     return this.branchService.remove(id);
   }
 
@@ -157,6 +165,16 @@ export class BranchController {
   ): Promise<BranchSettingResDto> {
     this.assertInScope(user, id);
     return this.settingService.update(user.id, id, dto);
+  }
+
+  /**
+   * D9: creating, changing and deleting branches is for the owner and for
+   * members who see every branch; a member scoped to some branches gets 403.
+   */
+  private assertUnrestricted(allowed: string[] | null): void {
+    if (allowed !== null) {
+      throw new ForbiddenCodeException(ErrorCode.B008);
+    }
   }
 
   /** A branch outside the caller's branches is a 404, so its existence is not leaked */

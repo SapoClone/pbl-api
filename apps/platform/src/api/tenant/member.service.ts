@@ -1,4 +1,8 @@
 import { ErrorCode } from '@/constants/error-code.constant';
+import {
+  ConflictCodeException,
+  ServiceUnavailableCodeException,
+} from '@/exceptions/coded.exception';
 import { ValidationException } from '@/exceptions/validation.exception';
 import { isUniqueViolation } from '@/utils/db-errors';
 import { Injectable, NotFoundException } from '@nestjs/common';
@@ -24,6 +28,11 @@ import {
   AccountStatus,
 } from '../account/entities/account.entity';
 import { SessionService } from '../auth/session.service';
+import {
+  BlockersUnavailableError,
+  BranchBlockersClient,
+} from '../branch-guard/branch-blockers.client';
+import { translate } from '../branch-guard/translate';
 import { BranchEntity } from '../branch/entities/branch.entity';
 import { RoleEntity } from '../role/entities/role.entity';
 import { StaffScheduleEntity } from '../staff-schedule/entities/staff-schedule.entity';
@@ -65,6 +74,7 @@ export class MemberService {
     private readonly sessions: SessionService,
     private readonly schedules: StaffScheduleService,
     private readonly quota: QuotaService,
+    private readonly blockers: BranchBlockersClient,
   ) {}
 
   async list(
@@ -215,10 +225,37 @@ export class MemberService {
         throw new NotFoundException();
       }
       this.assertRemovable(row, actorId);
+      await this.assertNoOpenShift(tenantId, accountId);
       await em.delete(StaffScheduleEntity, { accountId, tenantId });
       await em.delete(AccountTenantEntity, { accountId, tenantId });
     });
     await this.sessions.revokeAll(accountId, { tenantId });
+  }
+
+  /**
+   * D5: a member with an open POS shift cannot be removed (409 `T010`, with the
+   * reasons). Locking is allowed. Sales is asked; if it cannot be reached the
+   * removal fails closed (503).
+   */
+  private async assertNoOpenShift(
+    tenantId: string,
+    accountId: string,
+  ): Promise<void> {
+    let reasons;
+    try {
+      reasons = await this.blockers.forMember(tenantId, accountId);
+    } catch (error) {
+      if (error instanceof BlockersUnavailableError) {
+        throw new ServiceUnavailableCodeException(
+          ErrorCode.B009,
+          `${translate(ErrorCode.B009)} (${error.service})`,
+        );
+      }
+      throw error;
+    }
+    if (reasons.length > 0) {
+      throw new ConflictCodeException(ErrorCode.T010, undefined, { reasons });
+    }
   }
 
   /**

@@ -1,6 +1,16 @@
 {
   "error": {
     "code_exists": "Mã chi nhánh này đã tồn tại",
-    "last_branch": "Cửa hàng phải còn ít nhất một chi nhánh đang hoạt động"
+    "last_branch": "Cửa hàng phải còn ít nhất một chi nhánh đang hoạt động",
+    "not_inactive": "Phải ngừng hoạt động chi nhánh trước khi xóa",
+    "blocked": "Chưa thể ngừng hoạt động hoặc xóa chi nhánh này. Xem các lý do",
+    "invoice_prefix_exists": "Một chi nhánh khác của cửa hàng đã dùng tiền tố hóa đơn này",
+    "code_immutable": "Không thể đổi mã chi nhánh sau khi đã tạo",
+    "scope_restricted": "Chỉ chủ cửa hàng hoặc thành viên xem được mọi chi nhánh mới được tạo hoặc sửa chi nhánh",
+    "service_unavailable": "Chưa kiểm tra được chi nhánh lúc này, vui lòng thử lại sau"
+  },
+  "reason": {
+    "last_active": "Cửa hàng phải còn ít nhất một chi nhánh đang hoạt động",
+    "member_without_branch": "{count} thành viên sẽ không còn chi nhánh nào: {names}"
   }
 }

@@ -1,5 +1,10 @@
 import { ErrorCode } from '@/constants/error-code.constant';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 
 /**
  * 409 / 404 carrying an i18n error code, formatted by GlobalExceptionFilter
@@ -17,6 +22,20 @@ export class ConflictCodeException extends ConflictException {
 }
 
 export class NotFoundCodeException extends NotFoundException {
+  constructor(error: ErrorCode, message?: string) {
+    super({ errorCode: error, message });
+  }
+}
+
+/** 403 carrying an i18n error code */
+export class ForbiddenCodeException extends ForbiddenException {
+  constructor(error: ErrorCode, message?: string) {
+    super({ errorCode: error, message });
+  }
+}
+
+/** 503 carrying an i18n error code (a dependency could not be asked: fail closed) */
+export class ServiceUnavailableCodeException extends ServiceUnavailableException {
   constructor(error: ErrorCode, message?: string) {
     super({ errorCode: error, message });
   }

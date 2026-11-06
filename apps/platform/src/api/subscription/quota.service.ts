@@ -3,7 +3,10 @@ import { ConflictCodeException } from '@/exceptions/coded.exception';
 import { Injectable } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 import { BranchEntity } from '../branch/entities/branch.entity';
-import { AccountTenantEntity } from '../tenant/entities/account-tenant.entity';
+import {
+  AccountTenantEntity,
+  MemberStatus,
+} from '../tenant/entities/account-tenant.entity';
 import { FREE_PLAN_CODE } from './default-plans';
 import { PlanEntity } from './entities/plan.entity';
 import {
@@ -42,7 +45,10 @@ export class QuotaService {
     const used =
       key === 'branches'
         ? await em.count(BranchEntity, { where: { tenantId } })
-        : await em.count(AccountTenantEntity, { where: { tenantId } });
+        : // D6: a locked member does not use a seat
+          await em.count(AccountTenantEntity, {
+            where: { tenantId, status: MemberStatus.ACTIVE },
+          });
     if (used + adding <= limit) return;
     throw new ConflictCodeException(
       ErrorCode.Q001,

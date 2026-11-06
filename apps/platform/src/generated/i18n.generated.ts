@@ -16,6 +16,16 @@ export type I18nTranslations = {
         "error": {
             "code_exists": string;
             "last_branch": string;
+            "not_inactive": string;
+            "blocked": string;
+            "invoice_prefix_exists": string;
+            "code_immutable": string;
+            "scope_restricted": string;
+            "service_unavailable": string;
+        };
+        "reason": {
+            "last_active": string;
+            "member_without_branch": string;
         };
     };
     "common": {
@@ -74,6 +84,8 @@ export type I18nTranslations = {
             "already_suspended": string;
             "not_suspended": string;
             "owner_account_disabled": string;
+            "store_limit": string;
+            "member_blocked": string;
         };
     };
     "user": {

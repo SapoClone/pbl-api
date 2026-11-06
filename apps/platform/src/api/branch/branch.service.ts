@@ -17,14 +17,12 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { plainToInstance } from 'class-transformer';
 import { EntityManager } from 'typeorm';
-import {
-  PlatformDomainError,
-  PlatformDomainErrorCode,
-  assertNotLastActiveBranch,
-  isBranchDeactivating,
-} from '../../domain/platform-domain';
+import { isBranchDeactivating } from '../../domain/platform-domain';
+import { SessionService } from '../auth/session.service';
 import { QuotaService } from '../subscription/quota.service';
+import { AccountTenantBranchEntity } from '../tenant/entities/account-tenant-branch.entity';
 import { TenantEntity } from '../tenant/entities/tenant.entity';
+import { BranchLifecycleGuard } from './branch-lifecycle.guard';
 import { BranchResDto } from './dto/branch.res.dto';
 import { CreateBranchReqDto } from './dto/create-branch.req.dto';
 import { ListBranchReqDto } from './dto/list-branch.req.dto';
@@ -42,6 +40,8 @@ export class BranchService {
     private readonly branches: TenantScopedRepository<BranchEntity>,
     private readonly outbox: EventOutbox,
     private readonly quota: QuotaService,
+    private readonly lifecycle: BranchLifecycleGuard,
+    private readonly sessions: SessionService,
   ) {}
 
   /** `allowed`: the branch ids the caller may see, null for every branch */
@@ -124,33 +124,33 @@ export class BranchService {
     dto: UpdateBranchReqDto,
   ): Promise<BranchResDto> {
     const branch = await this.find(id);
+    // D8: the code is fixed after creation (sending the current one is harmless)
     if (dto.code !== undefined && dto.code !== branch.code) {
-      await this.assertCodeFree(dto.code);
+      throw new ValidationException(ErrorCode.B007);
     }
     const deactivating = isBranchDeactivating(branch.status, dto.status);
+    const { code: _code, ...changes } = dto;
     Object.assign(
       branch,
       Object.fromEntries(
-        Object.entries(dto).filter(([, value]) => value !== undefined),
+        Object.entries(changes).filter(([, value]) => value !== undefined),
       ),
     );
     branch.updatedBy = accountId;
-    if (deactivating) {
-      // Serialise against other "last branch" changes of the same store.
-      return (
-        await this.branches.transaction(async (branches, em) => {
-          await this.assertNotLastActive(branches, em);
-          const row = await this.save(branch, branches);
-          await this.outbox.add(
-            em,
-            PLATFORM_BRANCH_UPDATED,
-            this.eventPayload(row),
-          );
-          return row;
-        })
-      ).toDto(BranchResDto);
-    }
     const saved = await this.branches.transaction(async (branches, em) => {
+      if (deactivating) {
+        // Serialise against other "last branch" changes of the same store,
+        // then ask every service whether the branch can stop (D4).
+        await this.lockTenant(em);
+        const active = await branches.count({
+          where: { status: BranchStatus.ACTIVE },
+        });
+        await this.lifecycle.assertCanDeactivate(
+          TenantContext.require(),
+          branch.id,
+          active <= 1,
+        );
+      }
       const row = await this.save(branch, branches);
       await this.outbox.add(
         em,
@@ -162,28 +162,43 @@ export class BranchService {
     return saved.toDto(BranchResDto);
   }
 
+  /**
+   * D4/D38: a branch is deleted only after it was deactivated (`B004`) and only
+   * when no service holds anything for it (`B005`, every reason listed). The
+   * delete removes it from every member's branches in the same transaction and
+   * ends the sessions of the members who lost it (after the commit).
+   */
   async remove(id: string): Promise<void> {
     const branch = await this.find(id);
-    if (branch.status === BranchStatus.ACTIVE) {
-      await this.branches.transaction(async (branches, em) => {
-        await this.assertNotLastActive(branches, em);
-        await branches.softDelete({ id: branch.id });
-        await this.outbox.add(
-          em,
-          PLATFORM_BRANCH_UPDATED,
-          this.eventPayload(branch, 'deleted'),
-        );
-      });
-      return;
+    if (branch.status !== BranchStatus.INACTIVE) {
+      throw new ValidationException(ErrorCode.B004);
     }
-    await this.branches.transaction(async (branches, em) => {
+    const tenantId = TenantContext.require();
+    const affected = await this.branches.transaction(async (branches, em) => {
+      await this.lockTenant(em);
+      const accountIds = await this.lifecycle.assertCanDelete(
+        em,
+        tenantId,
+        branch.id,
+      );
+      await em.delete(AccountTenantBranchEntity, {
+        tenantId,
+        branchId: branch.id,
+      });
       await branches.softDelete({ id: branch.id });
       await this.outbox.add(
         em,
         PLATFORM_BRANCH_UPDATED,
         this.eventPayload(branch, 'deleted'),
       );
+      return accountIds;
     });
+    // after the commit, as suspend does: the deny-list write must not outlive a rollback
+    await Promise.all(
+      affected.map((accountId) =>
+        this.sessions.revokeAll(accountId, { tenantId }),
+      ),
+    );
   }
 
   /** What other services learn about a branch (the BranchProjection fields) */
@@ -215,36 +230,20 @@ export class BranchService {
     return branch;
   }
 
+  /** D8: a code is never reused, so a soft-deleted branch still holds its code */
   private async assertCodeFree(code: string): Promise<void> {
-    if (await this.branches.exists({ where: { code } })) {
+    if (await this.branches.exists({ where: { code }, withDeleted: true })) {
       throw new ValidationException(ErrorCode.B001);
     }
   }
 
   /** Locks the store row first, so concurrent callers queue up before counting. */
-  private async assertNotLastActive(
-    branches: TenantScopedRepository<BranchEntity>,
-    em: EntityManager,
-  ): Promise<void> {
+  private async lockTenant(em: EntityManager): Promise<void> {
     await em
       .createQueryBuilder(TenantEntity, 'tenant')
       .setLock('for_no_key_update')
       .where('tenant.id = :tenantId', { tenantId: TenantContext.require() })
       .getOne();
-    const activeCount = await branches.count({
-      where: { status: BranchStatus.ACTIVE },
-    });
-    try {
-      assertNotLastActiveBranch(activeCount);
-    } catch (err) {
-      if (
-        err instanceof PlatformDomainError &&
-        err.code === PlatformDomainErrorCode.LAST_ACTIVE_BRANCH
-      ) {
-        throw new ValidationException(ErrorCode.B002);
-      }
-      throw err;
-    }
   }
 
   private async save(

@@ -1,6 +1,16 @@
 {
   "error": {
     "code_exists": "A branch with this code already exists",
-    "last_branch": "A store must keep at least one active branch"
+    "last_branch": "A store must keep at least one active branch",
+    "not_inactive": "A branch must be deactivated before it can be deleted",
+    "blocked": "The branch cannot be deactivated or deleted yet. See the reasons",
+    "invoice_prefix_exists": "Another branch of this store already uses this invoice prefix",
+    "code_immutable": "A branch code cannot be changed after the branch is created",
+    "scope_restricted": "Only the owner or a member who sees every branch can create or change branches",
+    "service_unavailable": "Cannot check the branch right now, try again later"
+  },
+  "reason": {
+    "last_active": "The store must keep at least one active branch",
+    "member_without_branch": "{count} member(s) would be left with no branch: {names}"
   }
 }
