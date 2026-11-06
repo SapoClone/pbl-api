@@ -29,6 +29,7 @@ import { ProcurementService } from '../src/modules/procurement/procurement.servi
 import { ReceivingService } from '../src/modules/receiving/receiving.service';
 import { StocktakeService } from '../src/modules/stocktake/stocktake.service';
 import { TransfersService } from '../src/modules/transfers/transfers.service';
+import { WarehouseScopeService } from '../src/scope/warehouse-scope';
 import {
   InventoryLedgerEntity,
   StockItemEntity,
@@ -94,6 +95,20 @@ describe('stock integrity (Postgres)', () => {
        ORDER BY occurred_at, id`,
       [TENANT, warehouseId, skuId],
     );
+
+  const movements = async () =>
+    (
+      await dataSource.query(
+        `SELECT payload FROM ${t('outbox_event')} WHERE "type" = 'inventory.stock.changed'`,
+      )
+    ).map(
+      (e: {
+        payload: {
+          movementType?: string;
+          payload?: { movementType?: string };
+        };
+      }) => (e.payload.payload ?? e.payload).movementType,
+    ) as string[];
 
   beforeAll(async () => {
     useDatabase(schema);
@@ -313,6 +328,281 @@ describe('stock integrity (Postgres)', () => {
       const second = await as(() => receiving.createReceipt(dto, key));
       expect(second.id).toBe(first.id);
       expect((await balance(wh, SKU_A)).onHand).toBe('5.000');
+    });
+  });
+
+  describe('transfer dispatch and receive (review gaps)', () => {
+    it('refuses a second dispatch (409) and does not move stock twice', async () => {
+      const { src, transfer } = await dispatched('6.000');
+      await expect(
+        as(() => transfers.dispatchTransfer(transfer.id)),
+      ).rejects.toMatchObject({
+        code: 'TRANSFER_INVALID_STATE',
+        httpStatus: 409,
+      });
+      expect((await balance(src, SKU_A)).onHand).toBe('4.000');
+    });
+
+    it('refuses a dispatch for more than is available and names the shortage', async () => {
+      const src = await addWarehouse('SRC', BRANCH_1);
+      const dst = await addWarehouse('DST', BRANCH_2);
+      await stockIn(src, SKU_A, '3.000');
+      const draft = await as(() =>
+        transfers.createTransfer({
+          fromWarehouseId: src,
+          toWarehouseId: dst,
+          items: [{ skuId: SKU_A, qty: '5.000' }],
+        }),
+      );
+      await expect(
+        as(() => transfers.dispatchTransfer(draft.id)),
+      ).rejects.toMatchObject({
+        code: 'INSUFFICIENT_STOCK',
+        httpStatus: 409,
+      });
+      expect((await balance(src, SKU_A)).onHand).toBe('3.000');
+    });
+
+    it('answers 404 to a member of the wrong branch receiving or dispatching', async () => {
+      const { transfer } = await dispatched('6.000');
+      const scope = new WarehouseScopeService(dataSource);
+      // the destination branch may receive, the source branch may not
+      await expect(
+        as(() => scope.assertTransfer([BRANCH_2], transfer.id, 'to')),
+      ).resolves.toBeUndefined();
+      await expect(
+        as(() => scope.assertTransfer([BRANCH_1], transfer.id, 'to')),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        as(() => scope.assertTransfer([BRANCH_2], transfer.id, 'from')),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('receives in two parts and the line adds up (no clamping)', async () => {
+      const { dst, transfer } = await dispatched('6.000');
+      await as(() =>
+        transfers.receiveTransfer(transfer.id, {
+          items: [{ skuId: SKU_A, receivedQty: '4.000' }],
+        }),
+      );
+      const done = await as(() =>
+        transfers.receiveTransfer(transfer.id, {
+          items: [{ skuId: SKU_A, receivedQty: '2.000' }],
+        }),
+      );
+      expect(done.status).toBe('RECEIVED');
+      expect(await balance(dst, SKU_A)).toMatchObject({
+        onHand: '6.000',
+        inTransit: '0.000',
+      });
+    });
+
+    it('resolving a discrepancy writes a loss at the dispatch cost and closes the transfer', async () => {
+      const { dst, transfer } = await dispatched('6.000');
+      const withLoss = await as(() =>
+        transfers.receiveTransfer(transfer.id, {
+          items: [
+            {
+              skuId: SKU_A,
+              receivedQty: '4.000',
+              discrepancyQty: '2.000',
+              discrepancyReason: 'box crushed',
+            },
+          ],
+        }),
+      );
+      expect(withLoss.status).toBe('DISCREPANCY');
+      // nothing is booked as a loss until the discrepancy is closed
+      expect(
+        (await ledger(dst, SKU_A)).filter(
+          (r: { type: string }) => r.type === 'TRANSFER_LOSS',
+        ),
+      ).toHaveLength(0);
+
+      const closed = await as(() =>
+        transfers.receiveTransfer(transfer.id, { resolveDiscrepancy: true }),
+      );
+      expect(closed.status).toBe('RECEIVED');
+      const rows = await ledger(dst, SKU_A);
+      const loss = rows.filter(
+        (r: { type: string }) => r.type === 'TRANSFER_LOSS',
+      );
+      expect(loss).toHaveLength(1);
+      expect(loss[0].delta).toBe('-2.000');
+      const [row] = await dataSource.query(
+        `SELECT unit_cost::int AS cost FROM ${t('stock_balance_ledger')}
+         WHERE warehouse_id = $1 AND movement_type = 'TRANSFER_LOSS'`,
+        [dst],
+      );
+      expect(row.cost).toBe(100000);
+      // the ledger still nets to on hand: reconciliation stays clean
+      const sum = rows.reduce(
+        (s: number, r: { delta: string }) => s + Number(r.delta),
+        0,
+      );
+      expect(sum).toBe(Number((await balance(dst, SKU_A)).onHand));
+      expect(
+        (await movements()).filter((m) => m === 'TRANSFER_LOSS'),
+      ).toHaveLength(1);
+      // closed once: a second close is refused
+      await expect(
+        as(() =>
+          transfers.receiveTransfer(transfer.id, { resolveDiscrepancy: true }),
+        ),
+      ).rejects.toMatchObject({ code: 'TRANSFER_INVALID_STATE' });
+    });
+  });
+
+  describe('cancel after dispatch (D17)', () => {
+    it('returns the units on the road to the source and keeps what was received', async () => {
+      const { src, dst, transfer } = await dispatched('6.000');
+      await as(() =>
+        transfers.receiveTransfer(transfer.id, {
+          items: [{ skuId: SKU_A, receivedQty: '2.000' }],
+        }),
+      );
+      const cancelled = await as(() =>
+        transfers.cancelTransfer(transfer.id, 'wrong shop'),
+      );
+      expect(cancelled.status).toBe('CANCELLED');
+      expect(cancelled.items[0]).toMatchObject({
+        receivedQty: '2.000',
+        returnedQty: '4.000',
+        inTransitRemainingQty: '0.000',
+      });
+      // source: 10 - 6 + 4 back; destination keeps its 2, nothing in transit
+      expect((await balance(src, SKU_A)).onHand).toBe('8.000');
+      expect(await balance(dst, SKU_A)).toMatchObject({
+        onHand: '2.000',
+        inTransit: '0.000',
+      });
+      const rows = await dataSource.query(
+        `SELECT movement_type AS type, qty_delta::text AS delta,
+                reversal_of_ledger_id AS rev, unit_cost::int AS cost
+         FROM ${t('stock_balance_ledger')}
+         WHERE warehouse_id = $1 AND movement_type = 'TRANSFER_CANCEL'`,
+        [src],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ delta: '4.000', cost: 100000 });
+      expect(rows[0].rev).not.toBeNull();
+      expect(await movements()).toContain('TRANSFER_CANCEL');
+      // a cancelled transfer cannot be received or cancelled again
+      await expect(
+        as(() => transfers.receiveTransfer(transfer.id)),
+      ).rejects.toMatchObject({ code: 'TRANSFER_INVALID_STATE' });
+      await expect(
+        as(() => transfers.cancelTransfer(transfer.id)),
+      ).rejects.toMatchObject({ code: 'TRANSFER_INVALID_STATE' });
+    });
+
+    it('cancels a draft without touching stock, and refuses a received one', async () => {
+      const src = await addWarehouse('SRCD', BRANCH_1);
+      const dst = await addWarehouse('DSTD', BRANCH_2);
+      await stockIn(src, SKU_A, '5.000');
+      const draft = await as(() =>
+        transfers.createTransfer({
+          fromWarehouseId: src,
+          toWarehouseId: dst,
+          items: [{ skuId: SKU_A, qty: '2.000' }],
+        }),
+      );
+      expect((await as(() => transfers.cancelTransfer(draft.id))).status).toBe(
+        'CANCELLED',
+      );
+      expect((await balance(src, SKU_A)).onHand).toBe('5.000');
+
+      const { transfer } = await dispatched('1.000');
+      await as(() => transfers.receiveTransfer(transfer.id));
+      await expect(
+        as(() => transfers.cancelTransfer(transfer.id)),
+      ).rejects.toMatchObject({ code: 'TRANSFER_INVALID_STATE' });
+    });
+  });
+
+  describe('overdue transfers (D17)', () => {
+    it('flags a transfer still on the road after 7 days with daysOpen', async () => {
+      const { transfer } = await dispatched('1.000');
+      expect(transfer).toMatchObject({ overdue: false, daysOpen: 0 });
+      await dataSource.query(
+        `UPDATE ${t('stock_transfer')} SET dispatched_at = now() - interval '8 days' WHERE id = $1`,
+        [transfer.id],
+      );
+      const detail = await as(() => transfers.getTransferById(transfer.id));
+      expect(detail).toMatchObject({ overdue: true, daysOpen: 8 });
+      const list = await as(() => transfers.listTransfers());
+      expect(list[0]).toMatchObject({ overdue: true });
+      await as(() => transfers.receiveTransfer(transfer.id));
+      const done = await as(() => transfers.getTransferById(transfer.id));
+      expect(done).toMatchObject({ overdue: false, daysOpen: null });
+    });
+  });
+
+  describe('transfer warehouses (D18)', () => {
+    const draft = (from: string, to: string, canApprove = false) =>
+      as(() =>
+        transfers.createTransfer(
+          {
+            fromWarehouseId: from,
+            toWarehouseId: to,
+            items: [{ skuId: SKU_A, qty: '1.000' }],
+          },
+          { canApprove },
+        ),
+      );
+
+    it('refuses an inactive destination', async () => {
+      const src = await addWarehouse('SRC', BRANCH_1);
+      const dst = await addWarehouse('DST', BRANCH_2, 'BRANCH', 'INACTIVE');
+      await expect(draft(src, dst)).rejects.toMatchObject({
+        code: 'WAREHOUSE_INACTIVE',
+      });
+    });
+
+    it('lets quarantine stock go only to a BRANCH warehouse and only with approve', async () => {
+      const q = await addWarehouse('QRN', null, 'QUARANTINE');
+      const branch = await addWarehouse('BR', BRANCH_1);
+      const central = await addWarehouse('CEN', null, 'CENTRAL');
+      await expect(draft(q, central, true)).rejects.toMatchObject({
+        code: 'TRANSFER_QUARANTINE_NOT_ALLOWED',
+      });
+      await expect(draft(q, branch, false)).rejects.toMatchObject({
+        code: 'PERMISSION_DENIED',
+        httpStatus: 403,
+      });
+      expect((await draft(q, branch, true)).status).toBe('DRAFT');
+    });
+
+    it('needs approve to move stock into quarantine', async () => {
+      const q = await addWarehouse('QRN', null, 'QUARANTINE');
+      const branch = await addWarehouse('BR', BRANCH_1);
+      const central = await addWarehouse('CEN', null, 'CENTRAL');
+      for (const from of [branch, central]) {
+        await expect(draft(from, q, false)).rejects.toMatchObject({
+          code: 'PERMISSION_DENIED',
+        });
+        expect((await draft(from, q, true)).status).toBe('DRAFT');
+      }
+    });
+  });
+
+  describe('the ledger is append-only', () => {
+    it('refuses UPDATE and DELETE of a ledger row', async () => {
+      const wh = await addWarehouse('W1', BRANCH_1);
+      await stockIn(wh, SKU_A, '2.000');
+      await expect(
+        dataSource.query(
+          `UPDATE ${t('stock_balance_ledger')} SET qty_delta = 99 WHERE warehouse_id = $1`,
+          [wh],
+        ),
+      ).rejects.toThrow(/append-only/);
+      await expect(
+        dataSource.query(
+          `DELETE FROM ${t('stock_balance_ledger')} WHERE warehouse_id = $1`,
+          [wh],
+        ),
+      ).rejects.toThrow(/append-only/);
+      expect(await ledger(wh, SKU_A)).toHaveLength(1);
     });
   });
 });
