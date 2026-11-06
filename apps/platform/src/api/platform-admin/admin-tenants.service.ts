@@ -27,6 +27,7 @@ import {
   SubscriptionStatus,
 } from '../subscription/entities/subscription.entity';
 import { expiryOf } from '../subscription/expiry';
+import { issueCode } from '../subscription/issue-code';
 import { tableOf } from '../subscription/sql';
 import { AccountTenantEntity } from '../tenant/entities/account-tenant.entity';
 import { TenantEntity, TenantStatus } from '../tenant/entities/tenant.entity';
@@ -456,6 +457,7 @@ export class AdminTenantsService {
     }
     return em.save(
       new AccountEntity({
+        code: await issueCode(em, AccountEntity, 'US', 5),
         email: owner.email,
         name: owner.name,
         password: null,

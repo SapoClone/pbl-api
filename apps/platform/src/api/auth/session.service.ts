@@ -63,6 +63,15 @@ export class SessionService {
     return familyIds.length;
   }
 
+  /** Ends every live session of a platform admin (disabling the admin); returns how many. */
+  async revokeAllOfAdmin(adminId: string): Promise<number> {
+    const familyIds = await this.refreshTokens.revokeActiveFamilies(adminId, {
+      subjectType: 'platform_admin',
+    });
+    await this.deny(familyIds);
+    return familyIds.length;
+  }
+
   /** Ends every live session bound to a store, whoever the member is (locking the store); returns how many. */
   async revokeAllOfTenant(tenantId: string): Promise<number> {
     const familyIds =

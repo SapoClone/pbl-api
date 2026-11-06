@@ -30,6 +30,10 @@ import { SessionService } from './session.service';
 
 jest.mock('@/utils/password.util', () => ({ verifyPassword: jest.fn() }));
 
+jest.mock('../subscription/issue-code', () => ({
+  issueCode: jest.fn(async () => 'US00007'),
+}));
+
 describe('AuthService', () => {
   let service: AuthService;
   let configServiceValue: Partial<Record<keyof ConfigService, jest.Mock>>;
@@ -160,12 +164,17 @@ describe('AuthService', () => {
       const verificationToken = 'signed.jwt.token';
 
       jest.spyOn(AccountEntity, 'exists').mockResolvedValue(false);
-      jest
-        .spyOn(AccountEntity.prototype, 'save')
-        .mockImplementation(async function (this: AccountEntity) {
-          this.id = 'user-id-1' as AccountEntity['id'];
-          return this;
-        });
+      const em = {
+        save: jest.fn(async (account: AccountEntity) => {
+          account.id = 'user-id-1' as AccountEntity['id'];
+          return account;
+        }),
+      };
+      jest.spyOn(AccountEntity, 'getRepository').mockReturnValue({
+        manager: {
+          transaction: async (work: (m: typeof em) => unknown) => work(em),
+        },
+      } as never);
       (jwtServiceValue.signAsync as jest.Mock).mockResolvedValue(
         verificationToken,
       );
@@ -175,7 +184,9 @@ describe('AuthService', () => {
       expect(AccountEntity.exists).toHaveBeenCalledWith({
         where: { email: dto.email },
       });
-      expect(AccountEntity.prototype.save).toHaveBeenCalled();
+      expect(em.save).toHaveBeenCalledWith(
+        expect.objectContaining({ email: dto.email, code: 'US00007' }),
+      );
       expect(cacheManagerValue.set).toHaveBeenCalledWith(
         expect.any(String),
         verificationToken,
@@ -188,7 +199,7 @@ describe('AuthService', () => {
       expect(result.userId).toBe('user-id-1');
 
       (AccountEntity.exists as jest.Mock).mockRestore();
-      (AccountEntity.prototype.save as jest.Mock).mockRestore();
+      (AccountEntity.getRepository as jest.Mock).mockRestore();
     });
   });
 

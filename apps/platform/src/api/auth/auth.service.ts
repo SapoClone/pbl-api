@@ -33,6 +33,7 @@ import {
   AccountEntity,
   AccountStatus,
 } from '../account/entities/account.entity';
+import { issueCode } from '../subscription/issue-code';
 import { Membership, MembershipService } from '../tenant/membership.service';
 import { AccessTokenService } from './access-token.service';
 import { LoginReqDto } from './dto/login.req.dto';
@@ -288,7 +289,11 @@ export class AuthService {
       updatedBy: SYSTEM_USER_ID,
     });
 
-    await account.save();
+    // the code is issued under a lock held until the insert commits, so two sign-ups never share one
+    await AccountEntity.getRepository().manager.transaction(async (em) => {
+      account.code = await issueCode(em, AccountEntity, 'US', 5);
+      await em.save(account);
+    });
 
     // Send email verification
     const token = await this.createVerificationToken({ id: account.id });

@@ -16,6 +16,8 @@ export enum ErrorCode {
   // Platform admin (ADR-0022)
   A001 = 'admin.error.wrong_credentials',
   A003 = 'admin.error.account_locked',
+  A010 = 'admin.error.email_taken',
+  A011 = 'admin.error.protected_admin',
 
   // Tenant
   T001 = 'tenant.error.subdomain_exists',

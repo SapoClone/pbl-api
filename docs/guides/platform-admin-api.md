@@ -45,6 +45,13 @@ calls of the `feature/web-admin-01` branch map onto it, and what is still missin
 | `POST /admin/subscriptions/change-plan/check`       | 13 Gán / Đổi gói          | dry run: usage against the new limits                                                   |
 | `POST /admin/subscriptions/change-plan`             | 13                        | refused when over the new limits                                                        |
 | `GET /admin/usage`, `GET /admin/usage/{tenantId}`   | 14 Hạn mức                | `warning=normal\|near_limit\|at_limit`; fullest first                                   |
+| `GET /admin/accounts`                               | 07 Người dùng             | `q` (name, email, code), `tenantId`, `role` (the five seeded roles or `custom`), `status`; each item lists its `memberships` |
+| `GET /admin/accounts/{id}`                          | 08 Chi tiết người dùng    | `code` (`US00021`), `phoneMasked`, memberships with the store code, `activeSessionCount`  |
+| `GET /admin/accounts/{id}/sessions`                 | 08 (Phiên đăng nhập)      | one row per live login: `sessionId`, store, `device`, `ip`, `createdAt`, `lastUsedAt`, `expiresAt`; paginated |
+| `POST /admin/accounts/{id}/revoke-sessions`         | 08 (Thu hồi tất cả)       | `{ revokedCount }`; the account's tokens stop working at once, in every store            |
+| `GET /admin/admins`                                 | 07 (Quản trị viên)        | `q`, `role`, `status`                                                                    |
+| `POST /admin/admins`, `PATCH /admin/admins/{id}`    | admin management          | `super_admin`; `A010` email taken, `A011` cannot disable or demote yourself or the last super admin; disabling ends their sessions |
+| `GET /admin/settings`, `PATCH /admin/settings`      | 23 Cấu hình hệ thống      | `PATCH` is `super_admin` and takes any subset of `general`, `security`, `email`; 422 for an unknown timezone or locale, `lockoutMaxAttempts` < 3, `auditRetentionMonths` < 12 |
 
 Error codes the screens will want: `tenant.error.subdomain_exists` (T001), `tenant.error.already_suspended` (T006),
 `tenant.error.not_suspended` (T007), `tenant.error.owner_account_disabled` (T008), `plan.error.not_active` (P001),
@@ -65,6 +72,10 @@ repository's numbering, which differs from contract 04 where an old code was alr
 | `GET /admin/subscriptions`, `/{id}`                 | same paths                                                                     | `business` is `tenant: { id, code, name }`; `cycle` is `billingCycle`         |
 | `POST /admin/subscriptions/{id}/change-plan`        | `POST /admin/subscriptions/change-plan` (body has `tenantId`) after `.../check` | the plan is chosen by store, not by subscription id                           |
 | `GET /admin/limits`                                 | `GET /admin/usage`                                                             | `limits` is `usage`; `alert` is `warning`                                      |
+| `GET /admin/users`                                  | `GET /admin/accounts`                                                          | `users` is `accounts`; `organization` is `memberships[].tenantName`; `lastLogin` is `lastLoginAt` |
+| `GET /admin/users/{id}`                             | `GET /admin/accounts/{id}`, `.../sessions`                                     | the branch passes a business id here; pass the account id. Activities (`activities`) need the audit log (insight), not built |
+| `GET /admin/businesses/{id}/users`                  | `GET /admin/accounts?tenantId={id}`                                            |                                                                               |
+| `GET` / `PATCH /admin/settings` (flat)              | same paths, grouped                                                            | `general`, `security` (numbers and booleans, not the `loginLockPolicy` and `resetLinkPolicy` strings), `email` (`senderName`, `senderEmail`); `language` is `defaultLocale`; `emailReplyTo` and `emailFooter` do not exist |
 
 The branch's own pagination type and its `page`/`pageSize` query need the change described under Conventions.
 
@@ -72,7 +83,7 @@ The branch's own pagination type and its `page`/`pageSize` query need the change
 
 These are in contract 04 and in the branch, and have no endpoint: the dashboard (`/admin/dashboard`), monitoring,
 failed jobs and their retry, the audit log, announcements (insight); integration connections and their detail
-(integration); accounts and platform admins, settings and support sessions (platform). The branch's mock data covers
+(integration); support sessions (platform). The branch's mock data covers
 them until their endpoints exist. Other gaps in what is built:
 
 - **No invitation email, on purpose.** An owner created by an admin has no password and cannot sign in. The decision
@@ -82,6 +93,15 @@ them until their endpoints exist. Other gaps in what is built:
   `products` or `storageGb`): creating a branch, adding a member, creating a product and storing a file are refused
   when the store's plan has no room. The web turns the details into the upgrade hint. Catalog reports products and
   storage to `/admin/usage` through an event, so those two lag the truth by the event's delivery time.
+- **A new admin has no way to set a password but the one the super admin types.** Contract 04 queues a set-password
+  email; there is no email flow for admins, so `POST /admin/admins` takes an optional `password` (same policy as the
+  bootstrap command: 12 characters or more of letters, digits and `!#$%&*@^`). Without it the admin cannot sign in.
+- **Settings are stored and validated, not applied.** The sign-in lockout still uses 5 attempts and 15 minutes
+  (contract 04 says so for now); the reset-link and audit-retention values wait for the flows that need them.
+- **Accounts have no verified-email state yet**, so `status=pending_verification` matches nothing and
+  `isEmailVerified` is not in the detail.
+- **No events for admin actions** (`platform.admin.created`, `platform.settings.changed`, `...sessions_revoked`): they
+  belong to no store, and the platform-scope audit below comes first.
 - **Store `code` is not in the store-facing DTOs** (only the admin ones).
 - **Platform-scope audit.** The tenant events reach insight's audit log, per store; plan edits are told to every store
   on the plan. Actions that belong to no store need their own design.

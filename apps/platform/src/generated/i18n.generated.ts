@@ -8,6 +8,8 @@ export type I18nTranslations = {
         "error": {
             "wrong_credentials": string;
             "account_locked": string;
+            "email_taken": string;
+            "protected_admin": string;
         };
     };
     "branch": {
