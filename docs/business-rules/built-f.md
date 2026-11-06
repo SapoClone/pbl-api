@@ -1,0 +1,35 @@
+# Built: workstream F, stock integrity
+
+Branch `feat/stock-integrity`. Decisions D15, D16 (partial), D17, D18, D19 (inventory side and the order flows that are not POS checkout) and D21, all by the accepted defaults. Contracts: [02 catalog and inventory, stock integrity rules](../specs/2026-10-28-api-contracts/02-catalog-inventory.md#stock-integrity-rules-built-d15-d21).
+
+Tests: `apps/inventory/test/stock-integrity.int-spec.ts` (real Postgres, written failing first for defects 1 to 3), unit `inventory-domain.spec.ts` and `app.e2e.spec.ts`, and one assertion in `apps/sales/test/screen.int-spec.ts`.
+
+## Defects fixed
+
+| Defect | Rule | Where | Test |
+|---|---|---|---|
+| Transfer receive inflation (critical) | A receive request names each SKU at most once (422 `TRANSFER_DUPLICATE_SKU`). Each line is re-read `FOR UPDATE` and validated against the quantities as they are now. On hand rises by exactly the quantity received and in-transit falls by exactly what is cleared; if the in-transit counter holds less, the receive is refused (409 `TRANSFER_QUANTITY_MISMATCH`), never clamped with `GREATEST`. | `transfers.service.ts` `receiveTransfer` | "rejects the same SKU twice", "never raises on hand by more than the in-transit quantity removed" |
+| Stock lost on concurrent first receipts | Writers of one (tenant, warehouse, SKU) balance take `pg_advisory_xact_lock` before reading it (`common/balance-lock.ts`), so the read after the lock sees the committed row. Used by receipt posting, stock take approval, transfer receive, cancel and loss. | `receiving.service.ts`, `stocktake.service.ts` | "adds up parallel first receipts", stock take versus receipt race |
+| PO receive replay double counts | The receipt is looked up by `Idempotency-Key` first, before `received_qty` or the PO state is touched; the same key on another PO is 409 `IDEMPOTENCY_CONFLICT`. | `procurement.service.ts`, `receiving.service.ts` `findReceiptByKeyInTx` | two PO replay tests |
+| `POST /stock-receipts` ignored `Idempotency-Key` | The header is passed to `createReceipt` (a retried `autoPost` returns the same receipt, posts once). The gateway entry now forwards the header. | `stock.controller.ts`, `krakend.json` | integration retry test, e2e header test |
+
+## Decisions
+
+- **D15 (remove direct add-stock).** `POST /stock-balances/receipts` and its service method are gone (also from krakend and the platform swagger catalog). `POST /stock-receipts` with the old `branchId` body answers 410 `DIRECT_STOCK_ENTRY_REMOVED`. `StockService.receive` (older branch store) stays only as a service method that the integration tests use to seed the older store; it has no route. Nothing in `apps/web` contracts or `scripts/demo-*.sh` called the removed routes (the demo scripts use `warehouseId` receipts).
+- **D16 (partial).** `OrderCompletedHandler` skips an order that has a warehouse reservation (`warehouse_reservation.source_ref_type = 'ORDER'`), so no zero `sale_shortfall` rows and no stray deduction. The fact is read from inventory's own data: **no event field was added**. Full retirement of the older `stock_item` store (and its `stock_reservation`, `inventory_ledger`, `/internal/reservations` legacy routes) waits until sales has moved every checkout to the warehouse flow; until then orders without a warehouse hold still take the old path. Test: "the older stock store and warehouse orders".
+- **D17 (transfers).** Cancel after dispatch, loss write-off, overdue flag, see the contract. Choices: the cancel route and the `inventory.approve` permission already existed in the gateway file; a `DRAFT` can also be cancelled (no stock effect). The loss is booked as a `TRANSFER_LOST_IN` / `TRANSFER_LOSS` pair at the destination because the ledger must keep summing to on hand (reconciliation, `CHK qty_delta <> 0`) and the lost units never reached on hand; the balance row is untouched. The event is `inventory.stock.changed` (`TRANSFER_LOSS`, `TRANSFER_CANCEL`, `TRANSFER_LOST_IN` added to `InventoryMovementType`); **no new event, so `topology.ts` is unchanged**. Overdue: constant `TRANSFER_OVERDUE_DAYS = 7`, computed on read.
+- **D18.** Create needs scope on both warehouses (404), ACTIVE destination, quarantine rules (`assertTransferKindsAllowed`). A member restricted to one branch can therefore no longer create a transfer to another branch's warehouse, nor from or to a central or quarantine warehouse (no branch); that is the rule as written. Receive stays with destination scope.
+- **D19 (inventory side and non-POS orders).** `noExpiry` holds: `warehouse_reservation.expires_at` is now nullable, `NULL` is never selected by `expires_at < now()`, so the expiry job and the lazy expiry skip it. `expiresAt` is `null` in the response and in `inventory.reservation.confirmed` (type widened to `string | null`, additive for consumers that tolerate null). Sales (`m3-orders.service.ts` confirm) passes `noExpiry: true`. Not done: the POS awaiting-payment rule and "re-reserve, refund if now short" for a bank or QR payment after expiry belong to the POS checkout (workstream C1). Holds created before this change keep their expiry; a legacy expired hold is still a 503 at fulfilment commit.
+- **D21.** `emitBelowMinOnCrossing` (`common/below-min.ts`) runs for sale holds (`reserveWarehouseStock`), stock issues and transfer dispatches. Stock take approval and returns do not emit it (not asked). A stock take does not freeze movements (`freeze_movement` is stored, commented as unused); its stale check compares **on hand** with the snapshot instead of the balance version (holds no longer make a count stale); `forceRebase` lives on the approve endpoint, which already needs `inventory.approve`. No maker-checker on receipts, stock takes or POs: the permission is the control (documented default).
+
+## Other
+
+- Migration `1793000000600-stock-integrity.ts` (reversible): cancel columns on `stock_transfer`, nullable `warehouse_reservation.expires_at` (down fills NULL with `now()` first), append-only trigger on `stock_balance_ledger` (UPDATE or DELETE raise; TRUNCATE is allowed on purpose, the integration spec resets the ledger with it; the older specs do not run this migration). Tested in `stock-integrity.int-spec.ts` ("the ledger is append-only").
+- Receipt posting already refuses an INACTIVE warehouse and an unknown or non-sellable SKU (`assertActiveWarehouse`, `assertCatalogSkuEligible`); the paths without those checks were the removed direct receive.
+- Added missing transfer tests: double dispatch 409, dispatch refused for stock, receive and dispatch at the wrong branch (404), resolve discrepancy, and fixed the unit test that used the status string `IN_TRANSIT` (now `DISPATCHED`).
+
+## Not verified or left open
+
+- No migration up/down run against an existing populated schema besides the integration schema creation (up only; down is written, not executed).
+- Gateway: `krakend check` was run on the edited file (see the PR).
+- A concurrent cancel racing a receive on the same transfer is serialised by the transfer row lock (`FOR UPDATE`), not separately tested.
