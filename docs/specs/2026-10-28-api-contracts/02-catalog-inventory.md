@@ -111,7 +111,7 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
   - 400 `C002`: duplicate `barcode`.
   - 400 `C003`: unknown category, brand, or attribute value.
   - 400 `C004`: more than 100 variants.
-  - 400 `C005`: the plan's product quota is reached (from platform `TenantUsage`; see section 01).
+  - 409 `Q001`: the plan's product limit is reached (`details: { key: "products", used, limit, planCode }`). Catalog checks it itself from the plan limits it keeps from platform's events; built, replaces `C005`.
 - **Events:** `catalog.product.created`, and one `catalog.variant.created` per variant.
 
 ### GET /catalog/api/v1/products/{id}
@@ -179,7 +179,7 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
 - **Body:** `{ "fileName": "binh-xanh.jpg", "contentType": "image/jpeg", "size": 812345 }`. Allowed types are `image/png` and `image/jpeg`, up to 5 MB.
 - **Response 201:** `{ "imageId": "…", "uploadUrl": "https://<bucket>.s3…?X-Amz-…", "uploadHeaders": { "Content-Type": "image/jpeg" }, "publicUrl": "https://static.<domain>/t/<tenant>/p/<imageId>.jpg", "expiresAt": "…" }`
 - **Flow:** the client `PUT`s the file to `uploadUrl` within 15 minutes, then sends `imageId` in `POST/PATCH /products`. Images never attached to a product are deleted after 24 h.
-- **Errors:** 422 for a wrong type or size; 400 `C005` when the plan's storage quota is reached.
+- **Errors:** 422 for a wrong type or size; 409 `Q001` (`details.key` is `storageGb`) when the plan's storage limit is reached. Checked when the bytes are stored, not when the upload is registered; built, replaces `C005`.
 
 ### GET /catalog/api/v1/categories
 - **Status:** new.
