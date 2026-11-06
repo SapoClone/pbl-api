@@ -80,8 +80,13 @@ export class SyncJobWorker
         `
         SELECT DISTINCT tenant_id
         FROM ${qualifiedTable(em.connection, 'sync_jobs')}
-        WHERE (status IN ('PENDING', 'RETRY_SCHEDULED') AND next_retry_at <= now())
-           OR (status = 'RUNNING' AND lease_expires_at IS NOT NULL AND lease_expires_at <= now())
+        WHERE ((status IN ('PENDING', 'RETRY_SCHEDULED') AND next_retry_at <= now())
+           OR (status = 'RUNNING' AND lease_expires_at IS NOT NULL AND lease_expires_at <= now()))
+          -- a suspended store's jobs wait (D35): nothing runs and nothing is lost
+          AND NOT EXISTS (
+            SELECT 1 FROM ${qualifiedTable(em.connection, 'tenant_status')} ts
+            WHERE ts.tenant_id = ${qualifiedTable(em.connection, 'sync_jobs')}.tenant_id AND ts.status = 'suspended'
+          )
         LIMIT $1
         `,
         [TENANTS_PER_RUN],

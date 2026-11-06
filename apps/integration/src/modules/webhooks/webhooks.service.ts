@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
@@ -15,6 +19,7 @@ import {
   WebhookInboxEventEntity,
 } from '../../infrastructure/persistence/integration.entities';
 import { ProviderRegistryService } from '../../providers/provider-registry.service';
+import { isTenantSuspended } from '../../tenant-status/tenant-status.service';
 import { SyncJobsService } from '../sync-jobs/sync-jobs.service';
 
 export interface WebhookIngestionInput {
@@ -38,6 +43,7 @@ export interface WebhookIngestionResult {
 
 @Injectable()
 export class WebhooksService {
+  private readonly logger = new Logger(WebhooksService.name);
   private simulatePersistenceFailureForConnection = new Set<string>();
 
   constructor(
@@ -99,6 +105,18 @@ export class WebhooksService {
           'Unknown webhook routing connection key',
           404,
         );
+      }
+
+      // A suspended store takes no webhooks (D35). 503, not 4xx: the marketplace retries later, so nothing is lost
+      if (await isTenantSuspended(this.dataSource, conn.tenantId)) {
+        this.logger.warn(
+          `Rejected a webhook for suspended tenant ${conn.tenantId} (connection ${conn.id})`,
+        );
+        throw new ServiceUnavailableException({
+          statusCode: 503,
+          errorCode: 'TENANT_SUSPENDED',
+          message: 'This store is suspended; retry later',
+        });
       }
 
       // Now bind tenant context strictly from the trusted connection row

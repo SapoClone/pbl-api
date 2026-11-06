@@ -1,4 +1,4 @@
-import { INestApplication, Module } from '@nestjs/common';
+import { ForbiddenException, INestApplication, Module } from '@nestjs/common';
 import { PblAuthModule } from '@pbl/auth';
 import { createTestAuth } from '@pbl/auth/testing';
 import { PblLoggingModule, TenantContext, bootstrapService } from '@pbl/common';
@@ -30,6 +30,7 @@ import { StaffSalesController } from './modules/staff-sales/staff-sales.controll
 import { StaffSalesService } from './modules/staff-sales/staff-sales.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
+import { TenantStatusService } from './tenant-status/tenant-status.service';
 
 const auth = createTestAuth();
 const TENANT = '11111111-1111-4111-8111-111111111111';
@@ -64,6 +65,7 @@ const services = [
   OrderQueryService,
   OrderActionsService,
   ShiftViewService,
+  TenantStatusService,
   StaffSalesService,
   ReferenceService,
 ];
@@ -781,6 +783,21 @@ describe('Sales permissions, route by route', () => {
         allowPriceOverride: true,
         tolerateShortage: true,
       });
+    });
+
+    it('answers 403 TENANT_SUSPENDED for a suspended store and creates nothing', async () => {
+      const status = stubs.get(TenantStatusService) as unknown as {
+        assertActive: jest.Mock;
+      };
+      status.assertActive.mockRejectedValueOnce(
+        new ForbiddenException({ errorCode: 'TENANT_SUSPENDED' }),
+      );
+      const res = await post({
+        'x-internal-token': TOKEN,
+        'X-Tenant-Id': TENANT,
+      }).expect(403);
+      expect(res.body).toMatchObject({ errorCode: 'TENANT_SUSPENDED' });
+      expect(orders().createOmnichannelOrder).not.toHaveBeenCalled();
     });
 
     it('answers 200 with Idempotency-Replayed for a known external order', async () => {

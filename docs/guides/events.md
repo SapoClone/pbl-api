@@ -128,9 +128,9 @@ If `inventory` is down, `sales` refuses the sale with 503 `S005`.
 
 | Event | Producer | Consumers | Why |
 |---|---|---|---|
-| `platform.tenant.created`, `.updated`, `.status_changed` | platform | insight (audit log of the store) | an admin creates, edits, locks or reactivates a store |
+| `platform.tenant.created`, `.updated`, `.status_changed` | platform | insight (audit log of the store); `.status_changed` also sales and integration (`tenant_status` projection: a suspended store gets 403/503 `TENANT_SUSPENDED` on internal order intake and webhooks, and its sync jobs wait) | an admin creates, edits, locks or reactivates a store |
 | `platform.plan.changed` | platform (once per store on the plan, because an event carries a store) | catalog | an admin edits a plan's limits |
-| `platform.subscription.changed` | platform (also when a store opens, as `created`) | catalog | the store's plan, with its limits |
+| `platform.subscription.changed` | platform (also when a store opens, as `created`; the expiry job as `past_due` and `expired`; the resync as `resync`) | catalog, sales, integration | the store's plan, with its limits; sales and integration keep only the plan code |
 | `catalog.usage.changed` | catalog (product create, status change, delete, file stored) | platform | products and stored megabytes, as absolute numbers, written to `tenant_usage` |
 
 Catalog keeps the limits in `tenant_plan_quota` and refuses a product or a file over the plan itself (409 `Q001`), so
