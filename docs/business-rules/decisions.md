@@ -76,3 +76,20 @@ writing `built-<letter>.md` in this folder with decision, code, tests and deviat
 | F | Stock integrity: transfer receive, idempotency, direct add-stock, cancel after dispatch, losses, minimum alerts, holds | D15 to D19, D21 | 1 |
 | C2 | Shifts and people: overnight schedules, who is on duty, staff names kept, net revenue, own rows | D28 to D30 | 2 |
 | G | Audit log and identity: more audited actions, actor type, branch filter | D37 | 2 |
+
+## Wave 1 status (7 November 2026)
+
+Each workstream is a pull request with its contract changes and a `built-<letter>.md` (decision, code, tests, deviations).
+The six branches were combined on one branch and tested together before this note.
+
+| Workstream | Pull request | Built | Known gaps and interpretations |
+|---|---|---|---|
+| A | [#44](https://github.com/SapoClone/pbl-api/pull/44) | D1, D2 (the flag stays, informational), D3, D13, D14 | The older stock-hold route used by `POST /orders` still takes its own warehouse; it retires with the older stock model |
+| B | [#43](https://github.com/SapoClone/pbl-api/pull/43) | D4, D5, D6 (members), D8 to D12, D38 | Deactivating does not apply the member rule (it keeps assignments); old assignment rows pointing at already-deleted branches are not migrated (needs an owner decision); admin-created stores are not capped at 3; platform now makes a synchronous read to three services |
+| C1 | [#47](https://github.com/SapoClone/pbl-api/pull/47) | D20 (returns), D22 to D27 | A POS payment is still confirmed on the cashier's word (no gateway check); `planned_end_at` comes from the settings, not from the weekly schedule; no endpoint writes a `REVERSAL` entry yet |
+| D | [#46](https://github.com/SapoClone/pbl-api/pull/46) | D6, D7, D31 to D36 | Resync does not replay tenant status (a store suspended before the projection counts as active until its next status event); the deny-list warning is a start-up log, not a health note |
+| E | [#42](https://github.com/SapoClone/pbl-api/pull/42), pbl-infra [#14](https://github.com/SapoClone/pbl-infra/pull/14) | S3 presigned uploads | Nothing ran against real S3 or a browser PUT; pending uploads do not count toward the storage limit until completed |
+| F | [#45](https://github.com/SapoClone/pbl-api/pull/45) | D15, D16 (partial), D17, D18, D19 (partial), D21 | The older stock model is not retired; holds created before the change keep their expiry; the POS payment-after-expiry rule is not built |
+| infra | pbl-infra [#15](https://github.com/SapoClone/pbl-infra/pull/15) | topology (sales and integration take status and plan events) and the platform's branch-guard URLs | Merge before deploying #43 and #46 |
+
+Wave 2 (queued): D28 to D30 (overnight schedules, staff names kept, net revenue, own rows) and D37 (audit log, actor type).
