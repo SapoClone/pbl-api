@@ -47,7 +47,13 @@ describe('BranchService', () => {
     count: jest.Mock;
     save: jest.Mock;
     softDelete: jest.Mock;
+    delete: jest.Mock;
   };
+  let lifecycle: {
+    assertCanDeactivate: jest.Mock;
+    assertCanDelete: jest.Mock;
+  };
+  let sessions: { revokeAll: jest.Mock };
   let lockBuilder: Record<string, jest.Mock>;
   let builder: Record<string, jest.Mock>;
   let expressionMap: { extraAppendedAndWhereCondition: string };
@@ -100,6 +106,7 @@ describe('BranchService', () => {
       count: jest.fn().mockResolvedValue(2),
       save: jest.fn(async (e) => e),
       softDelete: jest.fn(),
+      delete: jest.fn(),
     };
     repository = {
       target: BranchEntity,
@@ -129,12 +136,19 @@ describe('BranchService', () => {
     } as unknown as Record<string, jest.Mock>;
     outbox = { add: jest.fn().mockResolvedValue(undefined) };
     quota = { assertCanAdd: jest.fn().mockResolvedValue(undefined) };
+    lifecycle = {
+      assertCanDeactivate: jest.fn().mockResolvedValue(undefined),
+      assertCanDelete: jest.fn().mockResolvedValue([]),
+    };
+    sessions = { revokeAll: jest.fn().mockResolvedValue(1) };
     service = new BranchService(
       new TenantScopedRepository(
         repository as unknown as Repository<BranchEntity>,
       ),
       outbox as never,
       quota as never,
+      lifecycle as never,
+      sessions as never,
     );
   });
 
@@ -160,8 +174,10 @@ describe('BranchService', () => {
       code: 'KHO2',
     });
 
+    // withDeleted: a deleted branch's code is never reused (D8)
     expect(repository.exists).toHaveBeenCalledWith({
       where: { tenantId: 't1', code: 'KHO2' },
+      withDeleted: true,
     });
     expect(em.save.mock.calls[0][0]).toMatchObject({
       tenantId: 't1',
@@ -207,6 +223,9 @@ describe('BranchService', () => {
       expect.objectContaining({ id: 'b1', name: 'Renamed', status: 'active' }),
     );
 
+    repository.findOne.mockResolvedValue(
+      branch({ status: BranchStatus.INACTIVE }),
+    );
     await as('t1').remove('b1');
     expect(outbox.add).toHaveBeenLastCalledWith(
       em,
@@ -223,80 +242,105 @@ describe('BranchService', () => {
     ).resolves.toBe(ErrorCode.B001);
   });
 
-  it('refuses to delete the last active branch with B002', async () => {
+  it('refuses to delete an active branch with B004 and asks nobody', async () => {
     repository.findOne.mockResolvedValue(branch());
-    em.count.mockResolvedValue(1);
 
     await expect(errorCodeOf(as('t1').remove('b1'))).resolves.toBe(
-      ErrorCode.B002,
+      ErrorCode.B004,
     );
+    expect(lifecycle.assertCanDelete).not.toHaveBeenCalled();
     expect(em.softDelete).not.toHaveBeenCalled();
   });
 
-  it('refuses to deactivate the last active branch with B002', async () => {
+  it('asks the guard with lastActive when deactivating the only active branch', async () => {
     repository.findOne.mockResolvedValue(branch());
     em.count.mockResolvedValue(1);
-
-    await expect(
-      errorCodeOf(
-        as('t1').update('a1', 'b1', { status: BranchStatus.INACTIVE }),
-      ),
-    ).resolves.toBe(ErrorCode.B002);
-  });
-
-  it('deletes an inactive branch even if only one active branch remains', async () => {
-    repository.findOne.mockResolvedValue(
-      branch({ status: BranchStatus.INACTIVE }),
-    );
-    em.count.mockResolvedValue(1);
-
-    await as('t1').remove('b1');
-
-    expect(em.softDelete).toHaveBeenCalledWith(BranchEntity, {
-      id: 'b1',
-      tenantId: 't1',
-    });
-    // no store lock: an inactive branch is not counted against the last active one
-    expect(em.createQueryBuilder).not.toHaveBeenCalled();
-  });
-
-  it('locks the store row before counting when removing an active branch', async () => {
-    repository.findOne.mockResolvedValue(branch());
-
-    await as('t1').remove('b1');
-
-    expect(em.createQueryBuilder).toHaveBeenCalledWith(TenantEntity, 'tenant');
-    expect(lockBuilder.setLock).toHaveBeenCalledWith('for_no_key_update');
-    expect(lockBuilder.where).toHaveBeenCalledWith('tenant.id = :tenantId', {
-      tenantId: 't1',
-    });
-    expect(lockBuilder.getOne.mock.invocationCallOrder[0]).toBeLessThan(
-      em.count.mock.invocationCallOrder[0],
-    );
-    expect(em.count).toHaveBeenCalledWith(BranchEntity, {
-      where: { tenantId: 't1', status: BranchStatus.ACTIVE },
-    });
-    expect(em.softDelete).toHaveBeenCalledWith(BranchEntity, {
-      id: 'b1',
-      tenantId: 't1',
-    });
-    expect(repository.softDelete).not.toHaveBeenCalled();
-  });
-
-  it('locks the store row before counting when deactivating an active branch', async () => {
-    repository.findOne.mockResolvedValue(branch());
 
     await as('t1').update('a1', 'b1', { status: BranchStatus.INACTIVE });
 
-    expect(lockBuilder.setLock).toHaveBeenCalledWith('for_no_key_update');
-    expect(lockBuilder.getOne.mock.invocationCallOrder[0]).toBeLessThan(
-      em.count.mock.invocationCallOrder[0],
+    expect(lifecycle.assertCanDeactivate).toHaveBeenCalledWith(
+      't1',
+      'b1',
+      true,
     );
-    expect(em.save).toHaveBeenCalledTimes(1);
-    expect(em.save.mock.calls[0][0]).toMatchObject({
-      status: BranchStatus.INACTIVE,
+  });
+
+  it('saves nothing and writes no event when the guard refuses a deactivation', async () => {
+    repository.findOne.mockResolvedValue(branch());
+    lifecycle.assertCanDeactivate.mockRejectedValue(new Error('refused'));
+
+    await expect(
+      as('t1').update('a1', 'b1', { status: BranchStatus.INACTIVE }),
+    ).rejects.toThrow('refused');
+    expect(em.save).not.toHaveBeenCalled();
+    expect(outbox.add).not.toHaveBeenCalled();
+  });
+
+  it('does not ask the guard for a change that is not a deactivation', async () => {
+    repository.findOne.mockResolvedValue(branch());
+
+    await as('t1').update('a1', 'b1', { name: 'New name' });
+
+    expect(lifecycle.assertCanDeactivate).not.toHaveBeenCalled();
+  });
+
+  describe('delete', () => {
+    beforeEach(() => {
+      repository.findOne.mockResolvedValue(
+        branch({ status: BranchStatus.INACTIVE }),
+      );
     });
-    expect(repository.save).not.toHaveBeenCalled();
+
+    it('locks the store row, asks the guard, drops the branch from members and soft-deletes it', async () => {
+      await as('t1').remove('b1');
+
+      expect(em.createQueryBuilder).toHaveBeenCalledWith(
+        TenantEntity,
+        'tenant',
+      );
+      expect(lockBuilder.setLock).toHaveBeenCalledWith('for_no_key_update');
+      expect(lifecycle.assertCanDelete).toHaveBeenCalledWith(em, 't1', 'b1');
+      expect(lockBuilder.getOne.mock.invocationCallOrder[0]).toBeLessThan(
+        lifecycle.assertCanDelete.mock.invocationCallOrder[0],
+      );
+      expect(em.delete).toHaveBeenCalledWith(expect.anything(), {
+        tenantId: 't1',
+        branchId: 'b1',
+      });
+      expect(em.softDelete).toHaveBeenCalledWith(BranchEntity, {
+        id: 'b1',
+        tenantId: 't1',
+      });
+    });
+
+    it('ends the sessions of the members who lost the branch, after the commit', async () => {
+      lifecycle.assertCanDelete.mockResolvedValue(['a1', 'a2']);
+      let committed = false;
+      repository.manager.transaction.mockImplementation(async (work) => {
+        const result = await work(em);
+        committed = true;
+        return result;
+      });
+      sessions.revokeAll.mockImplementation(async () => {
+        expect(committed).toBe(true);
+        return 1;
+      });
+
+      await as('t1').remove('b1');
+
+      expect(sessions.revokeAll).toHaveBeenCalledWith('a1', { tenantId: 't1' });
+      expect(sessions.revokeAll).toHaveBeenCalledWith('a2', { tenantId: 't1' });
+    });
+
+    it('deletes nothing and ends no session when the guard refuses', async () => {
+      lifecycle.assertCanDelete.mockRejectedValue(new Error('refused'));
+
+      await expect(as('t1').remove('b1')).rejects.toThrow('refused');
+      expect(em.delete).not.toHaveBeenCalled();
+      expect(em.softDelete).not.toHaveBeenCalled();
+      expect(outbox.add).not.toHaveBeenCalled();
+      expect(sessions.revokeAll).not.toHaveBeenCalled();
+    });
   });
 
   describe('save errors', () => {
@@ -328,13 +372,35 @@ describe('BranchService', () => {
     });
   });
 
-  it('rejects renaming the code to one already used in the tenant', async () => {
+  it('refuses to change the code of a branch with B007 (D8)', async () => {
     repository.findOne.mockResolvedValue(branch());
-    repository.exists.mockResolvedValue(true);
 
     await expect(
       errorCodeOf(as('t1').update('a1', 'b1', { code: 'KHO2' })),
+    ).resolves.toBe(ErrorCode.B007);
+    expect(em.save).not.toHaveBeenCalled();
+  });
+
+  it('accepts the unchanged code with the rest of an update', async () => {
+    repository.findOne.mockResolvedValue(branch());
+
+    await as('t1').update('a1', 'b1', { code: 'CN01', name: 'New' });
+
+    expect(em.save.mock.calls[0][0]).toMatchObject({
+      code: 'CN01',
+      name: 'New',
+    });
+  });
+
+  it('refuses a code that a deleted branch held (B001, soft-deleted rows count)', async () => {
+    repository.exists.mockResolvedValue(true);
+
+    await expect(
+      errorCodeOf(as('t1').create('a1', { name: 'X', code: 'OLD' })),
     ).resolves.toBe(ErrorCode.B001);
+    expect(repository.exists).toHaveBeenCalledWith(
+      expect.objectContaining({ withDeleted: true }),
+    );
   });
 
   it('stores null when an optional field is cleared', async () => {

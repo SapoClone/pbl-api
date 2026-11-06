@@ -268,6 +268,57 @@ describe('BranchController without a selected store', () => {
         },
       );
 
+      it.each([
+        ['post', '/v1/branches', { name: 'X', code: 'X1' }],
+        ['patch', `/v1/branches/${BRANCH_ID}`, { name: 'Y' }],
+        ['delete', `/v1/branches/${BRANCH_ID}`, undefined],
+      ] as const)(
+        'D9: %s %s answers 403 for a member who sees only some branches',
+        async (method, path, body) => {
+          const r = request.agent(app.getHttpServer())[method](path);
+          const res = await (body ? r.send(body) : r).set(
+            'Authorization',
+            `Bearer ${await as(['settings.update'], [BRANCH_ID])}`,
+          );
+
+          expect(res.status).toBe(403);
+          expect(service.create).not.toHaveBeenCalled();
+          expect(service.update).not.toHaveBeenCalled();
+          expect(service.remove).not.toHaveBeenCalled();
+        },
+      );
+
+      it('still lets that scoped member change the settings of their own branch', async () => {
+        await request
+          .agent(app.getHttpServer())
+          .patch(`/v1/branches/${BRANCH_ID}/settings`)
+          .set(
+            'Authorization',
+            `Bearer ${await as(['settings.update'], [BRANCH_ID])}`,
+          )
+          .send({ invoicePrefix: 'Q3' })
+          .expect(200);
+      });
+
+      it('lets a member whose branches are every branch create, change and delete', async () => {
+        const token = `Bearer ${await as(['settings.update'])}`;
+        const agent = request.agent(app.getHttpServer());
+        await agent
+          .post('/v1/branches')
+          .set('Authorization', token)
+          .send({ name: 'X', code: 'X1' })
+          .expect(201);
+        await agent
+          .patch(`/v1/branches/${BRANCH_ID}`)
+          .set('Authorization', token)
+          .send({ name: 'Y' })
+          .expect(200);
+        await agent
+          .delete(`/v1/branches/${BRANCH_ID}`)
+          .set('Authorization', token)
+          .expect(204);
+      });
+
       it('lets a scoped member reach a branch of theirs', async () => {
         await request
           .agent(app.getHttpServer())

@@ -5,6 +5,7 @@ import {
   PLATFORM_MEMBERSHIP_ROLE_CHANGED,
 } from '@pbl/contracts';
 import { AccountEntity } from '../account/entities/account.entity';
+import { BlockersUnavailableError } from '../branch-guard/branch-blockers.client';
 import { BranchEntity } from '../branch/entities/branch.entity';
 import { RoleEntity } from '../role/entities/role.entity';
 import { StaffScheduleEntity } from '../staff-schedule/entities/staff-schedule.entity';
@@ -55,6 +56,7 @@ describe('MemberService', () => {
   let accounts: { findOne: jest.Mock };
   let outbox: { add: jest.Mock };
   let quota: { assertCanAdd: jest.Mock };
+  let blockers: { forMember: jest.Mock };
   let service: MemberService;
   const errorCodeOf = (promise: Promise<unknown>) =>
     promise.catch((e) => e.getResponse().errorCode);
@@ -127,12 +129,14 @@ describe('MemberService', () => {
       transaction: jest.fn((work) => work(em)),
     };
     quota = { assertCanAdd: jest.fn().mockResolvedValue(undefined) };
+    blockers = { forMember: jest.fn().mockResolvedValue([]) };
     service = new MemberService(
       dataSource as never,
       outbox as never,
       sessions as never,
       schedules as never,
       quota as never,
+      blockers as never,
     );
   });
 
@@ -550,6 +554,62 @@ describe('MemberService', () => {
       expect(sessions.revokeAll).not.toHaveBeenCalled();
     });
 
+    it('refuses to remove a member with an open POS shift with T010 and the reasons (D5)', async () => {
+      memberRow = membership();
+      blockers.forMember.mockResolvedValue([
+        {
+          service: 'sales',
+          code: 'SALES_MEMBER_OPEN_SHIFT',
+          message: 'Nhân viên còn 1 ca bán hàng chưa đóng',
+          count: 1,
+        },
+      ]);
+
+      const error = await service.remove('t1', 'owner-1', 'a2').catch((e) => e);
+
+      expect(error.getStatus()).toBe(409);
+      expect(error.getResponse().errorCode).toBe(ErrorCode.T010);
+      expect(error.getResponse().details.reasons[0].code).toBe(
+        'SALES_MEMBER_OPEN_SHIFT',
+      );
+      expect(blockers.forMember).toHaveBeenCalledWith('t1', 'a2');
+      expect(em.delete).not.toHaveBeenCalled();
+      expect(sessions.revokeAll).not.toHaveBeenCalled();
+    });
+
+    it('fails closed with 503 naming sales when it cannot be asked', async () => {
+      memberRow = membership();
+      blockers.forMember.mockRejectedValue(
+        new BlockersUnavailableError('sales'),
+      );
+
+      const error = await service.remove('t1', 'owner-1', 'a2').catch((e) => e);
+
+      expect(error.getStatus()).toBe(503);
+      expect(error.getResponse().message).toContain('sales');
+      expect(em.delete).not.toHaveBeenCalled();
+    });
+
+    it('still lets a member with an open shift be locked', async () => {
+      memberRepo.findOne.mockResolvedValue(membership());
+      blockers.forMember.mockResolvedValue([
+        {
+          service: 'sales',
+          code: 'SALES_MEMBER_OPEN_SHIFT',
+          message: 'm',
+          count: 1,
+        },
+      ]);
+
+      await service.lock('t1', 'owner-1', 'a2');
+
+      expect(memberRepo.update).toHaveBeenCalledWith(
+        { accountId: 'a2', tenantId: 't1' },
+        { status: 'locked' },
+      );
+      expect(blockers.forMember).not.toHaveBeenCalled();
+    });
+
     it('answers 404 when removing a member of another store', async () => {
       memberRow = null;
 
@@ -709,6 +769,7 @@ describe('MemberService', () => {
         sessions as never,
         schedules as never,
         quota as never,
+        blockers as never,
       );
 
       const summary = await summaryService.summary('t1');
