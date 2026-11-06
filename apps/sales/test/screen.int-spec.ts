@@ -32,6 +32,7 @@ import { CreateSalesTables1791800000000 } from '../src/migrations/1791800000000-
 import { AddOrderIdempotency1791800000200 } from '../src/migrations/1791800000200-add-order-idempotency';
 import { CreateCheckoutWorkflow1791800000300 } from '../src/migrations/1791800000300-create-checkout-workflow';
 import { CreateM3SalesCore1791900000200 } from '../src/migrations/1791900000200-create-m3-sales-core';
+import { CashShiftSession1792200000100 } from '../src/migrations/1792200000100-cash-shift-session';
 import { CheckoutService } from '../src/modules/checkout/checkout.service';
 import { FulfillmentService } from '../src/modules/fulfillment/fulfillment.service';
 import { M3OrdersService } from '../src/modules/orders/m3-orders.service';
@@ -81,6 +82,7 @@ describe('sales screen contract (Postgres)', () => {
   let reference: ReferenceService;
   let shiftViews: ShiftViewService;
   let shifts: ShiftsService;
+  let defaultShiftId: string;
   let checkout: CheckoutService;
   let fulfillment: FulfillmentService;
   let returns: ReturnsService;
@@ -219,6 +221,7 @@ describe('sales screen contract (Postgres)', () => {
           AddOrderIdempotency1791800000200,
           CreateCheckoutWorkflow1791800000300,
           CreateM3SalesCore1791900000200,
+          CashShiftSession1792200000100,
         ],
       }),
     });
@@ -241,6 +244,15 @@ describe('sales screen contract (Postgres)', () => {
       inventory as never,
       outbox,
     );
+    const realCheckout = checkout.checkout.bind(checkout);
+    jest
+      .spyOn(checkout, 'checkout')
+      .mockImplementation((staff, perms, scope, key, body) =>
+        realCheckout(staff, perms, scope, key, {
+          ...body,
+          shiftId: body.shiftId ?? defaultShiftId,
+        }),
+      );
     returns = new ReturnsService(dataSource, inventory as never, outbox);
     fulfillment = new FulfillmentService(
       dataSource,
@@ -296,6 +308,8 @@ describe('sales screen contract (Postgres)', () => {
     inventory.receiveReturnedStock.mockImplementation(async () => ({
       receiptId: randomUUID(),
     }));
+    // the cash entries are append-only (no DELETE): TRUNCATE is the test cleanup
+    await sql(`TRUNCATE $S."pos_shift_cash_entry", $S."cash_setting"`);
     for (const table of [
       'shipping_providers',
       'registers',
@@ -324,6 +338,18 @@ describe('sales screen contract (Postgres)', () => {
     }
     await learnBranch(TENANT_A, BRANCH_A);
     await learnBranch(TENANT_A, BRANCH_C);
+    // Cash needs a drawer (SHIFT_REQUIRED, and a cash payment or refund goes into the caller's own open
+    // shift). These suites predate that rule: ACCOUNT has this default open shift on its own register.
+    defaultShiftId = (
+      await A(() =>
+        shifts.openShift(ACCOUNT, ALL, {
+          branchId: BRANCH_A,
+          registerCode: 'DEFAULT-REG',
+          openingCash: 0,
+        }),
+      )
+    ).id;
+    await sql(`DELETE FROM $S."outbox_event"`);
     await seedVariant(VARIANT_A, PRODUCT_A, 'SKU-A', 100000);
     await seedVariant(VARIANT_B, PRODUCT_B, 'SKU-B', 300000);
   });

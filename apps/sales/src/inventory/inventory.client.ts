@@ -260,17 +260,23 @@ export class InventoryClient {
     );
   }
 
+  /**
+   * Restocks a return into the warehouse of the original sale through the internal, idempotent
+   * `return-receipts` route (service identity: the caller needs no inventory permission). One return
+   * has one `idempotencyKey`, so a double receive posts one receipt.
+   */
   async receiveReturnedStock(req: {
     warehouseId: string;
     returnId: string;
     code?: string;
+    idempotencyKey: string;
     items: { skuId: string; qty: string; unitCost?: number }[];
   }): Promise<{ receiptId: string }> {
     this.assertClosed();
     let response;
     try {
       response = await this.http.post<{ id: string }>(
-        '/api/v1/stock-receipts',
+        '/internal/v1/return-receipts',
         {
           warehouseId: req.warehouseId,
           code: req.code,
@@ -285,8 +291,12 @@ export class InventoryClient {
         },
         {
           timeout: TIMEOUT_MS,
+          headers: this.internalHeaders({
+            'Idempotency-Key': req.idempotencyKey,
+          }),
           validateStatus: (status) => status < 500,
         },
+        this.asTenant(),
       );
     } catch (error) {
       throw this.failed(error);

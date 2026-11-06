@@ -28,6 +28,11 @@ import { OrderQueryService } from '../modules/screen/order-query.service';
 import { OrderViewsController } from '../modules/screen/order-views.controller';
 import { ScreenShiftsController } from '../modules/screen/screen-shifts.controller';
 import { ShiftViewService } from '../modules/screen/shift-view.service';
+import {
+  CashReportsController,
+  CashReportsService,
+} from '../modules/shifts/cash-reports.controller';
+import { CashSettingsService } from '../modules/shifts/cash-settings.service';
 import { ShiftsController } from '../modules/shifts/shifts.controller';
 import { ShiftsService } from '../modules/shifts/shifts.service';
 import { StaffSalesController } from '../modules/staff-sales/staff-sales.controller';
@@ -57,6 +62,7 @@ import { OrdersService } from './orders.service';
     OrdersController,
     M3OrdersController,
     ShiftsController,
+    CashReportsController,
     PosController,
     CheckoutController,
     ReturnsController,
@@ -76,6 +82,8 @@ import { OrdersService } from './orders.service';
     OrdersService,
     M3OrdersService,
     ShiftsService,
+    CashSettingsService,
+    CashReportsService,
     PosService,
     CheckoutService,
     ReturnsService,

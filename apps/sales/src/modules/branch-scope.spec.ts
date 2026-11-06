@@ -10,6 +10,8 @@ const ID = '44444444-4444-4444-8444-444444444444';
 /** A DataSource whose transaction hands the work an entity manager over canned rows */
 function dataSource(rows: unknown[]) {
   const em = {
+    // a real EntityManager knows its connection (and so the schema the raw SQL is qualified with)
+    connection: { options: { schema: 'sales' } },
     query: jest.fn(async (sql: string) =>
       /FROM .*pos_shifts/.test(sql) || /COUNT/.test(sql) ? rows : [],
     ),

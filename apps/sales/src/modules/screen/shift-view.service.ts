@@ -92,6 +92,7 @@ export class ShiftViewService {
 
   private async present(shift: PosShiftResponse, withTotals = false) {
     const closed = shift.status === 'CLOSED';
+    const waitingForApproval = shift.status === 'PENDING_APPROVAL';
     return {
       id: shift.id,
       code: shift.code,
@@ -102,13 +103,15 @@ export class ShiftViewService {
       staff: { id: shift.staffId, name: null },
       openedAt: shift.openedAt,
       closedAt: shift.closedAt,
-      // platform's StaffSchedule is not read from here
+      // platform's StaffSchedule is not read from here (the cash session's own end is `plannedEndAt`)
       scheduledEnd: null,
+      plannedEndAt: shift.plannedEndAt,
+      overdue: shift.overdue,
       openingCash: shift.openingCash,
       cashSales: shift.cashSalesTotal,
       status: shift.status.toLowerCase(),
       version: shift.version,
-      ...(closed
+      ...(closed || waitingForApproval
         ? {
             closingCashExpected: shift.expectedCash,
             closingCashActual: shift.actualCash,

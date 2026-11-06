@@ -31,6 +31,17 @@ export const SalesDomainErrorCode = {
   SHIFT_ALREADY_OPEN: 'SHIFT_ALREADY_OPEN',
   SHIFT_ALREADY_CLOSED: 'SHIFT_ALREADY_CLOSED',
   SHIFT_HAS_PENDING_TRANSACTIONS: 'SHIFT_HAS_PENDING_TRANSACTIONS',
+  SHIFT_REQUIRED: 'SHIFT_REQUIRED',
+  SHIFT_CLOSED: 'SHIFT_CLOSED',
+  SHIFT_HAS_OPEN_DRAFTS: 'SHIFT_HAS_OPEN_DRAFTS',
+  VARIANCE_REASON_REQUIRED: 'VARIANCE_REASON_REQUIRED',
+  APPROVAL_REQUIRED: 'APPROVAL_REQUIRED',
+  APPROVER_IS_COUNTER: 'APPROVER_IS_COUNTER',
+  COUNT_REQUIRED: 'COUNT_REQUIRED',
+  OPENING_FLOAT_NOTE_REQUIRED: 'OPENING_FLOAT_NOTE_REQUIRED',
+  CASH_SETTINGS_INVALID: 'CASH_SETTINGS_INVALID',
+  RETURN_WAREHOUSE_UNRESOLVED: 'RETURN_WAREHOUSE_UNRESOLVED',
+  PAYMENT_REFERENCE_REQUIRED: 'PAYMENT_REFERENCE_REQUIRED',
 
   POS_DRAFT_NOT_FOUND: 'POS_DRAFT_NOT_FOUND',
   POS_DRAFT_LIMIT_EXCEEDED: 'POS_DRAFT_LIMIT_EXCEEDED',
@@ -39,6 +50,7 @@ export const SalesDomainErrorCode = {
   RETURN_NOT_ELIGIBLE: 'RETURN_NOT_ELIGIBLE',
   RETURN_QUANTITY_EXCEEDED: 'RETURN_QUANTITY_EXCEEDED',
   REFUND_AMOUNT_EXCEEDED: 'REFUND_AMOUNT_EXCEEDED',
+  REFUND_ALREADY_REQUESTED: 'REFUND_ALREADY_REQUESTED',
 
   COUPON_INVALID: 'COUPON_INVALID',
   COUPON_USAGE_LIMIT_EXCEEDED: 'COUPON_USAGE_LIMIT_EXCEEDED',
@@ -1379,4 +1391,122 @@ export class OrderAggregate {
       reason: `FULFILLMENT_CONFIRMED:${fulfillmentCode}`,
     };
   }
+}
+
+// ---- Cash session: entries, expected cash, count and close decision ----
+
+export const CASH_ENTRY_KINDS = [
+  'CASH_SALE',
+  'CASH_REFUND',
+  'PAY_IN',
+  'PAY_OUT',
+  'CASH_SHORTAGE',
+  'CASH_OVERAGE',
+  'REVERSAL',
+] as const;
+export type CashEntryKind = (typeof CASH_ENTRY_KINDS)[number];
+
+export const VARIANCE_REASONS = [
+  'miscounted_change',
+  'unrecorded_sale',
+  'refund_not_recorded',
+  'theft_suspected',
+  'other',
+] as const;
+export type VarianceReason = (typeof VARIANCE_REASONS)[number];
+
+export const CASH_RESPONSIBILITIES = [
+  'none',
+  'cashier_deduction',
+  'store_loss',
+] as const;
+export type CashResponsibility = (typeof CASH_RESPONSIBILITIES)[number];
+
+export const DEFAULT_CASH_DENOMINATIONS = [
+  500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000,
+];
+
+/** The closing entries close the gap between expected and counted: they never open it */
+const CLOSING_KINDS: readonly CashEntryKind[] = [
+  'CASH_SHORTAGE',
+  'CASH_OVERAGE',
+];
+
+/**
+ * expected = opening float + cash sales - cash refunds + pay-ins - pay-outs, i.e. the opening float plus
+ * every signed entry except the shortage and overage entries written when the shift closes.
+ */
+export function expectedCashFromEntries(
+  openingCash: number,
+  entries: readonly { kind: string; amount: number }[],
+): number {
+  let expected = parseVndAmount(openingCash, true);
+  for (const e of entries) {
+    if ((CLOSING_KINDS as readonly string[]).includes(e.kind)) continue;
+    if (!Number.isSafeInteger(e.amount)) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.VALIDATION_ERROR,
+        `Invalid cash entry amount: ${String(e.amount)}`,
+        422,
+      );
+    }
+    expected += BigInt(e.amount);
+  }
+  return vndNumber(expected);
+}
+
+/** The signed amount a cash payment puts in the drawer: tendered minus change = the cash allocation */
+export function cashSaleDrawerAmount(
+  tenders: readonly { method: string; amount: number }[],
+): number {
+  let total = 0n;
+  for (const t of tenders) {
+    // card, QR, bank transfer, COD, marketplace and on-account never enter the drawer
+    if (t.method === 'CASH') total += parseVndAmount(t.amount, true);
+  }
+  return vndNumber(total);
+}
+
+/** The counted total of a count by denomination; throws on a note the store does not use */
+export function countedTotalFromDenominations(
+  counts: Record<string, number>,
+  allowed: readonly number[],
+): number {
+  let total = 0n;
+  for (const [note, qty] of Object.entries(counts)) {
+    const value = Number(note);
+    if (!allowed.includes(value)) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.VALIDATION_ERROR,
+        `Denomination ${note} is not one of the store's notes`,
+        400,
+      );
+    }
+    if (!Number.isInteger(qty) || qty < 0) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.VALIDATION_ERROR,
+        `Count of ${note} must be a whole number of notes (0 or more)`,
+        400,
+      );
+    }
+    total += BigInt(value) * BigInt(qty);
+  }
+  return vndNumber(total);
+}
+
+export type CloseDecision =
+  | 'WITHIN_TOLERANCE'
+  | 'REASON_REQUIRED'
+  | 'APPROVAL_REQUIRED';
+
+/** variance = counted - expected; within the tolerance it closes, up to the threshold a reason is enough */
+export function decideShiftClose(params: {
+  variance: number;
+  toleranceVnd: number;
+  approvalAboveVnd: number;
+}): CloseDecision {
+  const abs = Math.abs(params.variance);
+  if (abs <= params.toleranceVnd) return 'WITHIN_TOLERANCE';
+  if (abs <= params.approvalAboveVnd) return 'REASON_REQUIRED';
+  return 'APPROVAL_REQUIRED';
 }
