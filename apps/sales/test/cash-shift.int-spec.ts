@@ -73,6 +73,14 @@ describe('cash session (Postgres)', () => {
   const inventory = {
     reserve: jest.fn(),
     release: jest.fn(),
+    // a sale's warehouse: the one named, else the branch's default
+    resolveSaleWarehouse: jest.fn(
+      async (_branchId: string, warehouseId?: string) => ({
+        id: warehouseId ?? WAREHOUSE_A,
+        code: 'WH',
+        name: 'Warehouse',
+      }),
+    ),
     reserveWarehouseStock: jest.fn(),
     getWarehouseReservation: jest.fn(),
     getWarehouseReservationByKey: jest.fn(),

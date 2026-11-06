@@ -649,6 +649,7 @@ describe('stock integrity (Postgres)', () => {
       await as(() =>
         reservations.reserveWarehouseStock(randomUUID(), {
           callerService: 'sales',
+          branchId: BRANCH_1,
           sourceRefType: 'ORDER',
           sourceRefId: orderId,
           lines: [{ warehouseId: wh, skuId: SKU_A, qty: '2.000' }],
@@ -681,6 +682,7 @@ describe('stock integrity (Postgres)', () => {
         as(() =>
           reservations.reserveWarehouseStock(randomUUID(), {
             callerService: 'sales',
+            branchId: BRANCH_1,
             sourceRefType: 'ORDER',
             sourceRefId: randomUUID(),
             ...(noExpiry ? { noExpiry: true } : {}),
@@ -723,6 +725,7 @@ describe('stock integrity (Postgres)', () => {
       const orderId = randomUUID();
       const req = {
         callerService: 'sales' as const,
+        branchId: BRANCH_1,
         sourceRefType: 'ORDER' as const,
         sourceRefId: orderId,
         noExpiry: true,
@@ -796,6 +799,7 @@ describe('stock integrity (Postgres)', () => {
       await as(() =>
         reservations.reserveWarehouseStock(randomUUID(), {
           callerService: 'sales',
+          branchId: BRANCH_1,
           sourceRefType: 'ORDER',
           sourceRefId: randomUUID(),
           lines: [{ warehouseId: wh, skuId: SKU_A, qty: '6.000' }],
@@ -844,6 +848,7 @@ describe('stock integrity (Postgres)', () => {
       await as(() =>
         reservations.reserveWarehouseStock(randomUUID(), {
           callerService: 'sales',
+          branchId: BRANCH_1,
           sourceRefType: 'ORDER',
           sourceRefId: randomUUID(),
           lines: [{ warehouseId: wh, skuId: SKU_A, qty: '2.000' }],

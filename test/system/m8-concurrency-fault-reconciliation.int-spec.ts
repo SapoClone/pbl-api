@@ -1,5 +1,9 @@
 import { CreateTenantPlanQuota1792800000000 } from '../../apps/catalog/src/migrations/1792800000000-create-tenant-plan-quota';
 import { PlanQuotaService } from '../../apps/catalog/src/quota/plan-quota.service';
+import { CreateTenantStatus1793100000420 } from '../../apps/integration/src/migrations/1793100000420-create-tenant-status';
+import { DefaultBranchWarehouse1792700000000 } from '../../apps/inventory/src/migrations/1792700000000-default-branch-warehouse';
+import { CashShiftSession1792200000100 } from '../../apps/sales/src/migrations/1792200000100-cash-shift-session';
+import { CreateTenantStatus1793100000410 } from '../../apps/sales/src/migrations/1793100000410-create-tenant-status';
 /**
  * Milestone M8 — Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios),
  * Multi-Tenant Isolation Across 7 Schemas, 7 Cross-Service Reconciliation Pairs,
@@ -559,6 +563,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           CreateInventoryTables1791900000000,
           AddWarehouseStockBalances1791900000100,
           CreateM2InventoryCore1791900000200,
+          DefaultBranchWarehouse1792700000000,
           StockIntegrity1793000000600,
         ],
       }),
@@ -689,6 +694,8 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           CreateCheckoutWorkflow1791800000300,
           CreateM3SalesCore1791900000200,
           AllowOnAccountTender1792100000100,
+          CashShiftSession1792200000100,
+          CreateTenantStatus1793100000410,
         ],
       }),
     );
@@ -1023,6 +1030,42 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
       salesCustomerLoyaltyClient,
       salesFinanceCreditClient,
     );
+
+    // A POS sale needs an open shift (cash session). These system flows are about stock, money and events, not about
+    // the drawer, so a sale with no shift gets its branch's one open shift, opened on first use.
+    const defaultShifts = new Map<string, Promise<string>>();
+    const checkoutWithShift = salesCheckout.checkout.bind(salesCheckout);
+    salesCheckout.checkout = (async (...args: unknown[]) => {
+      const dto = args[4] as
+        | { shiftId?: string; branchId?: string }
+        | undefined;
+      if (dto && !dto.shiftId && dto.branchId) {
+        const key = `${TenantContext.require()}:${dto.branchId}`;
+        if (!defaultShifts.has(key)) {
+          defaultShifts.set(
+            key,
+            salesShifts
+              .openShift(args[0] as string, null, {
+                branchId: dto.branchId,
+                openingCash: 0,
+              })
+              .then((shift) => shift.id)
+              .catch(
+                async () =>
+                  (
+                    await salesShifts.getActiveShift(
+                      args[0] as string,
+                      null,
+                      dto.branchId,
+                    )
+                  ).id,
+              ),
+          );
+        }
+        args[4] = { ...dto, shiftId: await defaultShifts.get(key) };
+      }
+      return (checkoutWithShift as (...a: unknown[]) => unknown)(...args);
+    }) as never;
     salesOrders = new M3OrdersService(
       salesDs,
       salesPos,
@@ -1054,6 +1097,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           ...PRODUCER_MIGRATIONS,
           ...CONSUMER_MIGRATIONS,
           CreateM6IntegrationCore1791900000200,
+          CreateTenantStatus1793100000420,
         ],
       }),
     );
