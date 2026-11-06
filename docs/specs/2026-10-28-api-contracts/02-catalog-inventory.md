@@ -337,7 +337,7 @@ A sale always takes its stock from **its own branch's warehouse**. Both routes a
 - **Auth:** `inventory.update`.
 - **Body:** `{ "branchId": "…q3", "variantId": "…", "minQuantity": 10, "maxQuantity": null }`
 - **Response 200:** the threshold.
-- **Events:** `inventory.stock.below_min` fires when the change puts available below min. Insight turns it into a notification, as in the "Cần chú ý" (needs attention) card.
+- **Events:** `inventory.stock.below_min` fires when the change puts available below min (and, since workstream F, on every later drop across the minimum: see [Stock integrity rules](#stock-integrity-rules-built-d15-d21)). Insight turns it into a notification, as in the "Cần chú ý" (needs attention) card.
 
 ### GET /inventory/api/v1/ledger-entries
 - **Status:** new. The `inventory_ledger` table already exists; only the endpoint is new.
@@ -471,7 +471,7 @@ The current behaviour, where a receipt is applied immediately, is replaced by an
 - **Row:** `{ "id", "code", "status", "fromBranch", "toBranch", "totalQuantity": 12, "shippedAt", "receivedAt" }`
 
 ### POST /inventory/api/v1/stock-transfers/{id}/ship · /receive · /cancel
-- **Status:** new.
+- **Status:** new. **Built shape (warehouse based):** `POST /inventory/api/v1/stock-transfers/{id}/dispatch`, `/receive` and `/cancel`; the rules, errors and the overdue flag are in [Stock integrity rules](#stock-integrity-rules-built-d15-d21) and win over this sketch.
 - **Auth:** `inventory.update` (ship, cancel); `inventory.approve` (receive, on the destination branch).
 - **Body:** `{ "version" }`; `receive` may also take `{ "items": [{ "variantId", "receivedQuantity" }] }` to record a shortfall.
 - **Transitions and stock:**
@@ -690,3 +690,32 @@ Messages are added in `en`, `vi`, and `jp`.
 4. **Lot and expiry:** they are stored per receipt line only. Should stock be tracked per lot (FEFO picking, expiry alerts)? That would need a `StockLot` entity in the ERD.
 5. **Purchasing "Nhập file" (import file) on 13:2351:** is it a PO import or a supplier import? It is not specified here.
 6. **Barcodes:** must they be unique across all variants in a store, or may a combo share its component's barcode?
+
+
+## Stock integrity rules (built, D15-D21)
+
+Built in workstream F ([built-f](../../business-rules/built-f.md)). These rules win over the older screen sketches above where they differ.
+
+### Stock enters only through documents (D15)
+- `POST /inventory/api/v1/stock-balances/receipts` is **removed** (no route, no gateway entry).
+- `POST /inventory/api/v1/stock-receipts` takes `warehouseId` and `items` only. The old body `{branchId, items[{sku, quantity}]}` answers **410** `DIRECT_STOCK_ENTRY_REMOVED`.
+- Stock is added by posted receipts (document, cost, `inventory.approve` to post or `autoPost`), transfers, stock takes and returns. There is no second-person approval on receipts, stock takes or purchase orders by default (D21): the permission is the control.
+- `POST /stock-receipts` honours `Idempotency-Key`: the same key returns the same receipt (also for a retried `autoPost`) and posts nothing twice. `POST /purchase-orders/{id}/receive` with the same key is a pure replay: it answers the first result, moves no `received_qty` and creates no second receipt; the same key on another PO answers 409 `IDEMPOTENCY_CONFLICT`.
+
+### Transfers (D17, D18)
+- **Create** (`inventory.create`): the caller needs branch scope on **both** warehouses (404 otherwise); both must be `ACTIVE` (409 `WAREHOUSE_INACTIVE`). `QUARANTINE` stock may only be transferred **into a `BRANCH` warehouse** (409 `TRANSFER_QUARANTINE_NOT_ALLOWED` otherwise); any transfer into or out of a quarantine warehouse needs `inventory.approve` (403 `PERMISSION_DENIED`).
+- **Dispatch** (`inventory.update`, source scope): `DRAFT` only (409 `TRANSFER_INVALID_STATE` the second time), 409 `INSUFFICIENT_STOCK` with the shortages; deducts the source, adds the destination in-transit.
+- **Receive** (`inventory.update`, destination scope): `items` must name each SKU **at most once** (422 `TRANSFER_DUPLICATE_SKU`); every line is validated against the quantity still in transit **now** (409 `TRANSFER_QUANTITY_MISMATCH`); on hand rises only by what leaves in-transit. `resolveDiscrepancy: true` needs `inventory.approve` (403).
+- **Close a discrepancy** (`receive` with `resolveDiscrepancy: true`, status `DISCREPANCY` to `RECEIVED`, `inventory.approve`): the units recorded as lost are written off at the **dispatch cost**: ledger rows `TRANSFER_LOST_IN` (+n) and `TRANSFER_LOSS` (-n) at the destination (they net to zero, so on hand and reconciliation are unchanged; the loss row carries quantity and cost) and one `inventory.stock.changed` with `movementType: "TRANSFER_LOSS"`, `qtyDelta: "-n"`.
+- **Cancel** `POST /inventory/api/v1/stock-transfers/{id}/cancel` (`inventory.approve`, source scope), body `{ "reason"? }`: allowed for `DRAFT`, `DISPATCHED`, `PARTIALLY_RECEIVED` (409 `TRANSFER_INVALID_STATE` otherwise). The units not yet received go back to the source at the dispatch cost with a reversing ledger row `TRANSFER_CANCEL` (`reversal_of_ledger_id` = the dispatch row) and an `inventory.stock.changed` (`TRANSFER_CANCEL`); units already received stay. Status `CANCELLED`; the detail carries `cancelledBy`, `cancelledAt`, `cancelReason` and per line `returnedQty`.
+- **Overdue:** list and detail carry `daysOpen` (whole days since dispatch, only while `DISPATCHED` or `PARTIALLY_RECEIVED`, else `null`) and `overdue: true` from 7 days (`TRANSFER_OVERDUE_DAYS`). No scheduler.
+
+### Reservations without expiry (D19)
+`POST /internal/v1/reservations` accepts `noExpiry: true` (wins over `ttlSeconds`). The hold is stored with `expires_at = NULL`, answers and emits `expiresAt: null`, is never expired by the sweep and is released by cancel or committed by fulfilment. Sales sends it when it confirms an omnichannel or manual order (`POST /orders/{id}/confirm`); the POS checkout keeps its 15 minute hold.
+
+### Events (D16, D21)
+- `inventory.stock.below_min` is emitted whenever a sale hold, a stock issue or a transfer dispatch drops **available** stock (on hand minus holds) from at or above the warehouse minimum to below it: once per crossing, quiet while below, re-armed when stock rises back to the minimum; a threshold edit that leaves available below the minimum still emits as before.
+- `inventory.stock.changed` has the new `movementType` values `TRANSFER_CANCEL`, `TRANSFER_LOST_IN`, `TRANSFER_LOSS`. There is no separate `inventory.stock.written_off` event: a write-off is the `TRANSFER_LOSS` change.
+- `sales.order.completed` no longer deducts from the older branch-and-SKU-code store for an order that has a warehouse reservation (no `sale_shortfall` row).
+- A stock take freezes nothing (`freezeMovement` is stored and ignored). Its approval is stale only when on hand moved since the snapshot (holds do not count); `forceRebase` is part of `approve`, so it needs `inventory.approve`.
+- The ledger (`stock_balance_ledger`) is append-only: the database refuses UPDATE and DELETE of its rows.

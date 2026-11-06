@@ -127,6 +127,7 @@ import { M2_INVENTORY_ENTITIES } from '../../apps/inventory/src/infrastructure/p
 import { CreateInventoryTables1791900000000 } from '../../apps/inventory/src/migrations/1791900000000-create-inventory-tables';
 import { AddWarehouseStockBalances1791900000100 } from '../../apps/inventory/src/migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from '../../apps/inventory/src/migrations/1791900000200-create-m2-inventory-core';
+import { StockIntegrity1793000000600 } from '../../apps/inventory/src/migrations/1793000000600-stock-integrity';
 import { IssuingService } from '../../apps/inventory/src/modules/issuing/issuing.service';
 import { ProcurementService } from '../../apps/inventory/src/modules/procurement/procurement.service';
 import { ReceivingService } from '../../apps/inventory/src/modules/receiving/receiving.service';
@@ -558,6 +559,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           CreateInventoryTables1791900000000,
           AddWarehouseStockBalances1791900000100,
           CreateM2InventoryCore1791900000200,
+          StockIntegrity1793000000600,
         ],
       }),
     );

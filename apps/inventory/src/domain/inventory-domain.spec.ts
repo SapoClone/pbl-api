@@ -1,5 +1,7 @@
 import {
+  assertCanCancelStockTransfer,
   assertCanDispatchStockTransfer,
+  assertTransferKindsAllowed,
   assertValidStockTransferWarehouses,
   computeValuationAfterDeduction,
   computeWeightedAverageCostOnReceipt,
@@ -12,11 +14,14 @@ import {
   InventoryDomainErrorCode,
   InventoryMoney,
   InventoryQuantity,
+  isTransferOverdue,
   normalizeAndSortWarehouseLines,
   normalizeInventoryCode,
   parseMoneyToVnd,
   parseQtyToMilli,
   StockBalanceAggregate,
+  TRANSFER_OVERDUE_DAYS,
+  transferDaysOpen,
   vndToNumber,
 } from './inventory-domain';
 
@@ -226,7 +231,7 @@ describe('InventoryDomain (M2 pure unit tests)', () => {
       expect(() => assertValidStockTransferWarehouses('wh-1', 'wh-1')).toThrow(
         InventoryDomainError,
       );
-      expect(() => assertCanDispatchStockTransfer('IN_TRANSIT')).toThrow(
+      expect(() => assertCanDispatchStockTransfer('DISPATCHED')).toThrow(
         InventoryDomainError,
       );
 
@@ -248,6 +253,56 @@ describe('InventoryDomain (M2 pure unit tests)', () => {
         receivingNowBaseQty: '6.000',
       });
       expect(poEval.isFullyReceived).toBe(true);
+    });
+  });
+
+  describe('transfers: cancel, overdue and quarantine rules (D17, D18)', () => {
+    it('cancels a draft or a transfer with units on the road, nothing else', () => {
+      for (const ok of ['DRAFT', 'DISPATCHED', 'PARTIALLY_RECEIVED']) {
+        expect(() => assertCanCancelStockTransfer(ok)).not.toThrow();
+      }
+      for (const no of ['RECEIVED', 'DISCREPANCY', 'CANCELLED']) {
+        expect(() => assertCanCancelStockTransfer(no)).toThrow(
+          InventoryDomainError,
+        );
+      }
+    });
+
+    it('flags a transfer open for 7 days or more, only while units are on the road', () => {
+      expect(TRANSFER_OVERDUE_DAYS).toBe(7);
+      const now = new Date('2026-11-10T12:00:00Z');
+      const days = (d: number) =>
+        new Date(now.getTime() - d * 86_400_000 - 1000).toISOString();
+      expect(transferDaysOpen('DISPATCHED', days(6), now)).toBe(6);
+      expect(isTransferOverdue(6)).toBe(false);
+      expect(
+        isTransferOverdue(transferDaysOpen('DISPATCHED', days(7), now)),
+      ).toBe(true);
+      expect(transferDaysOpen('PARTIALLY_RECEIVED', days(9), now)).toBe(9);
+      expect(transferDaysOpen('RECEIVED', days(30), now)).toBeNull();
+      expect(transferDaysOpen('DRAFT', null, now)).toBeNull();
+      expect(isTransferOverdue(null)).toBe(false);
+    });
+
+    it('limits quarantine stock to BRANCH destinations and to inventory.approve', () => {
+      expect(() =>
+        assertTransferKindsAllowed('BRANCH', 'CENTRAL', false),
+      ).not.toThrow();
+      expect(() =>
+        assertTransferKindsAllowed('QUARANTINE', 'BRANCH', true),
+      ).not.toThrow();
+      expect(() =>
+        assertTransferKindsAllowed('QUARANTINE', 'CENTRAL', true),
+      ).toThrow(/BRANCH warehouse/);
+      expect(() =>
+        assertTransferKindsAllowed('QUARANTINE', 'BRANCH', false),
+      ).toThrow(/inventory.approve/);
+      expect(() =>
+        assertTransferKindsAllowed('CENTRAL', 'QUARANTINE', false),
+      ).toThrow(/inventory.approve/);
+      expect(() =>
+        assertTransferKindsAllowed('BRANCH', 'QUARANTINE', true),
+      ).not.toThrow();
     });
   });
 });

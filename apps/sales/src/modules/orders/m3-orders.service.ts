@@ -618,6 +618,9 @@ export class M3OrdersService {
         sourceRefType: 'ORDER',
         sourceRefId: orderId,
         branchId: order.branchId,
+        // D19: a confirmed order that is not shipped yet keeps its stock
+        // until it is fulfilled or cancelled: the hold has no 15 minute expiry
+        noExpiry: true,
         lines: Array.from(qtyBySku.entries()).map(([skuId, millis]) => ({
           warehouseId,
           skuId,

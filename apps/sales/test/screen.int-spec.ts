@@ -1191,6 +1191,11 @@ describe('sales screen contract (Postgres)', () => {
         }),
       );
       expect(ok.orderStatus).toBe('CONFIRMED');
+      // D19: a confirmed order that is not shipped keeps its hold: no expiry
+      expect(inventory.reserveWarehouseStock).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ sourceRefId: pending.id, noExpiry: true }),
+      );
       await expect(
         A(() =>
           m3.cancelOrder(pending.id, ACCOUNT, ALL, {

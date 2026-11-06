@@ -21,6 +21,7 @@ import { AddWarehouseStockBalances1791900000100 } from '../src/migrations/179190
 import { CreateM2InventoryCore1791900000200 } from '../src/migrations/1791900000200-create-m2-inventory-core';
 import { AllowReservationExpirySelect1792500000000 } from '../src/migrations/1792500000000-allow-reservation-expiry-select';
 import { DefaultBranchWarehouse1792700000000 } from '../src/migrations/1792700000000-default-branch-warehouse';
+import { StockIntegrity1793000000600 } from '../src/migrations/1793000000600-stock-integrity';
 import { StockQueryService } from '../src/modules/stock/stock-query.service';
 import { WarehousesService } from '../src/modules/warehouses/warehouses.service';
 import { WarehouseScopeService } from '../src/scope/warehouse-scope';
@@ -77,6 +78,7 @@ describe('inventory branch scope (Postgres)', () => {
           CreateM2InventoryCore1791900000200,
           AllowReservationExpirySelect1792500000000,
           DefaultBranchWarehouse1792700000000,
+          StockIntegrity1793000000600,
         ],
       }),
     );

@@ -6,22 +6,16 @@ import {
   TenantContext,
   TenantScopedRepository,
 } from '@pbl/common';
-import { INVENTORY_STOCK_CHANGED, StockChangedPayload } from '@pbl/contracts';
 import { EventOutbox, qualifiedTable } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { BranchProjectionEntity } from '../branches/branch-projection.entity';
 import { applyWarehouseScope, WarehouseScope } from '../scope/warehouse-scope';
-import {
-  ListStockReqDto,
-  ReceiveStockBalanceDto,
-  StockReceiptReqDto,
-} from './dto/stock.dto';
+import { ListStockReqDto, StockReceiptReqDto } from './dto/stock.dto';
 import { StockItemEntity } from './entities/stock.entities';
 import {
   formatMilliToDecimal,
   parseDecimalToMilli,
-  WarehouseReservationErrorCode,
 } from './reservations.service';
 import { mergeLines } from './stock-lines';
 
@@ -180,91 +174,6 @@ export class StockService {
         `,
         [tenantId],
       );
-    });
-  }
-
-  async receiveStockBalance(dto: ReceiveStockBalanceDto) {
-    const qtyMilli = parseDecimalToMilli(dto.qty);
-    if (qtyMilli <= 0n) {
-      throw new BadRequestException({
-        errorCode: WarehouseReservationErrorCode.INVALID_QUANTITY,
-        message: 'Receipt quantity must be strictly positive',
-      });
-    }
-    const qtyStr = formatMilliToDecimal(qtyMilli);
-    return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
-      const prefix = this.schemaPrefix(em);
-      const rows = await em.query(
-        `
-        INSERT INTO ${prefix}"stock_balance" (
-          id, tenant_id, warehouse_id, sku_id, on_hand_qty, reserved_qty, in_transit_qty, version
-        ) VALUES ($1, $2, $3, $4, $5::numeric(18,3), 0, 0, 1)
-        ON CONFLICT (tenant_id, warehouse_id, sku_id) DO UPDATE
-        SET
-          on_hand_qty = ${prefix}"stock_balance".on_hand_qty + EXCLUDED.on_hand_qty,
-          version = ${prefix}"stock_balance".version + 1,
-          updated_at = now()
-        RETURNING
-          id,
-          tenant_id AS "tenantId",
-          warehouse_id AS "warehouseId",
-          sku_id AS "skuId",
-          on_hand_qty AS "onHandQty",
-          reserved_qty AS "reservedQty",
-          (on_hand_qty - reserved_qty) AS "availableQty",
-          version
-        `,
-        [randomUUID(), tenantId, dto.warehouseId, dto.skuId, qtyStr],
-      );
-      const balance = rows[0];
-      const refId = dto.referenceId ?? randomUUID();
-      const occurredAt = new Date().toISOString();
-      const onHandAfter = formatMilliToDecimal(
-        parseDecimalToMilli(String(balance.onHandQty)),
-      );
-      const reservedAfter = formatMilliToDecimal(
-        parseDecimalToMilli(String(balance.reservedQty)),
-      );
-      await em.query(
-        `
-        INSERT INTO ${prefix}"stock_balance_ledger" (
-          id, tenant_id, warehouse_id, sku_id, movement_type, qty_delta,
-          on_hand_after, reserved_after, reference_type, reference_id, occurred_at
-        ) VALUES ($1, $2, $3, $4, 'RECEIPT', $5::numeric(18,3), $6::numeric(18,3), $7::numeric(18,3), 'RECEIPT', $8, $9)
-        `,
-        [
-          randomUUID(),
-          tenantId,
-          dto.warehouseId,
-          dto.skuId,
-          qtyStr,
-          onHandAfter,
-          reservedAfter,
-          refId,
-          occurredAt,
-        ],
-      );
-      if (this.outbox) {
-        await this.outbox.add(em, INVENTORY_STOCK_CHANGED, {
-          warehouseId: dto.warehouseId,
-          skuId: dto.skuId,
-          movementType: 'RECEIPT',
-          qtyDelta: qtyStr,
-          onHandAfter,
-          reservedAfter,
-          referenceType: 'RECEIPT',
-          referenceId: refId,
-          occurredAt,
-        } satisfies StockChangedPayload);
-      }
-      return {
-        ...balance,
-        onHandQty: onHandAfter,
-        reservedQty: reservedAfter,
-        availableQty: formatMilliToDecimal(
-          parseDecimalToMilli(String(balance.availableQty)),
-        ),
-      };
     });
   }
 

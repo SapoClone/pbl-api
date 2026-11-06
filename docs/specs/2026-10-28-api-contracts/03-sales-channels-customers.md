@@ -81,7 +81,7 @@ Product lookups for POS and manual orders use the catalog and stock endpoints in
     - `source`: `pos` | `manual`.
     - `orderStatus` on create:
       - `draft` saves a draft ("Lưu nháp" / "Lưu hóa đơn nháp"). It reserves nothing.
-      - `confirmed` corresponds to "Xác nhận ngay và trừ tồn kho". It reserves stock through `POST /internal/reservations`.
+      - `confirmed` corresponds to "Xác nhận ngay và trừ tồn kho". It reserves stock through `POST /internal/reservations`. The hold of a confirmed (not yet shipped) order does not expire (`noExpiry: true`, [stock integrity rules](02-catalog-inventory.md#stock-integrity-rules-built-d15-d21)).
       - POS checkout sends `completed`.
     - `unitPrice` may be omitted; the price-list price is used. Sending it requires `orders.update`.
     - `payments[].method` per D5.

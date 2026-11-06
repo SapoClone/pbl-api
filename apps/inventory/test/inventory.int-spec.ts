@@ -26,6 +26,7 @@ import { AddWarehouseStockBalances1791900000100 } from '../src/migrations/179190
 import { CreateM2InventoryCore1791900000200 } from '../src/migrations/1791900000200-create-m2-inventory-core';
 import { AllowReservationExpirySelect1792500000000 } from '../src/migrations/1792500000000-allow-reservation-expiry-select';
 import { DefaultBranchWarehouse1792700000000 } from '../src/migrations/1792700000000-default-branch-warehouse';
+import { StockIntegrity1793000000600 } from '../src/migrations/1793000000600-stock-integrity';
 import { IssuingService } from '../src/modules/issuing/issuing.service';
 import { ProcurementService } from '../src/modules/procurement/procurement.service';
 import { ReceivingService } from '../src/modules/receiving/receiving.service';
@@ -159,6 +160,7 @@ describe('inventory (Postgres)', () => {
           CreateM2InventoryCore1791900000200,
           AllowReservationExpirySelect1792500000000,
           DefaultBranchWarehouse1792700000000,
+          StockIntegrity1793000000600,
         ],
       }),
     );
@@ -205,7 +207,6 @@ describe('inventory (Postgres)', () => {
       'catalog_sku_projection',
       'warehouse_reservation_line',
       'warehouse_reservation',
-      'stock_balance_ledger',
       'stock_balance',
       'warehouse',
       'outbox_event',
@@ -217,6 +218,8 @@ describe('inventory (Postgres)', () => {
     ]) {
       await dataSource.query(`DELETE FROM ${table(name)}`);
     }
+    // the ledger is append-only (trigger): a reset is a TRUNCATE
+    await dataSource.query(`TRUNCATE ${table('stock_balance_ledger')}`);
     await learnBranch(TENANT_A);
   });
 
@@ -669,18 +672,15 @@ describe('inventory (Postgres)', () => {
         }),
       );
       warehouseId = warehouse.id;
+      // stock enters through a receipt document (D15)
       await as(TENANT_A, () =>
-        stock.receiveStockBalance({
+        receivingService.createReceipt({
           warehouseId,
-          skuId: SKU_ID_1,
-          qty: '5.000',
-        }),
-      );
-      await as(TENANT_A, () =>
-        stock.receiveStockBalance({
-          warehouseId,
-          skuId: SKU_ID_2,
-          qty: '2.000',
+          autoPost: true,
+          items: [
+            { skuId: SKU_ID_1, qty: '5.000' },
+            { skuId: SKU_ID_2, qty: '2.000' },
+          ],
         }),
       );
     });

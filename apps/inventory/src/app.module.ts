@@ -23,6 +23,7 @@ import { AddWarehouseStockBalances1791900000100 } from './migrations/17919000001
 import { CreateM2InventoryCore1791900000200 } from './migrations/1791900000200-create-m2-inventory-core';
 import { AllowReservationExpirySelect1792500000000 } from './migrations/1792500000000-allow-reservation-expiry-select';
 import { DefaultBranchWarehouse1792700000000 } from './migrations/1792700000000-default-branch-warehouse';
+import { StockIntegrity1793000000600 } from './migrations/1793000000600-stock-integrity';
 import { DocumentsController } from './modules/documents/documents.controller';
 import { DocumentsService } from './modules/documents/documents.service';
 import { IssuingController } from './modules/issuing/issuing.controller';
@@ -90,6 +91,7 @@ import { StockService } from './stock/stock.service';
         CreateM2InventoryCore1791900000200,
         AllowReservationExpirySelect1792500000000,
         DefaultBranchWarehouse1792700000000,
+        StockIntegrity1793000000600,
       ],
     }),
     PblEventsModule.forRoot({ service: 'inventory' }),
