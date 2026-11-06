@@ -1,3 +1,5 @@
+import { CreateTenantPlanQuota1792800000000 } from '../../src/migrations/1792800000000-create-tenant-plan-quota';
+import { PlanQuotaService } from '../../src/quota/plan-quota.service';
 /**
  * Reproducible Performance & EXPLAIN (ANALYZE, BUFFERS) Benchmark Suite
  * for SapoClone M1 Catalog Microservice.
@@ -122,6 +124,7 @@ async function main() {
         ...PRODUCER_MIGRATIONS,
         ...CONSUMER_MIGRATIONS,
         CreateCatalogTables1791900000200,
+        CreateTenantPlanQuota1792800000000,
       ],
     }),
   );
@@ -159,6 +162,7 @@ async function main() {
     TenantScopedRepository.forEntity(appDs, ProductEntity),
     TenantScopedRepository.forEntity(appDs, ProductVariantEntity),
     TenantScopedRepository.forEntity(appDs, UnitConversionEntity),
+    new PlanQuotaService(outbox),
   );
   const pricingService = new PricingService(
     appDs,

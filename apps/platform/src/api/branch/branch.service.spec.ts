@@ -53,6 +53,7 @@ describe('BranchService', () => {
   let expressionMap: { extraAppendedAndWhereCondition: string };
   let service: BranchService;
   let outbox: { add: jest.Mock };
+  let quota: { assertCanAdd: jest.Mock };
   const errorCodeOf = (promise: Promise<unknown>) =>
     promise.catch((e) => e.getResponse().errorCode);
   /** The service in a request of `tenantId` (TenantContext, set by @pbl/auth) */
@@ -127,11 +128,13 @@ describe('BranchService', () => {
       getCount: jest.fn().mockResolvedValue(0),
     } as unknown as Record<string, jest.Mock>;
     outbox = { add: jest.fn().mockResolvedValue(undefined) };
+    quota = { assertCanAdd: jest.fn().mockResolvedValue(undefined) };
     service = new BranchService(
       new TenantScopedRepository(
         repository as unknown as Repository<BranchEntity>,
       ),
       outbox as never,
+      quota as never,
     );
   });
 

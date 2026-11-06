@@ -23,6 +23,7 @@ import {
   assertNotLastActiveBranch,
   isBranchDeactivating,
 } from '../../domain/platform-domain';
+import { QuotaService } from '../subscription/quota.service';
 import { TenantEntity } from '../tenant/entities/tenant.entity';
 import { BranchResDto } from './dto/branch.res.dto';
 import { CreateBranchReqDto } from './dto/create-branch.req.dto';
@@ -40,6 +41,7 @@ export class BranchService {
     @InjectTenantScopedRepository(BranchEntity)
     private readonly branches: TenantScopedRepository<BranchEntity>,
     private readonly outbox: EventOutbox,
+    private readonly quota: QuotaService,
   ) {}
 
   /** `allowed`: the branch ids the caller may see, null for every branch */
@@ -104,6 +106,7 @@ export class BranchService {
     });
     // the event commits with the branch, or neither does
     const saved = await this.branches.transaction(async (branches, em) => {
+      await this.quota.assertCanAdd(em, TenantContext.require(), 'branches');
       const row = await this.save(branch, branches);
       await this.outbox.add(
         em,

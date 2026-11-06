@@ -75,11 +75,13 @@ failed jobs and their retry, the audit log, announcements (insight); integration
 (integration); accounts and platform admins, settings and support sessions (platform). The branch's mock data covers
 them until their endpoints exist. Other gaps in what is built:
 
-- **No invitation email.** An owner created by an admin has no password, and the set-password flow
-  (`forgot-password`, `reset-password`) is still a placeholder, so such an owner cannot sign in yet. An owner who
-  already has an account (the admin names their email) can.
-- **No quota enforcement.** Plans and usage are recorded and shown, but creating a second branch on `free` is not
-  refused yet (design step 4, `Q001`). Products and storage count 0 until catalog reports them.
+- **No invitation email, on purpose.** An owner created by an admin has no password and cannot sign in. The decision
+  is that owners sign up themselves and start on `free`; use create-for-owner only with the email of an existing
+  account.
+- **Plan limits are enforced** (409 `Q001`, `details: { key, used, limit, planCode }`, `key` is `branches`, `users`,
+  `products` or `storageGb`): creating a branch, adding a member, creating a product and storing a file are refused
+  when the store's plan has no room. The web turns the details into the upgrade hint. Catalog reports products and
+  storage to `/admin/usage` through an event, so those two lag the truth by the event's delivery time.
 - **Store `code` is not in the store-facing DTOs** (only the admin ones).
 - **Platform-scope audit.** The tenant events reach insight's audit log, per store; plan edits are told to every store
   on the plan. Actions that belong to no store need their own design.

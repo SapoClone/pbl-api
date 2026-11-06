@@ -1,3 +1,5 @@
+import { CreateTenantPlanQuota1792800000000 } from '../../apps/catalog/src/migrations/1792800000000-create-tenant-plan-quota';
+import { PlanQuotaService } from '../../apps/catalog/src/quota/plan-quota.service';
 /**
  * Milestone M8 — Full-System End-to-End Business Workflows (Workflows A through G)
  * Real PostgreSQL Multi-Schema Integration Suite across all 8 Bounded Contexts:
@@ -510,6 +512,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           ...PRODUCER_MIGRATIONS,
           ...CONSUMER_MIGRATIONS,
           CreateCatalogTables1791900000200,
+          CreateTenantPlanQuota1792800000000,
         ],
       }),
     );
@@ -530,6 +533,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       TenantScopedRepository.forEntity(catalogDs, ProductEntity),
       TenantScopedRepository.forEntity(catalogDs, ProductVariantEntity),
       TenantScopedRepository.forEntity(catalogDs, UnitConversionEntity),
+      new PlanQuotaService(outbox),
     );
     catalogPricing = new PricingService(
       catalogDs,

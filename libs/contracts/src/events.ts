@@ -593,6 +593,24 @@ export const CATALOG_VARIANT_DEACTIVATED = {
   version: 1,
 } as const satisfies EventDefinition;
 
+/**
+ * What a store uses of its plan's catalog limits, as absolute numbers (so a lost or reordered event is corrected by the
+ * next one). Platform keeps it in `tenant_usage` for the admin's usage screens; catalog enforces the limits itself.
+ */
+export const CATALOG_USAGE_CHANGED = {
+  type: 'catalog.usage.changed',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export interface CatalogUsageChangedPayload {
+  /** Products that count against the plan: draft, active and inactive; archived ones do not */
+  products: number;
+  /** Bytes of stored uploads, in megabytes rounded up */
+  storageMb: number;
+  /** ISO 8601; an older event than the row is ignored */
+  measuredAt: string;
+}
+
 export const CATALOG_PRICE_CHANGED = {
   type: 'catalog.price.changed',
   version: 1,

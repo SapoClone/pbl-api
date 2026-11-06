@@ -97,6 +97,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const r = exception.getResponse() as {
       errorCode: ErrorCode;
       message: string;
+      details?: Record<string, unknown>;
     };
     const statusCode = exception.getStatus();
 
@@ -109,6 +110,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message:
         r.message ||
         this.i18n.t(r.errorCode as unknown as keyof I18nTranslations),
+      ...(r.details ? { details: r.details } : {}),
     };
 
     this.logger.debug(exception);
