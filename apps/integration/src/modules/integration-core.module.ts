@@ -3,9 +3,12 @@ import { PblPropagationModule } from '@pbl/common';
 import { IntegrationEventsConsumer } from '../consumers/integration-events.consumer';
 import { ProviderRateLimiterService } from '../infrastructure/rate-limiting/provider-rate-limiter.service';
 import { SalesOrderClient } from '../infrastructure/sales-client/sales-order.client';
+import { BranchBlockersController } from '../internal/branch-blockers.controller';
+import { BranchBlockersService } from '../internal/branch-blockers.service';
 import { LazadaProviderAdapter } from '../providers/lazada/lazada.adapter';
 import { ProviderRegistryService } from '../providers/provider-registry.service';
 import { ShopeeProviderAdapter } from '../providers/shopee/shopee.adapter';
+import { TenantStatusHandler } from '../tenant-status/tenant-status.handler';
 import { BranchScopeService } from './branch-scope/branch-scope.service';
 import { ConflictsController } from './conflicts/conflicts.controller';
 import { ConflictsService } from './conflicts/conflicts.service';
@@ -34,8 +37,10 @@ import { WebhooksService } from './webhooks/webhooks.service';
     ConflictsController,
     ReconciliationController,
     WebhooksController,
+    BranchBlockersController,
   ],
   providers: [
+    BranchBlockersService,
     ProviderRateLimiterService,
     ShopeeProviderAdapter,
     LazadaProviderAdapter,
@@ -51,6 +56,7 @@ import { WebhooksService } from './webhooks/webhooks.service';
     ConflictsService,
     ReconciliationService,
     IntegrationEventsConsumer,
+    TenantStatusHandler,
   ],
   exports: [
     ProviderRateLimiterService,

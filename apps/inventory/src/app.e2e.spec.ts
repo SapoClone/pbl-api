@@ -35,6 +35,7 @@ import {
   ReservationsService,
   StockShortageError,
 } from './stock/reservations.service';
+import { ReturnReceiptsController } from './stock/return-receipts.controller';
 import { StockController } from './stock/stock.controller';
 import { StockService } from './stock/stock.service';
 
@@ -133,7 +134,6 @@ const reservations = {
 const stock = {
   receive: jest.fn(async () => []),
   list: jest.fn(async () => ({ data: [], pagination: {} })),
-  receiveStockBalance: jest.fn(async (dto) => dto),
   listStockBalances: jest.fn(async () => []),
 };
 const warehouses = {
@@ -244,6 +244,7 @@ const reserveBody = {
     ProcurementController,
     ReservationsController,
     WarehouseReservationsController,
+    ReturnReceiptsController,
   ],
   providers: [
     { provide: WarehouseScopeService, useValue: fakeScope },
@@ -325,7 +326,6 @@ describe('Inventory service bootstrap', () => {
         200,
         ['inventory.approve'],
       ],
-      ['post', '/api/v1/stock-balances/receipts', 201, ['inventory.create']],
       ['get', '/api/v1/stock-balances', 200, STOCK_LOOKUP],
       ['get', '/api/v1/warehouses', 200, ['inventory.view']],
       ['post', '/api/v1/warehouses', 201, ['inventory.create']],
@@ -398,14 +398,12 @@ describe('Inventory service bootstrap', () => {
     ];
     const bodyOf = (method: string, path: string): unknown => {
       if (path === '/api/v1/stock-receipts')
-        return { branchId: BRANCH_A, items: [{ sku: 'AO-01', quantity: 5 }] };
+        return { warehouseId: WH_A, items: [{ skuId: SKU_ID, qty: '5.000' }] };
       if (path === '/internal/reservations')
         return { ...reserveBody, branchId: BRANCH_A };
       if (path === '/api/v1/warehouses' && method === 'post')
         return { code: 'WH-01', name: 'Main', branchId: BRANCH_A };
       if (path.endsWith('/warehouses/' + WH_A)) return { name: 'Renamed' };
-      if (path === '/api/v1/stock-balances/receipts')
-        return { warehouseId: WH_A, skuId: SKU_ID, qty: '1.000' };
       if (path === '/api/v1/stock-thresholds')
         return { warehouseId: WH_A, skuId: SKU_ID, minQty: '1.000' };
       if (path === '/api/v1/stock-issues')
@@ -487,6 +485,23 @@ describe('Inventory service bootstrap', () => {
         expect(res.status).toBe(ok);
       },
     );
+
+    it('passes the Idempotency-Key of POST /stock-receipts to the receipt service', async () => {
+      receiving.createReceipt.mockClear();
+      await request(url())
+        .post('/api/v1/stock-receipts')
+        .set('Authorization', withPerms('inventory.create'))
+        .set('Idempotency-Key', 'receipt-key-1')
+        .send({
+          warehouseId: WH_A,
+          items: [{ skuId: SKU_ID, qty: '1.000', unitCost: 1 }],
+        })
+        .expect(201);
+      expect(receiving.createReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({ warehouseId: WH_A }),
+        'receipt-key-1',
+      );
+    });
 
     it('auto-posting a receipt or an issue needs inventory.approve as well', async () => {
       const receipt = {
@@ -655,11 +670,6 @@ describe('Inventory service bootstrap', () => {
         })
         .expect(404);
       await request(url())
-        .post('/api/v1/stock-receipts')
-        .set('Authorization', view())
-        .send({ branchId: BRANCH_B, items: [{ sku: 'AO-01', quantity: 1 }] })
-        .expect(404);
-      await request(url())
         .post('/api/v1/stocktakes')
         .set('Authorization', view())
         .send({ warehouseId: WH_B })
@@ -782,6 +792,52 @@ describe('Inventory service bootstrap', () => {
         .post(`/internal/v1/reservations/${ORDER}/release`)
         .set(h)
         .expect(200);
+    });
+
+    it('posts a return receipt for the service identity: token, tenant and key required, RETURN and autoPost forced', async () => {
+      process.env.INTERNAL_S2S_TOKEN = TOKEN;
+      receiving.createReceipt.mockClear();
+      const body = {
+        warehouseId: WH_A,
+        sourceType: 'MANUAL',
+        autoPost: false,
+        items: [{ skuId: SKU_ID, qty: '1.000', unitCost: 65000 }],
+      };
+      await request(url())
+        .post('/internal/v1/return-receipts')
+        .set('Authorization', bearer())
+        .set('Idempotency-Key', 'return-receipt:r1')
+        .send(body)
+        .expect(401);
+      const h = { 'x-internal-token': TOKEN };
+      await request(url())
+        .post('/internal/v1/return-receipts')
+        .set({ ...h, 'Idempotency-Key': 'k' })
+        .send(body)
+        .expect(400);
+      await request(url())
+        .post('/internal/v1/return-receipts')
+        .set({ ...h, 'X-Tenant-Id': TENANT })
+        .send(body)
+        .expect(400);
+      expect(receiving.createReceipt).not.toHaveBeenCalled();
+      await request(url())
+        .post('/internal/v1/return-receipts')
+        .set({
+          ...h,
+          'X-Tenant-Id': TENANT,
+          'Idempotency-Key': 'return-receipt:r1',
+        })
+        .send(body)
+        .expect(201);
+      expect(receiving.createReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          warehouseId: WH_A,
+          sourceType: 'RETURN',
+          autoPost: true,
+        }),
+        'return-receipt:r1',
+      );
     });
 
     it('also guards the legacy internal routes', async () => {
@@ -920,8 +976,14 @@ describe('Inventory service bootstrap', () => {
     await request(url())
       .post('/api/v1/stock-receipts')
       .set('Authorization', as(['owner']))
-      .send({ branchId: BRANCH, items: [{ sku: 'AO-01', quantity: -1 }] })
+      .send({ warehouseId: WH_A, items: [{ skuId: SKU_ID, qty: '-1' }] })
       .expect(422);
+    // the older branch receive (no document) is gone (D15)
+    await request(url())
+      .post('/api/v1/stock-receipts')
+      .set('Authorization', as(['owner']))
+      .send({ branchId: BRANCH, items: [{ sku: 'AO-01', quantity: 5 }] })
+      .expect(410);
     await request(url())
       .get('/api/v1/stock?limit=101')
       .set('Authorization', as(['owner']))

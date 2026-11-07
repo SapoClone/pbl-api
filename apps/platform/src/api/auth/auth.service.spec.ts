@@ -14,6 +14,7 @@ import {
   AccountEntity,
   AccountStatus,
 } from '../account/entities/account.entity';
+import { PlatformSettingReader } from '../platform-setting/platform-setting.reader';
 import { MembershipService } from '../tenant/membership.service';
 import { AccessTokenService } from './access-token.service';
 import { AuthService } from './auth.service';
@@ -30,6 +31,10 @@ import { SessionService } from './session.service';
 
 jest.mock('@/utils/password.util', () => ({ verifyPassword: jest.fn() }));
 
+jest.mock('../subscription/issue-code', () => ({
+  issueCode: jest.fn(async () => 'US00007'),
+}));
+
 describe('AuthService', () => {
   let service: AuthService;
   let configServiceValue: Partial<Record<keyof ConfigService, jest.Mock>>;
@@ -45,6 +50,7 @@ describe('AuthService', () => {
   >;
   let accessTokenServiceValue: { sign: jest.Mock };
   let outboxValue: { add: jest.Mock };
+  let settingsValue: { lockout: jest.Mock };
   let dataSourceValue: { transaction: jest.Mock };
   let sessionServiceValue: { revokeAll: jest.Mock };
   let membershipServiceValue: {
@@ -93,6 +99,11 @@ describe('AuthService', () => {
     };
 
     accessTokenServiceValue = { sign: jest.fn() };
+    settingsValue = {
+      lockout: jest
+        .fn()
+        .mockResolvedValue({ maxAttempts: 5, windowMs: 15 * 60 * 1000 }),
+    };
     outboxValue = { add: jest.fn().mockResolvedValue(undefined) };
     dataSourceValue = {
       transaction: jest.fn(async (work: (em: object) => unknown) => work({})),
@@ -137,6 +148,7 @@ describe('AuthService', () => {
         { provide: getDataSourceToken(), useValue: dataSourceValue },
         { provide: EventOutbox, useValue: outboxValue },
         { provide: SessionService, useValue: sessionServiceValue },
+        { provide: PlatformSettingReader, useValue: settingsValue },
       ],
     }).compile();
 
@@ -160,12 +172,17 @@ describe('AuthService', () => {
       const verificationToken = 'signed.jwt.token';
 
       jest.spyOn(AccountEntity, 'exists').mockResolvedValue(false);
-      jest
-        .spyOn(AccountEntity.prototype, 'save')
-        .mockImplementation(async function (this: AccountEntity) {
-          this.id = 'user-id-1' as AccountEntity['id'];
-          return this;
-        });
+      const em = {
+        save: jest.fn(async (account: AccountEntity) => {
+          account.id = 'user-id-1' as AccountEntity['id'];
+          return account;
+        }),
+      };
+      jest.spyOn(AccountEntity, 'getRepository').mockReturnValue({
+        manager: {
+          transaction: async (work: (m: typeof em) => unknown) => work(em),
+        },
+      } as never);
       (jwtServiceValue.signAsync as jest.Mock).mockResolvedValue(
         verificationToken,
       );
@@ -175,7 +192,9 @@ describe('AuthService', () => {
       expect(AccountEntity.exists).toHaveBeenCalledWith({
         where: { email: dto.email },
       });
-      expect(AccountEntity.prototype.save).toHaveBeenCalled();
+      expect(em.save).toHaveBeenCalledWith(
+        expect.objectContaining({ email: dto.email, code: 'US00007' }),
+      );
       expect(cacheManagerValue.set).toHaveBeenCalledWith(
         expect.any(String),
         verificationToken,
@@ -188,7 +207,7 @@ describe('AuthService', () => {
       expect(result.userId).toBe('user-id-1');
 
       (AccountEntity.exists as jest.Mock).mockRestore();
-      (AccountEntity.prototype.save as jest.Mock).mockRestore();
+      (AccountEntity.getRepository as jest.Mock).mockRestore();
     });
   });
 
@@ -584,6 +603,23 @@ describe('AuthService', () => {
         '"failed_login_count" + 1 >= :max',
       );
       expect(set.lockedUntil()).toContain(':lockedUntil');
+    });
+
+    it('uses the lockout numbers of the platform settings', async () => {
+      settingsValue.lockout.mockResolvedValue({
+        maxAttempts: 8,
+        windowMs: 30 * 60 * 1000,
+      });
+      (verifyPassword as jest.Mock).mockResolvedValue(false);
+      const before = Date.now();
+
+      await expect(login()).rejects.toThrow(UnauthorizedException);
+
+      const params = queryBuilder.setParameters.mock.calls[0][0];
+      expect(params.max).toBe(8);
+      expect(params.lockedUntil.getTime()).toBeGreaterThanOrEqual(
+        before + 30 * 60 * 1000,
+      );
     });
 
     it('does not count a failure for an unknown email', async () => {

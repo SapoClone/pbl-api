@@ -34,6 +34,7 @@ import {
 import { ProviderRateLimiterService } from '../src/infrastructure/rate-limiting/provider-rate-limiter.service';
 import { CreateM6IntegrationCore1791900000200 } from '../src/migrations/1791900000200-create-m6-integration-core';
 import { AllowSyncJobSchedulerSelect1792500000000 } from '../src/migrations/1792500000000-allow-sync-job-scheduler-select';
+import { CreateTenantStatus1793100000420 } from '../src/migrations/1793100000420-create-tenant-status';
 import { ConflictsService } from '../src/modules/conflicts/conflicts.service';
 import { ConnectionsService } from '../src/modules/connections/connections.service';
 import { InventorySyncService } from '../src/modules/inventory-sync/inventory-sync.service';
@@ -45,6 +46,8 @@ import { WebhooksService } from '../src/modules/webhooks/webhooks.service';
 import { LazadaProviderAdapter } from '../src/providers/lazada/lazada.adapter';
 import { ProviderRegistryService } from '../src/providers/provider-registry.service';
 import { ShopeeProviderAdapter } from '../src/providers/shopee/shopee.adapter';
+import { TenantStatusEntity } from '../src/tenant-status/tenant-status.entity';
+import { TenantStatusHandler } from '../src/tenant-status/tenant-status.handler';
 import { InMemorySalesOrderClient } from './support/in-memory-sales-order.client';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -95,6 +98,7 @@ describe('Integration M6 Core (Real PostgreSQL Integration, Concurrency & Fault-
       ...databaseOptions({
         entities: [
           ...M6_INTEGRATION_ENTITIES,
+          TenantStatusEntity,
           ...PRODUCER_ENTITIES,
           ...CONSUMER_ENTITIES,
         ],
@@ -103,6 +107,7 @@ describe('Integration M6 Core (Real PostgreSQL Integration, Concurrency & Fault-
           ...CONSUMER_MIGRATIONS,
           CreateM6IntegrationCore1791900000200,
           AllowSyncJobSchedulerSelect1792500000000,
+          CreateTenantStatus1793100000420,
         ],
       }),
     });
@@ -549,6 +554,76 @@ describe('Integration M6 Core (Real PostgreSQL Integration, Concurrency & Fault-
     });
 
     webhooksService.injectPersistenceFailure(conn.connectionKey, false);
+  });
+
+  it('a suspended store: its webhooks get 503 TENANT_SUSPENDED (retry later), its jobs are skipped, and it works again once reactivated (D35)', async () => {
+    const secret = 'lazada_secret_susp_1';
+    const conn = await runAsTenant(TENANT_A, () =>
+      connectionsService.createConnection(ACTOR_OWNER, {
+        provider: 'LAZADA',
+        externalShopId: 'LAZ-SHOP-SUSP',
+        shopName: 'Lazada Suspended Store',
+        branchId: BRANCH_A,
+        warehouseId: WAREHOUSE_A,
+        accessToken: 'laz_at_susp',
+        refreshToken: 'laz_rt_susp',
+        webhookSecret: secret,
+      }),
+    );
+    const rawBody = JSON.stringify({
+      message_type: 'TRADE_ORDER',
+      seller_id: 'LAZ-SHOP-SUSP',
+      msg_id: 'LAZ-MSG-SUSP-1',
+      timestamp: Math.floor(Date.now() / 1000),
+      data: { order_id: 'LAZ-ORD-SUSP-1', status: 'pending' },
+    });
+    const ingest = () =>
+      webhooksService.ingestWebhook({
+        provider: 'LAZADA',
+        connectionKey: conn.connectionKey,
+        rawBody,
+        headers: {
+          'x-lazada-signature': computeLazadaWebhookSignature(rawBody, secret),
+        },
+        webhookUrl: `https://api.sapoclone.local/webhooks/v1/lazada/${conn.connectionKey}`,
+      });
+    const handler = new TenantStatusHandler();
+    const statusEvent = (to: string, occurredAt: string) =>
+      ({
+        tenantId: TENANT_A,
+        occurredAt,
+        payload: { tenantId: TENANT_A, from: 'active', to, reason: null },
+      }) as never;
+    const apply = (to: string, occurredAt: string) =>
+      dataSource.transaction((em) =>
+        handler.onStatusChanged(statusEvent(to, occurredAt), em),
+      );
+
+    await apply('suspended', '2031-01-02T00:00:00.000Z');
+    await expect(ingest()).rejects.toMatchObject({
+      status: 503,
+      response: { errorCode: 'TENANT_SUSPENDED' },
+    });
+    // an older event (redelivered) does not undo the suspension
+    await apply('active', '2031-01-01T00:00:00.000Z');
+    await expect(ingest()).rejects.toMatchObject({ status: 503 });
+
+    // its due jobs are not picked up by the worker
+    await dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.sync_job_scheduler', 'on', true)`);
+      const rows = await em.query(
+        `SELECT DISTINCT j.tenant_id FROM "${schema}"."sync_jobs" j
+         WHERE j.status IN ('PENDING', 'RETRY_SCHEDULED')
+           AND NOT EXISTS (SELECT 1 FROM "${schema}"."tenant_status" ts
+                           WHERE ts.tenant_id = j.tenant_id AND ts.status = 'suspended')`,
+      );
+      expect(rows.map((r: { tenant_id: string }) => r.tenant_id)).not.toContain(
+        TENANT_A,
+      );
+    });
+
+    await apply('active', '2031-01-03T00:00:00.000Z');
+    await expect(ingest()).resolves.toMatchObject({ acknowledged: true });
   });
 
   it('Test G (Out-of-order order statuses): SHIPPED before READY_TO_SHIP ignores stale regression; CANCELLED after DELIVERED raises ORDER_STATE_CONFLICT', async () => {

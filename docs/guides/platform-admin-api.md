@@ -41,15 +41,24 @@ calls of the `feature/web-admin-01` branch map onto it, and what is still missin
 | `GET /admin/subscriptions`                          | 11 Thuê bao               | `q`, `planCode`, `status`, `isExpiringSoon`, `tenantId`; `counts`                       |
 | `GET /admin/subscriptions/{id}`                     | 12 Chi tiết thuê bao      | current payment and the last 20 history entries                                         |
 | `GET /admin/subscriptions/{id}/events`              | 12 (history paging)       |                                                                                         |
-| `POST /admin/subscriptions/{id}/payments`           | record payment            | a period that runs past the expiry renews the subscription                              |
+| `POST /admin/subscriptions/{id}/payments`           | record payment            | a period that runs past the expiry renews the subscription (also one in grace); 400 `S013` on `free` or a closed subscription, 400 `S014` when `amount` is not price x months and there is no `note` |
+| `POST /admin/subscriptions/resync`                  | (deploy step)             | `super_admin`; re-announces every current plan so catalog has the limits of stores that predate the events |
 | `POST /admin/subscriptions/change-plan/check`       | 13 Gán / Đổi gói          | dry run: usage against the new limits                                                   |
 | `POST /admin/subscriptions/change-plan`             | 13                        | refused when over the new limits                                                        |
 | `GET /admin/usage`, `GET /admin/usage/{tenantId}`   | 14 Hạn mức                | `warning=normal\|near_limit\|at_limit`; fullest first                                   |
+| `GET /admin/accounts`                               | 07 Người dùng             | `q` (name, email, code), `tenantId`, `role` (the five seeded roles or `custom`), `status`; each item lists its `memberships` |
+| `GET /admin/accounts/{id}`                          | 08 Chi tiết người dùng    | `code` (`US00021`), `phoneMasked`, memberships with the store code, `activeSessionCount`  |
+| `GET /admin/accounts/{id}/sessions`                 | 08 (Phiên đăng nhập)      | one row per live login: `sessionId`, store, `device`, `ip`, `createdAt`, `lastUsedAt`, `expiresAt`; paginated |
+| `POST /admin/accounts/{id}/revoke-sessions`         | 08 (Thu hồi tất cả)       | `{ revokedCount }`; the account's tokens stop working at once, in every store            |
+| `GET /admin/admins`                                 | 07 (Quản trị viên)        | `q`, `role`, `status`                                                                    |
+| `POST /admin/admins`, `PATCH /admin/admins/{id}`    | admin management          | `super_admin`; `A010` email taken, `A011` cannot disable or demote yourself or the last super admin; disabling ends their sessions |
+| `GET /admin/settings`, `PATCH /admin/settings`      | 23 Cấu hình hệ thống      | `PATCH` is `super_admin` and takes any subset of `general`, `security`, `email`; 422 for an unknown timezone or locale, `lockoutMaxAttempts` < 3, `auditRetentionMonths` < 12 |
 
 Error codes the screens will want: `tenant.error.subdomain_exists` (T001), `tenant.error.already_suspended` (T006),
 `tenant.error.not_suspended` (T007), `tenant.error.owner_account_disabled` (T008), `plan.error.not_active` (P001),
 `plan.error.code_exists` (P002), `subscription.error.quota_exceeded` (S010; the message names the key and the numbers),
-`subscription.error.same_plan_same_period` (S011), `subscription.error.payment_overlaps` (S012). These keep this
+`subscription.error.same_plan_same_period` (S011), `subscription.error.payment_overlaps` (S012), `subscription.error.payment_not_allowed` (S013),
+`subscription.error.payment_note_required` (S014). These keep this
 repository's numbering, which differs from contract 04 where an old code was already taken (T001 is the subdomain,
 `S001` is a schedule overlap).
 
@@ -65,6 +74,10 @@ repository's numbering, which differs from contract 04 where an old code was alr
 | `GET /admin/subscriptions`, `/{id}`                 | same paths                                                                     | `business` is `tenant: { id, code, name }`; `cycle` is `billingCycle`         |
 | `POST /admin/subscriptions/{id}/change-plan`        | `POST /admin/subscriptions/change-plan` (body has `tenantId`) after `.../check` | the plan is chosen by store, not by subscription id                           |
 | `GET /admin/limits`                                 | `GET /admin/usage`                                                             | `limits` is `usage`; `alert` is `warning`                                      |
+| `GET /admin/users`                                  | `GET /admin/accounts`                                                          | `users` is `accounts`; `organization` is `memberships[].tenantName`; `lastLogin` is `lastLoginAt` |
+| `GET /admin/users/{id}`                             | `GET /admin/accounts/{id}`, `.../sessions`                                     | the branch passes a business id here; pass the account id. Activities (`activities`) need the audit log (insight), not built |
+| `GET /admin/businesses/{id}/users`                  | `GET /admin/accounts?tenantId={id}`                                            |                                                                               |
+| `GET` / `PATCH /admin/settings` (flat)              | same paths, grouped                                                            | `general`, `security` (numbers and booleans, not the `loginLockPolicy` and `resetLinkPolicy` strings), `email` (`senderName`, `senderEmail`); `language` is `defaultLocale`; `emailReplyTo` and `emailFooter` do not exist |
 
 The branch's own pagination type and its `page`/`pageSize` query need the change described under Conventions.
 
@@ -72,14 +85,40 @@ The branch's own pagination type and its `page`/`pageSize` query need the change
 
 These are in contract 04 and in the branch, and have no endpoint: the dashboard (`/admin/dashboard`), monitoring,
 failed jobs and their retry, the audit log, announcements (insight); integration connections and their detail
-(integration); accounts and platform admins, settings and support sessions (platform). The branch's mock data covers
+(integration); support sessions (platform). The branch's mock data covers
 them until their endpoints exist. Other gaps in what is built:
 
-- **No invitation email.** An owner created by an admin has no password, and the set-password flow
-  (`forgot-password`, `reset-password`) is still a placeholder, so such an owner cannot sign in yet. An owner who
-  already has an account (the admin names their email) can.
-- **No quota enforcement.** Plans and usage are recorded and shown, but creating a second branch on `free` is not
-  refused yet (design step 4, `Q001`). Products and storage count 0 until catalog reports them.
+- **No invitation email, on purpose.** An owner created by an admin has no password and cannot sign in. The decision
+  is that owners sign up themselves and start on `free`; use create-for-owner only with the email of an existing
+  account.
+- **Plan limits are enforced** (409 `Q001`, `details: { key, used, limit, planCode }`, `key` is `branches`, `users`,
+  `products` or `storageGb`): creating a branch, adding a member, creating a product and storing a file are refused
+  when the store's plan has no room. The web turns the details into the upgrade hint. Catalog reports products and
+  storage to `/admin/usage` through an event, so those two lag the truth by the event's delivery time.
+- **A new admin has no way to set a password but the one the super admin types.** Contract 04 queues a set-password
+  email; there is no email flow for admins, so `POST /admin/admins` takes an optional `password` (same policy as the
+  bootstrap command: 12 characters or more of letters, digits and `!#$%&*@^`). Without it the admin cannot sign in.
+- **Settings:** `security.lockoutMaxAttempts` / `lockoutWindowMinutes` now drive both sign-ins (never under 3
+  attempts, cached 30 seconds) and `billing.graceDays` (default 7) drives the expiry job; the reset-link and
+  audit-retention values still wait for the flows that need them.
+- **Plans expire.** A job in platform (every 10 minutes, one instance at a time through a Postgres advisory lock) moves
+  a paid subscription past its end date to `past_due`, keeps the paid limits for `billing.graceDays` days, then closes it
+  (`expired`) and starts `free` with no end date. Nothing is deleted. A payment in the grace renews the same
+  subscription; after the fall back to `free`, renewing is a change of plan. **Trials are not offered**: `counts.trial`
+  is always 0 and the web hides the trial tab.
+- **Deploy step: resync plans.** After deploying catalog's plan projection, run
+  `POST /platform/api/v1/admin/subscriptions/resync` (super admin) or the task
+  `node dist/apps/platform/apps/platform/src/scripts/resync-plans.js`, once and again whenever a service that
+  consumes plan events is added. Until then a store that predates the events has no limits in catalog (fail open,
+  one WARN per store in catalog's log). It is safe to repeat.
+- **Suspension reaches the other services** through `platform.tenant.status_changed`: sales and integration keep a
+  `tenant_status` projection; the internal order intake answers 403 `TENANT_SUSPENDED`, marketplace webhooks 503
+  `TENANT_SUSPENDED` (the marketplace retries) and the sync worker skips the store's jobs. A store suspended before
+  these services were deployed is not known to them until its next status event.
+- **Accounts have no verified-email state yet**, so `status=pending_verification` matches nothing and
+  `isEmailVerified` is not in the detail.
+- **No events for admin actions** (`platform.admin.created`, `platform.settings.changed`, `...sessions_revoked`): they
+  belong to no store, and the platform-scope audit below comes first.
 - **Store `code` is not in the store-facing DTOs** (only the admin ones).
 - **Platform-scope audit.** The tenant events reach insight's audit log, per store; plan edits are told to every store
   on the plan. Actions that belong to no store need their own design.

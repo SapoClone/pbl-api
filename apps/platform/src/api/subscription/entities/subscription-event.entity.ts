@@ -13,6 +13,8 @@ export enum SubscriptionEventType {
   RENEWED = 'renewed',
   UPGRADED = 'upgraded',
   DOWNGRADED = 'downgraded',
+  /** A paid plan ran past its end date: it is in grace and keeps its limits */
+  PAST_DUE = 'past_due',
   EXPIRED = 'expired',
   CANCELLED = 'cancelled',
 }

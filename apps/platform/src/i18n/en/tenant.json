@@ -8,6 +8,8 @@
     "branch_not_found": "The branch does not belong to this store",
     "already_suspended": "This store is already locked",
     "not_suspended": "This store is not locked",
-    "owner_account_disabled": "The owner's account is disabled"
+    "owner_account_disabled": "The owner's account is disabled",
+    "store_limit": "An account can own at most 3 stores",
+    "member_blocked": "The member cannot be removed yet. See the reasons"
   }
 }

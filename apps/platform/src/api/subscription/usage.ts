@@ -40,7 +40,7 @@ export function usageSql(dataSource: DataSource): string {
   return `
     SELECT t."id" AS tenant_id,
       (SELECT count(*)::int FROM ${branch} b WHERE b."tenant_id" = t."id" AND b."deleted_at" IS NULL) AS branches_used,
-      (SELECT count(*)::int FROM ${member} m WHERE m."tenant_id" = t."id") AS users_used,
+      (SELECT count(*)::int FROM ${member} m WHERE m."tenant_id" = t."id" AND m."status" = 'active') AS users_used,
       COALESCE(u."products_used", 0) AS products_used,
       COALESCE(u."storage_mb_used", 0) AS storage_mb_used
     FROM ${tenant} t

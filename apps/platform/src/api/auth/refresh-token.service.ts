@@ -119,11 +119,14 @@ export class RefreshTokenService {
     );
   }
 
-  /** The live logins of an account: one unrevoked, unexpired token per family. */
-  listActive(subjectId: string): Promise<RefreshTokenEntity[]> {
+  /** The live logins of an account (or of a platform admin): one unrevoked, unexpired token per family. */
+  listActive(
+    subjectId: string,
+    subjectType: AccessTokenSubjectType = 'account',
+  ): Promise<RefreshTokenEntity[]> {
     return this.repository.find({
       where: {
-        subjectType: 'account',
+        subjectType,
         subjectId: subjectId as Uuid,
         revokedAt: IsNull(),
         expiresAt: MoreThan(new Date()),
@@ -138,11 +141,15 @@ export class RefreshTokenService {
    */
   async revokeActiveFamilies(
     subjectId: string,
-    options: { tenantId?: string; exceptFamilyId?: string } = {},
+    options: {
+      tenantId?: string;
+      exceptFamilyId?: string;
+      subjectType?: AccessTokenSubjectType;
+    } = {},
   ): Promise<string[]> {
     const rows = await this.repository.find({
       where: {
-        subjectType: 'account',
+        subjectType: options.subjectType ?? 'account',
         subjectId: subjectId as Uuid,
         revokedAt: IsNull(),
         ...(options.tenantId ? { tenantId: options.tenantId as Uuid } : {}),

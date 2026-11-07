@@ -9,6 +9,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthUser, PblAuthModule } from '@pbl/auth';
 import { Cache } from 'cache-manager';
 import { AccountEntity } from '../account/entities/account.entity';
+import { PlatformSettingReader } from '../platform-setting/platform-setting.reader';
 import { MembershipModule } from '../tenant/membership.module';
 import { AccessTokenModule } from './access-token.module';
 import { AccessTokenService } from './access-token.service';
@@ -52,7 +53,12 @@ import { SessionService } from './session.service';
     }),
   ],
   controllers: [AuthController, JwksController],
-  providers: [AuthService, RefreshTokenService, SessionService],
+  providers: [
+    AuthService,
+    RefreshTokenService,
+    SessionService,
+    PlatformSettingReader,
+  ],
   exports: [AuthService, SessionService, RefreshTokenService],
 })
 export class AuthModule {}

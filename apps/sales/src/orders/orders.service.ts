@@ -103,7 +103,7 @@ export function hashCheckoutRequest(dto: CreateCheckoutReqDto): string {
     .update(
       JSON.stringify({
         branchId: dto.branchId,
-        warehouseId: dto.warehouseId,
+        warehouseId: dto.warehouseId ?? null,
         paymentMethod: dto.paymentMethod,
         customerName: dto.customerName ?? null,
         items: dto.items.map((i) => [
@@ -323,6 +323,11 @@ export class OrdersService {
     }
 
     await this.assertActiveBranch(dto.branchId);
+    // D2: the branch's own warehouse, resolved (or the named one validated) by inventory
+    const saleWarehouse = await this.inventory.resolveSaleWarehouse(
+      dto.branchId,
+      dto.warehouseId,
+    );
 
     const checkoutId = orderIdFor(tenantId, `chk:${idempotencyKey}`);
     const reservationIdempotencyKey = reservationIdempotencyKeyFor(
@@ -347,7 +352,7 @@ export class OrdersService {
     workflow.idempotencyKey = idempotencyKey;
     workflow.requestSha256 = requestSha256;
     workflow.branchId = dto.branchId;
-    workflow.warehouseId = dto.warehouseId;
+    workflow.warehouseId = saleWarehouse.id;
     workflow.paymentMethod = dto.paymentMethod;
     workflow.customerName = dto.customerName ?? null;
     workflow.linesJson = linesJson;
@@ -503,6 +508,7 @@ export class OrdersService {
           callerService: 'sales',
           sourceRefType: 'ORDER',
           sourceRefId: workflow.id,
+          branchId: workflow.branchId,
           ttlSeconds: 900,
           lines: workflow.linesJson.map((line) => ({
             warehouseId: workflow.warehouseId,

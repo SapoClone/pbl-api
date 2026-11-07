@@ -1,7 +1,10 @@
+import { ErrorCode } from '@/constants/error-code.constant';
+import { ConflictCodeException } from '@/exceptions/coded.exception';
 import { isUniqueViolation } from '@/utils/db-errors';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   InjectTenantScopedRepository,
+  TenantContext,
   TenantScopedRepository,
 } from '@pbl/common';
 import { plainToInstance } from 'class-transformer';
@@ -43,7 +46,27 @@ export class BranchSettingService {
       ),
     );
     setting.updatedBy = accountId;
-    return this.present(await this.settings.save(setting));
+    if (dto.invoicePrefix === undefined) {
+      return this.present(await this.settings.save(setting));
+    }
+    // D12: an invoice prefix belongs to one branch of the store. The advisory
+    // lock makes two branches claiming the same prefix queue up.
+    return this.settings.transaction(async (settings, em) => {
+      await em.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+        `invoice-prefix:${TenantContext.require()}`,
+      ]);
+      const taken = await settings
+        .createQueryBuilder('setting')
+        .where('UPPER(setting.invoicePrefix) = UPPER(:prefix)', {
+          prefix: dto.invoicePrefix,
+        })
+        .andWhere('setting.branchId <> :branchId', { branchId })
+        .getExists();
+      if (taken) {
+        throw new ConflictCodeException(ErrorCode.B006);
+      }
+      return this.present(await settings.save(setting));
+    });
   }
 
   private async findOrCreate(

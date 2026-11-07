@@ -5,6 +5,18 @@ export const InventoryDomainErrorCode = {
   WAREHOUSE_INACTIVE: 'WAREHOUSE_INACTIVE',
   WAREHOUSE_CODE_CONFLICT: 'WAREHOUSE_CODE_CONFLICT',
   WAREHOUSE_HAS_PENDING_OPERATIONS: 'WAREHOUSE_HAS_PENDING_OPERATIONS',
+  /** A BRANCH warehouse names no branch, or a CENTRAL/QUARANTINE one names one (D14) */
+  WAREHOUSE_BRANCH_INVALID: 'WAREHOUSE_BRANCH_INVALID',
+  /** PATCH tried to move, re-kind or detach a warehouse that cannot be (D13) */
+  WAREHOUSE_BRANCH_LOCKED: 'WAREHOUSE_BRANCH_LOCKED',
+  /** The default warehouse of a branch cannot be unset, deactivated or moved without naming another (D14) */
+  WAREHOUSE_IS_DEFAULT: 'WAREHOUSE_IS_DEFAULT',
+  /** A sale named a warehouse that is not a BRANCH warehouse of the sale's branch (D2) */
+  WAREHOUSE_NOT_IN_BRANCH: 'WAREHOUSE_NOT_IN_BRANCH',
+  /** The branch has no active default warehouse yet (D1/D2) */
+  BRANCH_HAS_NO_WAREHOUSE: 'BRANCH_HAS_NO_WAREHOUSE',
+  BRANCH_NOT_FOUND: 'BRANCH_NOT_FOUND',
+  BRANCH_NOT_ACTIVE: 'BRANCH_NOT_ACTIVE',
   SKU_NOT_FOUND: 'SKU_NOT_FOUND',
   SKU_NOT_SELLABLE: 'SKU_NOT_SELLABLE',
   STOCK_BALANCE_NOT_FOUND: 'STOCK_BALANCE_NOT_FOUND',
@@ -28,6 +40,8 @@ export const InventoryDomainErrorCode = {
   TRANSFER_SAME_WAREHOUSE: 'TRANSFER_SAME_WAREHOUSE',
   TRANSFER_INVALID_STATE: 'TRANSFER_INVALID_STATE',
   TRANSFER_QUANTITY_MISMATCH: 'TRANSFER_QUANTITY_MISMATCH',
+  TRANSFER_DUPLICATE_SKU: 'TRANSFER_DUPLICATE_SKU',
+  TRANSFER_QUARANTINE_NOT_ALLOWED: 'TRANSFER_QUARANTINE_NOT_ALLOWED',
   STOCKTAKE_NOT_FOUND: 'STOCKTAKE_NOT_FOUND',
   STOCKTAKE_INVALID_STATE: 'STOCKTAKE_INVALID_STATE',
   STOCKTAKE_STALE_SNAPSHOT: 'STOCKTAKE_STALE_SNAPSHOT',
@@ -631,6 +645,64 @@ export function assertValidStockTransferWarehouses(
       InventoryDomainErrorCode.TRANSFER_SAME_WAREHOUSE,
       'Source and destination warehouses must be different',
       400,
+    );
+  }
+}
+
+/** A transfer still DISPATCHED or PARTIALLY_RECEIVED after this many days is flagged `overdue` (D17) */
+export const TRANSFER_OVERDUE_DAYS = 7;
+
+const OPEN_IN_TRANSIT_STATUSES = ['DISPATCHED', 'PARTIALLY_RECEIVED'];
+
+/** Days since dispatch for a transfer that still has units on the road, else null */
+export function transferDaysOpen(
+  status: string,
+  dispatchedAt: Date | string | null | undefined,
+  now: Date = new Date(),
+): number | null {
+  if (!OPEN_IN_TRANSIT_STATUSES.includes(status) || !dispatchedAt) return null;
+  const ms = now.getTime() - new Date(dispatchedAt).getTime();
+  return Math.max(0, Math.floor(ms / 86_400_000));
+}
+
+export function isTransferOverdue(daysOpen: number | null): boolean {
+  return daysOpen !== null && daysOpen >= TRANSFER_OVERDUE_DAYS;
+}
+
+/** A transfer can be cancelled while it is a draft or has units on the road (D17) */
+export function assertCanCancelStockTransfer(currentStatus: string): void {
+  if (!['DRAFT', ...OPEN_IN_TRANSIT_STATUSES].includes(currentStatus)) {
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.TRANSFER_INVALID_STATE,
+      `Cannot cancel stock transfer in state ${currentStatus}`,
+      409,
+    );
+  }
+}
+
+/**
+ * D18: quarantine stock may only leave to a BRANCH warehouse, and moving
+ * stock into or out of quarantine needs `inventory.approve`.
+ */
+export function assertTransferKindsAllowed(
+  fromKind: string,
+  toKind: string,
+  canApprove: boolean,
+): void {
+  const touchesQuarantine =
+    fromKind === 'QUARANTINE' || toKind === 'QUARANTINE';
+  if (fromKind === 'QUARANTINE' && toKind !== 'BRANCH') {
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.TRANSFER_QUARANTINE_NOT_ALLOWED,
+      'Quarantine stock can only be transferred into a BRANCH warehouse',
+      409,
+    );
+  }
+  if (touchesQuarantine && !canApprove) {
+    throw new InventoryDomainError(
+      InventoryDomainErrorCode.PERMISSION_DENIED,
+      'inventory.approve is required to transfer stock into or out of a QUARANTINE warehouse',
+      403,
     );
   }
 }

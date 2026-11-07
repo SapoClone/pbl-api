@@ -26,8 +26,8 @@ Sibling repos: `pbl-infra` (Terraform/Terragrunt on AWS), `pbl-mail-service`
 | Area | Today | Target (build toward this) |
 |---|---|---|
 | Services | All eight have business logic. `platform`, `insight` and the RBAC libraries are ours; `catalog`, `inventory`, `sales`, `customer`, `finance` and `integration` are the M1-M6 stack of contributor dhtphu05, adopted as the base and converted to our permissions, branch scope and integer VND (see "M1-M6 base" below and [docs/specs/2026-11-01-adopt-m1-m6/](docs/specs/2026-11-01-adopt-m1-m6/phase-1.md)) | 8 services owning the ERD domains ([ADR-0001](docs/decisions/0001-monorepo-one-app-per-service.md), [ADR-0010](docs/decisions/0010-eight-services.md)) |
-| Tenancy | Implemented (P0): stores, branches, `tid` in tokens, `@CurrentTenant()` ([ADR-0008](docs/decisions/0008-tenancy.md)). Roles and permissions (RBAC) are built: see Auth. Plans, subscriptions and usage are built on the admin side (`/admin/tenants`, `/plans`, `/subscriptions`, `/usage`); quota enforcement is not | Quota enforcement (`Q001`) |
-| Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`, `platform_admin`, `plan`, `subscription` (+ `_event`, `_payment`) and `tenant_usage`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
+| Tenancy | Implemented (P0): stores, branches, `tid` in tokens, `@CurrentTenant()` ([ADR-0008](docs/decisions/0008-tenancy.md)). Roles and permissions (RBAC) are built: see Auth. Plans, subscriptions and usage are built on the admin side (`/admin/tenants`, `/plans`, `/subscriptions`, `/usage`); plan limits are enforced (`Q001`: branches and members in platform, products and files in catalog); accounts, admins and settings are built on the admin side | Support sessions; business rules in [docs/business-rules/](docs/business-rules/README.md) (decisions, review, what was built per workstream). A new branch gets a default warehouse and a sale uses its own branch's warehouse; a branch cannot be deactivated or deleted while stock, open shifts, pending transfers, unfinished orders or live channel connections remain (platform asks inventory, sales and integration, [guide](docs/guides/branch-guard.md)); a paid plan gets 7 days of grace then `free` limits, and a suspended store is refused by sales and integration |
+| Data | One Postgres DB `pbl`, one schema per service; platform has `account`, `tenant`, `account_tenant`, `branch`, `refresh_token`, `platform_admin`, `plan`, `subscription` (+ `_event`, `_payment`) `tenant_usage` and `platform_setting`. Tenant data access goes through `TenantScopedRepository` from `@pbl/common` (`BranchService` uses it) | Platform ERD (Account, Tenant, Branch, Staff, Role/Permission, Plan/Subscription, RefreshToken, …) ([ADR-0002](docs/decisions/0002-database-schema-per-service.md)) |
 | Gateway | KrakenD routes every client-facing endpoint of every service + each service's `/health`; validates RS256 tokens (`auth/validator`) on protected routes against platform's JWKS | Same, with an https JWKS URL and per-environment config for production ([ADR-0003](docs/decisions/0003-krakend-api-gateway.md)) |
 | Auth | Platform signs RS256 access tokens and serves `/.well-known/jwks.json`; KrakenD **and** every app (via `@pbl/auth`) verify them; opaque rotating refresh tokens with reuse detection; Redis deny-list for logout; tokens carry `sub`/`sid`/`sub_type` plus `tid`/`roles`/`perms`/`branches`; routes use `@RequirePermission` and branch scope ([ADR-0020](docs/decisions/0020-permissions-and-branch-scope.md), [guide](docs/guides/permissions.md)) | Short access-token TTL (the deny-list stays: every service uses it) ([ADR-0004](docs/decisions/0004-authentication-and-tokens.md)) |
 | Events | Built locally (P1): outbox → relay → ElasticMQ queue → consumer with an inbox, retry, DLQ and redrive, in `@pbl/events`; first events: platform branch/login/role events and `sales.order.completed`, consumed by sales, inventory, customer (spend and loyalty points) and insight ([guide](docs/guides/events.md)). The email queue stays separate ([ADR-0005](docs/decisions/0005-async-work-via-sqs.md)) | Production transport: outbox → SNS → SQS ([ADR-0007](docs/decisions/0007-event-bus.md)); the SNS adapter is written and unit-tested, never run against AWS |
@@ -40,7 +40,7 @@ back away from the target direction.
 
 ```
 apps/
-  platform/src/        auth · account · tenant · branch · staff schedules (TypeORM entities, i18n errors)
+  platform/src/        auth · account · tenant · branch · staff schedules with duties and who is on duty (TypeORM entities, i18n errors; [guide](docs/guides/work-shifts.md))
   catalog|customer|inventory|sales|finance|integration|insight/src/   own modules, entities and migrations on `@pbl/common` / `@pbl/events` (raw SQL qualified with `qualifiedTable`)
 libs/
   auth/src/            @pbl/auth — token verification, global AuthGuard, tenant context interceptor, Public/AuthOptional/CurrentUser
@@ -79,7 +79,7 @@ are copied there via an explicit asset `outDir`.
 - **platform**: auth, tenant, branch, staff, RBAC, subscription — **issues JWTs**
 - **catalog**: products, SKU, combos, price lists
 - **inventory** (core): stock per branch, reservations, ledger, receipts/issues, transfers, stock takes, suppliers, purchase orders
-- **sales** (core): channels, shifts, orders, payments (record and status), returns, promotions, coupons
+- **sales** (core): channels, shifts, orders (and who sold what: `/staff-sales`), payments (record and status), returns, promotions, coupons
 - **customer**: customers, groups, addresses, membership tiers, loyalty
 - **finance**: cash book, receivables/payables, shipping, COD reconciliation
 - **integration**: e-commerce marketplaces (Shopee/Lazada/TikTok), SKU mapping, webhooks
@@ -396,17 +396,17 @@ moves dead letters back. Local SQS is ElasticMQ; queued messages:
 ## Known open work (don't rediscover, don't depend on)
 
 - Deferred on purpose: staff invitations, forgot/reset/verify email, the rest of the platform admin (stores, plans,
-  subscriptions and usage are built: [guide](docs/guides/platform-admin-api.md); still to build: quota enforcement,
-  accounts and admins, settings, support sessions, and the insight and integration admin read models:
+  subscriptions, usage, accounts, admins and settings are built: [guide](docs/guides/platform-admin-api.md); still to build:
+  support sessions, and the insight and integration admin read models:
   [ADR-0022](docs/decisions/0022-platform-admin-identity.md) and
   [its design](docs/specs/2026-11-02-platform-admin-design.md)),
-  real object storage for uploads (a local-disk adapter exists), a queue for catalog imports (they run in-process),
+  a queue for catalog imports (they run in-process). Images upload to S3 with presigned URLs from the API (`UPLOADS_DRIVER=s3`, [guide](docs/guides/uploads.md); the local-disk driver stays for dev and tests). After deploying catalog's plan projection run the plan resync once (`POST /admin/subscriptions/resync`). The cash drawer (entries, count, tolerance and manager approval) is built in sales ([design](docs/specs/2026-11-06-cash-shift-design.md)). Still to build (wave 2): overnight schedules and staff names kept (D28-D30), the audit log and actor identity (D37),
   PO edit/submit/VAT/payments, receipt `PATCH`, issue `submit`, shipping address capture on orders. Per-service lists:
   `docs/specs/2026-11-01-adopt-m1-m6/phase-4-*.md`; first-wave decisions of ours: [docs/specs/2026-10-29-first-wave/](docs/specs/2026-10-29-first-wave/README.md).
 
 - Events: the SNS adapter, the Terraform for topics/queues and the SNS-to-SQS subscription do not
   exist or have never run against AWS (checklist in [docs/deploy-actions.md](docs/deploy-actions.md)).
-  No replay tool beyond the DLQ redrive. Only branch, login, membership and order events exist.
+  No replay tool beyond the DLQ redrive. Beyond the M1-M6 services' own events, platform emits branch, login, membership, store, plan and subscription events and catalog emits `catalog.usage.changed` ([guide](docs/guides/events.md)).
 - Inventory keys stock by warehouse and SKU/variant (their model); branch views sum a branch's warehouses and exclude
   the central and quarantine ones. Order creation and payments need an `Idempotency-Key` header (a retry returns the
   first order, 200 + `Idempotency-Replayed`).

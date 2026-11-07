@@ -11,7 +11,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   ALL_PERMISSIONS,
   PLATFORM_BRANCH_CREATED,
+  PLATFORM_TENANT_CREATED,
   ROLE_CODES,
+  TenantEventPayload,
   WILDCARD_PERMISSION,
 } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
@@ -52,6 +54,13 @@ import {
 import { TenantEntity, TenantStatus } from './entities/tenant.entity';
 import { formatMemberCode } from './member-code';
 import { MembershipService } from './membership.service';
+
+/**
+ * D11: how many stores one account may own (counted from its owner
+ * memberships). Self-serve creation only; a platform admin may open stores
+ * for an owner beyond it.
+ */
+export const MAX_STORES_PER_ACCOUNT = 3;
 
 @Injectable()
 export class TenantService {
@@ -98,8 +107,9 @@ export class TenantService {
       throw new ValidationException(ErrorCode.T001);
     }
     try {
-      return await this.dataSource.transaction((em) =>
-        this.openStore(em, {
+      return await this.dataSource.transaction(async (em) => {
+        await this.assertUnderStoreLimit(em, accountId);
+        const tenant = await this.openStore(em, {
           ownerAccountId: accountId,
           actor: { type: SubscriptionActorType.ACCOUNT, id: accountId },
           name: dto.name,
@@ -107,14 +117,47 @@ export class TenantService {
           phone: dto.phone,
           email: dto.email,
           address: dto.address,
-        }),
-      );
+          defaultBranchName: dto.defaultBranchName,
+        });
+        // the same event the admin path emits: other services learn of the store
+        await this.outbox.add(
+          em,
+          PLATFORM_TENANT_CREATED,
+          {
+            id: tenant.id,
+            code: tenant.code,
+            name: tenant.name,
+            subdomain: tenant.subdomain,
+            status: tenant.status,
+            updatedAt: (tenant.updatedAt ?? new Date()).toISOString(),
+            actor: { type: 'account', id: accountId },
+          } satisfies TenantEventPayload,
+          { tenantId: tenant.id },
+        );
+        return tenant;
+      });
     } catch (error) {
       // Two creations raced past the pre-check; the unique index decided
       if (isUniqueViolation(error, 'UQ_tenant_subdomain')) {
         throw new ValidationException(ErrorCode.T001);
       }
       throw error;
+    }
+  }
+
+  /** T009; the advisory lock makes two creations by one account queue up */
+  private async assertUnderStoreLimit(
+    em: EntityManager,
+    accountId: string,
+  ): Promise<void> {
+    await em.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
+      `stores:${accountId}`,
+    ]);
+    const owned = await em.count(AccountTenantEntity, {
+      where: { accountId, role: ROLE_CODES.OWNER },
+    });
+    if (owned >= MAX_STORES_PER_ACCOUNT) {
+      throw new ValidationException(ErrorCode.T009);
     }
   }
 

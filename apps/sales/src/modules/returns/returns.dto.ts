@@ -41,10 +41,6 @@ export class CreateReturnDto {
   @IsUUID()
   warehouseId?: string;
 
-  @IsOptional()
-  @IsUUID()
-  shiftId?: string;
-
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
@@ -85,8 +81,4 @@ export class CreateRefundRequestDto {
   @IsOptional()
   @IsIn(['CASH', 'BANK_TRANSFER', 'CARD', 'E_WALLET'])
   method?: 'CASH' | 'BANK_TRANSFER' | 'CARD' | 'E_WALLET';
-
-  @IsOptional()
-  @IsUUID()
-  shiftId?: string;
 }

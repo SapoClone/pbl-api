@@ -21,6 +21,7 @@ describe('StaffScheduleController', () => {
     create: jest.fn(async () => []),
     update: jest.fn(async () => ({ id: ID })),
     remove: jest.fn(async () => undefined),
+    onDuty: jest.fn(async () => ({ at: '2026-11-05T01:00:00.000Z', data: [] })),
   };
 
   beforeAll(async () => {
@@ -81,6 +82,7 @@ describe('StaffScheduleController', () => {
   describe('permission matrix', () => {
     const routes: [string, string, (a: request.Agent) => request.Test][] = [
       ['staff.view', 'GET /', (a) => a.get(base)],
+      ['staff.view', 'GET /on-duty', (a) => a.get(`${base}/on-duty`)],
       ['staff.update', 'POST /', (a) => a.post(base).send(body)],
       [
         'staff.update',
@@ -176,6 +178,76 @@ describe('StaffScheduleController', () => {
       .set('Authorization', owner())
       .expect(204);
     expect(service.remove).toHaveBeenCalledWith(ID, null);
+  });
+
+  describe('duty and who is on shift', () => {
+    it('takes a duty, a name and a note on create, and refuses an unknown duty (422)', async () => {
+      await request(app.getHttpServer())
+        .post(base)
+        .set('Authorization', owner())
+        .send({ ...body, duty: 'cashier', name: 'Ca sáng', note: 'Quầy 1' })
+        .expect(201);
+      expect(service.create).toHaveBeenLastCalledWith(
+        'account-1',
+        expect.objectContaining({
+          duty: 'cashier',
+          name: 'Ca sáng',
+          note: 'Quầy 1',
+        }),
+      );
+      await request(app.getHttpServer())
+        .post(base)
+        .set('Authorization', owner())
+        .send({ ...body, duty: 'janitor' })
+        .expect(422);
+      await request(app.getHttpServer())
+        .patch(`${base}/${ID}`)
+        .set('Authorization', owner())
+        .send({ duty: 'janitor' })
+        .expect(422);
+    });
+
+    it('patches the duty alone and filters the list by it', async () => {
+      await request(app.getHttpServer())
+        .patch(`${base}/${ID}`)
+        .set('Authorization', owner())
+        .send({ duty: 'shift_lead', note: null })
+        .expect(200);
+      expect(service.update).toHaveBeenLastCalledWith(
+        'account-1',
+        ID,
+        { duty: 'shift_lead', note: null },
+        null,
+      );
+      await request(app.getHttpServer())
+        .get(`${base}?duty=warehouse`)
+        .set('Authorization', owner())
+        .expect(200);
+      expect(service.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ duty: 'warehouse' }),
+        null,
+      );
+      await request(app.getHttpServer())
+        .get(`${base}?duty=janitor`)
+        .set('Authorization', owner())
+        .expect(422);
+    });
+
+    it('answers on-duty as its own route, with a moment and the allowed branches', async () => {
+      await request(app.getHttpServer())
+        .get(`${base}/on-duty?branchId=${ID}&at=2026-11-05T01:00:00.000Z`)
+        .set('Authorization', as(['staff.view'], [ID]))
+        .expect(200);
+      expect(service.onDuty).toHaveBeenCalledWith(
+        { branchId: ID, at: new Date('2026-11-05T01:00:00.000Z') },
+        [ID],
+      );
+      expect(service.list).not.toHaveBeenCalled();
+      await request(app.getHttpServer())
+        .get(`${base}/on-duty?at=yesterday`)
+        .set('Authorization', owner())
+        .expect(422);
+    });
   });
 
   describe('branch scope', () => {

@@ -138,6 +138,10 @@ export class InventoryLedgerEntity {
 }
 
 @Entity('warehouse')
+@Index('UQ_warehouse_default_per_branch', ['tenantId', 'branchId'], {
+  unique: true,
+  where: `"kind" = 'BRANCH' AND "is_default"`,
+})
 export class WarehouseEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -145,11 +149,18 @@ export class WarehouseEntity {
   @Column({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
 
-  @Column({ name: 'branch_id', type: 'uuid' })
-  branchId!: string;
+  /** Null for a CENTRAL or QUARANTINE warehouse: only BRANCH warehouses belong to a branch (D14) */
+  @Column({ name: 'branch_id', type: 'uuid', nullable: true })
+  branchId!: string | null;
 
   @Column({ type: 'varchar', length: 32 })
   code!: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'BRANCH' })
+  kind!: 'BRANCH' | 'CENTRAL' | 'QUARANTINE';
+
+  @Column({ type: 'text', nullable: true })
+  address!: string | null;
 
   @Column({ type: 'varchar', length: 120 })
   name!: string;
@@ -241,8 +252,9 @@ export class WarehouseReservationEntity {
   @Column({ type: 'varchar', length: 16 })
   state!: WarehouseReservationState;
 
-  @Column({ name: 'expires_at', type: 'timestamptz' })
-  expiresAt!: Date;
+  /** NULL: a hold for a confirmed, not yet shipped order never expires (D19) */
+  @Column({ name: 'expires_at', type: 'timestamptz', nullable: true })
+  expiresAt!: Date | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

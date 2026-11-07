@@ -414,6 +414,36 @@ export class ProcurementService {
         );
       }
       const header = headerRows[0];
+
+      // A replay changes nothing: look the receipt up BEFORE any received_qty
+      // is touched (and before the state check: a replay after the PO was
+      // fully received must still answer with the first result).
+      const replayed = await this.receiving.findReceiptByKeyInTx(
+        em,
+        tenantId,
+        idempotencyKey,
+      );
+      if (replayed) {
+        if (replayed.purchaseOrderId !== poId) {
+          throw new InventoryDomainError(
+            InventoryDomainErrorCode.IDEMPOTENCY_CONFLICT,
+            'Idempotency-Key was already used for another document',
+            409,
+          );
+        }
+        const poResponse = await this.loadPurchaseOrderResponse(
+          em,
+          prefix,
+          tenantId,
+          poId,
+        );
+        return {
+          ...poResponse,
+          purchaseOrder: poResponse,
+          latestReceipt: replayed,
+        };
+      }
+
       if (!['APPROVED', 'PARTIALLY_RECEIVED'].includes(header.status)) {
         throw new InventoryDomainError(
           InventoryDomainErrorCode.PURCHASE_ORDER_INVALID_STATE,

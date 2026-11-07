@@ -1,4 +1,8 @@
-import { UUIDField } from '@/decorators/field.decorators';
+import {
+  EnumFieldOptional,
+  StringFieldOptional,
+  UUIDField,
+} from '@/decorators/field.decorators';
 import { ApiProperty } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
@@ -9,6 +13,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { StaffDuty } from '../staff-duty';
 
 export const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -36,4 +41,14 @@ export class CreateStaffScheduleReqDto {
   @ApiProperty({ example: '16:00' })
   @Matches(TIME_PATTERN)
   endTime!: string;
+
+  @StringFieldOptional({ maxLength: 50, example: 'Ca sáng' })
+  name?: string;
+
+  /** What the member is in charge of in this shift; `sales` when left out */
+  @EnumFieldOptional(() => StaffDuty, { default: StaffDuty.SALES })
+  duty?: StaffDuty;
+
+  @StringFieldOptional({ maxLength: 200 })
+  note?: string;
 }

@@ -31,6 +31,9 @@ describe('SyncJobWorker', () => {
       `SELECT set_config('app.sync_job_scheduler', 'on', true)`,
     );
     expect(query.mock.calls[1][0]).toContain('"integration"."sync_jobs"');
+    // a suspended store's jobs are not due (D35)
+    expect(query.mock.calls[1][0]).toContain('"integration"."tenant_status"');
+    expect(query.mock.calls[1][0]).toContain("ts.status = 'suspended'");
     expect(
       claimAndProcessBatch.mock.calls.map((c: any[]) => c[0].tenantId),
     ).toEqual(['t1', 't2']);

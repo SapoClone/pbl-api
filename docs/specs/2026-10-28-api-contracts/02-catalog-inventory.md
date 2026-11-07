@@ -111,7 +111,7 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
   - 400 `C002`: duplicate `barcode`.
   - 400 `C003`: unknown category, brand, or attribute value.
   - 400 `C004`: more than 100 variants.
-  - 400 `C005`: the plan's product quota is reached (from platform `TenantUsage`; see section 01).
+  - 409 `Q001`: the plan's product limit is reached (`details: { key: "products", used, limit, planCode }`). Catalog checks it itself from the plan limits it keeps from platform's events; built, replaces `C005`.
 - **Events:** `catalog.product.created`, and one `catalog.variant.created` per variant.
 
 ### GET /catalog/api/v1/products/{id}
@@ -173,13 +173,39 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
 - **Response 200:** `{ data: [{ "variantId", "productId", "name", "label", "skuCode", "barcode", "imageUrl", "price", "avgCostPrice", "category": {id,name} }], pagination }`
 
 ### POST /catalog/api/v1/uploads/images
-- **Status:** new.
+- **Status:** new; built (S3 presigned uploads, workstream E). Guide: [uploads](../../guides/uploads.md).
 - **Screens:** 51:2, image dropzone.
 - **Auth:** `products.create` or `products.update`.
-- **Body:** `{ "fileName": "binh-xanh.jpg", "contentType": "image/jpeg", "size": 812345 }`. Allowed types are `image/png` and `image/jpeg`, up to 5 MB.
-- **Response 201:** `{ "imageId": "…", "uploadUrl": "https://<bucket>.s3…?X-Amz-…", "uploadHeaders": { "Content-Type": "image/jpeg" }, "publicUrl": "https://static.<domain>/t/<tenant>/p/<imageId>.jpg", "expiresAt": "…" }`
-- **Flow:** the client `PUT`s the file to `uploadUrl` within 15 minutes, then sends `imageId` in `POST/PATCH /products`. Images never attached to a product are deleted after 24 h.
-- **Errors:** 422 for a wrong type or size; 400 `C005` when the plan's storage quota is reached.
+- **Body:** `{ "fileName": "binh-xanh.jpg", "contentType": "image/jpeg", "size": 812345 }`. Allowed types are `image/png` and `image/jpeg`, 1 byte up to 5 MB.
+- **Response 201:** `{ "imageId": "…", "uploadUrl": "https://<bucket>.s3.<region>.amazonaws.com/t/<tenant>/p/<imageId>.jpg?X-Amz-…", "uploadHeaders": { "Content-Type": "image/jpeg" }, "publicUrl": "https://static.<domain>/t/<tenant>/p/<imageId>.jpg", "expiresAt": "…" }`
+  - `uploadUrl` is a presigned `PUT` valid 15 minutes. It signs `Content-Type` and `Content-Length`, so S3 refuses (403) another type or size than declared. The client sends `uploadHeaders` unchanged; the body must be exactly `size` bytes.
+  - `publicUrl` is built from `UPLOADS_PUBLIC_BASE_URL` (the CloudFront domain), else the bucket URL. The object key is built by the server (`t/<tenant>/p/<imageId>.<ext>`); a client never sends a key. The response never carries credentials.
+- **Flow (three steps):**
+  1. `POST /uploads/images` registers the upload (status `pending`).
+  2. The client `PUT`s the file straight to `uploadUrl`. The API never receives the bytes when the driver is `s3`.
+  3. The client calls `POST /uploads/{imageId}/complete`, then sends `imageId` in `POST/PATCH /products` (`imageIds`).
+- **Errors:** 422 for a wrong type or size; 409 `Q001` (`details: { key: "storageGb", used, limit, planCode }`) when `used + size` would pass the plan's storage limit, answered **before** the URL is issued. Every kept file counts toward `used`, attached images included (D34).
+- **Cleanup:** a job every 10 minutes deletes `pending` uploads past `expiresAt` and `uploaded` images never attached to a product for 24 hours, from S3 and the table. Removing an image from a product (or deleting the product) deletes its object and gives the bytes back to the plan (best effort, logged).
+
+### POST /catalog/api/v1/uploads/imports
+- **Status:** new; built (same flow as images).
+- **Auth:** `products.create`.
+- **Body:** `{ "fileName": "san-pham.csv", "contentType": "text/csv", "size": 20480 }` (up to 5 MB).
+- **Response 201:** `{ "uploadId": "…", "uploadUrl": "…", "uploadHeaders": { "Content-Type": "text/csv" }, "expiresAt": "…" }`. Key `t/<tenant>/imports/<uploadId>.csv`; there is no public URL for a CSV.
+- **Errors:** as images (422, 409 `Q001`). After the `PUT`, call `POST /uploads/{uploadId}/complete`, then `POST /product-imports`.
+
+### POST /catalog/api/v1/uploads/{id}/complete
+- **Status:** new; built.
+- **Auth:** `products.create` or `products.update`.
+- **Body:** none.
+- **Response 200:** `{ "id": "…", "status": "uploaded", "size": 812345, "publicUrl": "…" }` (`publicUrl` for images only). The API sends `HEAD` for the object: it must exist with the declared content type and 1 to `size` bytes. The upload becomes `uploaded`, counts toward the plan, and catalog reports the new usage to platform. Idempotent: calling it again for an uploaded or attached file returns the same body.
+- **Errors:** 400 `UPLOAD_INVALID` when the object is missing, or its type or size differs from the declaration (the object is deleted); 404 `UPLOAD_NOT_FOUND` for an unknown id or another store's upload; 409 `Q001` if the store filled up in between.
+
+### PUT /catalog/api/v1/uploads/{id}/content
+- **Status:** built, **local driver only** (`UPLOADS_DRIVER=local`, development and tests): the bytes go through the API and `uploadUrl` points here. Under `UPLOADS_DRIVER=s3` it answers 404 `UPLOAD_NOT_FOUND`.
+
+### Product images and the stored link
+`images` on a product is `[{ "key", "url", "sortOrder" }]`. For images attached with `imageIds`, `url` is the S3 or CloudFront link (`publicUrl`), never an API path; `key` is the object key. Attaching needs status `uploaded` and checks the object still exists (400 `UPLOAD_INVALID` otherwise). `images` sent directly (without `imageIds`) is stored as given and is not backed by an upload.
 
 ### GET /catalog/api/v1/categories
 - **Status:** new.
@@ -224,13 +250,62 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
 - **Status:** new.
 - **Screens:** 13:325, button Nhập file (import file).
 - **Auth:** `products.create`.
-- **Body:** `{ "uploadId": "…" }`. The file is uploaded first through a presigned URL, like images but with type `text/csv`.
+- **Body:** `{ "uploadId": "…" }`. The file is uploaded first with `POST /uploads/imports`, a presigned `PUT` and `POST /uploads/{id}/complete`.
 - **Response:**
   - POST returns 202 `{ "id", "status": "processing" }`.
   - GET returns `{ "id", "status": "processing|completed|failed", "created": 40, "updated": 8, "errors": [{ "row": 12, "message": "SKU trùng: MC-LG-300-K" }] }`.
 - **Events:** the same as creating or updating products, one per row.
 
 ---
+
+## Inventory: warehouses
+
+Stock lives in warehouses, keyed by warehouse and variant. A warehouse has a `kind`: `BRANCH` (belongs to one branch and counts in that branch's stock), `CENTRAL` or `QUARANTINE` (belong to no branch and count in no branch view). Built in workstream A (D1, D2, D13, D14); the rules are tested in `apps/inventory/test/branch-warehouse.int-spec.ts`.
+
+- **Every active branch has exactly one default `BRANCH` warehouse.** Inventory consumes `platform.branch.created` and `platform.branch.updated` and, in the same transaction as its branch projection, creates one (`kind` `BRANCH`, `isDefault` true, code from the branch code upper-cased and made unique in the store with `-2`, `-3`, ..., name from the branch name). It is idempotent by branch id and serialised per branch, so a redelivered or concurrent event creates nothing twice; a partial unique index `UQ_warehouse_default_per_branch` on `(tenant_id, branch_id) WHERE kind = 'BRANCH' AND is_default` backs it. A branch that is `inactive` or `deleted` creates nothing; when a branch stops being active, its `BRANCH` warehouses that hold no on-hand, reserved or in-transit stock become `INACTIVE` (those with stock are left alone: platform refuses to switch off a branch that has stock, D4), and when the branch is active again its default warehouse is re-activated. A migration backfills every active branch that has none and repairs branches with two defaults or none.
+- **`isWarehouse` of the branch is informational.** Nothing in inventory depends on it (`branch_projection.is_warehouse` is kept, unused). See `01-platform.md`.
+
+### GET /inventory/api/v1/warehouses · GET /inventory/api/v1/warehouses/{id}
+- **Status:** `exists`. The list takes `status`, `kind`, `branchId`; a member limited to some branches sees only the warehouses of those branches (a warehouse with no branch is for unrestricted members). A warehouse outside the caller's branches answers 404.
+- **Auth:** `inventory.view`.
+
+### POST /inventory/api/v1/warehouses
+- **Status:** `change`. It was an upsert on the code (a branch-limited manager could take over another branch's warehouse). It is now a plain insert.
+- **Auth:** `inventory.create`. A member limited to some branches creates `BRANCH` warehouses of those branches only; anything else (another branch, `CENTRAL`, `QUARANTINE`) answers 404.
+- **Body:** `{ "code": "WH-Q3-2", "name": "…", "kind": "BRANCH", "branchId": "…", "address": "…", "isDefault": false }` (`kind` defaults to `BRANCH`; the code is upper-cased).
+- **Rules:**
+  - A `BRANCH` warehouse needs `branchId` of a branch that is known to inventory and `active`; `CENTRAL` and `QUARANTINE` must not name a branch.
+  - The first `BRANCH` warehouse of a branch becomes its default whatever `isDefault` says; `isDefault: true` on a later one moves the default to it.
+  - A code that already exists in the store is refused and nothing is changed.
+- **Response:** 201, the warehouse.
+- **Errors:**
+
+  | Code | Status | Meaning |
+  |---|---|---|
+  | `WAREHOUSE_CODE_CONFLICT` | 409 | The code exists (in this store, any branch) |
+  | `WAREHOUSE_BRANCH_INVALID` | 400 | `BRANCH` without `branchId`, or `CENTRAL`/`QUARANTINE` with one |
+  | `BRANCH_NOT_FOUND` | 404 | The branch is unknown to inventory |
+  | `BRANCH_NOT_ACTIVE` | 409 | The branch is inactive or deleted |
+
+### PATCH /inventory/api/v1/warehouses/{id}
+- **Status:** `change`.
+- **Auth:** `inventory.update`. The caller's branches are checked on the existing warehouse and on the target branch, including `branchId: null` (a limited member never owns a null branch): 404.
+- **Body:** any of `name`, `address`, `isDefault`, `status` (`ACTIVE` | `INACTIVE`), `branchId`, `kind`.
+- **Rules:**
+  - `branchId` or `kind` can change only while the warehouse holds no stock (on hand, reserved or in transit), no `HELD` reservation and no open transfer; the 409 lists every reason in `details.reasons` (`NON_ZERO_STOCK_BALANCE`, `ACTIVE_RESERVATIONS`, `PENDING_TRANSFERS`, `DEFAULT_WAREHOUSE`). A `BRANCH` warehouse can be moved to another active branch but never detached (`branchId: null`, or `kind` away from `BRANCH`).
+  - A branch always has one default. `isDefault: false` on the default is refused; make another warehouse the default first (that unsets this one). The default cannot be deactivated or moved while its branch is active. An `INACTIVE` warehouse cannot be a default.
+  - Deactivating a warehouse that holds stock, holds or transfers is refused as before (`WAREHOUSE_HAS_PENDING_OPERATIONS`, `details.reason`).
+- **Errors:** `WAREHOUSE_BRANCH_LOCKED` 409 (move, re-kind or detach refused, `details.reasons`), `WAREHOUSE_IS_DEFAULT` 409, `WAREHOUSE_INACTIVE` 409, `WAREHOUSE_BRANCH_INVALID` 400, `WAREHOUSE_HAS_PENDING_OPERATIONS` 409, `BRANCH_NOT_ACTIVE` 409.
+
+### Stock views by branch
+`GET /stock`, `/stock/summary`, `/stock/lookup`, `/stock/export` and the branch figures sum the stock of a branch's **`BRANCH` warehouses** (`warehouse.kind = 'BRANCH'` and `branch_id`), never "warehouses with a branch id". Central and quarantine stock appears in no branch figure, even for data that still carries a `branch_id`.
+
+### Internal: which warehouse a sale uses
+A sale always takes its stock from **its own branch's warehouse**. Both routes are internal (not in `krakend.json`, `x-internal-token`, tenant from `X-Tenant-Id` after the token is valid).
+
+- `GET /internal/v1/branches/{branchId}/sale-warehouse[?warehouseId=…]`: answers `{ id, code, name }`, the branch's default `BRANCH` warehouse, or the named one when it is an active `BRANCH` warehouse of that branch. Sales calls it before it claims anything.
+- `POST /internal/v1/reservations` now takes `branchId` (required when `callerService` is `sales`, else 400 `BRANCH_REQUIRED`); a line's `warehouseId` is optional. A line without one uses the branch's default warehouse; a named one is checked the same way. The idempotency hash covers `branchId` when sent and the lines as sent, so a replay returns the same reservation even if the default warehouse changed since.
+- **Errors (both routes):** `BRANCH_HAS_NO_WAREHOUSE` 409 (the branch has no active default warehouse), `WAREHOUSE_NOT_IN_BRANCH` 409 (the warehouse is another branch's, `CENTRAL` or `QUARANTINE`), `WAREHOUSE_INACTIVE` 409, `WAREHOUSE_NOT_FOUND` 404. Central and quarantine warehouses are never used for sales.
 
 ## Inventory: stock
 
@@ -288,7 +363,7 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
 - **Auth:** `inventory.update`.
 - **Body:** `{ "branchId": "…q3", "variantId": "…", "minQuantity": 10, "maxQuantity": null }`
 - **Response 200:** the threshold.
-- **Events:** `inventory.stock.below_min` fires when the change puts available below min. Insight turns it into a notification, as in the "Cần chú ý" (needs attention) card.
+- **Events:** `inventory.stock.below_min` fires when the change puts available below min (and, since workstream F, on every later drop across the minimum: see [Stock integrity rules](#stock-integrity-rules-built-d15-d21)). Insight turns it into a notification, as in the "Cần chú ý" (needs attention) card.
 
 ### GET /inventory/api/v1/ledger-entries
 - **Status:** new. The `inventory_ledger` table already exists; only the endpoint is new.
@@ -422,7 +497,7 @@ The current behaviour, where a receipt is applied immediately, is replaced by an
 - **Row:** `{ "id", "code", "status", "fromBranch", "toBranch", "totalQuantity": 12, "shippedAt", "receivedAt" }`
 
 ### POST /inventory/api/v1/stock-transfers/{id}/ship · /receive · /cancel
-- **Status:** new.
+- **Status:** new. **Built shape (warehouse based):** `POST /inventory/api/v1/stock-transfers/{id}/dispatch`, `/receive` and `/cancel`; the rules, errors and the overdue flag are in [Stock integrity rules](#stock-integrity-rules-built-d15-d21) and win over this sketch.
 - **Auth:** `inventory.update` (ship, cancel); `inventory.approve` (receive, on the destination branch).
 - **Body:** `{ "version" }`; `receive` may also take `{ "items": [{ "variantId", "receivedQuantity" }] }` to record a shortfall.
 - **Transitions and stock:**
@@ -623,6 +698,13 @@ The current behaviour, where a receipt is applied immediately, is replaced by an
 | `I011` | supplier still in use (open POs or debt) |
 | `I012` | PO not editable in its status |
 | `I013` | payment over the remaining amount |
+| `WAREHOUSE_CODE_CONFLICT` | warehouse code exists (409) |
+| `WAREHOUSE_BRANCH_INVALID` | warehouse kind and `branchId` disagree (400) |
+| `WAREHOUSE_BRANCH_LOCKED` | move, re-kind or detach refused (409, `details.reasons`) |
+| `WAREHOUSE_IS_DEFAULT` | default warehouse of a branch cannot be unset, deactivated or moved alone (409) |
+| `WAREHOUSE_NOT_IN_BRANCH` | a sale named a warehouse that is not a `BRANCH` warehouse of its branch (409) |
+| `BRANCH_HAS_NO_WAREHOUSE` | the branch has no active default warehouse (409) |
+| `BRANCH_NOT_FOUND` / `BRANCH_NOT_ACTIVE` | warehouse create or move into an unknown or inactive branch (404 / 409) |
 
 Messages are added in `en`, `vi`, and `jp`.
 
@@ -634,3 +716,32 @@ Messages are added in `en`, `vi`, and `jp`.
 4. **Lot and expiry:** they are stored per receipt line only. Should stock be tracked per lot (FEFO picking, expiry alerts)? That would need a `StockLot` entity in the ERD.
 5. **Purchasing "Nhập file" (import file) on 13:2351:** is it a PO import or a supplier import? It is not specified here.
 6. **Barcodes:** must they be unique across all variants in a store, or may a combo share its component's barcode?
+
+
+## Stock integrity rules (built, D15-D21)
+
+Built in workstream F ([built-f](../../business-rules/built-f.md)). These rules win over the older screen sketches above where they differ.
+
+### Stock enters only through documents (D15)
+- `POST /inventory/api/v1/stock-balances/receipts` is **removed** (no route, no gateway entry).
+- `POST /inventory/api/v1/stock-receipts` takes `warehouseId` and `items` only. The old body `{branchId, items[{sku, quantity}]}` answers **410** `DIRECT_STOCK_ENTRY_REMOVED`.
+- Stock is added by posted receipts (document, cost, `inventory.approve` to post or `autoPost`), transfers, stock takes and returns. There is no second-person approval on receipts, stock takes or purchase orders by default (D21): the permission is the control.
+- `POST /stock-receipts` honours `Idempotency-Key`: the same key returns the same receipt (also for a retried `autoPost`) and posts nothing twice. `POST /purchase-orders/{id}/receive` with the same key is a pure replay: it answers the first result, moves no `received_qty` and creates no second receipt; the same key on another PO answers 409 `IDEMPOTENCY_CONFLICT`.
+
+### Transfers (D17, D18)
+- **Create** (`inventory.create`): the caller needs branch scope on **both** warehouses (404 otherwise); both must be `ACTIVE` (409 `WAREHOUSE_INACTIVE`). `QUARANTINE` stock may only be transferred **into a `BRANCH` warehouse** (409 `TRANSFER_QUARANTINE_NOT_ALLOWED` otherwise); any transfer into or out of a quarantine warehouse needs `inventory.approve` (403 `PERMISSION_DENIED`).
+- **Dispatch** (`inventory.update`, source scope): `DRAFT` only (409 `TRANSFER_INVALID_STATE` the second time), 409 `INSUFFICIENT_STOCK` with the shortages; deducts the source, adds the destination in-transit.
+- **Receive** (`inventory.update`, destination scope): `items` must name each SKU **at most once** (422 `TRANSFER_DUPLICATE_SKU`); every line is validated against the quantity still in transit **now** (409 `TRANSFER_QUANTITY_MISMATCH`); on hand rises only by what leaves in-transit. `resolveDiscrepancy: true` needs `inventory.approve` (403).
+- **Close a discrepancy** (`receive` with `resolveDiscrepancy: true`, status `DISCREPANCY` to `RECEIVED`, `inventory.approve`): the units recorded as lost are written off at the **dispatch cost**: ledger rows `TRANSFER_LOST_IN` (+n) and `TRANSFER_LOSS` (-n) at the destination (they net to zero, so on hand and reconciliation are unchanged; the loss row carries quantity and cost) and one `inventory.stock.changed` with `movementType: "TRANSFER_LOSS"`, `qtyDelta: "-n"`.
+- **Cancel** `POST /inventory/api/v1/stock-transfers/{id}/cancel` (`inventory.approve`, source scope), body `{ "reason"? }`: allowed for `DRAFT`, `DISPATCHED`, `PARTIALLY_RECEIVED` (409 `TRANSFER_INVALID_STATE` otherwise). The units not yet received go back to the source at the dispatch cost with a reversing ledger row `TRANSFER_CANCEL` (`reversal_of_ledger_id` = the dispatch row) and an `inventory.stock.changed` (`TRANSFER_CANCEL`); units already received stay. Status `CANCELLED`; the detail carries `cancelledBy`, `cancelledAt`, `cancelReason` and per line `returnedQty`.
+- **Overdue:** list and detail carry `daysOpen` (whole days since dispatch, only while `DISPATCHED` or `PARTIALLY_RECEIVED`, else `null`) and `overdue: true` from 7 days (`TRANSFER_OVERDUE_DAYS`). No scheduler.
+
+### Reservations without expiry (D19)
+`POST /internal/v1/reservations` accepts `noExpiry: true` (wins over `ttlSeconds`). The hold is stored with `expires_at = NULL`, answers and emits `expiresAt: null`, is never expired by the sweep and is released by cancel or committed by fulfilment. Sales sends it when it confirms an omnichannel or manual order (`POST /orders/{id}/confirm`); the POS checkout keeps its 15 minute hold.
+
+### Events (D16, D21)
+- `inventory.stock.below_min` is emitted whenever a sale hold, a stock issue or a transfer dispatch drops **available** stock (on hand minus holds) from at or above the warehouse minimum to below it: once per crossing, quiet while below, re-armed when stock rises back to the minimum; a threshold edit that leaves available below the minimum still emits as before.
+- `inventory.stock.changed` has the new `movementType` values `TRANSFER_CANCEL`, `TRANSFER_LOST_IN`, `TRANSFER_LOSS`. There is no separate `inventory.stock.written_off` event: a write-off is the `TRANSFER_LOSS` change.
+- `sales.order.completed` no longer deducts from the older branch-and-SKU-code store for an order that has a warehouse reservation (no `sale_shortfall` row).
+- A stock take freezes nothing (`freezeMovement` is stored and ignored). Its approval is stale only when on hand moved since the snapshot (holds do not count); `forceRebase` is part of `approve`, so it needs `inventory.approve`.
+- The ledger (`stock_balance_ledger`) is append-only: the database refuses UPDATE and DELETE of its rows.

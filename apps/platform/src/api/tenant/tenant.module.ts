@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
+import { BranchGuardModule } from '../branch-guard/branch-guard.module';
 import { StaffScheduleModule } from '../staff-schedule/staff-schedule.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { TenantEntity } from './entities/tenant.entity';
@@ -16,6 +17,7 @@ import { TenantService } from './tenant.service';
     AuthModule,
     StaffScheduleModule,
     SubscriptionModule,
+    BranchGuardModule,
   ],
   controllers: [TenantController],
   providers: [TenantService, MemberService],

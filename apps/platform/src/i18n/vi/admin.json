@@ -1,6 +1,8 @@
 {
   "error": {
     "wrong_credentials": "Sai email hoặc mật khẩu",
-    "account_locked": "Đăng nhập sai quá nhiều lần. Tài khoản bị khóa trong 15 phút"
+    "account_locked": "Đăng nhập sai quá nhiều lần. Tài khoản bị khóa trong 15 phút",
+    "email_taken": "Đã có quản trị viên nền tảng dùng email này",
+    "protected_admin": "Không thể vô hiệu hóa hoặc hạ quyền chính mình, hay super admin cuối cùng"
   }
 }

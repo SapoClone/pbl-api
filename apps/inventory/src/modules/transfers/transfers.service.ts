@@ -10,18 +10,24 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { lockStockBalance } from '../../common/balance-lock';
+import { emitBelowMinOnCrossing } from '../../common/below-min';
 import {
+  assertCanCancelStockTransfer,
   assertCanDispatchStockTransfer,
+  assertTransferKindsAllowed,
   assertValidStockTransferWarehouses,
   computeValuationAfterDeduction,
   computeWeightedAverageCostOnReceipt,
   formatMilliToQty,
   InventoryDomainError,
   InventoryDomainErrorCode,
+  isTransferOverdue,
   normalizeAndSortWarehouseLines,
   normalizeInventoryCode,
   parseMoneyToVnd,
   parseQtyToMilli,
+  transferDaysOpen,
   vndToNumber,
 } from '../../domain/inventory-domain';
 import { WarehouseScope } from '../../scope/warehouse-scope';
@@ -41,13 +47,33 @@ export class TransfersService {
     @Optional() private readonly outbox?: EventOutbox,
   ) {}
 
-  async createTransfer(dto: CreateStockTransferDto) {
+  /**
+   * D18: both warehouses must exist and be ACTIVE; quarantine stock may only
+   * go to a BRANCH warehouse, and moving into or out of quarantine needs
+   * `inventory.approve` (`canApprove`). Branch scope on both ends is checked
+   * by the controller (404).
+   */
+  async createTransfer(
+    dto: CreateStockTransferDto,
+    opts: { canApprove?: boolean } = {},
+  ) {
     assertValidStockTransferWarehouses(dto.fromWarehouseId, dto.toWarehouseId);
 
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
-      await assertActiveWarehouse(em, prefix, tenantId, dto.fromWarehouseId);
-      await assertActiveWarehouse(em, prefix, tenantId, dto.toWarehouseId);
+      const from = await assertActiveWarehouse(
+        em,
+        prefix,
+        tenantId,
+        dto.fromWarehouseId,
+      );
+      const to = await assertActiveWarehouse(
+        em,
+        prefix,
+        tenantId,
+        dto.toWarehouseId,
+      );
+      assertTransferKindsAllowed(from.kind, to.kind, opts.canApprove === true);
 
       const normalized = normalizeAndSortWarehouseLines(
         dto.items.map((i) => ({
@@ -229,6 +255,24 @@ export class TransfersService {
           deductedBaseQty: qtyStr,
         });
 
+        // D21: alert once when the dispatch takes available stock under the minimum
+        {
+          const availBefore =
+            parseQtyToMilli(srcBal.onHandQty, true, false) -
+            parseQtyToMilli(srcBal.reservedQty, true, false);
+          await emitBelowMinOnCrossing(
+            em,
+            this.outbox,
+            prefix,
+            tenantId,
+            header.from_warehouse_id,
+            item.skuId,
+            availBefore,
+            availBefore - parseQtyToMilli(qtyStr, false, false),
+            occurredAt,
+          );
+        }
+
         // 1. Deduct from source warehouse on_hand_qty
         await em.query(
           `
@@ -358,6 +402,21 @@ export class TransfersService {
   }
 
   async receiveTransfer(transferId: string, dto?: ReceiveStockTransferDto) {
+    // One line per SKU: two lines for the same SKU would be validated against
+    // the same stale snapshot of the transfer line and could put twice the
+    // quantity on hand while the line shows it once.
+    const seen = new Set<string>();
+    for (const line of dto?.items ?? []) {
+      if (seen.has(line.skuId)) {
+        throw new InventoryDomainError(
+          InventoryDomainErrorCode.TRANSFER_DUPLICATE_SKU,
+          `SKU ${line.skuId} appears more than once in the receive request`,
+          422,
+        );
+      }
+      seen.add(line.skuId);
+    }
+
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
       const prefix = schemaPrefix(em);
 
@@ -412,11 +471,6 @@ export class TransfersService {
         [tenantId, transferId],
       );
 
-      const itemBySku = new Map<string, Record<string, unknown>>();
-      for (const row of dbItems) {
-        itemBySku.set(String(row.skuId), row);
-      }
-
       const incomingLines =
         dto?.items && dto.items.length > 0
           ? dto.items
@@ -451,7 +505,22 @@ export class TransfersService {
       const correlationId = RequestContext.get()?.requestId ?? null;
 
       for (const reqLine of incomingLines) {
-        const dbItem = itemBySku.get(reqLine.skuId);
+        // Re-read (and lock) the line for every request line: validation is
+        // always against the quantities as they are now, cumulatively.
+        const [dbItem] = await em.query(
+          `
+          SELECT
+            id,
+            dispatched_qty AS "dispatchedQty",
+            received_qty AS "receivedQty",
+            discrepancy_qty AS "discrepancyQty",
+            unit_cost AS "unitCost"
+          FROM ${prefix}"stock_transfer_item"
+          WHERE tenant_id = $1 AND transfer_id = $2 AND sku_id = $3
+          FOR UPDATE
+          `,
+          [tenantId, transferId, reqLine.skuId],
+        );
         if (!dbItem) {
           throw new InventoryDomainError(
             InventoryDomainErrorCode.TRANSFER_QUANTITY_MISMATCH,
@@ -507,6 +576,12 @@ export class TransfersService {
         }
 
         // Lock destination stock_balance row
+        await lockStockBalance(
+          em,
+          tenantId,
+          header.to_warehouse_id,
+          reqLine.skuId,
+        );
         const destBalRows = await em.query(
           `
           SELECT
@@ -521,6 +596,20 @@ export class TransfersService {
           `,
           [tenantId, header.to_warehouse_id, reqLine.skuId],
         );
+
+        // on hand may rise only by what leaves in-transit: refuse when the
+        // counter holds less than we are about to clear (never clamp)
+        const inTransitMilli =
+          destBalRows.length > 0
+            ? parseQtyToMilli(String(destBalRows[0].inTransitQty), true, false)
+            : 0n;
+        if (inTransitMilli < totalClearedNowMilli) {
+          throw new InventoryDomainError(
+            InventoryDomainErrorCode.TRANSFER_QUANTITY_MISMATCH,
+            `Destination in-transit quantity (${formatMilliToQty(inTransitMilli)}) for SKU ${reqLine.skuId} is lower than ${formatMilliToQty(totalClearedNowMilli)}`,
+            409,
+          );
+        }
 
         const oldOnHandQty =
           destBalRows.length > 0
@@ -625,8 +714,8 @@ export class TransfersService {
             `
             UPDATE ${prefix}"stock_balance"
             SET
-              on_hand_qty = $4::numeric(18,3),
-              in_transit_qty = GREATEST(0, in_transit_qty - $5::numeric(18,3)),
+              on_hand_qty = on_hand_qty + $4::numeric(18,3),
+              in_transit_qty = in_transit_qty - $5::numeric(18,3),
               avg_unit_cost = $6::bigint,
               valuation_amount = $7::bigint,
               version = version + 1,
@@ -637,7 +726,7 @@ export class TransfersService {
               tenantId,
               header.to_warehouse_id,
               reqLine.skuId,
-              newOnHandQty,
+              formatMilliToQty(receiveNowMilli),
               clearedStr,
               newAvgCost,
               newValuation,
@@ -708,6 +797,16 @@ export class TransfersService {
         nextStatus = 'RECEIVED';
       }
 
+      // D17: closing a transfer that has lost units books the loss
+      if (nextStatus === 'RECEIVED' && dto?.resolveDiscrepancy) {
+        await this.writeTransferLosses(em, prefix, tenantId, header, {
+          transferId,
+          actorId,
+          correlationId,
+          occurredAt,
+        });
+      }
+
       await em.query(
         `
         UPDATE ${prefix}"stock_transfer"
@@ -732,6 +831,346 @@ export class TransfersService {
         });
       }
 
+      return this.loadTransferResponse(em, prefix, tenantId, transferId);
+    });
+  }
+
+  /**
+   * D17: the units recorded as lost in transit are written off at the
+   * dispatch cost when the discrepancy is closed. They never reached on
+   * hand, so the loss is booked as an in/out pair at the destination: the
+   * ledger still nets to the on-hand quantity (reconciliation stays clean)
+   * and the `TRANSFER_LOSS` row carries the quantity and the dispatch cost.
+   * The balance row is not touched. One `inventory.stock.changed` per line,
+   * movement `TRANSFER_LOSS`.
+   */
+  private async writeTransferLosses(
+    em: EntityManager,
+    prefix: string,
+    tenantId: string,
+    header: Record<string, unknown>,
+    ctx: {
+      transferId: string;
+      actorId: string;
+      correlationId: string | null;
+      occurredAt: string;
+    },
+  ) {
+    const lines = await em.query(
+      `
+      SELECT sku_id AS "skuId", discrepancy_qty AS "discrepancyQty",
+             unit_cost AS "unitCost", discrepancy_reason AS "reason"
+      FROM ${prefix}"stock_transfer_item"
+      WHERE tenant_id = $1 AND transfer_id = $2 AND discrepancy_qty > 0
+      ORDER BY sku_id ASC
+      `,
+      [tenantId, ctx.transferId],
+    );
+    for (const line of lines) {
+      const lostMilli = parseQtyToMilli(
+        String(line.discrepancyQty),
+        false,
+        false,
+      );
+      const lostStr = formatMilliToQty(lostMilli);
+      const costStr = vndToNumber(
+        parseMoneyToVnd(String(line.unitCost ?? '0')),
+      );
+      await lockStockBalance(
+        em,
+        tenantId,
+        String(header.to_warehouse_id),
+        line.skuId,
+      );
+      const [bal] = await em.query(
+        `
+        SELECT on_hand_qty AS "onHandQty", reserved_qty AS "reservedQty",
+               COALESCE(avg_unit_cost, 0) AS "avgUnitCost"
+        FROM ${prefix}"stock_balance"
+        WHERE tenant_id = $1 AND warehouse_id = $2 AND sku_id = $3
+        FOR UPDATE
+        `,
+        [tenantId, header.to_warehouse_id, line.skuId],
+      );
+      const onHand = formatMilliToQty(
+        parseQtyToMilli(String(bal?.onHandQty ?? '0'), true, false),
+      );
+      const reserved = formatMilliToQty(
+        parseQtyToMilli(String(bal?.reservedQty ?? '0'), true, false),
+      );
+      const avg = vndToNumber(parseMoneyToVnd(String(bal?.avgUnitCost ?? '0')));
+      const onHandPlusLost = formatMilliToQty(
+        parseQtyToMilli(onHand, true, false) + lostMilli,
+      );
+      const reason = `Lost in transit: ${line.reason ?? header.note ?? ctx.transferId}`;
+      const ledgerRow = (
+        type: string,
+        before: string,
+        delta: string,
+        after: string,
+      ) =>
+        em.query(
+          `
+          INSERT INTO ${prefix}"stock_balance_ledger" (
+            id, tenant_id, warehouse_id, sku_id, movement_type,
+            qty_before, qty_delta, on_hand_after, reserved_after,
+            unit_cost, avg_cost_after, reference_type, reference_id,
+            actor_id, correlation_id, reason, occurred_at
+          ) VALUES (
+            $1, $2, $3, $4, $5,
+            $6::numeric(18,3), $7::numeric(18,3), $8::numeric(18,3), $9::numeric(18,3),
+            $10::bigint, $11::bigint, 'STOCK_TRANSFER', $12,
+            $13, $14, $15, $16
+          )
+          `,
+          [
+            randomUUID(),
+            tenantId,
+            header.to_warehouse_id,
+            line.skuId,
+            type,
+            before,
+            delta,
+            after,
+            reserved,
+            costStr,
+            avg,
+            ctx.transferId,
+            ctx.actorId,
+            ctx.correlationId,
+            reason.slice(0, 255),
+            ctx.occurredAt,
+          ],
+        );
+      await ledgerRow('TRANSFER_LOST_IN', onHand, lostStr, onHandPlusLost);
+      await ledgerRow('TRANSFER_LOSS', onHandPlusLost, `-${lostStr}`, onHand);
+      if (this.outbox) {
+        await this.outbox.add(em, INVENTORY_STOCK_CHANGED, {
+          warehouseId: header.to_warehouse_id as string,
+          skuId: line.skuId,
+          movementType: 'TRANSFER_LOSS',
+          qtyDelta: `-${lostStr}`,
+          onHandAfter: onHand,
+          reservedAfter: reserved,
+          unitCost: costStr,
+          avgCostAfter: avg,
+          referenceType: 'STOCK_TRANSFER',
+          referenceId: ctx.transferId,
+          occurredAt: ctx.occurredAt,
+        } satisfies StockChangedPayload);
+      }
+    }
+  }
+
+  /**
+   * D17: cancel a transfer. A DRAFT only changes status. After dispatch the
+   * units not yet received (dispatched - received - lost) leave the
+   * destination in-transit counter and return to the source warehouse at the
+   * dispatch cost with a reversing ledger row (`TRANSFER_CANCEL`,
+   * `reversal_of_ledger_id` = the dispatch row) and an
+   * `inventory.stock.changed` event; units already received stay.
+   */
+  async cancelTransfer(transferId: string, reason?: string) {
+    return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
+      const prefix = schemaPrefix(em);
+      const headerRows = await em.query(
+        `SELECT * FROM ${prefix}"stock_transfer"
+         WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, transferId],
+      );
+      if (headerRows.length === 0) {
+        throw new InventoryDomainError(
+          InventoryDomainErrorCode.TRANSFER_NOT_FOUND,
+          `Stock transfer ${transferId} not found`,
+          404,
+        );
+      }
+      const header = headerRows[0];
+      assertCanCancelStockTransfer(header.status);
+
+      const occurredAt = new Date().toISOString();
+      const actorId = RequestContext.get()?.actor?.id ?? 'system';
+      const correlationId = RequestContext.get()?.requestId ?? null;
+
+      if (header.status !== 'DRAFT') {
+        const items = await em.query(
+          `
+          SELECT id, sku_id AS "skuId",
+                 dispatched_qty AS "dispatchedQty",
+                 received_qty AS "receivedQty",
+                 discrepancy_qty AS "discrepancyQty",
+                 unit_cost AS "unitCost"
+          FROM ${prefix}"stock_transfer_item"
+          WHERE tenant_id = $1 AND transfer_id = $2
+          ORDER BY sku_id ASC
+          FOR UPDATE
+          `,
+          [tenantId, transferId],
+        );
+        for (const item of items) {
+          const remainingMilli =
+            parseQtyToMilli(String(item.dispatchedQty), true, false) -
+            parseQtyToMilli(String(item.receivedQty), true, false) -
+            parseQtyToMilli(String(item.discrepancyQty), true, false);
+          if (remainingMilli <= 0n) continue;
+          const remainingStr = formatMilliToQty(remainingMilli);
+          const unitCost = vndToNumber(
+            parseMoneyToVnd(String(item.unitCost ?? '0')),
+          );
+
+          // destination: take the units off the road (never clamp)
+          await lockStockBalance(
+            em,
+            tenantId,
+            header.to_warehouse_id,
+            item.skuId,
+          );
+          const [dest] = await em.query(
+            `SELECT in_transit_qty AS "inTransitQty"
+             FROM ${prefix}"stock_balance"
+             WHERE tenant_id = $1 AND warehouse_id = $2 AND sku_id = $3
+             FOR UPDATE`,
+            [tenantId, header.to_warehouse_id, item.skuId],
+          );
+          if (
+            !dest ||
+            parseQtyToMilli(String(dest.inTransitQty), true, false) <
+              remainingMilli
+          ) {
+            throw new InventoryDomainError(
+              InventoryDomainErrorCode.TRANSFER_QUANTITY_MISMATCH,
+              `Destination in-transit quantity for SKU ${item.skuId} is lower than the ${remainingStr} to return`,
+              409,
+            );
+          }
+          await em.query(
+            `UPDATE ${prefix}"stock_balance"
+             SET in_transit_qty = in_transit_qty - $4::numeric(18,3),
+                 version = version + 1, updated_at = now()
+             WHERE tenant_id = $1 AND warehouse_id = $2 AND sku_id = $3`,
+            [tenantId, header.to_warehouse_id, item.skuId, remainingStr],
+          );
+
+          // source: the units come back at the dispatch cost
+          await lockStockBalance(
+            em,
+            tenantId,
+            header.from_warehouse_id,
+            item.skuId,
+          );
+          const [src] = await em.query(
+            `SELECT on_hand_qty AS "onHandQty", reserved_qty AS "reservedQty",
+                    COALESCE(avg_unit_cost, 0) AS "avgUnitCost"
+             FROM ${prefix}"stock_balance"
+             WHERE tenant_id = $1 AND warehouse_id = $2 AND sku_id = $3
+             FOR UPDATE`,
+            [tenantId, header.from_warehouse_id, item.skuId],
+          );
+          const oldOnHand = formatMilliToQty(
+            parseQtyToMilli(String(src?.onHandQty ?? '0'), true, false),
+          );
+          const reserved = formatMilliToQty(
+            parseQtyToMilli(String(src?.reservedQty ?? '0'), true, false),
+          );
+          const oldAvg = vndToNumber(
+            parseMoneyToVnd(String(src?.avgUnitCost ?? '0')),
+          );
+          const valuation = computeWeightedAverageCostOnReceipt({
+            currentOnHandQty: oldOnHand,
+            currentAvgUnitCost: oldAvg,
+            receivedBaseQty: remainingStr,
+            receivedUnitCost: unitCost,
+          });
+          await em.query(
+            `
+            INSERT INTO ${prefix}"stock_balance" (
+              id, tenant_id, warehouse_id, sku_id, on_hand_qty, reserved_qty,
+              in_transit_qty, avg_unit_cost, valuation_amount, version, updated_at
+            ) VALUES ($1, $2, $3, $4, $5::numeric(18,3), 0, 0, $6::bigint, $7::bigint, 1, now())
+            ON CONFLICT (tenant_id, warehouse_id, sku_id) DO UPDATE
+            SET on_hand_qty = ${prefix}"stock_balance".on_hand_qty + $8::numeric(18,3),
+                avg_unit_cost = $6::bigint,
+                valuation_amount = $7::bigint,
+                version = ${prefix}"stock_balance".version + 1,
+                updated_at = now()
+            `,
+            [
+              randomUUID(),
+              tenantId,
+              header.from_warehouse_id,
+              item.skuId,
+              valuation.newOnHandQty,
+              valuation.newAvgUnitCost,
+              valuation.newValuationAmount,
+              remainingStr,
+            ],
+          );
+          const [dispatchRow] = await em.query(
+            `SELECT id FROM ${prefix}"stock_balance_ledger"
+             WHERE tenant_id = $1 AND reference_type = 'STOCK_TRANSFER'
+               AND reference_id = $2 AND warehouse_id = $3 AND sku_id = $4
+               AND movement_type = 'TRANSFER_DISPATCH'
+             ORDER BY occurred_at DESC LIMIT 1`,
+            [tenantId, transferId, header.from_warehouse_id, item.skuId],
+          );
+          await em.query(
+            `
+            INSERT INTO ${prefix}"stock_balance_ledger" (
+              id, tenant_id, warehouse_id, sku_id, movement_type,
+              qty_before, qty_delta, on_hand_after, reserved_after,
+              unit_cost, avg_cost_after, reference_type, reference_id,
+              actor_id, correlation_id, reason, reversal_of_ledger_id, occurred_at
+            ) VALUES (
+              $1, $2, $3, $4, 'TRANSFER_CANCEL',
+              $5::numeric(18,3), $6::numeric(18,3), $7::numeric(18,3), $8::numeric(18,3),
+              $9::bigint, $10::bigint, 'STOCK_TRANSFER', $11,
+              $12, $13, $14, $15, $16
+            )
+            `,
+            [
+              randomUUID(),
+              tenantId,
+              header.from_warehouse_id,
+              item.skuId,
+              oldOnHand,
+              remainingStr,
+              valuation.newOnHandQty,
+              reserved,
+              unitCost,
+              valuation.newAvgUnitCost,
+              transferId,
+              actorId,
+              correlationId,
+              (reason ?? 'Transfer cancelled after dispatch').slice(0, 255),
+              dispatchRow?.id ?? null,
+              occurredAt,
+            ],
+          );
+          if (this.outbox) {
+            await this.outbox.add(em, INVENTORY_STOCK_CHANGED, {
+              warehouseId: header.from_warehouse_id,
+              skuId: item.skuId,
+              movementType: 'TRANSFER_CANCEL',
+              qtyDelta: remainingStr,
+              onHandAfter: valuation.newOnHandQty,
+              reservedAfter: reserved,
+              unitCost,
+              avgCostAfter: valuation.newAvgUnitCost,
+              referenceType: 'STOCK_TRANSFER',
+              referenceId: transferId,
+              occurredAt,
+            } satisfies StockChangedPayload);
+          }
+        }
+      }
+
+      await em.query(
+        `UPDATE ${prefix}"stock_transfer"
+         SET status = 'CANCELLED', cancelled_by = $3, cancelled_at = $4::timestamptz,
+             cancel_reason = $5, updated_at = now()
+         WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, transferId, actorId, occurredAt, reason ?? null],
+      );
       return this.loadTransferResponse(em, prefix, tenantId, transferId);
     });
   }
@@ -811,6 +1250,9 @@ export class TransfersService {
         dispatched_at AS "dispatchedAt",
         received_by AS "receivedBy",
         received_at AS "receivedAt",
+        cancelled_by AS "cancelledBy",
+        cancelled_at AS "cancelledAt",
+        cancel_reason AS "cancelReason",
         created_by AS "createdBy",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
@@ -848,8 +1290,13 @@ export class TransfersService {
       [tenantId, transferId],
     );
 
+    const status = String(headers[0].status);
+    const daysOpen = transferDaysOpen(status, headers[0].dispatchedAt);
     return {
       ...headers[0],
+      // D17: still on the road after TRANSFER_OVERDUE_DAYS days
+      daysOpen,
+      overdue: isTransferOverdue(daysOpen),
       items: items.map((i: Record<string, unknown>) => ({
         id: i.id,
         lineNo: Number(i.lineNo),
@@ -866,9 +1313,27 @@ export class TransfersService {
         discrepancyQty: formatMilliToQty(
           parseQtyToMilli(String(i.discrepancyQty), true, false),
         ),
-        inTransitRemainingQty: formatMilliToQty(
-          parseQtyToMilli(String(i.inTransitRemainingQty ?? '0'), true, true),
-        ),
+        // a cancelled transfer has nothing on the road: the rest went back
+        inTransitRemainingQty:
+          status === 'CANCELLED'
+            ? '0.000'
+            : formatMilliToQty(
+                parseQtyToMilli(
+                  String(i.inTransitRemainingQty ?? '0'),
+                  true,
+                  true,
+                ),
+              ),
+        returnedQty:
+          status === 'CANCELLED'
+            ? formatMilliToQty(
+                parseQtyToMilli(
+                  String(i.inTransitRemainingQty ?? '0'),
+                  true,
+                  true,
+                ),
+              )
+            : '0.000',
         unitCost: vndToNumber(parseMoneyToVnd(String(i.unitCost ?? '0'))),
         discrepancyReason: i.discrepancyReason,
       })),

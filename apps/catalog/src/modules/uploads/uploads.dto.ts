@@ -58,4 +58,6 @@ export interface UploadedRes {
   id: string;
   status: string;
   size: number;
+  /** Images only: the link stored on products */
+  publicUrl?: string;
 }

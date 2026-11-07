@@ -1,3 +1,9 @@
+import { CreateTenantPlanQuota1792800000000 } from '../../apps/catalog/src/migrations/1792800000000-create-tenant-plan-quota';
+import { PlanQuotaService } from '../../apps/catalog/src/quota/plan-quota.service';
+import { CreateTenantStatus1793100000420 } from '../../apps/integration/src/migrations/1793100000420-create-tenant-status';
+import { DefaultBranchWarehouse1792700000000 } from '../../apps/inventory/src/migrations/1792700000000-default-branch-warehouse';
+import { CashShiftSession1792200000100 } from '../../apps/sales/src/migrations/1792200000100-cash-shift-session';
+import { CreateTenantStatus1793100000410 } from '../../apps/sales/src/migrations/1793100000410-create-tenant-status';
 /**
  * Milestone M8 — Full-System End-to-End Business Workflows (Workflows A through G)
  * Real PostgreSQL Multi-Schema Integration Suite across all 8 Bounded Contexts:
@@ -8,6 +14,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   EventEnvelope,
   RequestContext,
+  TenantContext,
   TenantScopedRepository,
 } from '@pbl/common';
 import {
@@ -122,11 +129,13 @@ import { ShopeeProviderAdapter } from '../../apps/integration/src/providers/shop
 import { InMemorySalesOrderClient } from '../../apps/integration/test/support/in-memory-sales-order.client';
 import { BranchProjectionEntity as InventoryBranchProjectionEntity } from '../../apps/inventory/src/branches/branch-projection.entity';
 import { BranchProjectionHandler as InventoryBranchProjectionHandler } from '../../apps/inventory/src/branches/branch-projection.handler';
+import { resolveBranchWarehouse } from '../../apps/inventory/src/branches/branch-warehouse';
 import { CatalogSkuProjectionHandler } from '../../apps/inventory/src/infrastructure/catalog-reference/catalog-sku-projection.handler';
 import { M2_INVENTORY_ENTITIES } from '../../apps/inventory/src/infrastructure/persistence/inventory.entities';
 import { CreateInventoryTables1791900000000 } from '../../apps/inventory/src/migrations/1791900000000-create-inventory-tables';
 import { AddWarehouseStockBalances1791900000100 } from '../../apps/inventory/src/migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from '../../apps/inventory/src/migrations/1791900000200-create-m2-inventory-core';
+import { StockIntegrity1793000000600 } from '../../apps/inventory/src/migrations/1793000000600-stock-integrity';
 import { IssuingService } from '../../apps/inventory/src/modules/issuing/issuing.service';
 import { ProcurementService } from '../../apps/inventory/src/modules/procurement/procurement.service';
 import { ReceivingService } from '../../apps/inventory/src/modules/receiving/receiving.service';
@@ -510,6 +519,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           ...PRODUCER_MIGRATIONS,
           ...CONSUMER_MIGRATIONS,
           CreateCatalogTables1791900000200,
+          CreateTenantPlanQuota1792800000000,
         ],
       }),
     );
@@ -530,6 +540,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       TenantScopedRepository.forEntity(catalogDs, ProductEntity),
       TenantScopedRepository.forEntity(catalogDs, ProductVariantEntity),
       TenantScopedRepository.forEntity(catalogDs, UnitConversionEntity),
+      new PlanQuotaService(outbox),
     );
     catalogPricing = new PricingService(
       catalogDs,
@@ -558,6 +569,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           CreateInventoryTables1791900000000,
           AddWarehouseStockBalances1791900000100,
           CreateM2InventoryCore1791900000200,
+          DefaultBranchWarehouse1792700000000,
+          StockIntegrity1793000000600,
         ],
       }),
     );
@@ -687,6 +700,8 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           CreateCheckoutWorkflow1791800000300,
           CreateM3SalesCore1791900000200,
           AllowOnAccountTender1792100000100,
+          CashShiftSession1792200000100,
+          CreateTenantStatus1793100000410,
         ],
       }),
     );
@@ -897,6 +912,15 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
     const realInventoryBridge = {
       reserve: async () => null,
       release: async () => undefined,
+      resolveSaleWarehouse: (branchId: string, warehouseId?: string) =>
+        inventoryDs.transaction((em) =>
+          resolveBranchWarehouse(
+            em,
+            TenantContext.require(),
+            branchId,
+            warehouseId,
+          ),
+        ),
       reserveWarehouseStock: async (idempotencyKey: string, req: any) => {
         try {
           const res = await invReservations.reserveWarehouseStock(
@@ -1009,6 +1033,42 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
       salesCustomerLoyaltyClient,
       salesFinanceCreditClient,
     );
+
+    // A POS sale needs an open shift (cash session). These system flows are about stock, money and events, not about
+    // the drawer, so a sale with no shift gets its branch's one open shift, opened on first use.
+    const defaultShifts = new Map<string, Promise<string>>();
+    const checkoutWithShift = salesCheckout.checkout.bind(salesCheckout);
+    salesCheckout.checkout = (async (...args: unknown[]) => {
+      const dto = args[4] as
+        | { shiftId?: string; branchId?: string }
+        | undefined;
+      if (dto && !dto.shiftId && dto.branchId) {
+        const key = `${TenantContext.require()}:${dto.branchId}`;
+        if (!defaultShifts.has(key)) {
+          defaultShifts.set(
+            key,
+            salesShifts
+              .openShift(args[0] as string, null, {
+                branchId: dto.branchId,
+                openingCash: 0,
+              })
+              .then((shift) => shift.id)
+              .catch(
+                async () =>
+                  (
+                    await salesShifts.getActiveShift(
+                      args[0] as string,
+                      null,
+                      dto.branchId,
+                    )
+                  ).id,
+              ),
+          );
+        }
+        args[4] = { ...dto, shiftId: await defaultShifts.get(key) };
+      }
+      return (checkoutWithShift as (...a: unknown[]) => unknown)(...args);
+    }) as never;
     salesOrders = new M3OrdersService(
       salesDs,
       salesPos,
@@ -1040,6 +1100,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           ...PRODUCER_MIGRATIONS,
           ...CONSUMER_MIGRATIONS,
           CreateM6IntegrationCore1791900000200,
+          CreateTenantStatus1793100000420,
         ],
       }),
     );

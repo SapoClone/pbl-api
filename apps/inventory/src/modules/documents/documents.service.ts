@@ -212,12 +212,33 @@ export class DocumentsService {
     return this.issuing.getIssueById(id);
   }
 
-  /** Only a draft: cancelling goods in transit (returning them) is not built */
-  async cancelTransfer(id: string) {
-    await runInTenantTransaction(this.dataSource, (em, t) =>
-      this.move(em, t, 'transfer', id, ['DRAFT'], 'CANCELLED'),
-    );
-    return this.transfers.getTransferById(id);
+  /**
+   * A draft is simply cancelled. After dispatch (D17) the transfer service
+   * returns the units not yet received to the source; that needs
+   * `inventory.approve`.
+   */
+  async cancelTransfer(
+    id: string,
+    opts: { canApprove?: boolean; reason?: string } = {},
+  ) {
+    const current = await this.transfers.getTransferById(id);
+    if (current.status === 'DRAFT') {
+      await runInTenantTransaction(this.dataSource, (em, t) =>
+        this.move(em, t, 'transfer', id, ['DRAFT'], 'CANCELLED'),
+      );
+      return this.transfers.getTransferById(id);
+    }
+    if (
+      ['DISPATCHED', 'PARTIALLY_RECEIVED'].includes(current.status) &&
+      !opts.canApprove
+    ) {
+      throw new InventoryDomainError(
+        InventoryDomainErrorCode.PERMISSION_DENIED,
+        'inventory.approve is required to cancel a transfer after dispatch',
+        403,
+      );
+    }
+    return this.transfers.cancelTransfer(id, opts.reason);
   }
 
   async cancelStocktake(id: string) {

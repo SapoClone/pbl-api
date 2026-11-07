@@ -130,12 +130,15 @@ export class CreateCheckoutReqDto {
   @IsUUID()
   branchId!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     example: '22222222-2222-4222-8222-222222222222',
+    description:
+      'Optional: the sale uses its own branch warehouse; a value must be a BRANCH warehouse of branchId',
   })
+  @IsOptional()
   @IsUUID()
-  warehouseId!: string;
+  warehouseId?: string;
 
   @ApiProperty({ enum: PAYMENT_METHODS, example: 'card' })
   @IsIn(PAYMENT_METHODS)

@@ -63,9 +63,10 @@ describe('setupSwagger', () => {
 
     const mergedDoc = setupSpy.mock.calls[0][2] as OpenAPIObject;
     expect(mergedDoc.paths['/inventory/api/v1/warehouses']).toBeDefined();
+    // direct "add stock" was removed (D15)
     expect(
       mergedDoc.paths['/inventory/api/v1/stock-balances/receipts'],
-    ).toBeDefined();
+    ).toBeUndefined();
     expect(mergedDoc.paths['/internal/v1/reservations']).toBeDefined();
     expect(mergedDoc.paths['/sales/api/v1/orders']).toBeDefined();
     expect(mergedDoc.paths['/sales/api/v1/orders/checkouts']).toBeDefined();

@@ -5,12 +5,10 @@ import { ValidationException } from '@/exceptions/validation.exception';
 import { isUniqueViolation } from '@/utils/db-errors';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
-  PLATFORM_SUBSCRIPTION_CHANGED,
   PLATFORM_TENANT_CREATED,
   PLATFORM_TENANT_STATUS_CHANGED,
   PLATFORM_TENANT_UPDATED,
   PlatformActor,
-  SubscriptionChangedPayload,
   TenantEventPayload,
   TenantStatusChangedPayload,
 } from '@pbl/contracts';
@@ -29,6 +27,7 @@ import {
   SubscriptionStatus,
 } from '../subscription/entities/subscription.entity';
 import { expiryOf } from '../subscription/expiry';
+import { issueCode } from '../subscription/issue-code';
 import { tableOf } from '../subscription/sql';
 import { AccountTenantEntity } from '../tenant/entities/account-tenant.entity';
 import { TenantEntity, TenantStatus } from '../tenant/entities/tenant.entity';
@@ -310,7 +309,6 @@ export class AdminTenantsService {
           this.tenantPayload(tenant, actor),
           { tenantId: tenant.id },
         );
-        await this.emitSubscriptionCreated(em, tenant.id, actor);
         return tenant.id;
       });
       return await this.get(tenantId);
@@ -459,6 +457,7 @@ export class AdminTenantsService {
     }
     return em.save(
       new AccountEntity({
+        code: await issueCode(em, AccountEntity, 'US', 5),
         email: owner.email,
         name: owner.name,
         password: null,
@@ -500,35 +499,6 @@ export class AdminTenantsService {
       changedBy: { type: 'platform_admin', id: adminId },
     };
     await this.outbox.add(em, PLATFORM_TENANT_STATUS_CHANGED, payload, {
-      tenantId,
-    });
-  }
-
-  private async emitSubscriptionCreated(
-    em: EntityManager,
-    tenantId: string,
-    actor: PlatformActor,
-  ): Promise<void> {
-    const sub = await em.findOneOrFail(SubscriptionEntity, {
-      where: { tenantId, status: SubscriptionStatus.ACTIVE },
-      relations: { plan: true },
-    });
-    const payload: SubscriptionChangedPayload = {
-      subscriptionId: sub.id,
-      tenantId,
-      eventType: 'created',
-      fromPlan: null,
-      toPlan: sub.plan!.code,
-      expiresAt: sub.expiresAt ? sub.expiresAt.toISOString() : null,
-      quotas: {
-        branches: sub.plan!.quotaBranches,
-        users: sub.plan!.quotaUsers,
-        products: sub.plan!.quotaProducts,
-        storageMb: sub.plan!.quotaStorageMb,
-      },
-      actor,
-    };
-    await this.outbox.add(em, PLATFORM_SUBSCRIPTION_CHANGED, payload, {
       tenantId,
     });
   }

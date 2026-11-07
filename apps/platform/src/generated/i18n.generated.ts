@@ -8,12 +8,24 @@ export type I18nTranslations = {
         "error": {
             "wrong_credentials": string;
             "account_locked": string;
+            "email_taken": string;
+            "protected_admin": string;
         };
     };
     "branch": {
         "error": {
             "code_exists": string;
             "last_branch": string;
+            "not_inactive": string;
+            "blocked": string;
+            "invoice_prefix_exists": string;
+            "code_immutable": string;
+            "scope_restricted": string;
+            "service_unavailable": string;
+        };
+        "reason": {
+            "last_active": string;
+            "member_without_branch": string;
         };
     };
     "common": {
@@ -30,6 +42,11 @@ export type I18nTranslations = {
             "not_active": string;
             "code_exists": string;
             "not_found": string;
+        };
+    };
+    "quota": {
+        "error": {
+            "limit_reached": string;
         };
     };
     "role": {
@@ -54,6 +71,8 @@ export type I18nTranslations = {
             "quota_exceeded": string;
             "same_plan_same_period": string;
             "payment_overlaps": string;
+            "payment_not_allowed": string;
+            "payment_note_required": string;
         };
     };
     "tenant": {
@@ -67,6 +86,8 @@ export type I18nTranslations = {
             "already_suspended": string;
             "not_suspended": string;
             "owner_account_disabled": string;
+            "store_limit": string;
+            "member_blocked": string;
         };
     };
     "user": {

@@ -114,6 +114,7 @@ const uploadsStub = {
   createImageUpload: jest.fn(async () => ({ imageId: SAMPLE_UUID })),
   createImportUpload: jest.fn(async () => ({ uploadId: SAMPLE_UUID })),
   storeContent: jest.fn(async () => ({ id: SAMPLE_UUID, status: 'uploaded' })),
+  complete: jest.fn(async () => ({ id: SAMPLE_UUID, status: 'uploaded' })),
 };
 
 const importsStub = {
@@ -280,6 +281,11 @@ describe('Catalog service HTTP & RBAC contract', () => {
         ['products.create', 'products.update'],
       ],
       ['post', '/api/v1/uploads/imports', ['products.create']],
+      [
+        'post',
+        `/api/v1/uploads/${U}/complete`,
+        ['products.create', 'products.update'],
+      ],
       [
         'put',
         `/api/v1/uploads/${U}/content`,
@@ -483,6 +489,18 @@ describe('Catalog service HTTP & RBAC contract', () => {
         .set('Authorization', owner())
         .send({ fileName: 'p.csv', contentType: 'image/png', size: 10 })
         .expect(422);
+    });
+
+    it('POST /uploads/:id/complete answers 200 and needs a uuid', async () => {
+      await request(url())
+        .post(`/api/v1/uploads/${SAMPLE_UUID}/complete`)
+        .set('Authorization', owner())
+        .expect(200);
+      expect(uploadsStub.complete).toHaveBeenCalledWith(SAMPLE_UUID);
+      await request(url())
+        .post('/api/v1/uploads/not-a-uuid/complete')
+        .set('Authorization', owner())
+        .expect(400);
     });
 
     it('PUT /uploads/:id/content hands the raw body and content type to the service', async () => {

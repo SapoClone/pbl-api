@@ -16,6 +16,7 @@ import type { Response } from 'express';
 import { InternalOmnichannelOrderDto } from '../modules/orders/m3-orders.dto';
 import { M3OrdersService } from '../modules/orders/m3-orders.service';
 import { SalesExceptionFilter } from '../presentation/sales-http-error';
+import { TenantStatusService } from '../tenant-status/tenant-status.service';
 import { InternalTokenGuard } from './internal-token.guard';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -45,7 +46,10 @@ export const SERVICE_ACTOR_ID = '00000000-0000-0000-0000-000000000000';
 @UseFilters(SalesExceptionFilter)
 @Controller('internal/v1/orders')
 export class InternalOrdersController {
-  constructor(private readonly orders: M3OrdersService) {}
+  constructor(
+    private readonly orders: M3OrdersService,
+    private readonly tenantStatus: TenantStatusService,
+  ) {}
 
   /** 201 with the order, 200 + `Idempotency-Replayed` when `(sourceConnectionId, externalOrderId)` exists */
   @Post('omnichannel')
@@ -65,6 +69,8 @@ export class InternalOrdersController {
           'A valid X-Tenant-Id header (UUID) is required for internal calls',
       });
     }
+    // a suspended store takes no marketplace orders (403 TENANT_SUSPENDED); integration keeps the job and retries
+    await this.tenantStatus.assertActive(tenantId, 'internal order intake');
     const result = await TenantContext.run(tenantId, () =>
       this.orders.createOmnichannelOrder(SERVICE_ACTOR_ID, [], null, dto, {
         allowPriceOverride: true,

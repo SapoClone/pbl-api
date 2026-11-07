@@ -42,7 +42,7 @@ export class WarehousesController {
   @ApiOperation({
     summary: 'Create a warehouse',
     description:
-      'Creates a tenant-scoped physical warehouse (BRANCH, CENTRAL, or QUARANTINE).',
+      'Creates a warehouse (BRANCH, CENTRAL, or QUARANTINE). A code that exists is a 409 WAREHOUSE_CODE_CONFLICT and nothing is overwritten. A BRANCH warehouse needs an active branch of the caller; CENTRAL and QUARANTINE have none.',
   })
   @ApiResponse({
     status: HttpStatus.CREATED,
@@ -118,8 +118,11 @@ export class WarehousesController {
   ) {
     try {
       await this.scope.assertWarehouse(branches, id);
-      // moving a warehouse to a branch is allowed only into the member's own
-      if (dto.branchId) this.scope.assertBranch(branches, dto.branchId);
+      // the target branch must be the member's own, and a restricted member never
+      // sends null: a null branch is not theirs (D13)
+      if (dto.branchId !== undefined) {
+        this.scope.assertBranch(branches, dto.branchId);
+      }
       return await this.warehouses.update(id, dto);
     } catch (error) {
       rethrowInventoryHttpError(error);

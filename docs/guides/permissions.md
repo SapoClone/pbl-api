@@ -12,10 +12,10 @@ A permission is `<module>.<action>`; the catalog and the default roles live in
 | products, channels, customers, staff | view, create, update, delete          |
 | inventory, orders, purchasing        | view, create, update, delete, approve |
 | finance                              | view, create, update, approve         |
-| pos                                  | view, create, update                  |
+| pos                                  | view, create, update, approve         |
 | settings                             | view, update                          |
 
-42 codes in all. Exports: `PERMISSION_CATALOG`, `PERMISSION_MODULES`, `PERMISSION_ACTIONS`, `PermissionCode`,
+43 codes in all. `pos.approve` approves a cash shift close with a large variance (owner and `branch_manager` by default; the approver cannot be the person who counted). Exports: `PERMISSION_CATALOG`, `PERMISSION_MODULES`, `PERMISSION_ACTIONS`, `PermissionCode`,
 `ALL_PERMISSIONS`, `isPermissionCode()`, `WILDCARD_PERMISSION` (`'*'`).
 
 ## Default roles

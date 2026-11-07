@@ -13,7 +13,7 @@ describe('permissions', () => {
   it('lists sorted, unique codes', () => {
     expect([...ALL_PERMISSIONS]).toEqual([...new Set(ALL_PERMISSIONS)].sort());
     expect(ALL_PERMISSIONS).toContain('orders.approve');
-    expect(ALL_PERMISSIONS).toHaveLength(42);
+    expect(ALL_PERMISSIONS).toHaveLength(43);
     expect(ALL_PERMISSIONS).toContain('finance.approve');
   });
 

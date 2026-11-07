@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import { discountValueTransformer, moneyTransformer } from '../../common/money';
 
 @Entity({ name: 'sales_code_sequence' })
@@ -133,6 +133,14 @@ export class OrderStatusHistoryEntity {
 }
 
 @Entity({ name: 'pos_shifts' })
+@Index(
+  'UQ_pos_shifts_active_register',
+  ['tenantId', 'branchId', 'registerCode'],
+  {
+    unique: true,
+    where: `"status" IN ('OPEN', 'PENDING_CLOSE', 'PENDING_APPROVAL')`,
+  },
+)
 export class PosShiftEntity {
   @PrimaryColumn('uuid')
   id!: string;
@@ -228,6 +236,169 @@ export class PosShiftEntity {
 
   @Column({ name: 'version', type: 'int', default: 1 })
   version!: number;
+
+  @Column({ name: 'counted_by_denomination', type: 'jsonb', nullable: true })
+  countedByDenomination!: Record<string, number> | null;
+
+  @Column({ name: 'counted_by', type: 'uuid', nullable: true })
+  countedBy!: string | null;
+
+  @Column({ name: 'counted_at', type: 'timestamptz', nullable: true })
+  countedAt!: Date | null;
+
+  @Column({
+    name: 'variance_reason',
+    type: 'varchar',
+    length: 32,
+    nullable: true,
+  })
+  varianceReason!: string | null;
+
+  @Column({ name: 'variance_note', type: 'text', nullable: true })
+  varianceNote!: string | null;
+
+  @Column({ name: 'close_requested_by', type: 'uuid', nullable: true })
+  closeRequestedBy!: string | null;
+
+  @Column({ name: 'close_requested_at', type: 'timestamptz', nullable: true })
+  closeRequestedAt!: Date | null;
+
+  @Column({ name: 'approved_by', type: 'uuid', nullable: true })
+  approvedBy!: string | null;
+
+  @Column({ name: 'approved_at', type: 'timestamptz', nullable: true })
+  approvedAt!: Date | null;
+
+  @Column({
+    name: 'responsibility',
+    type: 'varchar',
+    length: 24,
+    nullable: true,
+  })
+  responsibility!: string | null;
+
+  @Column({ name: 'planned_end_at', type: 'timestamptz', nullable: true })
+  plannedEndAt!: Date | null;
+
+  @Column({
+    name: 'close_history',
+    type: 'jsonb',
+    default: () => `'[]'::jsonb`,
+  })
+  closeHistory!: unknown[];
+}
+
+/** One signed, append-only row per cash movement of a shift (the migration also blocks UPDATE and DELETE) */
+@Entity({ name: 'pos_shift_cash_entry' })
+@Index('UQ_pos_shift_cash_entry_source', ['tenantId', 'sourceKey'], {
+  unique: true,
+})
+export class PosShiftCashEntryEntity {
+  @PrimaryColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ name: 'shift_id', type: 'uuid' })
+  shiftId!: string;
+
+  @Column({ name: 'branch_id', type: 'uuid' })
+  branchId!: string;
+
+  @Column({ name: 'kind', type: 'varchar', length: 16 })
+  kind!: string;
+
+  @Column({ name: 'amount', type: 'bigint', transformer: moneyTransformer })
+  amount!: number;
+
+  @Column({ name: 'reason', type: 'varchar', length: 32, nullable: true })
+  reason!: string | null;
+
+  @Column({ name: 'note', type: 'text', nullable: true })
+  note!: string | null;
+
+  @Column({ name: 'order_id', type: 'uuid', nullable: true })
+  orderId!: string | null;
+
+  @Column({ name: 'return_id', type: 'uuid', nullable: true })
+  returnId!: string | null;
+
+  @Column({ name: 'tender_id', type: 'uuid', nullable: true })
+  tenderId!: string | null;
+
+  @Column({ name: 'reverses_entry_id', type: 'uuid', nullable: true })
+  reversesEntryId!: string | null;
+
+  @Column({ name: 'staff_id', type: 'uuid' })
+  staffId!: string;
+
+  @Column({ name: 'occurred_at', type: 'timestamptz', default: () => 'now()' })
+  occurredAt!: Date;
+
+  @Column({ name: 'recorded_at', type: 'timestamptz', default: () => 'now()' })
+  recordedAt!: Date;
+
+  @Column({ name: 'source_key', type: 'varchar', length: 160 })
+  sourceKey!: string;
+}
+
+/** The store's cash drawer numbers, one row per tenant (defaults apply until the first PATCH) */
+@Entity({ name: 'cash_setting' })
+@Index('UQ_cash_setting_tenant', ['tenantId'], { unique: true })
+export class CashSettingEntity {
+  @PrimaryColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({
+    name: 'tolerance_vnd',
+    type: 'bigint',
+    default: 10000,
+    transformer: moneyTransformer,
+  })
+  toleranceVnd!: number;
+
+  @Column({
+    name: 'approval_above_vnd',
+    type: 'bigint',
+    default: 10000,
+    transformer: moneyTransformer,
+  })
+  approvalAboveVnd!: number;
+
+  @Column({
+    name: 'responsibility',
+    type: 'varchar',
+    length: 24,
+    default: 'none',
+  })
+  responsibility!: string;
+
+  @Column({ name: 'max_open_hours', type: 'int', default: 16 })
+  maxOpenHours!: number;
+
+  @Column({
+    name: 'max_opening_float_vnd',
+    type: 'bigint',
+    default: 5000000,
+    transformer: moneyTransformer,
+  })
+  maxOpeningFloatVnd!: number;
+
+  @Column({ name: 'denominations', type: 'jsonb' })
+  denominations!: number[];
+
+  @Column({ name: 'updated_by', type: 'uuid', nullable: true })
+  updatedBy!: string | null;
+
+  @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
+  createdAt!: Date;
+
+  @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
+  updatedAt!: Date;
 }
 
 @Entity({ name: 'pos_drafts' })
@@ -862,6 +1033,8 @@ export const M3_SALES_ENTITIES = [
   CatalogVariantProjectionEntity,
   OrderStatusHistoryEntity,
   PosShiftEntity,
+  PosShiftCashEntryEntity,
+  CashSettingEntity,
   PosDraftEntity,
   OrderTenderEntity,
   SalesReturnEntity,
