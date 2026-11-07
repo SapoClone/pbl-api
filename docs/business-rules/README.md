@@ -298,3 +298,37 @@ with this list.
 
 The glossary proposed in a6 (branch, warehouse, register, shift, staff, member, account, store, tenant) is worth reading
 before the decisions: several of the defects above come from one word meaning two things in two services.
+
+## 9. Status after wave 1 (7 November 2026)
+
+What happened to each finding of section 3. Wave 1 is built and tested together; the numbers are those of section 3.
+"Fixed" means the code now enforces it and a test proves it. Details: [decisions.md](decisions.md) and `built-a.md` to
+`built-f.md`.
+
+| # | Finding | Now |
+|---|---|---|
+| 1, 2 | A new branch gets no warehouse; a sale can use any warehouse | **Fixed** (A): default warehouse per branch, backfilled; a sale resolves its own branch's warehouse |
+| 3 | `isWarehouse` means nothing | **Settled**: the flag stays, documented as informational |
+| 4, 5 | A sale needs no shift; any open shift will do | **Fixed** (C1), as decided: a POS sale needs an open shift picked from the branch's open shifts, and the cashier of the order is the signed-in user |
+| 6, 7, 8 | Refund shift chosen by the client; a refund changes a closed shift; a refund before the return is approved | **Fixed** (C1) |
+| 9, 10 | Two cashiers on one register code; closing with open drafts | **Fixed** (C1) |
+| 11 | Schedule not tied to the register; shortage booked to the opener; orphaned shift | **Partly**: responsibility is a store setting, a member with an open shift cannot be removed (B), overdue shifts are flagged; the weekly schedule is still not read when a shift opens |
+| 12 | A POS payment confirmed on the caller's word | **Partly**: a non-cash tender needs a reference and records who confirmed it; there is no gateway verification |
+| 13 | Transfer receive can inflate stock | **Fixed** (F), reproduced with a failing test first |
+| 14 | Warehouse create overwrites; update moves a stock-holding warehouse | **Fixed** (A) |
+| 15, 16, 17 | Lost stock on first receipts; replayed receipts count twice; stock added with no document | **Fixed** (F): advisory lock, idempotency keys, the direct add-stock route removed |
+| 18 | No cancel after dispatch, no write-off, a transfer pushed by the sender alone | **Fixed** (F) |
+| 19 | Two stock models | **Partly** (F): the spurious deduction is skipped for warehouse orders; the older model is not retired |
+| 20 | Returns: no approval before refund, restock at cost 0, cashiers cannot restock | **Fixed** (C1) |
+| 21 | Holds last 15 minutes | **Partly** (F): confirmed orders hold without expiry; a POS payment arriving after the hold expired is not handled yet |
+| 22, 23, 24 | Branch delete and deactivate ignored downstream; an active branch deleted in one step; members keep deleted branches | **Fixed** (B), except old assignment rows pointing at already-deleted branches, which need an owner decision |
+| 25 | Self-serve store creation ignores the default branch name | **Fixed** (B) |
+| 26, 27 | A paid plan never expires; no trial | **Fixed** (D): 7 days of grace, then `free`; trials are not offered |
+| 28 | The storage limit does not count attached files | **Fixed** (D) |
+| 29 | Older stores unlimited in catalog | **Partly** (D): a resync (admin endpoint and script) closes the gap; it is a deploy step |
+| 30 | Suspension only ends logins | **Fixed** for sales and integration (D); a service without Redis logs an error at start |
+| 31, 32 | Payment on any row; demotion keeps sessions; lockout settings unused | **Fixed** (D) |
+| 33 | A free store has one branch | **Documented**, unchanged |
+| 34, 35 | Audit log not branch-limited; it cannot answer "who did what" | **Open**: wave 2 (D37) |
+| 36, 37 | A removed employee's name is lost; revenue does not reconcile | **Open**: wave 2 (D28 to D30) |
+| 38 | Inactive branches and locked members count toward plan limits | **Fixed** (B): locked members no longer count; inactive branches still do, as decided |
