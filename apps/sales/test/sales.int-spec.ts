@@ -37,6 +37,7 @@ import { CreateSalesTables1791800000000 } from '../src/migrations/1791800000000-
 import { AddOrderIdempotency1791800000200 } from '../src/migrations/1791800000200-add-order-idempotency';
 import { CreateCheckoutWorkflow1791800000300 } from '../src/migrations/1791800000300-create-checkout-workflow';
 import { CreateM3SalesCore1791900000200 } from '../src/migrations/1791900000200-create-m3-sales-core';
+import { CashShiftSession1792200000100 } from '../src/migrations/1792200000100-cash-shift-session';
 import { CheckoutService } from '../src/modules/checkout/checkout.service';
 import { FulfillmentService } from '../src/modules/fulfillment/fulfillment.service';
 import { M3OrdersService } from '../src/modules/orders/m3-orders.service';
@@ -86,11 +87,13 @@ describe('sales (Postgres)', () => {
   let m3OrdersService: M3OrdersService;
   let returnsService: ReturnsService;
   let fulfillmentService: FulfillmentService;
+  let defaultShiftId: string;
 
   /** What inventory answers: null means the stock was held */
   const inventory = {
     reserve: jest.fn(async (): Promise<unknown> => null),
     release: jest.fn(async () => undefined),
+    resolveSaleWarehouse: jest.fn(),
     reserveWarehouseStock: jest.fn(),
     getWarehouseReservation: jest.fn(),
     getWarehouseReservationByKey: jest.fn(),
@@ -193,6 +196,7 @@ describe('sales (Postgres)', () => {
           AddOrderIdempotency1791800000200,
           CreateCheckoutWorkflow1791800000300,
           CreateM3SalesCore1791900000200,
+          CashShiftSession1792200000100,
         ],
       }),
     });
@@ -222,6 +226,15 @@ describe('sales (Postgres)', () => {
       inventory as never,
       outbox,
     );
+    const realCheckout = checkoutService.checkout.bind(checkoutService);
+    jest
+      .spyOn(checkoutService, 'checkout')
+      .mockImplementation((staff, perms, scope, key, body) =>
+        realCheckout(staff, perms, scope, key, {
+          ...body,
+          shiftId: body.shiftId ?? defaultShiftId,
+        }),
+      );
     returnsService = new ReturnsService(dataSource, inventory as never, outbox);
     fulfillmentService = new FulfillmentService(
       dataSource,
@@ -237,6 +250,14 @@ describe('sales (Postgres)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // inventory resolves a sale's warehouse: the one named, else the branch's default
+    inventory.resolveSaleWarehouse.mockImplementation(
+      async (_branchId: string, warehouseId?: string) => ({
+        id: warehouseId ?? WAREHOUSE_A,
+        code: 'WH',
+        name: 'Warehouse',
+      }),
+    );
     inventory.reserve.mockResolvedValue(null);
     inventory.reserveWarehouseStock.mockImplementation(
       async (
@@ -276,6 +297,10 @@ describe('sales (Postgres)', () => {
       receiptId: randomUUID(),
     }));
 
+    // the cash entries are append-only (no DELETE): TRUNCATE is the test cleanup
+    await dataSource.query(
+      `TRUNCATE "${schema}"."pos_shift_cash_entry", "${schema}"."cash_setting"`,
+    );
     for (const table of [
       'coupon_usages',
       'coupons',
@@ -300,6 +325,18 @@ describe('sales (Postgres)', () => {
       await dataSource.query(`DELETE FROM "${schema}"."${table}"`);
     }
     await learnBranch(TENANT_A, BRANCH_A);
+    // A POS sale needs a shift (SHIFT_REQUIRED). These suites predate that rule: sales that name no
+    // shift go into this default drawer (its own register, so tests that open REG-01 still can).
+    defaultShiftId = (
+      await as(TENANT_A, () =>
+        shiftsService.openShift(ACCOUNT, ALL, {
+          branchId: BRANCH_A,
+          registerCode: 'DEFAULT-REG',
+          openingCash: 0,
+        }),
+      )
+    ).id;
+    await dataSource.query(`DELETE FROM "${schema}"."outbox_event"`);
     await seedCatalogVariant(TENANT_A, {
       variantId: VARIANT_A,
       productId: PRODUCT_A,
@@ -1322,6 +1359,8 @@ describe('sales (Postgres)', () => {
           branchId: BRANCH_A,
           registerCode: 'POS-BIG',
           openingCash: 5_000_000_000,
+          // above maxOpeningFloatVnd a note is required (cash design 4.3)
+          note: 'float for the money test',
         }),
       );
       expect(big.openingCash).toBe(5_000_000_000);
@@ -1385,6 +1424,93 @@ describe('sales (Postgres)', () => {
         );
       expect(events[0].payload.payload.grandTotal).toBe(details.grandTotal);
       expect(typeof events[0].payload.payload.subtotal).toBe('number');
+    });
+  });
+
+  describe('a sale uses its own branch warehouse (D2)', () => {
+    const NEW_BRANCH_WAREHOUSE = '88888888-8888-4888-8888-888888888888';
+    const pos = (over: Record<string, unknown> = {}) => ({
+      branchId: BRANCH_A,
+      lines: [{ variantId: VARIANT_A, qty: 1 }],
+      paymentMethod: 'CASH',
+      ...over,
+    });
+    const run = (key: string, body: Record<string, unknown>) =>
+      as(TENANT_A, () =>
+        checkoutService.checkout(ACCOUNT, ['*'], ALL, key, body as never),
+      );
+    const workflows = () =>
+      dataSource.getRepository(CheckoutWorkflowEntity).find();
+
+    it('a new branch can sell with no warehouseId: inventory resolves it and the workflow keeps it', async () => {
+      inventory.resolveSaleWarehouse.mockResolvedValue({
+        id: NEW_BRANCH_WAREHOUSE,
+        code: 'CN01',
+        name: 'Default',
+      });
+      const outcome = await run(randomUUID(), pos());
+      expect(inventory.resolveSaleWarehouse).toHaveBeenCalledWith(
+        BRANCH_A,
+        undefined,
+      );
+      expect(outcome.warehouseId).toBe(NEW_BRANCH_WAREHOUSE);
+      const reserveCall = inventory.reserveWarehouseStock.mock.calls[0][1];
+      expect(reserveCall.branchId).toBe(BRANCH_A);
+      expect(reserveCall.lines[0].warehouseId).toBe(NEW_BRANCH_WAREHOUSE);
+      expect((await workflows())[0].warehouseId).toBe(NEW_BRANCH_WAREHOUSE);
+    });
+
+    it('a client-supplied warehouseId is validated, and a foreign, central or quarantine one is refused before anything is created', async () => {
+      for (const code of ['WAREHOUSE_NOT_IN_BRANCH', 'WAREHOUSE_INACTIVE']) {
+        inventory.resolveSaleWarehouse.mockRejectedValueOnce(
+          new ConflictException({ errorCode: code, message: code }),
+        );
+        const error = await run(
+          randomUUID(),
+          pos({ warehouseId: randomUUID() }),
+        ).catch((e) => e);
+        expect(error.getStatus()).toBe(409);
+        expect(error.getResponse()).toMatchObject({ errorCode: code });
+      }
+      expect(inventory.resolveSaleWarehouse).toHaveBeenCalledWith(
+        BRANCH_A,
+        expect.any(String),
+      );
+      expect(inventory.reserveWarehouseStock).not.toHaveBeenCalled();
+      expect(await workflows()).toHaveLength(0);
+      expect(await dataSource.getRepository(OrderEntity).count()).toBe(0);
+    });
+
+    it('a branch with no warehouse answers 409 BRANCH_HAS_NO_WAREHOUSE, not a 503 or out of stock', async () => {
+      inventory.resolveSaleWarehouse.mockRejectedValueOnce(
+        new ConflictException({
+          errorCode: 'BRANCH_HAS_NO_WAREHOUSE',
+          message: 'no warehouse',
+        }),
+      );
+      const error = await run(randomUUID(), pos()).catch((e) => e);
+      expect(error.getStatus()).toBe(409);
+      expect(error.getResponse()).toMatchObject({
+        errorCode: 'BRANCH_HAS_NO_WAREHOUSE',
+      });
+      expect(inventory.reserveWarehouseStock).not.toHaveBeenCalled();
+    });
+
+    it('a manual order confirms from the branch warehouse without a warehouseId', async () => {
+      const created = await as(TENANT_A, () =>
+        m3OrdersService.createOmnichannelOrder(ACCOUNT, ['*'], ALL, {
+          branchId: BRANCH_A,
+          channelType: 'MANUAL',
+          lines: [{ variantId: VARIANT_A, qty: 1 }],
+          autoConfirm: true,
+        } as never),
+      );
+      expect(created.orderStatus).toBe('CONFIRMED');
+      expect(inventory.resolveSaleWarehouse).toHaveBeenCalledWith(
+        BRANCH_A,
+        null,
+      );
+      expect(created.warehouseId).toBe(WAREHOUSE_A);
     });
   });
 });

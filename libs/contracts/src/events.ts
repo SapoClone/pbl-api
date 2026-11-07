@@ -102,7 +102,18 @@ export interface PlanChangedPayload {
 export interface SubscriptionChangedPayload {
   subscriptionId: string;
   tenantId: string;
-  eventType: 'created' | 'renewed' | 'upgraded' | 'downgraded';
+  /**
+   * `past_due`: a paid plan ran past its end date and is in grace (limits unchanged); `expired`: the grace ended and the
+   * store fell back to `free`; `resync`: the current plan re-announced (backfill, nothing changed).
+   */
+  eventType:
+    | 'created'
+    | 'renewed'
+    | 'upgraded'
+    | 'downgraded'
+    | 'past_due'
+    | 'expired'
+    | 'resync';
   fromPlan: string | null;
   toPlan: string;
   /** ISO 8601, null for a plan that does not expire */
@@ -316,6 +327,17 @@ export interface SalesShiftEventPayload {
   actualCash?: number;
   /** Integer VND, negative when the drawer is short */
   variance?: number;
+  /** Cash session close (additive): reason code of a variance above the tolerance */
+  varianceReason?: string | null;
+  varianceNote?: string | null;
+  /** none | cashier_deduction | store_loss, copied from the store setting at close */
+  responsibility?: string | null;
+  /** Who counted the drawer, who asked to close and who approved (null within the tolerance) */
+  countedBy?: string | null;
+  closedBy?: string | null;
+  approvedBy?: string | null;
+  /** The CASH_SHORTAGE or CASH_OVERAGE entry the close wrote (null when the drawer matched) */
+  varianceEntryId?: string | null;
   occurredAt: string;
 }
 
@@ -384,7 +406,8 @@ export interface ReservationConfirmedPayload {
   sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
   sourceRefId: string;
   state: 'HELD';
-  expiresAt: string;
+  /** `null` for a hold that does not expire (D19) */
+  expiresAt: string | null;
   lines: {
     warehouseId: string;
     skuId: string;
@@ -451,6 +474,9 @@ export type InventoryMovementType =
   | 'MANUAL_ISSUE'
   | 'TRANSFER_DISPATCH'
   | 'TRANSFER_RECEIPT'
+  | 'TRANSFER_CANCEL'
+  | 'TRANSFER_LOST_IN'
+  | 'TRANSFER_LOSS'
   | 'STOCKTAKE_ADJUSTMENT'
   | 'RETURN_IN'
   | 'RETURN_RECEIPT'
@@ -519,7 +545,8 @@ export type WarehouseReservationState =
   | 'EXPIRED';
 
 export interface WarehouseReservationLineInput {
-  warehouseId: string;
+  /** Optional when the request names a `branchId`: the branch's default BRANCH warehouse is used (D2) */
+  warehouseId?: string;
   skuId: string;
   qty: string;
 }
@@ -528,7 +555,14 @@ export interface CreateWarehouseReservationRequest {
   callerService: 'sales' | 'inventory' | 'integration';
   sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
   sourceRefId: string;
+  /** The branch of the sale (required for `callerService: 'sales'`); a named warehouse must be its BRANCH warehouse */
+  branchId?: string;
   ttlSeconds?: number;
+  /**
+   * D19: the hold never expires (a confirmed order that is not shipped yet).
+   * Wins over `ttlSeconds`; released by cancel, committed by fulfilment.
+   */
+  noExpiry?: boolean;
   lines: WarehouseReservationLineInput[];
 }
 
@@ -549,7 +583,8 @@ export interface WarehouseReservationResponse {
   sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
   sourceRefId: string;
   state: WarehouseReservationState;
-  expiresAt: string;
+  /** `null` for a hold created with `noExpiry` */
+  expiresAt: string | null;
   createdAt: string;
   lines: WarehouseReservationLineResult[];
 }
@@ -592,6 +627,24 @@ export const CATALOG_VARIANT_DEACTIVATED = {
   type: 'catalog.variant.deactivated',
   version: 1,
 } as const satisfies EventDefinition;
+
+/**
+ * What a store uses of its plan's catalog limits, as absolute numbers (so a lost or reordered event is corrected by the
+ * next one). Platform keeps it in `tenant_usage` for the admin's usage screens; catalog enforces the limits itself.
+ */
+export const CATALOG_USAGE_CHANGED = {
+  type: 'catalog.usage.changed',
+  version: 1,
+} as const satisfies EventDefinition;
+
+export interface CatalogUsageChangedPayload {
+  /** Products that count against the plan: draft, active and inactive; archived ones do not */
+  products: number;
+  /** Bytes of stored uploads, in megabytes rounded up */
+  storageMb: number;
+  /** ISO 8601; an older event than the row is ignored */
+  measuredAt: string;
+}
 
 export const CATALOG_PRICE_CHANGED = {
   type: 'catalog.price.changed',

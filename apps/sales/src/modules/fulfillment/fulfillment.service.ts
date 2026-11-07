@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { TenantContext } from '@pbl/common';
 import { SALES_FULFILLMENT_COMPLETED } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
@@ -60,6 +60,19 @@ export class FulfillmentService {
         );
       }
 
+      // D2: stock leaves the warehouse the order reserved from; another one is refused
+      if (
+        dto.warehouseId &&
+        order.warehouseId &&
+        dto.warehouseId !== order.warehouseId
+      ) {
+        throw new ConflictException({
+          errorCode: 'WAREHOUSE_NOT_IN_BRANCH',
+          message:
+            'A fulfillment ships from the warehouse the order reserved its stock in',
+        });
+      }
+
       const orderAgg = new OrderAggregate(
         order.id,
         tenantId,
@@ -86,7 +99,7 @@ export class FulfillmentService {
         code,
         orderId: order.id,
         branchId: order.branchId,
-        warehouseId: dto.warehouseId ?? order.warehouseId ?? null,
+        warehouseId: order.warehouseId ?? null,
         reservationId: order.reservationId ?? null,
         fulfillmentType: dto.fulfillmentType ?? 'DELIVERY',
         status: 'PENDING',

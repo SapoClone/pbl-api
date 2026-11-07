@@ -48,6 +48,8 @@ services:
       AWS_ENDPOINT_URL_SQS: http://elasticmq:9324
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
+      # uploads: local disk through the API; production sets s3 (see docs/guides/uploads.md)
+      UPLOADS_DRIVER: ${UPLOADS_DRIVER:-local}
     depends_on:
       postgres:
         condition: service_healthy

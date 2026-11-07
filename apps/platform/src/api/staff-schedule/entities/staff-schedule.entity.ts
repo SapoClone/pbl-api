@@ -12,6 +12,7 @@ import {
   PrimaryGeneratedColumn,
   Relation,
 } from 'typeorm';
+import { StaffDuty } from '../staff-duty';
 
 /**
  * A weekly recurring shift of a member in a branch ("Ca làm việc").
@@ -75,4 +76,15 @@ export class StaffScheduleEntity extends AbstractEntity {
 
   @Column({ name: 'end_time', type: 'time' })
   endTime!: string;
+
+  /** "Ca sáng", as the store calls it; optional */
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  name!: string | null;
+
+  /** What the member is in charge of during this shift */
+  @Column({ type: 'varchar', length: 20, default: StaffDuty.SALES })
+  duty!: StaffDuty;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  note!: string | null;
 }

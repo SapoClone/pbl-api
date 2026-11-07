@@ -5,6 +5,7 @@ import {
   ALL_PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
   PLATFORM_BRANCH_CREATED,
+  PLATFORM_TENANT_CREATED,
   SEEDED_ROLES,
 } from '@pbl/contracts';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
@@ -18,7 +19,14 @@ import { SubscriptionEntity } from '../subscription/entities/subscription.entity
 import { AccountTenantEntity } from './entities/account-tenant.entity';
 import { TenantEntity, TenantStatus } from './entities/tenant.entity';
 import { MembershipService } from './membership.service';
-import { initialsOf, TenantService } from './tenant.service';
+import {
+  initialsOf,
+  MAX_STORES_PER_ACCOUNT,
+  TenantService,
+} from './tenant.service';
+
+const errorCodeOf = (promise: Promise<unknown>) =>
+  promise.catch((e) => e.getResponse().errorCode);
 
 describe('TenantService.create', () => {
   const dto = { name: 'My Shop', subdomain: 'my-shop' };
@@ -30,6 +38,7 @@ describe('TenantService.create', () => {
     save: jest.Mock;
     insert: jest.Mock;
     query: jest.Mock;
+    count: jest.Mock;
     connection: unknown;
   };
   let subscriptions: { startFree: jest.Mock };
@@ -63,6 +72,8 @@ describe('TenantService.create', () => {
       insert: jest.fn(async (_entity, rows) => {
         inserted.push(...rows);
       }),
+      // owner memberships of the account (D11)
+      count: jest.fn().mockResolvedValue(0),
       // issueCode: the table name from the metadata, then the next number
       connection: { getMetadata: () => ({ tablePath: 'tenant' }) },
       query: jest.fn(async (sql: string) =>
@@ -168,12 +179,70 @@ describe('TenantService.create', () => {
   it('writes the branch.created event of the default branch in the same transaction, for the new store', async () => {
     await service.create('a1', dto);
 
-    expect(outbox.add).toHaveBeenCalledTimes(1);
     expect(outbox.add).toHaveBeenCalledWith(
       expect.anything(),
       PLATFORM_BRANCH_CREATED,
       expect.objectContaining({ code: 'CN01', status: 'active' }),
       { tenantId: 't1' },
+    );
+  });
+
+  it('writes platform.tenant.created in the same transaction, like the admin path (D10)', async () => {
+    await service.create('a1', dto);
+
+    expect(outbox.add).toHaveBeenCalledWith(
+      expect.anything(),
+      PLATFORM_TENANT_CREATED,
+      expect.objectContaining({
+        id: 't1',
+        code: 'TN0001',
+        subdomain: 'my-shop',
+        actor: { type: 'account', id: 'a1' },
+      }),
+      { tenantId: 't1' },
+    );
+  });
+
+  it('names the default branch with defaultBranchName when it is sent (D10)', async () => {
+    await service.create('a1', {
+      ...dto,
+      defaultBranchName: 'Cửa hàng Quận 1',
+    });
+
+    expect(saved.find((e) => e instanceof BranchEntity)).toMatchObject({
+      code: 'CN01',
+      name: 'Cửa hàng Quận 1',
+    });
+    expect(outbox.add).toHaveBeenCalledWith(
+      expect.anything(),
+      PLATFORM_BRANCH_CREATED,
+      expect.objectContaining({ name: 'Cửa hàng Quận 1' }),
+      { tenantId: 't1' },
+    );
+  });
+
+  it('allows a third store and refuses the fourth with T009 (D11)', async () => {
+    em.count.mockResolvedValue(MAX_STORES_PER_ACCOUNT - 1);
+    await expect(service.create('a1', dto)).resolves.toBeDefined();
+
+    em.count.mockResolvedValue(MAX_STORES_PER_ACCOUNT);
+    saved.length = 0;
+    await expect(errorCodeOf(service.create('a1', dto))).resolves.toBe(
+      ErrorCode.T009,
+    );
+    // nothing was created for the refused one
+    expect(saved).toHaveLength(0);
+    expect(em.count).toHaveBeenCalledWith(AccountTenantEntity, {
+      where: { accountId: 'a1', role: 'owner' },
+    });
+  });
+
+  it('serialises two creations of one account with an advisory lock', async () => {
+    await service.create('a1', dto);
+
+    expect(em.query).toHaveBeenCalledWith(
+      expect.stringContaining('pg_advisory_xact_lock'),
+      ['stores:a1'],
     );
   });
 

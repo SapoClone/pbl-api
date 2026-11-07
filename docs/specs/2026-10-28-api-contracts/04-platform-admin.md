@@ -20,6 +20,25 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 
 **Shared list query.** Unless an endpoint says otherwise, lists accept `page`, `limit`, `q`, `order` and the filters listed under that endpoint, and return `{ data, pagination }`. The design's "20 / trang" (20 per page) is the client default `limit=20`.
 
+## Build status
+
+Built so far (pbl-api: #33 merged; #35 to #38 open): **31 of the 52 endpoints** below, marked `built` in their *Status* line: admin identity, stores, accounts, admins, plans, subscriptions, usage and settings, which serve 12 of the 23 screens completely and 2 (03, 08) in part. Not built: the insight endpoints (overview, system health, failed jobs, audit log, announcements), the integration admin endpoints, and support sessions. The how-to and the mapping from the web branch's calls is [the platform admin API guide](../../guides/platform-admin-api.md); the design record is [the platform admin design](../2026-11-02-platform-admin-design.md).
+
+Where the built API differs from the sections below (the sections keep the design; this list is the truth):
+
+- **Error codes** follow this repository's numbering: `T001` is the subdomain, `S001` a schedule overlap, so plans, subscriptions and stores use `P001` to `P003`, `S010` (store over the new plan's limits), `S011` (same plan, same period), `S012` (payment overlaps), `S013` (no payment on a free or closed subscription), `S014` (a note is required when the amount differs from price x months) and `T006` to `T008` (already suspended, not suspended, owner account disabled). `A010` (email taken) and `A011` (cannot disable or demote yourself, or the last super admin) are as written.
+- **Plan limits** answer **409 `Q001`** with `details: { key, used, limit, planCode }` (`key`: `branches`, `users`, `products`, `storageGb`). It replaces `B003`, `T022` and `C005` of sections 01 and 02.
+- **Quotas** are `quotas: { branches, users, products, storageGb }`; storage is the one decimal, in gigabytes, stored as megabytes.
+- **One subscription row per store**, changed in place by a change of plan, with its history in `subscription_event`.
+- **`GET /admin/tenants` and `/subscriptions`** answer `counts` for the tab labels next to `{ data, pagination }`.
+- **`POST /admin/admins`** takes an optional `password` (12 or more characters of letters, digits and `!#$%&*@^`) because no set-password email exists for admins; without it the admin cannot sign in. A store owner created by an admin has no password either; owners are expected to sign up themselves.
+- **Settings** `security.lockoutMaxAttempts` and `security.lockoutWindowMinutes` are applied to both sign-ins (store accounts and admins; never fewer than 3 attempts; read with a 30 second cache); `billing.graceDays` (0 to 60, default 7) is read by the expiry job. The other values are stored and validated only.
+- **Trials are not offered** (D32): nothing creates a `trialing` subscription, so `GET /admin/tenants` answers `counts.trial = 0` and no `trial` store; the web hides the trial tab. `status=trial` and `trialing` stay accepted values for a later release.
+- **Expiry (D31):** a job in platform moves a paid subscription past `expiresAt` to `past_due` (the grace: the paid plan's limits stay for `billing.graceDays` days, default 7), then closes it (`expired`) and starts a `free` subscription with no end date. Data is kept and nothing is deleted; over-limit adds are refused by the usual `Q001` checks. A payment during the grace renews the same subscription to `active`. The `past_due` and `expired` counters of `GET /admin/subscriptions` work.
+- **Suspension** also stops marketplace webhooks (503 `TENANT_SUSPENDED`, the marketplace retries), the integration sync jobs and the internal order intake (403 `TENANT_SUSPENDED`); other services learn the store status from `platform.tenant.status_changed`.
+- **Accounts** have no verified-email state, so `status=pending_verification` matches nothing and `isEmailVerified` is not returned. `code` (`US00021`) is built.
+- **Events** for admin actions (`platform.admin.created`, `.updated`, `.logged_in`, `platform.settings.changed`, `platform.account.sessions_revoked`) are not emitted: events carry a store, and these belong to none. They wait for the platform-scope audit design. `platform.tenant.*`, `platform.plan.changed` (once per store on the plan) and `platform.subscription.changed` are emitted; `catalog.usage.changed` replaces `catalog.product.count_changed` and `catalog.storage.usage_changed` in the table at the end.
+
 ## Screen → endpoints
 
 | Screen | Endpoints |
@@ -58,7 +77,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 ## Auth (platform)
 
 ### POST /platform/api/v1/admin/auth/login
-- **Status:** new
+- **Status:** built
 - **Screens:** Admin login *(missing)*
 - **Auth:** public
 - **Body:** `{ "email": "lananh@omniretail.vn", "password": "••••••••" }`
@@ -71,11 +90,11 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Errors:**
   - 400 `A001` wrong email or password; also an unknown email, a disabled admin and an admin with no password yet, so sign-in does not reveal which (ADR-0022)
   - 400 `A002` is not used
-  - 400 `A003` locked: 5 failed attempts lock the admin for 15 minutes, the same rule as accounts (fixed constants for now, `PlatformSetting lockout_*` is not built)
+  - 400 `A003` locked: after `security.lockoutMaxAttempts` failed attempts (default 5, minimum 3) the admin is locked for `security.lockoutWindowMinutes` (default 15), the same rule as accounts
 - **Events:** `platform.admin.logged_in` → insight audit (not emitted yet: events are tenant-scoped, so a platform-scope audit comes with the first admin write)
 
 ### POST /platform/api/v1/admin/auth/refresh
-- **Status:** new. It reuses `RefreshTokenService`, but a refresh token whose subject is a platform admin is only accepted on this path.
+- **Status:** built. It reuses `RefreshTokenService`, but a refresh token whose subject is a platform admin is only accepted on this path.
 - **Screens:** all admin screens
 - **Auth:** public
 - **Body:** `{ "refreshToken": "rt_…" }`
@@ -84,7 +103,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### POST /platform/api/v1/admin/auth/logout
-- **Status:** new
+- **Status:** built
 - **Screens:** sidebar "Đăng xuất"
 - **Auth:** platform_admin
 - **Body:** none
@@ -93,7 +112,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none (the `sid` goes on the deny-list)
 
 ### GET /platform/api/v1/admin/me
-- **Status:** new
+- **Status:** built
 - **Screens:** top bar "LA Lan Anh / Quản trị viên nền tảng"
 - **Auth:** platform_admin
 - **Response:** 200 `{ "id": "uuid", "name": "Lan Anh", "email": "lananh@omniretail.vn", "role": "super_admin", "environment": "production" }`. `environment` drives the "Production" badge and comes from config.
@@ -148,7 +167,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 ## Tenants (platform)
 
 ### GET /platform/api/v1/admin/tenants
-- **Status:** new
+- **Status:** built
 - **Screens:** 02 Doanh nghiệp
 - **Auth:** platform_admin
 - **Query:**
@@ -172,7 +191,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### GET /platform/api/v1/admin/tenants/{id}
-- **Status:** new
+- **Status:** built
 - **Screens:** 03 Chi tiết (tab "Thông tin chung"), 05 (prefill)
 - **Auth:** platform_admin
 - **Response:** 200
@@ -189,7 +208,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### POST /platform/api/v1/admin/tenants
-- **Status:** new. Unlike the self-serve `POST /tenants`, the admin is not the owner.
+- **Status:** built. Unlike the self-serve `POST /tenants`, the admin is not the owner.
 - **Screens:** 04 Tạo doanh nghiệp
 - **Auth:** platform_admin
 - **Body:**
@@ -210,7 +229,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** `platform.tenant.created`, `platform.subscription.changed`, `platform.branch.created`, `platform.membership.granted`
 
 ### PATCH /platform/api/v1/admin/tenants/{id}
-- **Status:** new
+- **Status:** built
 - **Screens:** 05 Sửa doanh nghiệp
 - **Auth:** platform_admin
 - **Body:** any of `name`, `subdomain`, `email`, `phone`, `address`. `code`, owner and status are not editable here.
@@ -219,7 +238,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** `platform.tenant.updated` (audit records the before and after values)
 
 ### POST /platform/api/v1/admin/tenants/{id}/suspend
-- **Status:** new
+- **Status:** built
 - **Screens:** 06 Khóa doanh nghiệp
 - **Auth:** platform_admin
 - **Body:** `{ "reason": "Vi phạm điều khoản thanh toán" }` (reason required, 1–500 characters)
@@ -229,7 +248,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** `platform.tenant.status_changed` `{ tenantId, from: "active", to: "suspended", reason, changedBy }`
 
 ### POST /platform/api/v1/admin/tenants/{id}/reactivate
-- **Status:** new
+- **Status:** built
 - **Screens:** 03 (button shown when the tenant is locked)
 - **Auth:** platform_admin
 - **Body:** `{ "note": "Đã thanh toán" }` (optional)
@@ -240,7 +259,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 ## Accounts and admins (platform)
 
 ### GET /platform/api/v1/admin/accounts
-- **Status:** new
+- **Status:** built
 - **Screens:** 07 Người dùng (tabs "Tất cả người dùng" / "Người dùng doanh nghiệp")
 - **Auth:** platform_admin
 - **Query:**
@@ -261,7 +280,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### GET /platform/api/v1/admin/accounts/{id}
-- **Status:** new
+- **Status:** built
 - **Screens:** 08 Chi tiết người dùng (tab "Hồ sơ")
 - **Auth:** platform_admin
 - **Response:** 200
@@ -275,7 +294,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### GET /platform/api/v1/admin/accounts/{id}/sessions
-- **Status:** new
+- **Status:** built
 - **Screens:** 08 (tab "Phiên đăng nhập")
 - **Auth:** platform_admin
 - **Response:** 200 `{ "data": [ { "sessionId": "uuid", "tenantName": "Mộc Store", "createdAt": "…", "lastUsedAt": "…", "expiresAt": "…" } ], "pagination": {…} }`. Built from live `RefreshToken` families.
@@ -283,7 +302,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### POST /platform/api/v1/admin/accounts/{id}/revoke-sessions
-- **Status:** new
+- **Status:** built
 - **Screens:** 08 "Thu hồi tất cả phiên"
 - **Auth:** platform_admin
 - **Body:** none
@@ -292,7 +311,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** `platform.account.sessions_revoked` → audit
 
 ### GET /platform/api/v1/admin/admins
-- **Status:** new
+- **Status:** built
 - **Screens:** 07 (tab "Quản trị viên nền tảng"), Admin management *(missing)*
 - **Auth:** platform_admin
 - **Response:** 200 `{ "data": [ { "id": "uuid", "name": "Lan Anh", "email": "lananh@omniretail.vn", "role": "super_admin", "status": "active", "lastLoginAt": "…" } ], "pagination": {…} }`
@@ -300,7 +319,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### POST /platform/api/v1/admin/admins
-- **Status:** new
+- **Status:** built
 - **Screens:** Admin management *(missing)*
 - **Auth:** platform_admin, role `super_admin`
 - **Body:** `{ "name": "Quốc Minh", "email": "minh@omniretail.vn", "role": "admin" }`
@@ -309,7 +328,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** `platform.admin.created`
 
 ### PATCH /platform/api/v1/admin/admins/{id}
-- **Status:** new
+- **Status:** built
 - **Screens:** Admin management *(missing)*
 - **Auth:** platform_admin, role `super_admin`
 - **Body:** `{ "role": "admin", "status": "disabled" }`. Disabling also revokes that admin's sessions.
@@ -320,7 +339,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 ## Plans (platform)
 
 ### GET /platform/api/v1/admin/plans
-- **Status:** new
+- **Status:** built
 - **Screens:** 09 Gói dịch vụ, 04 (plan select), 13 (plan select)
 - **Auth:** platform_admin
 - **Query:** `status=active|hidden`
@@ -336,7 +355,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### GET /platform/api/v1/admin/plans/{id}
-- **Status:** new
+- **Status:** built
 - **Screens:** 10 Cấu hình gói (prefill)
 - **Auth:** platform_admin
 - **Response:** 200, the same item shape
@@ -344,7 +363,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### POST /platform/api/v1/admin/plans
-- **Status:** new
+- **Status:** built
 - **Screens:** Create plan *(missing; reuses the 10 form)*
 - **Auth:** platform_admin, role `super_admin`
 - **Body:** `{ "code": "enterprise", "name": "Enterprise", "description": "…", "priceMonthly": 1499000, "status": "hidden", "isFeatured": false, "quotas": { "branches": 20, "users": 100, "products": 50000, "storageGb": 200 } }`
@@ -353,7 +372,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** `platform.plan.changed`
 
 ### PATCH /platform/api/v1/admin/plans/{id}
-- **Status:** new
+- **Status:** built
 - **Screens:** 10 Cấu hình gói ("Lưu gói dịch vụ")
 - **Auth:** platform_admin, role `super_admin`
 - **Body:** any of `name`, `priceMonthly`, `status`, `isFeatured`, `description`, `quotas.*`. `code` cannot change.
@@ -364,7 +383,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 ## Subscriptions (platform)
 
 ### GET /platform/api/v1/admin/subscriptions
-- **Status:** new
+- **Status:** built
 - **Screens:** 11 Thuê bao, 03 (tab "Thuê bao", `tenantId=`)
 - **Auth:** platform_admin
 - **Query:**
@@ -387,7 +406,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### GET /platform/api/v1/admin/subscriptions/{id}
-- **Status:** new
+- **Status:** built
 - **Screens:** 12 Chi tiết thuê bao
 - **Auth:** platform_admin
 - **Response:** 200
@@ -406,7 +425,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### GET /platform/api/v1/admin/subscriptions/{id}/events
-- **Status:** new
+- **Status:** built
 - **Screens:** 12 (history pagination)
 - **Auth:** platform_admin
 - **Response:** 200 `{ data: [history item], pagination }`
@@ -414,16 +433,24 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### POST /platform/api/v1/admin/subscriptions/{id}/payments
-- **Status:** new. Payments are recorded by hand ([D6](../2026-10-28-screen-api-contracts.md#d6-gaps-the-erd-still-does-not-model-on-purpose)).
+- **Status:** built. Payments are recorded by hand ([D6](../2026-10-28-screen-api-contracts.md#d6-gaps-the-erd-still-does-not-model-on-purpose)).
 - **Screens:** Record payment *(missing)*
 - **Auth:** platform_admin
 - **Body:** `{ "amount": 599000, "method": "transfer", "periodStart": "2026-10-25", "periodEnd": "2026-11-25", "paidAt": "2026-10-24T03:00:00.000Z", "note": "CK Vietcombank" }`
 - **Response:** 201 `{ "id": "uuid", "code": "PAY-01002", "status": "paid", … }`. When the period extends `expiresAt`, the subscription is renewed and a `renewed` event is written.
-- **Errors:** 404; 400 `S003` overlaps a period already paid
+- **Rules (D33):** refused on a `free` plan and on a closed subscription (`expired`, `cancelled`): 400 `S013`; a closed subscription is never reopened, a renewal after the fall back to `free` is a change of plan. `amount` is an integer of 0 or more. When `amount` differs from `priceMonthly x months` a `note` is required: 400 `S014`. `months` is the days of the period over 30.4375, rounded, at least 1. A payment on a `past_due` subscription whose period runs past `expiresAt` renews it to `active`.
+- **Errors:** 404; 400 `S012` overlaps a period already paid; 400 `S013`; 400 `S014`
 - **Events:** `platform.subscription.changed` `{ eventType: "renewed" }`
 
+### POST /platform/api/v1/admin/subscriptions/resync
+- **Status:** built (D7)
+- **Auth:** platform_admin, `super_admin`
+- **Body:** none
+- **Response:** 200 `{ "count": 42 }`: the number of current subscriptions announced. It changes no subscription. Safe to repeat; run it at deploy so catalog's limits exist for stores created before the plan events (`apps/platform/src/scripts/resync-plans.ts` does the same from a task).
+- **Events:** one `platform.subscription.changed` `{ eventType: "resync" }` per current subscription
+
 ### POST /platform/api/v1/admin/subscriptions/change-plan/check
-- **Status:** new. A dry run with no writes.
+- **Status:** built. A dry run with no writes.
 - **Screens:** 13 Gán / Đổi gói ("Kiểm tra lại hạn mức", the quota panel)
 - **Auth:** platform_admin
 - **Body:** `{ "tenantId": "uuid", "planCode": "basic", "effectiveFrom": "2026-10-25", "expiresAt": "2026-11-25" }`
@@ -442,18 +469,18 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events:** none
 
 ### POST /platform/api/v1/admin/subscriptions/change-plan
-- **Status:** new
+- **Status:** built
 - **Screens:** 13 (confirm, enabled only when the check returns `allowed`)
 - **Auth:** platform_admin
 - **Body:** the check body plus `"note": "Hạ cấp theo yêu cầu của doanh nghiệp"`
 - **Response:** 200, subscription detail
 - **Errors:** 400 `S001` quota exceeded for the new plan (`details` lists the failing keys, as in the check); 400 `S002` same plan and same period
-- **Events:** `platform.subscription.changed` `{ subscriptionId, tenantId, eventType: "downgraded"|"upgraded"|"renewed", fromPlan, toPlan, expiresAt, actor }`
+- **Events:** `platform.subscription.changed` `{ subscriptionId, tenantId, eventType: "downgraded"|"upgraded"|"renewed", fromPlan, toPlan, expiresAt, actor }`. The expiry job and the resync add `eventType` `past_due` (grace begins, limits unchanged), `expired` (the grace ended: `toPlan` is `free`, `actor.type = system`) and `resync`.
 
 ## Usage (platform)
 
 ### GET /platform/api/v1/admin/usage
-- **Status:** new
+- **Status:** built
 - **Screens:** 14 Hạn mức sử dụng
 - **Auth:** platform_admin
 - **Query:** `q` (tenant name), `planCode`, `warning=normal|near_limit|at_limit` ("Gần hạn mức" is near the limit)
@@ -471,7 +498,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 - **Events consumed by platform:** `catalog.product.count_changed`, `catalog.storage.usage_changed`
 
 ### GET /platform/api/v1/admin/usage/{tenantId}
-- **Status:** new
+- **Status:** built
 - **Screens:** 14 detail panel "Mây Boutique · Chi tiết sử dụng", 03 tab "Hạn mức"
 - **Auth:** platform_admin
 - **Response:** 200, one item of the list shape, plus `"enforcement": "Các thao tác thêm mới sẽ bị chặn khi đạt hạn mức"` (copy only; the real rule is in each service)
@@ -747,7 +774,7 @@ The job code (`JOB-00984`) is assigned by the source service. Integration and th
 ## System settings (platform)
 
 ### GET /platform/api/v1/admin/settings
-- **Status:** new
+- **Status:** built
 - **Screens:** 23 Cấu hình hệ thống (tabs "Thiết lập chung" / "Xác thực & bảo mật" / "Email & thông báo")
 - **Auth:** platform_admin
 - **Response:** 200
@@ -761,7 +788,7 @@ The job code (`JOB-00984`) is assigned by the source service. Integration and th
 - **Events:** none
 
 ### PATCH /platform/api/v1/admin/settings
-- **Status:** new
+- **Status:** built
 - **Screens:** 23 "Lưu cấu hình"
 - **Auth:** platform_admin, role `super_admin`
 - **Body:** any subset of the GET shape, e.g. `{ "general": { "supportEmail": "help@omniretail.vn" } }`. Each key is stored as one `PlatformSetting` row.
@@ -783,7 +810,7 @@ The job code (`JOB-00984`) is assigned by the source service. Integration and th
 | `platform.support_session.started`, `.ended` | platform | insight (audit) |
 | `platform.settings.changed` | platform | insight (audit) |
 | `platform.usage.updated` | platform | insight (watchlist) |
-| `catalog.product.count_changed`, `catalog.storage.usage_changed` | catalog | platform (`TenantUsage`) |
+| `catalog.usage.changed` (built; replaces `catalog.product.count_changed` and `catalog.storage.usage_changed`) | catalog | platform (`tenant_usage`) |
 | `integration.sync_job.failed`, `.retrying`, `.resolved` | integration | insight (`FailedJobView`, system errors) |
 | `integration.connection.status_changed` | integration | insight (audience) |
 | `bus.dead_letter.recorded` | `@pbl/events` (every service) | insight (`FailedJobView`) |
@@ -800,7 +827,7 @@ Insight read models added: `PlatformTenantStats`, `PlatformDailyTransactions`, `
 
 ## Open questions
 1. Do platform admins also use the tenant web for support, or does admin get its own read-only viewer? This spec assumes the tenant web with the support token.
-2. Does a trial (`trialing`) have a fixed length (for example 14 days), and what happens at the end: does the tenant become `expired`, or move to Free automatically?
+2. Does a trial (`trialing`) have a fixed length (for example 14 days), and what happens at the end: does the tenant become `expired`, or move to Free automatically? **Answered (D32, D31):** no trial is offered now; a paid plan past its end date gets 7 days of grace, then `free` limits.
 3. When a tenant is over quota after a plan edit, is it blocked immediately or given a grace period? The spec only reports the count.
 4. Do the product and storage quotas count catalog variants or products, and does storage include images only? This decides the catalog usage events.
 5. Can admins schedule announcements for later? The design shows only send-now. `scheduledAt` is included but optional.

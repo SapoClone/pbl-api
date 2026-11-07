@@ -11,6 +11,8 @@ import {
 } from '@pbl/events';
 import { CATALOG_ENTITIES } from './infrastructure/persistence/catalog.entities';
 import { CreateCatalogTables1791900000200 } from './migrations/1791900000200-create-catalog-tables';
+import { CreateTenantPlanQuota1792800000000 } from './migrations/1792800000000-create-tenant-plan-quota';
+import { AllowUploadCleanupSelect1793300000000 } from './migrations/1793300000000-allow-upload-cleanup-select';
 import { AttributesController } from './modules/attributes/attributes.controller';
 import { AttributesService } from './modules/attributes/attributes.service';
 import { BrandsController } from './modules/brands/brands.controller';
@@ -27,8 +29,11 @@ import {
   createFileStorage,
   FILE_STORAGE,
 } from './modules/uploads/file-storage';
+import { UploadsCleanupJob } from './modules/uploads/uploads-cleanup.job';
 import { UploadsController } from './modules/uploads/uploads.controller';
 import { UploadsService } from './modules/uploads/uploads.service';
+import { PlanQuotaHandler } from './quota/plan-quota.handler';
+import { PlanQuotaService } from './quota/plan-quota.service';
 
 @Module({
   // Every route requires a platform-issued access token unless @Public()
@@ -51,6 +56,8 @@ import { UploadsService } from './modules/uploads/uploads.service';
         ...PRODUCER_MIGRATIONS,
         ...CONSUMER_MIGRATIONS,
         CreateCatalogTables1791900000200,
+        CreateTenantPlanQuota1792800000000,
+        AllowUploadCleanupSelect1793300000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'catalog' }),
@@ -72,7 +79,10 @@ import { UploadsService } from './modules/uploads/uploads.service';
     ProductsService,
     PricingService,
     UploadsService,
+    UploadsCleanupJob,
     ImportsService,
+    PlanQuotaHandler,
+    PlanQuotaService,
     { provide: FILE_STORAGE, useFactory: createFileStorage },
   ],
 })

@@ -25,6 +25,8 @@ import { CreateInventoryTables1791900000000 } from '../src/migrations/1791900000
 import { AddWarehouseStockBalances1791900000100 } from '../src/migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from '../src/migrations/1791900000200-create-m2-inventory-core';
 import { AllowReservationExpirySelect1792500000000 } from '../src/migrations/1792500000000-allow-reservation-expiry-select';
+import { DefaultBranchWarehouse1792700000000 } from '../src/migrations/1792700000000-default-branch-warehouse';
+import { StockIntegrity1793000000600 } from '../src/migrations/1793000000600-stock-integrity';
 import { IssuingService } from '../src/modules/issuing/issuing.service';
 import { ProcurementService } from '../src/modules/procurement/procurement.service';
 import { ReceivingService } from '../src/modules/receiving/receiving.service';
@@ -157,6 +159,8 @@ describe('inventory (Postgres)', () => {
           AddWarehouseStockBalances1791900000100,
           CreateM2InventoryCore1791900000200,
           AllowReservationExpirySelect1792500000000,
+          DefaultBranchWarehouse1792700000000,
+          StockIntegrity1793000000600,
         ],
       }),
     );
@@ -203,7 +207,6 @@ describe('inventory (Postgres)', () => {
       'catalog_sku_projection',
       'warehouse_reservation_line',
       'warehouse_reservation',
-      'stock_balance_ledger',
       'stock_balance',
       'warehouse',
       'outbox_event',
@@ -215,6 +218,8 @@ describe('inventory (Postgres)', () => {
     ]) {
       await dataSource.query(`DELETE FROM ${table(name)}`);
     }
+    // the ledger is append-only (trigger): a reset is a TRUNCATE
+    await dataSource.query(`TRUNCATE ${table('stock_balance_ledger')}`);
     await learnBranch(TENANT_A);
   });
 
@@ -660,25 +665,22 @@ describe('inventory (Postgres)', () => {
 
     beforeEach(async () => {
       const warehouse = await as(TENANT_A, () =>
-        stock.createWarehouse({
+        warehousesService.create({
           code: 'WH-HCM-01',
           name: 'Kho Trung Tam HCM',
           branchId: BRANCH,
         }),
       );
       warehouseId = warehouse.id;
+      // stock enters through a receipt document (D15)
       await as(TENANT_A, () =>
-        stock.receiveStockBalance({
+        receivingService.createReceipt({
           warehouseId,
-          skuId: SKU_ID_1,
-          qty: '5.000',
-        }),
-      );
-      await as(TENANT_A, () =>
-        stock.receiveStockBalance({
-          warehouseId,
-          skuId: SKU_ID_2,
-          qty: '2.000',
+          autoPost: true,
+          items: [
+            { skuId: SKU_ID_1, qty: '5.000' },
+            { skuId: SKU_ID_2, qty: '2.000' },
+          ],
         }),
       );
     });
@@ -690,6 +692,7 @@ describe('inventory (Postgres)', () => {
       const first = await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(idempotencyKey, {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: checkoutId,
           ttlSeconds: 900,
@@ -722,6 +725,7 @@ describe('inventory (Postgres)', () => {
       const replay = await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(idempotencyKey, {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: checkoutId,
           ttlSeconds: 900,
@@ -740,6 +744,7 @@ describe('inventory (Postgres)', () => {
       const conflictErr = await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(idempotencyKey, {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: checkoutId,
           ttlSeconds: 900,
@@ -755,6 +760,7 @@ describe('inventory (Postgres)', () => {
       const err = await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(randomUUID(), {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: randomUUID(),
           ttlSeconds: 900,
@@ -794,6 +800,7 @@ describe('inventory (Postgres)', () => {
           as(TENANT_A, () =>
             reservations.reserveWarehouseStock(randomUUID(), {
               callerService: 'sales',
+              branchId: BRANCH,
               sourceRefType: 'ORDER',
               sourceRefId: randomUUID(),
               ttlSeconds: 900,
@@ -821,6 +828,7 @@ describe('inventory (Postgres)', () => {
       const held = await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(randomUUID(), {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: randomUUID(),
           ttlSeconds: 900,
@@ -862,6 +870,7 @@ describe('inventory (Postgres)', () => {
       const held2 = await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(randomUUID(), {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: randomUUID(),
           ttlSeconds: 900,
@@ -907,8 +916,6 @@ describe('inventory (Postgres)', () => {
           code: 'WH-HCM-CENTRAL',
           name: 'Kho Trung Tam HCM',
           kind: 'CENTRAL',
-          branchId: BRANCH,
-          isDefault: true,
         }),
       );
       const wh2 = await as(TENANT_A, () =>
@@ -1046,6 +1053,7 @@ describe('inventory (Postgres)', () => {
           code: 'WH-DST',
           name: 'Destination Warehouse',
           kind: 'BRANCH',
+          branchId: BRANCH,
         }),
       );
 
@@ -1124,6 +1132,7 @@ describe('inventory (Postgres)', () => {
         warehousesService.create({
           code: 'WH-ST',
           name: 'Stocktake Warehouse',
+          branchId: BRANCH,
         }),
       );
       await as(TENANT_A, () =>
@@ -1141,6 +1150,7 @@ describe('inventory (Postgres)', () => {
       await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(randomUUID(), {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: randomUUID(),
           lines: [{ warehouseId: wh.id, skuId: SKU_A, qty: '3.000' }],
@@ -1223,6 +1233,7 @@ describe('inventory (Postgres)', () => {
         warehousesService.create({
           code: 'WH-PO',
           name: 'Procurement Warehouse',
+          branchId: BRANCH,
         }),
       );
       const supplier = await as(TENANT_A, () =>
@@ -1313,6 +1324,7 @@ describe('inventory (Postgres)', () => {
         warehousesService.create({
           code: 'WH-CAT',
           name: 'Catalog Projection Warehouse',
+          branchId: BRANCH,
         }),
       );
       const productId = randomUUID();
@@ -1384,6 +1396,7 @@ describe('inventory (Postgres)', () => {
         as(TENANT_A, () =>
           reservations.reserveWarehouseStock(randomUUID(), {
             callerService: 'sales',
+            branchId: BRANCH,
             sourceRefType: 'ORDER',
             sourceRefId: randomUUID(),
             lines: [{ warehouseId: wh.id, skuId: SKU_C, qty: '1.000' }],
@@ -1406,7 +1419,8 @@ describe('inventory (Postgres)', () => {
         warehousesService.create({
           code: 'WH-CONC',
           name: 'Concurrency Test Warehouse',
-          kind: 'CENTRAL',
+          kind: 'BRANCH',
+          branchId: BRANCH,
         }),
       );
       warehouseId = wh.id;
@@ -1425,6 +1439,7 @@ describe('inventory (Postgres)', () => {
         as(TENANT_A, () =>
           reservations.reserveWarehouseStock(randomUUID(), {
             callerService: 'sales',
+            branchId: BRANCH,
             sourceRefType: 'ORDER',
             sourceRefId: randomUUID(),
             lines: [{ warehouseId, skuId: SKU_1, qty: '1.000' }],
@@ -1433,6 +1448,7 @@ describe('inventory (Postgres)', () => {
         as(TENANT_A, () =>
           reservations.reserveWarehouseStock(randomUUID(), {
             callerService: 'sales',
+            branchId: BRANCH,
             sourceRefType: 'ORDER',
             sourceRefId: randomUUID(),
             lines: [{ warehouseId, skuId: SKU_1, qty: '1.000' }],
@@ -1467,6 +1483,7 @@ describe('inventory (Postgres)', () => {
           as(TENANT_A, () =>
             reservations.reserveWarehouseStock(randomUUID(), {
               callerService: 'sales',
+              branchId: BRANCH,
               sourceRefType: 'ORDER',
               sourceRefId: randomUUID(),
               lines: [{ warehouseId, skuId: SKU_1, qty: '1.000' }],
@@ -1515,6 +1532,7 @@ describe('inventory (Postgres)', () => {
           as(TENANT_A, () =>
             reservations.reserveWarehouseStock(sharedKey, {
               callerService: 'sales',
+              branchId: BRANCH,
               sourceRefType: 'ORDER',
               sourceRefId: sharedOrderId,
               lines: [{ warehouseId, skuId: SKU_1, qty: '2.000' }],
@@ -1555,6 +1573,7 @@ describe('inventory (Postgres)', () => {
       const err = await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(randomUUID(), {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: randomUUID(),
           lines: [
@@ -1586,6 +1605,7 @@ describe('inventory (Postgres)', () => {
       const { reservation } = await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(randomUUID(), {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: randomUUID(),
           lines: [{ warehouseId, skuId: SKU_1, qty: '2.000' }],
@@ -1622,6 +1642,7 @@ describe('inventory (Postgres)', () => {
       const { reservation } = await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(randomUUID(), {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: randomUUID(),
           lines: [{ warehouseId, skuId: SKU_1, qty: '2.000' }],
@@ -1669,6 +1690,7 @@ describe('inventory (Postgres)', () => {
         as(TENANT_A, () =>
           reservations.reserveWarehouseStock(randomUUID(), {
             callerService: 'sales',
+            branchId: BRANCH,
             sourceRefType: 'ORDER',
             sourceRefId: randomUUID(),
             lines: [{ warehouseId, skuId: SKU_1, qty: '1.000' }],
@@ -1829,6 +1851,7 @@ describe('inventory (Postgres)', () => {
           return as(TENANT_A, () =>
             reservations.reserveWarehouseStock(randomUUID(), {
               callerService: 'sales',
+              branchId: BRANCH,
               sourceRefType: 'ORDER',
               sourceRefId: randomUUID(),
               lines,
@@ -1859,6 +1882,7 @@ describe('inventory (Postgres)', () => {
       await as(TENANT_A, () =>
         reservations.reserveWarehouseStock(idempotencyKey, {
           callerService: 'sales',
+          branchId: BRANCH,
           sourceRefType: 'ORDER',
           sourceRefId: orderId,
           lines: [{ warehouseId, skuId: SKU_1, qty: '5.000' }],

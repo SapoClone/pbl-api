@@ -37,6 +37,8 @@ import {
 import { EventOutbox, qualifiedTable } from '@pbl/events';
 import { createHash, randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { resolveBranchWarehouse } from '../branches/branch-warehouse';
+import { emitBelowMinOnCrossing } from '../common/below-min';
 import { RESERVATION_TTL_MINUTES } from '../config/inventory.config';
 import {
   computeValuationAfterDeduction,
@@ -114,13 +116,13 @@ export function normalizeReservationLines(
         message: 'Reservation line quantity must be strictly greater than zero',
       });
     }
-    const key = `${line.warehouseId}:${line.skuId}`;
+    const key = `${line.warehouseId ?? ''}:${line.skuId}`;
     const existing = merged.get(key);
     if (existing) {
       existing.qtyMilli += qtyMilli;
     } else {
       merged.set(key, {
-        warehouseId: line.warehouseId,
+        warehouseId: line.warehouseId ?? '',
         skuId: line.skuId,
         qtyMilli,
       });
@@ -149,6 +151,9 @@ export function hashReservationRequest(
         callerService: req.callerService,
         sourceRefType: req.sourceRefType,
         sourceRefId: req.sourceRefId,
+        // only when named, so the hash of a request without a branch is unchanged
+        ...(req.branchId ? { branchId: req.branchId } : {}),
+        ...(req.noExpiry ? { noExpiry: true } : {}),
         lines: normalizedLines.map((l) => [l.warehouseId, l.skuId, l.qty]),
       }),
     )
@@ -540,8 +545,20 @@ export class ReservationsService {
       });
     }
 
-    const normalizedLines = normalizeReservationLines(req.lines);
-    const requestSha256 = hashReservationRequest(req, normalizedLines);
+    const inputLines = normalizeReservationLines(req.lines);
+    const requestSha256 = hashReservationRequest(req, inputLines);
+    if (req.callerService === 'sales' && !req.branchId) {
+      throw new BadRequestException({
+        errorCode: 'BRANCH_REQUIRED',
+        message: 'branchId is required: a sale uses its own branch warehouse',
+      });
+    }
+    if (!req.branchId && inputLines.some((l) => !l.warehouseId)) {
+      throw new BadRequestException({
+        errorCode: 'BRANCH_REQUIRED',
+        message: 'A line without warehouseId needs the request branchId',
+      });
+    }
     const ttlSeconds = req.ttlSeconds ?? DEFAULT_TTL_SECONDS;
 
     return runInTenantTransaction(this.dataSource, async (em, tenantId) => {
@@ -587,6 +604,31 @@ export class ReservationsService {
           existing,
         );
         return { reservation, replayed: true };
+      }
+
+      // D2: a sale takes its stock from its own branch's BRANCH warehouse; the
+      // default one when a line names none, else the named one must be that branch's
+      let normalizedLines = inputLines;
+      if (req.branchId) {
+        const resolved = new Map<string, string>();
+        for (const l of inputLines) {
+          if (!resolved.has(l.warehouseId)) {
+            const wh = await resolveBranchWarehouse(
+              em,
+              tenantId,
+              req.branchId,
+              l.warehouseId || null,
+            );
+            resolved.set(l.warehouseId, wh.id);
+          }
+        }
+        normalizedLines = normalizeReservationLines(
+          inputLines.map((l) => ({
+            warehouseId: resolved.get(l.warehouseId)!,
+            skuId: l.skuId,
+            qty: l.qty,
+          })),
+        );
       }
 
       const uniqueWarehouseIds = Array.from(
@@ -650,7 +692,12 @@ export class ReservationsService {
 
       const reservationId = randomUUID();
       const now = new Date();
-      const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
+      // D19: no expiry (NULL) for a confirmed order that is not shipped yet;
+      // `expires_at < now()` is never true for NULL, so the expiry job and
+      // the lazy expiry skip such holds.
+      const expiresAt = req.noExpiry
+        ? null
+        : new Date(now.getTime() + ttlSeconds * 1000);
 
       await em.query(
         `
@@ -676,7 +723,7 @@ export class ReservationsService {
           requestSha256,
           req.sourceRefType,
           req.sourceRefId,
-          expiresAt.toISOString(),
+          expiresAt ? expiresAt.toISOString() : null,
           now.toISOString(),
         ],
       );
@@ -742,6 +789,20 @@ export class ReservationsService {
             parseDecimalToMilli(String(updated[0].availableAfter)),
           ),
         });
+        // D21: a hold that takes available stock under the minimum alerts once
+        const availableAfter = parseDecimalToMilli(
+          String(updated[0].availableAfter),
+        );
+        await emitBelowMinOnCrossing(
+          em,
+          this.outbox,
+          prefix,
+          tenantId,
+          line.warehouseId,
+          line.skuId,
+          availableAfter + line.qtyMilli,
+          availableAfter,
+        );
       }
 
       if (this.outbox) {
@@ -750,7 +811,7 @@ export class ReservationsService {
           sourceRefType: req.sourceRefType,
           sourceRefId: req.sourceRefId,
           state: 'HELD',
-          expiresAt: expiresAt.toISOString(),
+          expiresAt: expiresAt ? expiresAt.toISOString() : null,
           lines: normalizedLines.map((l) => ({
             warehouseId: l.warehouseId,
             skuId: l.skuId,
@@ -768,7 +829,7 @@ export class ReservationsService {
           sourceRefType: req.sourceRefType,
           sourceRefId: req.sourceRefId,
           state: 'HELD',
-          expiresAt: expiresAt.toISOString(),
+          expiresAt: expiresAt ? expiresAt.toISOString() : null,
           createdAt: now.toISOString(),
           lines: lineResults,
         },
@@ -1450,7 +1511,7 @@ export class ReservationsService {
       sourceRefType: 'ORDER' | 'TRANSFER' | 'RETURN';
       sourceRefId: string;
       state: WarehouseReservationState;
-      expiresAt: Date | string;
+      expiresAt: Date | string | null;
       createdAt: Date | string;
     },
   ): Promise<WarehouseReservationResponse> {
@@ -1483,9 +1544,11 @@ export class ReservationsService {
       sourceRefId: header.sourceRefId,
       state: header.state,
       expiresAt:
-        header.expiresAt instanceof Date
-          ? header.expiresAt.toISOString()
-          : new Date(header.expiresAt).toISOString(),
+        header.expiresAt === null || header.expiresAt === undefined
+          ? null
+          : header.expiresAt instanceof Date
+            ? header.expiresAt.toISOString()
+            : new Date(header.expiresAt).toISOString(),
       createdAt:
         header.createdAt instanceof Date
           ? header.createdAt.toISOString()

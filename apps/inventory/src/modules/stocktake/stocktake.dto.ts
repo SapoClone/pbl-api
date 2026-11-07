@@ -27,6 +27,7 @@ export class CreateStocktakeDto {
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()
+  /** Stored only: it freezes nothing (D21) */
   freezeMovement?: boolean;
 
   @ApiPropertyOptional({ maxLength: 500 })

@@ -8,11 +8,15 @@ import { AccountEntity } from '../../src/api/account/entities/account.entity';
 import { RefreshTokenEntity } from '../../src/api/auth/entities/refresh-token.entity';
 import { BranchSettingEntity } from '../../src/api/branch/entities/branch-setting.entity';
 import { BranchEntity } from '../../src/api/branch/entities/branch.entity';
+import { AdminAccountsService } from '../../src/api/platform-admin/admin-accounts.service';
+import { AdminAdminsService } from '../../src/api/platform-admin/admin-admins.service';
 import { AdminPlansService } from '../../src/api/platform-admin/admin-plans.service';
+import { AdminSettingsService } from '../../src/api/platform-admin/admin-settings.service';
 import { AdminSubscriptionsService } from '../../src/api/platform-admin/admin-subscriptions.service';
 import { AdminTenantsService } from '../../src/api/platform-admin/admin-tenants.service';
 import { AdminUsageService } from '../../src/api/platform-admin/admin-usage.service';
 import { PlatformAdminEntity } from '../../src/api/platform-admin/entities/platform-admin.entity';
+import { PlatformSettingEntity } from '../../src/api/platform-setting/entities/platform-setting.entity';
 import { RolePermissionEntity } from '../../src/api/role/entities/role-permission.entity';
 import { RoleEntity } from '../../src/api/role/entities/role.entity';
 import { StaffScheduleEntity } from '../../src/api/staff-schedule/entities/staff-schedule.entity';
@@ -21,7 +25,9 @@ import { SubscriptionEventEntity } from '../../src/api/subscription/entities/sub
 import { SubscriptionPaymentEntity } from '../../src/api/subscription/entities/subscription-payment.entity';
 import { SubscriptionEntity } from '../../src/api/subscription/entities/subscription.entity';
 import { TenantUsageEntity } from '../../src/api/subscription/entities/tenant-usage.entity';
+import { QuotaService } from '../../src/api/subscription/quota.service';
 import { SubscriptionCoreService } from '../../src/api/subscription/subscription-core.service';
+import { UsageHandler } from '../../src/api/subscription/usage.handler';
 import { AccountTenantBranchEntity } from '../../src/api/tenant/entities/account-tenant-branch.entity';
 import { AccountTenantEntity } from '../../src/api/tenant/entities/account-tenant.entity';
 import { TenantEntity } from '../../src/api/tenant/entities/tenant.entity';
@@ -38,6 +44,8 @@ import { CreateRolePermissionAndMemberBranch1792300000000 } from '../../src/data
 import { AddFinancePermissions1792400000000 } from '../../src/database/migrations/1792400000000-add-finance-permissions';
 import { CreatePlatformAdmin1792600000000 } from '../../src/database/migrations/1792600000000-create-platform-admin';
 import { CreatePlanSubscriptionAndTenantAdminFields1792700000000 } from '../../src/database/migrations/1792700000000-create-plan-subscription-and-tenant-admin-fields';
+import { AddAccountCodeAndPlatformSetting1792900000000 } from '../../src/database/migrations/1792900000000-add-account-code-and-platform-setting';
+import { AddDutyToStaffSchedule1793000000000 } from '../../src/database/migrations/1793000000000-add-duty-to-staff-schedule';
 
 export type OutboxCall = [
   unknown,
@@ -83,6 +91,7 @@ export async function startAdminDb(prefix: string) {
       StaffScheduleEntity,
       RefreshTokenEntity,
       PlatformAdminEntity,
+      PlatformSettingEntity,
       PlanEntity,
       SubscriptionEntity,
       SubscriptionEventEntity,
@@ -101,6 +110,7 @@ export async function startAdminDb(prefix: string) {
     new IntroduceTenancy1791563000000(),
     new AddMemberStatusLoginLockoutSessions1792000000000(),
     new CreateBranchSettingAndStaffSchedule1792000000001(),
+    new AddDutyToStaffSchedule1793000000000(),
     new CreateRolePermissionAndMemberBranch1792300000000(),
     new AddFinancePermissions1792400000000(),
     new CreatePlatformAdmin1792600000000(),
@@ -110,9 +120,14 @@ export async function startAdminDb(prefix: string) {
   await runner.release();
 
   const outbox = { add: jest.fn(async () => undefined) };
-  const sessions = { revokeAllOfTenant: jest.fn(async () => 2) };
+  const sessions = {
+    revokeAllOfTenant: jest.fn(async () => 2),
+    revokeAll: jest.fn(async () => 2),
+    revokeAllOfAdmin: jest.fn(async () => 1),
+  };
   const subscriptions = new SubscriptionCoreService(
     dataSource.getRepository(PlanEntity),
+    outbox as never,
   );
   const tenantService = new TenantService(
     dataSource.getRepository(TenantEntity),
@@ -128,10 +143,12 @@ export async function startAdminDb(prefix: string) {
     sessions,
     sql: <T = unknown>(text: string, params: unknown[] = []) =>
       dataSource.query(text, params) as Promise<T>,
-    /** The migration under test: run it after seeding the data it must backfill */
+    /** The migrations under test (plans and subscriptions, then account code and settings): run after seeding the data they must backfill */
     async applyPlanMigration() {
       const r = dataSource.createQueryRunner();
       await new CreatePlanSubscriptionAndTenantAdminFields1792700000000().up(r);
+      // the account code and platform_setting come right after it, so the entities find their columns
+      await new AddAccountCodeAndPlatformSetting1792900000000().up(r);
       await r.release();
     },
     services: {
@@ -144,6 +161,11 @@ export async function startAdminDb(prefix: string) {
       plans: new AdminPlansService(dataSource, outbox as never),
       subscriptions: new AdminSubscriptionsService(dataSource, outbox as never),
       usage: new AdminUsageService(dataSource),
+      quota: new QuotaService(),
+      accounts: new AdminAccountsService(dataSource, sessions as never),
+      admins: new AdminAdminsService(dataSource, sessions as never),
+      settings: new AdminSettingsService(dataSource),
+      usageHandler: new UsageHandler(),
     },
     outboxCalls: () => outbox.add.mock.calls as unknown as OutboxCall[],
     async stop() {

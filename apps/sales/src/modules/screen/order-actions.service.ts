@@ -38,6 +38,11 @@ import { OrderEntity } from '../../orders/entities/order.entity';
 import { BranchScope, branchAllowed } from '../../presentation/access';
 import { FulfillmentService } from '../fulfillment/fulfillment.service';
 import { ReturnsService } from '../returns/returns.service';
+import {
+  assertOpenShiftOfBranch,
+  findCallersOpenShift,
+  recordCashEntry,
+} from '../shifts/cash-ledger';
 import { emitOrderCompleted } from './order-completion';
 import { OrderQueryService } from './order-query.service';
 import { OrderReturnDto, RecordPaymentDto, ShipOrderDto } from './screen.dto';
@@ -434,20 +439,35 @@ export class OrderActionsService {
           ? 'PAID'
           : 'PARTIALLY_PAID';
 
-      const shift = order.shiftId
-        ? await em.query(
-            `SELECT id FROM ${getSchemaPrefix(em)}"pos_shifts" WHERE tenant_id = $1 AND id = $2 AND status = 'OPEN'`,
-            [tenantId, order.shiftId],
-          )
-        : [];
-      const cash = method === 'CASH' && shift.length > 0;
+      // Cash goes into a drawer that is open now, never a closed one: a refund into the caller's own
+      // open shift (chosen by the server), a later payment into the shift the caller picked (or their own).
+      const cash = method === 'CASH';
+      let cashShiftId: string | null = null;
+      if (cash) {
+        if (!refund && dto.shiftId) {
+          await assertOpenShiftOfBranch(
+            em,
+            tenantId,
+            dto.shiftId,
+            order.branchId,
+          );
+          cashShiftId = dto.shiftId;
+        } else {
+          cashShiftId = await findCallersOpenShift(
+            em,
+            tenantId,
+            actorId,
+            order.branchId,
+          );
+        }
+      }
 
       const tender = em.create(OrderTenderEntity, {
         id: randomUUID(),
         tenantId,
         orderId: id,
         checkoutId: null,
-        shiftId: cash ? order.shiftId! : null,
+        shiftId: cashShiftId,
         idempotencyKey: tenderKey,
         method,
         amount: value,
@@ -464,19 +484,18 @@ export class OrderActionsService {
       });
       await em.save(OrderTenderEntity, tender);
 
-      if (cash) {
-        await em.query(
-          refund
-            ? `UPDATE ${getSchemaPrefix(em)}"pos_shifts"
-               SET cash_refunds_total = cash_refunds_total + $3::bigint,
-                   expected_cash = expected_cash - $3::bigint, version = version + 1
-               WHERE tenant_id = $1 AND id = $2`
-            : `UPDATE ${getSchemaPrefix(em)}"pos_shifts"
-               SET cash_sales_total = cash_sales_total + $3::bigint,
-                   expected_cash = expected_cash + $3::bigint, version = version + 1
-               WHERE tenant_id = $1 AND id = $2`,
-          [tenantId, order.shiftId, value],
-        );
+      if (cashShiftId) {
+        await recordCashEntry(em, {
+          tenantId,
+          shiftId: cashShiftId,
+          kind: refund ? 'CASH_REFUND' : 'CASH_SALE',
+          amount: refund ? -value : value,
+          reason: refund ? 'order_refund' : null,
+          orderId: id,
+          tenderId: tender.id,
+          staffId: actorId,
+          sourceKey: `tender:${tender.id}`,
+        });
       }
 
       const previousPayment = order.paymentStatus ?? 'UNPAID';
@@ -517,7 +536,7 @@ export class OrderActionsService {
           checkoutId: null,
           shiftId: tender.shiftId,
           totalConfirmed: value,
-          totalCashSales: cash ? value : 0,
+          totalCashSales: cashShiftId ? value : 0,
           totalChangeDue: 0,
           occurredAt: now.toISOString(),
         });

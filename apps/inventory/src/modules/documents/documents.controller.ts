@@ -12,7 +12,13 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AllowedBranches, RequirePermission } from '@pbl/auth';
+import {
+  AllowedBranches,
+  CurrentUser,
+  hasPermission,
+  RequirePermission,
+  type AuthUser,
+} from '@pbl/auth';
 import { rethrowInventoryHttpError } from '../../presentation/inventory-http-error';
 import {
   WarehouseDocument,
@@ -143,17 +149,22 @@ export class DocumentsController {
   @HttpCode(HttpStatus.OK)
   @RequirePermission('inventory.update')
   @ApiOperation({
-    summary: 'Cancel a draft transfer',
+    summary: 'Cancel a transfer (a draft, or after dispatch)',
     description:
-      'A dispatched transfer answers 409 (returning stock is not built).',
+      'A DRAFT is cancelled with inventory.update. A DISPATCHED or PARTIALLY_RECEIVED transfer needs inventory.approve (403 otherwise): the units not yet received go back to the source at the dispatch cost with a reversing ledger row and an inventory.stock.changed event (D17). Any other state answers 409.',
   })
   async cancelTransfer(
     @Param('id', uuid) id: string,
     @AllowedBranches() branches: string[] | null,
+    @CurrentUser() user: AuthUser,
+    @Body() body?: ReasonDto,
   ) {
     try {
       await this.scope.assertTransfer(branches, id, 'from');
-      return await this.docs.cancelTransfer(id);
+      return await this.docs.cancelTransfer(id, {
+        canApprove: hasPermission(user, 'inventory.approve'),
+        reason: body?.reason,
+      });
     } catch (e) {
       rethrowInventoryHttpError(e);
     }

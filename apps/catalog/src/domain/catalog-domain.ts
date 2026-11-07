@@ -41,6 +41,8 @@ export const CatalogErrorCode = {
   UPLOAD_INVALID: 'UPLOAD_INVALID',
   IMPORT_NOT_FOUND: 'IMPORT_NOT_FOUND',
   EXPORT_LIMIT_EXCEEDED: 'EXPORT_LIMIT_EXCEEDED',
+  /** The store's plan has no room left (same code as platform's, so the web shows one upgrade hint) */
+  PLAN_LIMIT_REACHED: 'Q001',
 } as const;
 
 export type CatalogErrorCodeType =

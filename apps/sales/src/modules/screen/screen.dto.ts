@@ -49,6 +49,14 @@ export class RecordPaymentDto {
   @IsDateString()
   paidAt?: string;
 
+  /**
+   * Cash payments only: the open shift of the order's branch the cash goes into (default: the caller's
+   * own open shift). Ignored for a refund: a refund always leaves the caller's own open shift.
+   */
+  @IsOptional()
+  @IsUUID()
+  shiftId?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(255)

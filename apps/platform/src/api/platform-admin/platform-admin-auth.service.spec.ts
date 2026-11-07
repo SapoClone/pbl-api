@@ -10,6 +10,7 @@ import {
   RefreshTokenReuseError,
   RefreshTokenService,
 } from '../auth/refresh-token.service';
+import { PlatformSettingReader } from '../platform-setting/platform-setting.reader';
 import {
   PlatformAdminEntity,
   PlatformAdminRole,
@@ -21,6 +22,7 @@ const PASSWORD = 'CorrectHorse123!';
 const REFRESH_TOKEN = 'r'.repeat(43);
 
 describe('PlatformAdminAuthService', () => {
+  let settings: { lockout: jest.Mock };
   let passwordHash: string;
   let admins: {
     findOne: jest.Mock;
@@ -69,6 +71,11 @@ describe('PlatformAdminAuthService', () => {
   });
 
   beforeEach(() => {
+    settings = {
+      lockout: jest
+        .fn()
+        .mockResolvedValue({ maxAttempts: 5, windowMs: 15 * 60 * 1000 }),
+    };
     queryBuilder = {};
     for (const method of ['update', 'set', 'where', 'setParameters']) {
       queryBuilder[method] = jest.fn(() => queryBuilder);
@@ -98,6 +105,7 @@ describe('PlatformAdminAuthService', () => {
       refreshTokens as unknown as RefreshTokenService,
       { getOrThrow: (key: string) => values[key] } as unknown as ConfigService,
       cache as unknown as Cache,
+      settings as unknown as PlatformSettingReader,
     );
   });
 
@@ -150,6 +158,23 @@ describe('PlatformAdminAuthService', () => {
       expect(await errorCodeOf(login('WrongPassword1!'))).toBe(ErrorCode.A001);
       expect(queryBuilder.execute).toHaveBeenCalledTimes(1);
       expect(refreshTokens.issue).not.toHaveBeenCalled();
+    });
+
+    it('should lock with the numbers of the platform settings', async () => {
+      settings.lockout.mockResolvedValue({
+        maxAttempts: 3,
+        windowMs: 60 * 60 * 1000,
+      });
+      admins.findOne.mockResolvedValue(admin());
+      const before = Date.now();
+
+      await errorCodeOf(login('WrongPassword1!'));
+
+      const params = queryBuilder.setParameters.mock.calls[0][0];
+      expect(params.max).toBe(3);
+      expect(params.lockedUntil.getTime()).toBeGreaterThanOrEqual(
+        before + 60 * 60 * 1000,
+      );
     });
 
     it('should answer A001, not a different error, for a disabled admin even with the right password', async () => {

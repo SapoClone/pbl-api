@@ -1,6 +1,8 @@
 {
   "error": {
     "wrong_credentials": "Wrong email or password",
-    "account_locked": "Too many failed sign-in attempts. The account is locked for 15 minutes"
+    "account_locked": "Too many failed sign-in attempts. The account is locked for 15 minutes",
+    "email_taken": "A platform admin with this email already exists",
+    "protected_admin": "You cannot disable or demote yourself, or the last super admin"
   }
 }

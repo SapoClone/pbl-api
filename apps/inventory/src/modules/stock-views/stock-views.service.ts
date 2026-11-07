@@ -84,7 +84,7 @@ interface Built {
 /**
  * The contract's stock views (02-catalog-inventory) on top of their
  * warehouse + SKU model. A branch is the sum of its warehouses
- * (`warehouse.branch_id`); a central or quarantine warehouse has no branch and
+ * (`warehouse.kind = BRANCH` and `branch_id`, D14); a central or quarantine warehouse has no branch and
  * is not part of these views. The catalog variant id is the `sku_id` of
  * `stock_balance`; nothing about their keys changes.
  */
@@ -120,7 +120,7 @@ export class StockViewsService {
         FROM ${prefix}"stock_balance" b
         JOIN ${prefix}"warehouse" w
           ON w.tenant_id = b.tenant_id AND w.id = b.warehouse_id
-        WHERE b.tenant_id = $1 AND w.branch_id IS NOT NULL${bf}
+        WHERE b.tenant_id = $1 AND w.kind = 'BRANCH' AND w.branch_id IS NOT NULL${bf}
         GROUP BY w.branch_id, b.sku_id
       ), thr AS (
         SELECT w.branch_id, t.sku_id,
@@ -128,7 +128,7 @@ export class StockViewsService {
         FROM ${prefix}"stock_threshold" t
         JOIN ${prefix}"warehouse" w
           ON w.tenant_id = t.tenant_id AND w.id = t.warehouse_id
-        WHERE t.tenant_id = $1 AND w.branch_id IS NOT NULL${bf}
+        WHERE t.tenant_id = $1 AND w.kind = 'BRANCH' AND w.branch_id IS NOT NULL${bf}
         GROUP BY w.branch_id, t.sku_id
       ), keys AS (
         SELECT branch_id, sku_id FROM bal
@@ -322,7 +322,7 @@ export class StockViewsService {
          FROM ${prefix}"stock_balance" b
          JOIN ${prefix}"warehouse" w
            ON w.tenant_id = b.tenant_id AND w.id = b.warehouse_id
-         WHERE b.tenant_id = $1 AND b.sku_id = $2 AND w.branch_id = $3`,
+         WHERE b.tenant_id = $1 AND b.sku_id = $2 AND w.kind = 'BRANCH' AND w.branch_id = $3`,
         [tenantId, v.sku_id, query.branchId],
       );
       return {

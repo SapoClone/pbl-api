@@ -16,12 +16,15 @@ import { AddOrderIdempotency1791800000200 } from './migrations/1791800000200-add
 import { CreateCheckoutWorkflow1791800000300 } from './migrations/1791800000300-create-checkout-workflow';
 import { CreateM3SalesCore1791900000200 } from './migrations/1791900000200-create-m3-sales-core';
 import { AllowOnAccountTender1792100000100 } from './migrations/1792100000100-allow-on-account-tender';
+import { CashShiftSession1792200000100 } from './migrations/1792200000100-cash-shift-session';
+import { CreateTenantStatus1793100000410 } from './migrations/1793100000410-create-tenant-status';
 import { OrderItemEntity } from './orders/entities/order-item.entity';
 import {
   CheckoutWorkflowEntity,
   OrderEntity,
 } from './orders/entities/order.entity';
 import { OrdersModule } from './orders/orders.module';
+import { TenantStatusEntity } from './tenant-status/tenant-status.entity';
 
 @Module({
   // Every route requires a platform-issued access token unless @Public()
@@ -40,6 +43,7 @@ import { OrdersModule } from './orders/orders.module';
         OrderItemEntity,
         CheckoutWorkflowEntity,
         BranchProjectionEntity,
+        TenantStatusEntity,
         ...M3_SALES_ENTITIES,
         ...PRODUCER_ENTITIES,
         ...CONSUMER_ENTITIES,
@@ -52,6 +56,8 @@ import { OrdersModule } from './orders/orders.module';
         CreateCheckoutWorkflow1791800000300,
         CreateM3SalesCore1791900000200,
         AllowOnAccountTender1792100000100,
+        CashShiftSession1792200000100,
+        CreateTenantStatus1793100000410,
       ],
     }),
     PblEventsModule.forRoot({ service: 'sales' }),

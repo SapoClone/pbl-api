@@ -21,6 +21,8 @@ import { CreateInventoryTables1791900000000 } from '../src/migrations/1791900000
 import { AddWarehouseStockBalances1791900000100 } from '../src/migrations/1791900000100-add-warehouse-stock-balances';
 import { CreateM2InventoryCore1791900000200 } from '../src/migrations/1791900000200-create-m2-inventory-core';
 import { AllowReservationExpirySelect1792500000000 } from '../src/migrations/1792500000000-allow-reservation-expiry-select';
+import { DefaultBranchWarehouse1792700000000 } from '../src/migrations/1792700000000-default-branch-warehouse';
+import { StockIntegrity1793000000600 } from '../src/migrations/1793000000600-stock-integrity';
 import { DocumentsService } from '../src/modules/documents/documents.service';
 import { IssuingService } from '../src/modules/issuing/issuing.service';
 import { ProcurementService } from '../src/modules/procurement/procurement.service';
@@ -84,6 +86,8 @@ describe('inventory stock views (Postgres)', () => {
           AddWarehouseStockBalances1791900000100,
           CreateM2InventoryCore1791900000200,
           AllowReservationExpirySelect1792500000000,
+          DefaultBranchWarehouse1792700000000,
+          StockIntegrity1793000000600,
         ],
       }),
     );
@@ -587,7 +591,7 @@ describe('inventory stock views (Postgres)', () => {
       });
     });
 
-    it('cancels a draft transfer but not one in transit', async () => {
+    it('cancels a draft transfer, one in transit only with approve, and never a received one', async () => {
       const mk = async (status: string) => {
         const id = randomUUID();
         await q(
@@ -603,8 +607,22 @@ describe('inventory stock views (Postgres)', () => {
       expect(
         (await as(async () => docs.cancelTransfer(await mk('DRAFT')))).status,
       ).toBe('CANCELLED');
+      // after dispatch (D17) it needs inventory.approve ...
       await expect(
         as(async () => docs.cancelTransfer(await mk('DISPATCHED'))),
+      ).rejects.toMatchObject({ httpStatus: 403, code: 'PERMISSION_DENIED' });
+      expect(
+        (
+          await as(async () =>
+            docs.cancelTransfer(await mk('DISPATCHED'), { canApprove: true }),
+          )
+        ).status,
+      ).toBe('CANCELLED');
+      // ... and a finished one cannot be cancelled at all
+      await expect(
+        as(async () =>
+          docs.cancelTransfer(await mk('RECEIVED'), { canApprove: true }),
+        ),
       ).rejects.toMatchObject({
         httpStatus: 409,
         code: 'TRANSFER_INVALID_STATE',

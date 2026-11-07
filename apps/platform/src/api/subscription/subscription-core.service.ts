@@ -3,6 +3,11 @@ import { ErrorCode } from '@/constants/error-code.constant';
 import { ValidationException } from '@/exceptions/validation.exception';
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import {
+  PLATFORM_SUBSCRIPTION_CHANGED,
+  SubscriptionChangedPayload,
+} from '@pbl/contracts';
+import { EventOutbox } from '@pbl/events';
 import { EntityManager, Repository } from 'typeorm';
 import { DEFAULT_PLANS, FREE_PLAN_CODE } from './default-plans';
 import { PlanEntity, PlanStatus } from './entities/plan.entity';
@@ -32,6 +37,7 @@ export class SubscriptionCoreService implements OnApplicationBootstrap {
   constructor(
     @InjectRepository(PlanEntity)
     private readonly plans: Repository<PlanEntity>,
+    private readonly outbox: EventOutbox,
   ) {}
 
   /**
@@ -65,7 +71,12 @@ export class SubscriptionCoreService implements OnApplicationBootstrap {
     tenantId: string,
     planCode: string,
     actor: SubscriptionActor,
-    options: { allowHidden?: boolean } = {},
+    options: {
+      allowHidden?: boolean;
+      /** What the plan event says: `created` for a store's first plan, `expired` for the fall back to `free` */
+      eventType?: 'created' | 'expired';
+      fromPlan?: string | null;
+    } = {},
   ): Promise<SubscriptionEntity> {
     const plan = await em.findOneBy(PlanEntity, { code: planCode });
     if (!plan || (!options.allowHidden && plan.status !== PlanStatus.ACTIVE)) {
@@ -117,6 +128,30 @@ export class SubscriptionCoreService implements OnApplicationBootstrap {
       .values({ tenantId })
       .orIgnore()
       .execute();
+    // catalog keeps the limits of every store, so a store's first plan is announced like a change of plan
+    await this.outbox.add(
+      em,
+      PLATFORM_SUBSCRIPTION_CHANGED,
+      {
+        subscriptionId: subscription.id,
+        tenantId,
+        eventType: options.eventType ?? 'created',
+        fromPlan: options.fromPlan ?? null,
+        toPlan: plan.code,
+        expiresAt: expiresAt ? expiresAt.toISOString() : null,
+        quotas: {
+          branches: plan.quotaBranches,
+          users: plan.quotaUsers,
+          products: plan.quotaProducts,
+          storageMb: plan.quotaStorageMb,
+        },
+        actor: {
+          type: actor.type,
+          id: actor.id ?? null,
+        },
+      } satisfies SubscriptionChangedPayload,
+      { tenantId },
+    );
     return subscription;
   }
 

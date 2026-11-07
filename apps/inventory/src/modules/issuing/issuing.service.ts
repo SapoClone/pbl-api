@@ -9,6 +9,7 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { emitBelowMinOnCrossing } from '../../common/below-min';
 import {
   computeValuationAfterDeduction,
   formatMilliToQty,
@@ -291,6 +292,23 @@ export class IssuingService {
           qtyStr,
         ],
       );
+
+      // D21: alert once when the issue takes available stock under the minimum
+      {
+        const availBefore =
+          parseQtyToMilli(bal.onHandQty, true, false) -
+          parseQtyToMilli(bal.reservedQty, true, false);
+        await emitBelowMinOnCrossing(
+          em,
+          this.outbox,
+          prefix,
+          tenantId,
+          header.warehouse_id,
+          item.skuId,
+          availBefore,
+          availBefore - parseQtyToMilli(qtyStr, false, false),
+        );
+      }
 
       await em.query(
         `

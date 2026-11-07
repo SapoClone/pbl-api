@@ -19,13 +19,10 @@ import { RefreshReqDto } from '../auth/dto/refresh.req.dto';
 import { RefreshResDto } from '../auth/dto/refresh.res.dto';
 import { DUMMY_PASSWORD_HASH } from '../auth/dummy-password-hash.constant';
 import {
-  LOGIN_LOCK_DURATION_MS,
-  MAX_FAILED_LOGINS,
-} from '../auth/login-lockout.constant';
-import {
   RefreshTokenReuseError,
   RefreshTokenService,
 } from '../auth/refresh-token.service';
+import { PlatformSettingReader } from '../platform-setting/platform-setting.reader';
 import { AdminLoginReqDto } from './dto/admin-login.req.dto';
 import { AdminLoginResDto } from './dto/admin-login.res.dto';
 import { AdminMeResDto, AdminResDto } from './dto/admin.res.dto';
@@ -48,6 +45,7 @@ export class PlatformAdminAuthService {
     private readonly refreshTokens: RefreshTokenService,
     private readonly configService: ConfigService<AllConfigType>,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly settings: PlatformSettingReader,
   ) {}
 
   async signIn(
@@ -144,10 +142,11 @@ export class PlatformAdminAuthService {
 
   /**
    * One atomic statement, so parallel guesses cannot slip past the counter: the failure that reaches the limit
-   * starts the lock and resets the count. The same rule as accounts (login-lockout.constant.ts).
+   * starts the lock and resets the count. The same rule as accounts, with the numbers of the platform settings.
    */
   private async registerFailedLogin(adminId: string): Promise<void> {
     const reachesLimit = '"failed_login_count" + 1 >= :max';
+    const lockout = await this.settings.lockout();
     await this.admins
       .createQueryBuilder()
       .update(PlatformAdminEntity)
@@ -159,8 +158,8 @@ export class PlatformAdminAuthService {
       })
       .where('id = :id', { id: adminId })
       .setParameters({
-        max: MAX_FAILED_LOGINS,
-        lockedUntil: new Date(Date.now() + LOGIN_LOCK_DURATION_MS),
+        max: lockout.maxAttempts,
+        lockedUntil: new Date(Date.now() + lockout.windowMs),
       })
       .execute();
   }

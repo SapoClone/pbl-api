@@ -81,7 +81,7 @@ Product lookups for POS and manual orders use the catalog and stock endpoints in
     - `source`: `pos` | `manual`.
     - `orderStatus` on create:
       - `draft` saves a draft ("Lưu nháp" / "Lưu hóa đơn nháp"). It reserves nothing.
-      - `confirmed` corresponds to "Xác nhận ngay và trừ tồn kho". It reserves stock through `POST /internal/reservations`.
+      - `confirmed` corresponds to "Xác nhận ngay và trừ tồn kho". It reserves stock through `POST /internal/reservations`. The hold of a confirmed (not yet shipped) order does not expire (`noExpiry: true`, [stock integrity rules](02-catalog-inventory.md#stock-integrity-rules-built-d15-d21)).
       - POS checkout sends `completed`.
     - `unitPrice` may be omitted; the price-list price is used. Sending it requires `orders.update`.
     - `payments[].method` per D5.
@@ -105,10 +105,16 @@ Product lookups for POS and manual orders use the catalog and stock endpoints in
   | Code | Status | Meaning |
   |---|---|---|
   | `S004` | 409 | Stock shortage, with `shortages` (exists) |
-  | `S010` | 400 | Shift not open for this register (POS) |
+  | `S010` | 400 | Shift not open for this register (POS). Built as `SHIFT_NOT_OPEN` (409) for a closed or foreign-branch shift and `SHIFT_REQUIRED` (400) when a POS checkout names no shift; online and manual orders need none |
   | `S011` | 400 | Payments below `totalAmount` on `completed` POS |
   | `S012` | 400 | Variant inactive or not sold on this channel |
   | `S013` | 400 | Customer is required for `cod` |
+  | `BRANCH_HAS_NO_WAREHOUSE` | 409 | The order's branch has no active default warehouse (D1/D2) |
+  | `WAREHOUSE_NOT_IN_BRANCH` | 409 | A client-supplied `warehouseId` is not a `BRANCH` warehouse of the order's branch (another branch's, central or quarantine) |
+  | `WAREHOUSE_INACTIVE` | 409 | The named warehouse is inactive |
+  | `WAREHOUSE_NOT_FOUND` | 404 | The named warehouse does not exist |
+
+  **Warehouse of a sale (D2, workstream A).** `warehouseId` is optional on every sale route (POS checkout, `POST /orders/checkouts`, omnichannel and manual orders, `POST /orders/{id}/confirm` and the draft PATCH): a sale always uses **its own branch's warehouse**. Sales sends the order's `branchId`; inventory resolves the branch's default `BRANCH` warehouse (`GET /internal/v1/branches/{branchId}/sale-warehouse`) and sales stores the resolved id on the checkout workflow and the order (the responses still carry `warehouseId`). A `warehouseId` that is sent is **validated, never trusted**: it must be an active `BRANCH` warehouse of that branch. The check runs before a coupon, loyalty hold or credit authorisation is claimed, and a refusal creates nothing and keeps inventory's own code (`BRANCH_HAS_NO_WAREHOUSE`, `WAREHOUSE_NOT_IN_BRANCH`, ...) with its 409, not a 503 or `S004`. A new branch can sell as soon as its default warehouse exists (the branch event creates it); a manual order confirmed without a `warehouseId` takes the same default. A fulfillment ships from the warehouse the order reserved from; another `warehouseId` is 409 `WAREHOUSE_NOT_IN_BRANCH`. The older branch-and-SKU-code hold (`POST /internal/reservations`) is unchanged and retires with D16.
 
 - **Events:**
   - Emitted: `sales.order.created`; `sales.order.confirmed` when reserved; `sales.order.completed` (exists, gains `variantId`, `customerId`, `channelId`, `costAmount`); `sales.payment.recorded` per payment.
@@ -249,6 +255,7 @@ Product lookups for POS and manual orders use the catalog and stock endpoints in
 - **Body:** `{ "method": "transfer", "amount": 300000, "paidAt": "2026-10-20T08:00:00.000Z", "note": null }`. A negative `amount` records a refund.
 - **Response 201:** `{ "payment": {…}, "paymentStatus": "partially_paid", "paidAmount": 300000, "dueAmount": 460000 }`.
 - **Errors:** `S017` 400 when the amount exceeds what is due.
+- **Cash (built):** a `cash` payment goes into the open shift of the order's branch the caller names (`shiftId`, optional) or else the caller's own open shift, never a closed one (409 `SHIFT_NOT_OPEN`); a negative `cash` amount (a refund) always leaves the caller's own open shift, chosen by the server (a `shiftId` is ignored). With no open shift both are 409 `SHIFT_REQUIRED`. Each is one cash entry of that shift for the caller.
 - **Events:** emits `sales.payment.recorded`; consumes `finance.cod.reconciled` (`sales` records a `cod` payment).
 
 ### POST /sales/api/v1/orders/{id}/returns
@@ -258,6 +265,10 @@ Product lookups for POS and manual orders use the catalog and stock endpoints in
 - **Body:** `{ "items": [{ "orderItemId": "oi-…", "quantity": 1 }], "reason": "Lỗi sản phẩm", "refund": { "method": "cash", "amount": 150000 }, "restock": true }`.
 - **Response 201:** `{ "id": "rt-…", "orderId": "o-…", "items": [...], "refundAmount": 150000, "createdAt": "…" }`.
 - **Errors:** `S018` 400 when the order isn't completed; `S019` 400 when a quantity exceeds what was sold.
+- **Refunds and returns (built, decisions D20 and D26):**
+  - A cash refund (`refund.method = cash`, or `POST /returns/{id}/refund-request` with the default method) leaves **the refunding cashier's own open shift**, chosen by the server; the client `shiftId` was removed from both bodies and is ignored. No open shift: 409 `SHIFT_REQUIRED`. The cash entry is `CASH_REFUND`, signed negative, `staffId` = the caller.
+  - A refund is accepted only for an approved return (`APPROVED`, `RECEIVED`, `COMPLETED`); `REQUESTED` and `REJECTED` answer 409 `RETURN_NOT_ELIGIBLE`. A non-cash refund stays `PENDING` until finance settles it and touches no drawer. One refund request per return (409 `REFUND_ALREADY_REQUESTED`).
+  - `POST /returns/{id}/receive` needs an approved return. Goods go back to the warehouse of the **original sale** (read from the order; a `warehouseId` in the body is ignored) at the **original line cost**, through the internal idempotent inventory route `POST /internal/v1/return-receipts` (service identity, key `return-receipt:{returnId}`), so a cashier with `orders.update` can receive their branch's return and two simultaneous receives restock once. A return with goods to restock and no warehouse on the original sale stays `APPROVED` and answers 409 `RETURN_WAREHOUSE_UNRESOLVED`.
 - **Events:** `sales.order.returned` (`inventory` restocks when `restock`; `customer` reverses points).
 
 ### GET /sales/api/v1/orders/{id}/print
@@ -327,6 +338,66 @@ Product lookups for POS and manual orders use the catalog and stock endpoints in
 - **Response 200:** the shift with `closingCashExpected`, `closingCashActual`, `difference` and per-method totals.
 - **Errors:** `S022` 400 when draft invoices are still open (lists their ids); 409.
 - **Events:** `sales.shift.closed` (`finance` posts to the cash book).
+
+### The cash session: count, close, approve, entries, settings, reports
+- **Status:** `new`, built (docs/specs/2026-11-06-cash-shift-design.md, [built-c.md](../../business-rules/built-c.md)). The M3 routes live under `/sales/api/v1/pos/shifts`; the screen routes above (`/shifts`) call the same service.
+- **Rule:** `expected = opening float + cash sales - cash refunds + pay-ins - pay-outs`, `variance = counted - expected` (negative: shortage). Every cash movement is one signed, append-only entry (`CASH_SALE`, `CASH_REFUND`, `PAY_IN`, `PAY_OUT`, `CASH_SHORTAGE`, `CASH_OVERAGE`, `REVERSAL`). Only the cash part of a payment is an entry (tendered minus change); card, QR and transfer never. `cashSalesTotal`, `cashRefundsTotal` and `expectedCash` on the shift are totals derived from the entries.
+- **States:** `OPEN` -> (count) `PENDING_CLOSE` -> `CLOSED`, or -> `PENDING_APPROVAL` -> `CLOSED`. Only an `OPEN` shift takes sales and entries. One `OPEN`/`PENDING_*` shift per register (same branch and register code, whoever opens it, with `registerCode` or `registerId`).
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `GET /sales/api/v1/pos/shifts/available?branchId=` | `pos.view` | Open shifts the cashier may sell into, inside their branches: `{ "data": [{ "id", "code", "branchId", "register": { "id", "code" }, "opener": { "id" }, "openedAt", "plannedEndAt" }] }`. A shared drawer is allowed. |
+| `POST /pos/shifts/open` (and `POST /shifts`) | `pos.create` | Opens a shift. `openingCash` above `maxOpeningFloatVnd` needs a `note` (400 `OPENING_FLOAT_NOTE_REQUIRED`). `plannedEndAt` is set to now + `maxOpenHours`. 409 `SHIFT_ALREADY_OPEN` when the register has an open shift (any opener). |
+| `POST /pos/shifts/{id}/count` | `pos.update` | Body `{ "denominations": { "500000": 1, "200000": 2 }, "version"? }`. The shift becomes `PENDING_CLOSE` (no more sales). 200 `{ shift, countedTotal, expectedCash, variance, decision }` where `decision` is `WITHIN_TOLERANCE`, `REASON_REQUIRED` or `APPROVAL_REQUIRED`. A note the store does not use, or a fractional count, is 400. Counting again from `PENDING_CLOSE` replaces the count (kept in the history). |
+| `POST /pos/shifts/{id}/close` | `pos.update` | Body `{ "actualCash"?, "reason"?, "note"?, "version"? }`. Uses the stored count; `actualCash` replaces it (the legacy close, no denominations). Within `toleranceVnd`: closes. Above it: `reason` (one of `miscounted_change`, `unrecorded_sale`, `refund_not_recorded`, `theft_suspected`, `other`) is required (400 `VARIANCE_REASON_REQUIRED`); up to `approvalAboveVnd` it then closes, above it the shift becomes `PENDING_APPROVAL`. A closing variance writes one `CASH_SHORTAGE`/`CASH_OVERAGE` entry linked to the shift and copies `responsibility` from the settings. |
+| `POST /pos/shifts/{id}/approve-close` | `pos.approve` | Body `{ "note"? }`. Closes a `PENDING_APPROVAL` shift. 403 `APPROVER_IS_COUNTER` when the caller counted the drawer or asked to close. |
+| `POST /pos/shifts/{id}/reject-close` | `pos.approve` | Body `{ "note" }` (required). Sends a counted shift (`PENDING_CLOSE` or `PENDING_APPROVAL`) back to `OPEN`; the count stays in `closeHistory`. |
+| `POST /pos/shifts/{id}/cash-entries` | `pos.update` | Body `{ "kind": "PAY_IN" or "PAY_OUT", "amount": 50000, "reason": "supplier_payment", "note"? }` (`amount` above 0, `reason` required, `Idempotency-Key` optional). 201 `{ replayed, entry }`. Only an `OPEN` shift. |
+| `PATCH /pos/shifts/{id}` | `pos.update` | Body `{ "plannedEndAt" }` of an `OPEN` shift (branch scope applies). For the demo: money is untouched, entries are never back-dated. |
+| `GET /pos/shifts?status=&overdue=&branchId=` | `pos.view` | `status` may list several (`OPEN,PENDING_APPROVAL`). `overdue=true`: open longer than `maxOpenHours` or past `plannedEndAt` (each row also carries `overdue`). `PENDING_APPROVAL` shifts come first. Never closed automatically. |
+| `GET /pos/shifts/{id}` | `pos.view` | The shift plus `entries` (each with `staffId`, `kind`, signed `amount`, `reason`, `orderId`, `returnId`, `occurredAt`), `staffTotals` (`cashIn`, `cashOut` per person who handled cash) and `closeHistory`. |
+| `GET /sales/api/v1/cash-shortages?groupBy=staff\|branch\|day&from=&to=&branchId=` | `reports.view` | `{ "groupBy", "data": [{ "staffId" or "branchId" or "day", "shortageTotal", "shortageCount", "shortageShifts", "overageTotal", "overageCount" }] }`, worst first; branch scope applies; days in UTC+7. |
+| `GET` / `PATCH /sales/api/v1/cash-settings` | `settings.view` / `settings.update` | `{ toleranceVnd: 10000, approvalAboveVnd: 10000, responsibility: "none"\|"cashier_deduction"\|"store_loss", maxOpenHours: 16, maxOpeningFloatVnd: 5000000, denominations: [500000, ..., 1000] }`. Whole VND, `toleranceVnd` at most `approvalAboveVnd`, notes positive and unique (400 `CASH_SETTINGS_INVALID`). Applies to shifts that close after the change. |
+
+- **Shift fields added:** `status` (`OPEN`, `PENDING_CLOSE`, `PENDING_APPROVAL`, `CLOSED`), `countedByDenomination`, `countedBy`, `countedAt`, `varianceReason`, `varianceNote`, `closeRequestedBy/At`, `approvedBy/At`, `responsibility`, `plannedEndAt`, `overdue`.
+- **POS checkout (`POST /pos/checkout`, `/pos/checkouts`):** `shiftId` is required (400 `SHIFT_REQUIRED`) and must be an `OPEN` shift of the order's branch (404 `SHIFT_NOT_FOUND`, 409 `SHIFT_NOT_OPEN`). The cashier of the order (`created_by`) and the staff of the cash entry are the signed-in caller, never the shift's opener. A retry with the same `Idempotency-Key` writes one entry. `POST /pos/checkouts/{id}/confirm-payment` needs a payment reference (`externalRef`, or one already on the tender) for every non-cash tender (400 `PAYMENT_REFERENCE_REQUIRED`) and records who confirmed it; a gateway verification is not built.
+- **Close is refused** while drafts of the shift are open (400 `SHIFT_HAS_OPEN_DRAFTS`, the contract's `S022`, `details.draftIds`) and while a checkout of the shift is in flight (409 `SHIFT_HAS_PENDING_TRANSACTIONS`).
+- **Errors:**
+
+  | Code | Status | Meaning |
+  |---|---|---|
+  | `SHIFT_REQUIRED` | 400 | A POS checkout names no shift. 409 for a cash refund or cash payment when the caller has no open shift at the order's branch |
+  | `SHIFT_NOT_OPEN` | 409 | The shift is not `OPEN` (or not of the order's branch) |
+  | `SHIFT_CLOSED` | 409 | An entry was written to a `CLOSED` shift (it is locked) |
+  | `SHIFT_ALREADY_CLOSED` | 409 | Second close, approve or count of a closed shift |
+  | `SHIFT_ALREADY_OPEN` | 409 | The register has an open shift (also by register code; the contract's `S021`) |
+  | `SHIFT_HAS_OPEN_DRAFTS` | 400 | The contract's `S022` |
+  | `VARIANCE_REASON_REQUIRED` | 400 | The variance is above the tolerance and no reason was given |
+  | `APPROVAL_REQUIRED` | 409 | The shift waits for a manager: it can only be approved or sent back |
+  | `APPROVER_IS_COUNTER` | 403 | The approver counted the drawer or asked to close |
+  | `COUNT_REQUIRED` | 400 | Close with no count and no `actualCash` |
+  | `OPENING_FLOAT_NOTE_REQUIRED` | 400 | Opening float above `maxOpeningFloatVnd` without a note |
+  | `CASH_SETTINGS_INVALID` | 400 | The settings break a rule above |
+
+- **Events:** `sales.shift.closed` gains (additive) `varianceReason`, `varianceNote`, `responsibility`, `countedBy`, `closedBy`, `approvedBy` and `varianceEntryId`; `finance` journals the variance as before (once per shift).
+
+### GET /sales/api/v1/staff-sales
+- **Status:** built. Not in the design: it answers "who sold what" for the work-shift management ([guide](../../guides/work-shifts.md)).
+- **Auth:** `reports.view`, inside the caller's branches (a `branchId` outside them is 404).
+- **Query:** `branchId`, `shiftId` (one register session), `from`, `to` (days counted in UTC+7, `to` included, or datetimes), `channelType=POS|ALL` (default `POS`).
+- **Response:** 200
+  ```json
+  { "data": [ { "staffId": "…", "ordersCount": 12, "itemsSold": 31, "revenue": 4820000,
+                "firstSaleAt": "2026-11-05T01:12:00.000Z", "lastSaleAt": "2026-11-05T09:40:00.000Z" } ],
+    "totals": { "ordersCount": 12, "itemsSold": 31, "revenue": 4820000 } }
+  ```
+  Completed orders only, grouped by who rang them up (`orders.created_by`), best seller first. `revenue` is the grand total in integer VND; returns are not netted. Rows carry staff ids: names come from `GET /platform/api/v1/members`.
+
+### GET /sales/api/v1/staff-sales/{staffId}/products
+- **Status:** built.
+- **Auth:** `reports.view`, branch scope as above.
+- **Query:** as the list.
+- **Response:** 200 `{ "staffId": "…", "data": [ { "productId", "variantId", "sku", "name", "variantLabel", "quantity", "revenue", "ordersCount" } ] }`, best sellers first; `revenue` is after discounts.
 
 ---
 

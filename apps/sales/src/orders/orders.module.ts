@@ -7,6 +7,8 @@ import { CatalogClient } from '../infrastructure/catalog-client/catalog.client';
 import { CustomerLoyaltyClient } from '../infrastructure/customer-client/customer-loyalty.client';
 import { FinanceCreditClient } from '../infrastructure/finance-client/finance-credit.client';
 import { M3_SALES_ENTITIES } from '../infrastructure/persistence/sales.entities';
+import { BranchBlockersController } from '../internal/branch-blockers.controller';
+import { BranchBlockersService } from '../internal/branch-blockers.service';
 import { InternalOrdersController } from '../internal/internal-orders.controller';
 import { InventoryClient } from '../inventory/inventory.client';
 import { CheckoutController } from '../modules/checkout/checkout.controller';
@@ -28,8 +30,17 @@ import { OrderQueryService } from '../modules/screen/order-query.service';
 import { OrderViewsController } from '../modules/screen/order-views.controller';
 import { ScreenShiftsController } from '../modules/screen/screen-shifts.controller';
 import { ShiftViewService } from '../modules/screen/shift-view.service';
+import {
+  CashReportsController,
+  CashReportsService,
+} from '../modules/shifts/cash-reports.controller';
+import { CashSettingsService } from '../modules/shifts/cash-settings.service';
 import { ShiftsController } from '../modules/shifts/shifts.controller';
 import { ShiftsService } from '../modules/shifts/shifts.service';
+import { StaffSalesController } from '../modules/staff-sales/staff-sales.controller';
+import { StaffSalesService } from '../modules/staff-sales/staff-sales.service';
+import { TenantStatusHandler } from '../tenant-status/tenant-status.handler';
+import { TenantStatusService } from '../tenant-status/tenant-status.service';
 import { OrderItemEntity } from './entities/order-item.entity';
 import { CheckoutWorkflowEntity, OrderEntity } from './entities/order.entity';
 import { OrdersController } from './orders.controller';
@@ -55,6 +66,7 @@ import { OrdersService } from './orders.service';
     OrdersController,
     M3OrdersController,
     ShiftsController,
+    CashReportsController,
     PosController,
     CheckoutController,
     ReturnsController,
@@ -62,16 +74,22 @@ import { OrdersService } from './orders.service';
     PromotionsController,
     ReferenceController,
     ScreenShiftsController,
+    StaffSalesController,
     InternalOrdersController,
+    BranchBlockersController,
   ],
   providers: [
+    BranchBlockersService,
     OrderQueryService,
     OrderActionsService,
     ShiftViewService,
+    StaffSalesService,
     ReferenceService,
     OrdersService,
     M3OrdersService,
     ShiftsService,
+    CashSettingsService,
+    CashReportsService,
     PosService,
     CheckoutService,
     ReturnsService,
@@ -81,6 +99,8 @@ import { OrdersService } from './orders.service';
     CustomerLoyaltyClient,
     FinanceCreditClient,
     BranchProjectionHandler,
+    TenantStatusHandler,
+    TenantStatusService,
     InventoryClient,
   ],
   exports: [

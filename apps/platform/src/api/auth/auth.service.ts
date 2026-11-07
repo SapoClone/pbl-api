@@ -33,6 +33,8 @@ import {
   AccountEntity,
   AccountStatus,
 } from '../account/entities/account.entity';
+import { PlatformSettingReader } from '../platform-setting/platform-setting.reader';
+import { issueCode } from '../subscription/issue-code';
 import { Membership, MembershipService } from '../tenant/membership.service';
 import { AccessTokenService } from './access-token.service';
 import { LoginReqDto } from './dto/login.req.dto';
@@ -42,10 +44,6 @@ import { RefreshResDto } from './dto/refresh.res.dto';
 import { RegisterReqDto } from './dto/register.req.dto';
 import { RegisterResDto } from './dto/register.res.dto';
 import { DUMMY_PASSWORD_HASH } from './dummy-password-hash.constant';
-import {
-  LOGIN_LOCK_DURATION_MS,
-  MAX_FAILED_LOGINS,
-} from './login-lockout.constant';
 import {
   RefreshTokenReuseError,
   RefreshTokenService,
@@ -79,6 +77,7 @@ export class AuthService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly outbox: EventOutbox,
     private readonly sessions: SessionService,
+    private readonly settings: PlatformSettingReader,
   ) {}
 
   /**
@@ -184,6 +183,8 @@ export class AuthService {
    */
   private async registerFailedLogin(accountId: string): Promise<void> {
     const reachesLimit = '"failed_login_count" + 1 >= :max';
+    // the numbers come from the platform settings (security.lockout*), minimum 3 attempts
+    const lockout = await this.settings.lockout();
     await this.accountRepository
       .createQueryBuilder()
       .update(AccountEntity)
@@ -195,8 +196,8 @@ export class AuthService {
       })
       .where('id = :id', { id: accountId })
       .setParameters({
-        max: MAX_FAILED_LOGINS,
-        lockedUntil: new Date(Date.now() + LOGIN_LOCK_DURATION_MS),
+        max: lockout.maxAttempts,
+        lockedUntil: new Date(Date.now() + lockout.windowMs),
       })
       .execute();
   }
@@ -288,7 +289,11 @@ export class AuthService {
       updatedBy: SYSTEM_USER_ID,
     });
 
-    await account.save();
+    // the code is issued under a lock held until the insert commits, so two sign-ups never share one
+    await AccountEntity.getRepository().manager.transaction(async (em) => {
+      account.code = await issueCode(em, AccountEntity, 'US', 5);
+      await em.save(account);
+    });
 
     // Send email verification
     const token = await this.createVerificationToken({ id: account.id });

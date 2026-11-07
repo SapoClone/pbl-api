@@ -32,6 +32,11 @@ export class AccountEntity extends AbstractEntity {
   @Index('UQ_account_email', { where: '"deleted_at" IS NULL', unique: true })
   email!: string;
 
+  /** `US00021`, shown on the admin's users screen; issued when the account is created (null for older seeds) */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  @Index('UQ_account_code', { where: '"code" IS NOT NULL', unique: true })
+  code!: string | null;
+
   /** Null for an owner created by an admin who has not set a password yet: sign-in refuses it like a wrong one */
   @Column({ type: 'varchar', nullable: true })
   password!: string | null;

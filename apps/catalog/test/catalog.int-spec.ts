@@ -1,3 +1,5 @@
+import { CreateTenantPlanQuota1792800000000 } from '../src/migrations/1792800000000-create-tenant-plan-quota';
+import { PlanQuotaService } from '../src/quota/plan-quota.service';
 /**
  * Real PostgreSQL Integration, Concurrency, Row-Level Security (non-superuser role),
  * Outbox Event, and End-to-End Business Demo Test Suite for M1 Catalog Core.
@@ -5,7 +7,11 @@
  * Run with: `pnpm test:int` or `npx jest --config libs/events/test/jest-int.json apps/catalog/test/catalog.int-spec.ts`
  */
 import { HttpException } from '@nestjs/common';
-import { RequestContext, TenantScopedRepository } from '@pbl/common';
+import {
+  RequestContext,
+  runInTenantTransaction,
+  TenantScopedRepository,
+} from '@pbl/common';
 import {
   CATALOG_PRICE_CHANGED,
   CATALOG_PRODUCT_CREATED,
@@ -16,17 +22,20 @@ import {
 import {
   CONSUMER_ENTITIES,
   CONSUMER_MIGRATIONS,
+  databaseOptions,
   EventOutbox,
+  initializeDatabase,
   OutboxEventEntity,
   PRODUCER_ENTITIES,
   PRODUCER_MIGRATIONS,
-  databaseOptions,
-  initializeDatabase,
   provisionServiceRole,
 } from '@pbl/events';
 import { DataSource } from 'typeorm';
 import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
-import { CatalogErrorCode } from '../src/domain/catalog-domain';
+import {
+  CatalogDomainError,
+  CatalogErrorCode,
+} from '../src/domain/catalog-domain';
 import {
   AttributeEntity,
   AttributeValueEntity,
@@ -88,6 +97,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           ...PRODUCER_MIGRATIONS,
           ...CONSUMER_MIGRATIONS,
           CreateCatalogTables1791900000200,
+          CreateTenantPlanQuota1792800000000,
         ],
       }),
     );
@@ -130,6 +140,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
       TenantScopedRepository.forEntity(appDs, ProductEntity),
       TenantScopedRepository.forEntity(appDs, ProductVariantEntity),
       TenantScopedRepository.forEntity(appDs, UnitConversionEntity),
+      new PlanQuotaService(outbox),
     );
     pricingService = new PricingService(
       appDs,
@@ -145,7 +156,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
     await adminDs?.destroy();
   });
 
-  it('creates all 15 Catalog domain tables with RLS enabled and forced', async () => {
+  it('creates all 16 Catalog domain tables with RLS enabled and forced', async () => {
     const rlsRows: {
       relname: string;
       relrowsecurity: boolean;
@@ -174,6 +185,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
       'product_imports',
       'product_variants',
       'products',
+      'tenant_plan_quota',
       'unit_conversions',
       'uploads',
       'variant_attribute_values',
@@ -758,6 +770,139 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           .count({ where: { tenantId: rollbackTenant } });
         expect(outboxAfter).toBe(outboxBefore);
       });
+    });
+  });
+
+  describe('Plan limits (products)', () => {
+    const tenant = 'f0f0f0f0-f0f0-4f0f-8f0f-f0f0f0f0f0f0';
+    const setLimit = (quotaProducts: number) =>
+      adminDs.query(
+        `INSERT INTO "${schema}"."tenant_plan_quota"
+           ("tenant_id","plan_code","quota_products","quota_storage_mb","source_changed_at")
+         VALUES ($1,'free',$2,1024,now())
+         ON CONFLICT ("tenant_id") DO UPDATE SET "quota_products" = EXCLUDED."quota_products"`,
+        [tenant, quotaProducts],
+      );
+    const create = (name: string) =>
+      asTenant(tenant, () => productsService.createProduct({ name }));
+    const usageEvents = () =>
+      adminDs
+        .getRepository(OutboxEventEntity)
+        .find({ where: { tenantId: tenant, type: 'catalog.usage.changed' } });
+
+    it('creates without limit while no plan is known for the store', async () => {
+      await create('No plan 1');
+      await create('No plan 2');
+    });
+
+    it('refuses the product over the limit with 409 Q001 and the facts for the upgrade hint', async () => {
+      await setLimit(3); // two products exist already
+      await create('Third');
+      const error = await create('Fourth').catch((e) => e);
+      expect(error).toBeInstanceOf(HttpException);
+      expect(error.getStatus()).toBe(409);
+      expect(error.getResponse()).toMatchObject({
+        errorCode: 'Q001',
+        details: { key: 'products', used: 3, limit: 3, planCode: 'free' },
+      });
+    });
+
+    it('does not count archived products', async () => {
+      const [first] = await asTenant(tenant, () =>
+        productsService.listProducts({
+          page: 1,
+          limit: 10,
+          q: 'No plan 1',
+          sort: 'createdAt',
+          order: 'ASC',
+        }),
+      ).then((r) => r.items);
+      await asTenant(tenant, () =>
+        productsService.updateProductStatus(first.id, { status: 'ARCHIVED' }),
+      );
+      await create('Fits again');
+    });
+
+    it('tells platform what the store uses, in the same transaction as the change', async () => {
+      const events = await usageEvents();
+      const last = events
+        .map(
+          (e) =>
+            e.payload.payload as {
+              products: number;
+              storageMb: number;
+              measuredAt: string;
+            },
+        )
+        .sort((a, b) => a.measuredAt.localeCompare(b.measuredAt))
+        .pop();
+      expect(events.length).toBeGreaterThan(0);
+      expect(last).toMatchObject({ products: 3, storageMb: 0 });
+    });
+
+    it('is serialised: two creates at limit - 1 let exactly one through', async () => {
+      await setLimit(4); // three used
+      const results = await Promise.allSettled([
+        create('Race A'),
+        create('Race B'),
+      ]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    });
+  });
+  describe('Plan limits (storage)', () => {
+    const tenant = 'f1f1f1f1-f1f1-4f1f-8f1f-f1f1f1f1f1f1';
+    const MB = 1024 * 1024;
+    const quota = () => new PlanQuotaService(new EventOutbox());
+    const addUpload = (status: string, kind: string, bytes: number) =>
+      adminDs.query(
+        `INSERT INTO "${schema}"."uploads"
+           ("tenant_id","kind","file_name","content_type","declared_size","stored_size","storage_key","status","expires_at")
+         VALUES ($1,$2,'f','image/png',$3,$3,'k-' || gen_random_uuid(),$4, now() + interval '1 day')`,
+        [tenant, kind, bytes, status],
+      );
+    const store = (bytes: number) =>
+      asTenant(tenant, () =>
+        runInTenantTransaction(appDs, (em) =>
+          quota().assertCanStore(em, bytes),
+        ),
+      );
+
+    beforeAll(async () => {
+      await adminDs.query(
+        `INSERT INTO "${schema}"."tenant_plan_quota"
+           ("tenant_id","plan_code","quota_products","quota_storage_mb","source_changed_at")
+         VALUES ($1,'free',100,10,now())`,
+        [tenant],
+      );
+    });
+
+    it('counts UPLOADED and ATTACHED files (images and imports), not PENDING ones', async () => {
+      await addUpload('PENDING', 'IMAGE', 5 * MB);
+      await addUpload('UPLOADED', 'IMAGE', 4 * MB);
+      await addUpload('ATTACHED', 'IMAGE', 3 * MB);
+      await addUpload('ATTACHED', 'IMPORT', 2 * MB);
+      // 9 MB kept of 10 MB: 1 MB fits, 2 MB does not
+      await store(1 * MB);
+      const error = await store(2 * MB).catch((e) => e);
+      expect(error).toBeInstanceOf(CatalogDomainError);
+      expect(error).toMatchObject({
+        code: 'Q001',
+        details: { key: 'storageGb', planCode: 'free' },
+      });
+    });
+
+    it('announces the same figure as the usage', async () => {
+      await asTenant(tenant, () =>
+        runInTenantTransaction(appDs, (em) => quota().announceUsage(em)),
+      );
+      const events = await adminDs
+        .getRepository(OutboxEventEntity)
+        .find({ where: { tenantId: tenant, type: 'catalog.usage.changed' } });
+      expect(
+        events.map(
+          (e) => (e.payload.payload as { storageMb: number }).storageMb,
+        ),
+      ).toContain(9);
     });
   });
 });

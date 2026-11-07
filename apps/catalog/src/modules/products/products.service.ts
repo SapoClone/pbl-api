@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   InjectTenantRepository,
   TenantScopedRepository,
@@ -48,6 +48,8 @@ import {
   VariantAttributeValueEntity,
 } from '../../infrastructure/persistence/catalog.entities';
 import { toCatalogHttpException } from '../../presentation/catalog-http-error';
+import { PlanQuotaService } from '../../quota/plan-quota.service';
+import { FILE_STORAGE, FileStorage } from '../uploads/file-storage';
 import { csvRow } from './csv';
 import {
   CreateProductReqDto,
@@ -97,7 +99,45 @@ export class ProductsService {
     private readonly variantsRepo: TenantScopedRepository<ProductVariantEntity>,
     @InjectTenantRepository(UnitConversionEntity)
     private readonly unitsRepo: TenantScopedRepository<UnitConversionEntity>,
+    private readonly quota: PlanQuotaService,
+    @Optional()
+    @Inject(FILE_STORAGE)
+    private readonly storage?: FileStorage,
   ) {}
+
+  private readonly logger = new Logger(ProductsService.name);
+
+  /**
+   * Forgets the uploads behind images a product no longer shows (the rows leave the plan's storage count) and returns
+   * their object keys; delete the objects after the transaction commits with `deleteObjects`.
+   */
+  private async releaseImageUploads(
+    em: EntityManager,
+    keys: string[],
+  ): Promise<string[]> {
+    if (keys.length === 0) return [];
+    const scoped = TenantScopedRepository.forEntity(em, UploadEntity);
+    const rows = await scoped.find({
+      where: { storageKey: In(keys), kind: 'IMAGE' },
+    });
+    if (rows.length === 0) return [];
+    await scoped.delete({ id: In(rows.map((r) => r.id)) });
+    await this.quota.announceUsage(em);
+    return rows.map((r) => r.storageKey);
+  }
+
+  /** Best effort: a failed delete is logged (the row is already gone, so the cleanup job cannot retry it). */
+  private async deleteObjects(keys: string[]): Promise<void> {
+    for (const key of keys) {
+      try {
+        await this.storage?.delete(key);
+      } catch (error) {
+        this.logger.warn(
+          `Could not delete image object ${key}: ${error instanceof Error ? error.message : error}`,
+        );
+      }
+    }
+  }
 
   private toProductRes(
     entity: ProductEntity,
@@ -278,6 +318,19 @@ export class ProductsService {
           `Image ${id} is unknown or its file was not uploaded yet`,
           'BAD_REQUEST',
         );
+      }
+    }
+    if (this.storage) {
+      // the object must still be in the store: the plan counts it and the link must not be dead
+      for (const row of rows) {
+        if (row.status === 'ATTACHED') continue;
+        if (!(await this.storage.head(row.storageKey))) {
+          throw new CatalogDomainError(
+            CatalogErrorCode.UPLOAD_INVALID,
+            `Image ${row.id} is missing from storage; upload it again`,
+            'BAD_REQUEST',
+          );
+        }
       }
     }
     for (const row of rows) {
@@ -570,6 +623,7 @@ export class ProductsService {
 
       return await runInTenantTransaction(this.dataSource, async (em) => {
         await this.verifyCategoryAndBrand(em, dto.categoryId, dto.brandId);
+        await this.quota.assertCanAddProducts(em);
 
         const scopedProducts = TenantScopedRepository.forEntity(
           em,
@@ -659,6 +713,8 @@ export class ProductsService {
 
           createdVariants.push(this.toVariantRes(variant, []));
         }
+
+        await this.quota.announceUsage(em);
 
         return this.toProductRes(product, createdVariants, [
           this.toUnitRes(baseUnitConv),
@@ -874,68 +930,82 @@ export class ProductsService {
     dto: UpdateProductReqDto,
   ): Promise<ProductRes> {
     try {
-      return await runInTenantTransaction(this.dataSource, async (em) => {
-        const scoped = TenantScopedRepository.forEntity(em, ProductEntity);
-        const product = await scoped.findOne({
-          where: { id, deletedAt: IsNull() },
-        });
-        if (!product) {
-          throw new CatalogDomainError(
-            CatalogErrorCode.PRODUCT_NOT_FOUND,
-            'Product not found',
-            'NOT_FOUND',
+      const released: string[] = [];
+      const result = await runInTenantTransaction(
+        this.dataSource,
+        async (em) => {
+          const scoped = TenantScopedRepository.forEntity(em, ProductEntity);
+          const product = await scoped.findOne({
+            where: { id, deletedAt: IsNull() },
+          });
+          if (!product) {
+            throw new CatalogDomainError(
+              CatalogErrorCode.PRODUCT_NOT_FOUND,
+              'Product not found',
+              'NOT_FOUND',
+            );
+          }
+
+          if (dto.version !== undefined && dto.version !== product.version) {
+            throw new CatalogDomainError(
+              CatalogErrorCode.RESOURCE_VERSION_CONFLICT,
+              `Product version conflict: expected ${dto.version}, current is ${product.version}`,
+              'CONFLICT',
+              { expectedVersion: dto.version, currentVersion: product.version },
+            );
+          }
+
+          await this.verifyCategoryAndBrand(em, dto.categoryId, dto.brandId);
+
+          if (dto.name !== undefined) {
+            product.name = dto.name.trim();
+            product.normalizedName = normalizeName(dto.name);
+          }
+          if (dto.description !== undefined) {
+            product.description = dto.description?.trim() ?? null;
+          }
+          if (dto.categoryId !== undefined) {
+            product.categoryId = dto.categoryId;
+          }
+          if (dto.brandId !== undefined) {
+            product.brandId = dto.brandId;
+          }
+          if (dto.baseUnit !== undefined) {
+            product.baseUnit = dto.baseUnit.trim();
+          }
+          const before = (product.images ?? []).map((i) => i.key);
+          if (dto.imageIds !== undefined) {
+            product.images = await this.resolveImageIds(em, dto.imageIds);
+          } else if (dto.images !== undefined) {
+            product.images = dto.images;
+          }
+          const kept = new Set(product.images.map((i) => i.key));
+          released.push(
+            ...(await this.releaseImageUploads(
+              em,
+              before.filter((k) => !kept.has(k)),
+            )),
           );
-        }
+          product.version += 1;
 
-        if (dto.version !== undefined && dto.version !== product.version) {
-          throw new CatalogDomainError(
-            CatalogErrorCode.RESOURCE_VERSION_CONFLICT,
-            `Product version conflict: expected ${dto.version}, current is ${product.version}`,
-            'CONFLICT',
-            { expectedVersion: dto.version, currentVersion: product.version },
-          );
-        }
+          const saved = await scoped.save(product);
 
-        await this.verifyCategoryAndBrand(em, dto.categoryId, dto.brandId);
+          await this.outbox.add(em, CATALOG_PRODUCT_UPDATED, {
+            productId: saved.id,
+            name: saved.name,
+            baseUnit: saved.baseUnit,
+            categoryId: saved.categoryId,
+            brandId: saved.brandId,
+            status: saved.status,
+            aggregateVersion: saved.version,
+            updatedAt: saved.updatedAt.toISOString(),
+          });
 
-        if (dto.name !== undefined) {
-          product.name = dto.name.trim();
-          product.normalizedName = normalizeName(dto.name);
-        }
-        if (dto.description !== undefined) {
-          product.description = dto.description?.trim() ?? null;
-        }
-        if (dto.categoryId !== undefined) {
-          product.categoryId = dto.categoryId;
-        }
-        if (dto.brandId !== undefined) {
-          product.brandId = dto.brandId;
-        }
-        if (dto.baseUnit !== undefined) {
-          product.baseUnit = dto.baseUnit.trim();
-        }
-        if (dto.imageIds !== undefined) {
-          product.images = await this.resolveImageIds(em, dto.imageIds);
-        } else if (dto.images !== undefined) {
-          product.images = dto.images;
-        }
-        product.version += 1;
-
-        const saved = await scoped.save(product);
-
-        await this.outbox.add(em, CATALOG_PRODUCT_UPDATED, {
-          productId: saved.id,
-          name: saved.name,
-          baseUnit: saved.baseUnit,
-          categoryId: saved.categoryId,
-          brandId: saved.brandId,
-          status: saved.status,
-          aggregateVersion: saved.version,
-          updatedAt: saved.updatedAt.toISOString(),
-        });
-
-        return this.toProductRes(saved);
-      });
+          return this.toProductRes(saved);
+        },
+      );
+      await this.deleteObjects(released);
+      return result;
     } catch (error) {
       toCatalogHttpException(error);
     }
@@ -1016,6 +1086,7 @@ export class ProductsService {
           aggregateVersion: saved.version,
           updatedAt: saved.updatedAt.toISOString(),
         });
+        await this.quota.announceUsage(em);
 
         return this.toProductRes(saved);
       });
@@ -1026,6 +1097,7 @@ export class ProductsService {
 
   async softDeleteProduct(id: string): Promise<void> {
     try {
+      const released: string[] = [];
       await runInTenantTransaction(this.dataSource, async (em) => {
         const scoped = TenantScopedRepository.forEntity(em, ProductEntity);
         const product = await scoped.findOne({
@@ -1043,6 +1115,12 @@ export class ProductsService {
         product.version += 1;
         product.deletedAt = new Date();
         await scoped.save(product);
+        released.push(
+          ...(await this.releaseImageUploads(
+            em,
+            (product.images ?? []).map((i) => i.key),
+          )),
+        );
 
         const scopedVariants = TenantScopedRepository.forEntity(
           em,
@@ -1079,7 +1157,9 @@ export class ProductsService {
           aggregateVersion: product.version,
           updatedAt: product.updatedAt.toISOString(),
         });
+        await this.quota.announceUsage(em);
       });
+      await this.deleteObjects(released);
     } catch (error) {
       toCatalogHttpException(error);
     }

@@ -3,6 +3,7 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
+  PrimaryColumn,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -446,6 +447,34 @@ export class ProductImportEntity {
   updatedAt!: Date;
 }
 
+/**
+ * The limits of the store's plan, kept from platform's subscription and plan events (ADR-0002). Catalog enforces
+ * products and storage itself with it, so a create never waits on a call to the platform service: no row means no limit is known
+ * yet (a store older than the events): nothing is refused.
+ */
+@Entity('tenant_plan_quota')
+export class TenantPlanQuotaEntity {
+  @PrimaryColumn({
+    name: 'tenant_id',
+    type: 'uuid',
+    primaryKeyConstraintName: 'PK_tenant_plan_quota_tenant_id',
+  })
+  tenantId!: string;
+
+  @Column({ name: 'plan_code', type: 'varchar', length: 32 })
+  planCode!: string;
+
+  @Column({ name: 'quota_products', type: 'integer' })
+  quotaProducts!: number;
+
+  @Column({ name: 'quota_storage_mb', type: 'integer' })
+  quotaStorageMb!: number;
+
+  /** When the plan change happened at the source: an older event is ignored */
+  @Column({ name: 'source_changed_at', type: 'timestamptz' })
+  sourceChangedAt!: Date;
+}
+
 export const CATALOG_ENTITIES = [
   CategoryEntity,
   BrandEntity,
@@ -459,4 +488,5 @@ export const CATALOG_ENTITIES = [
   PriceListItemEntity,
   UploadEntity,
   ProductImportEntity,
+  TenantPlanQuotaEntity,
 ];

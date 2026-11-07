@@ -68,10 +68,23 @@ export class UploadsController {
     return this.uploads.createImportUpload(dto);
   }
 
+  @Post(':id/complete')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('products.create', 'products.update')
+  @ApiOperation({
+    summary: 'Confirm the file reached the object store (HEAD check)',
+    description:
+      'Call after the PUT to uploadUrl. The API checks the object exists with the declared type and size, then marks the upload as uploaded. Repeating the call is safe.',
+  })
+  complete(@Param('id', ParseUUIDPipe) id: string): Promise<UploadedRes> {
+    return this.uploads.complete(id);
+  }
+
   @Put(':id/content')
   @RequirePermission('products.create', 'products.update')
   @ApiOperation({
-    summary: 'Upload the file bytes (raw body, declared Content-Type)',
+    summary:
+      'Local driver only: upload the bytes through the API (404 when UPLOADS_DRIVER=s3)',
   })
   async content(
     @Param('id', ParseUUIDPipe) id: string,

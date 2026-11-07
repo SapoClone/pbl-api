@@ -1,4 +1,4 @@
-import { INestApplication, Module } from '@nestjs/common';
+import { ForbiddenException, INestApplication, Module } from '@nestjs/common';
 import { PblAuthModule } from '@pbl/auth';
 import { createTestAuth } from '@pbl/auth/testing';
 import { PblLoggingModule, TenantContext, bootstrapService } from '@pbl/common';
@@ -24,10 +24,18 @@ import { OrderQueryService } from './modules/screen/order-query.service';
 import { OrderViewsController } from './modules/screen/order-views.controller';
 import { ScreenShiftsController } from './modules/screen/screen-shifts.controller';
 import { ShiftViewService } from './modules/screen/shift-view.service';
+import {
+  CashReportsController,
+  CashReportsService,
+} from './modules/shifts/cash-reports.controller';
+import { CashSettingsService } from './modules/shifts/cash-settings.service';
 import { ShiftsController } from './modules/shifts/shifts.controller';
 import { ShiftsService } from './modules/shifts/shifts.service';
+import { StaffSalesController } from './modules/staff-sales/staff-sales.controller';
+import { StaffSalesService } from './modules/staff-sales/staff-sales.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
+import { TenantStatusService } from './tenant-status/tenant-status.service';
 
 const auth = createTestAuth();
 const TENANT = '11111111-1111-4111-8111-111111111111';
@@ -59,9 +67,13 @@ const services = [
   PromotionsService,
   ReturnsService,
   ShiftsService,
+  CashReportsService,
+  CashSettingsService,
   OrderQueryService,
   OrderActionsService,
   ShiftViewService,
+  TenantStatusService,
+  StaffSalesService,
   ReferenceService,
 ];
 const stubs = new Map(services.map((s) => [s, stub()]));
@@ -81,8 +93,10 @@ const stubs = new Map(services.map((s) => [s, stub()]));
     PromotionsController,
     ReturnsController,
     ShiftsController,
+    CashReportsController,
     ReferenceController,
     ScreenShiftsController,
+    StaffSalesController,
     InternalOrdersController,
   ],
   providers: services.map((s) => ({ provide: s, useValue: stubs.get(s) })),
@@ -315,6 +329,50 @@ const ROUTES: Route[] = [
   },
   { method: 'get', path: '/api/v1/pos/shifts', perms: ['pos.view'] },
   { method: 'get', path: `/api/v1/pos/shifts/${ID}`, perms: ['pos.view'] },
+  // the cash session
+  {
+    method: 'get',
+    path: '/api/v1/pos/shifts/available',
+    perms: ['pos.view'],
+  },
+  {
+    method: 'post',
+    path: `/api/v1/pos/shifts/${ID}/count`,
+    perms: ['pos.update'],
+    body: { denominations: { '500000': 1 } },
+  },
+  {
+    method: 'post',
+    path: `/api/v1/pos/shifts/${ID}/approve-close`,
+    perms: ['pos.approve'],
+    body: {},
+  },
+  {
+    method: 'post',
+    path: `/api/v1/pos/shifts/${ID}/reject-close`,
+    perms: ['pos.approve'],
+    body: { note: 'count again' },
+  },
+  {
+    method: 'post',
+    path: `/api/v1/pos/shifts/${ID}/cash-entries`,
+    perms: ['pos.update'],
+    body: { kind: 'PAY_OUT', amount: 50000, reason: 'supplier_payment' },
+  },
+  {
+    method: 'patch',
+    path: `/api/v1/pos/shifts/${ID}`,
+    perms: ['pos.update'],
+    body: { plannedEndAt: '2026-11-07T10:00:00.000Z' },
+  },
+  { method: 'get', path: '/api/v1/cash-shortages', perms: ['reports.view'] },
+  { method: 'get', path: '/api/v1/cash-settings', perms: ['settings.view'] },
+  {
+    method: 'patch',
+    path: '/api/v1/cash-settings',
+    perms: ['settings.update'],
+    body: { toleranceVnd: 20000 },
+  },
   // screen contract (phase 4)
   { method: 'get', path: '/api/v1/orders/summary', perms: ['orders.view'] },
   { method: 'get', path: '/api/v1/orders/export', perms: ['orders.view'] },
@@ -397,6 +455,12 @@ const ROUTES: Route[] = [
     perms: ['pos.create', 'pos.update'],
     body: { version: 1, closingCashActual: 0 },
   },
+  { method: 'get', path: '/api/v1/staff-sales', perms: ['reports.view'] },
+  {
+    method: 'get',
+    path: `/api/v1/staff-sales/${ID}/products`,
+    perms: ['reports.view'],
+  },
 ];
 
 describe('Sales permissions, route by route', () => {
@@ -443,10 +507,11 @@ describe('Sales permissions, route by route', () => {
       'pos.view',
       'pos.create',
       'pos.update',
+      'pos.approve',
     ].filter((p) => !perms.includes(p));
 
   it('covers every route of the controllers', () => {
-    expect(ROUTES.length).toBe(63);
+    expect(ROUTES.length).toBe(74);
   });
 
   describe.each(
@@ -773,6 +838,21 @@ describe('Sales permissions, route by route', () => {
       });
     });
 
+    it('answers 403 TENANT_SUSPENDED for a suspended store and creates nothing', async () => {
+      const status = stubs.get(TenantStatusService) as unknown as {
+        assertActive: jest.Mock;
+      };
+      status.assertActive.mockRejectedValueOnce(
+        new ForbiddenException({ errorCode: 'TENANT_SUSPENDED' }),
+      );
+      const res = await post({
+        'x-internal-token': TOKEN,
+        'X-Tenant-Id': TENANT,
+      }).expect(403);
+      expect(res.body).toMatchObject({ errorCode: 'TENANT_SUSPENDED' });
+      expect(orders().createOmnichannelOrder).not.toHaveBeenCalled();
+    });
+
     it('answers 200 with Idempotency-Replayed for a known external order', async () => {
       orders().createOmnichannelOrder.mockResolvedValue({
         id: 'o1',
@@ -834,7 +914,7 @@ describe('Sales permissions, route by route', () => {
     it('passes it to the shift routes', async () => {
       const shifts = stubs.get(ShiftsService) as unknown as {
         listShifts: jest.Mock;
-        getById: jest.Mock;
+        getDetail: jest.Mock;
       };
       await request(url())
         .get('/api/v1/pos/shifts')
@@ -847,7 +927,7 @@ describe('Sales permissions, route by route', () => {
         .get(`/api/v1/pos/shifts/${ID}`)
         .set('Authorization', bearer(['pos.view'], [B2]))
         .expect(200);
-      expect(shifts.getById).toHaveBeenLastCalledWith(ID, [B2]);
+      expect(shifts.getDetail).toHaveBeenLastCalledWith(ID, [B2]);
     });
   });
 });

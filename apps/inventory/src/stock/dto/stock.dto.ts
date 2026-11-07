@@ -104,12 +104,13 @@ export class ListStockReqDto {
 }
 
 export class WarehouseReservationLineDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     format: 'uuid',
     example: '77777777-7777-4777-8777-777777777777',
   })
+  @IsOptional()
   @IsUUID()
-  warehouseId!: string;
+  warehouseId?: string;
 
   @ApiProperty({
     format: 'uuid',
@@ -148,6 +149,11 @@ export class CreateWarehouseReservationDto {
   })
   @IsUUID()
   sourceRefId!: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 
   @ApiPropertyOptional({ default: 900, minimum: 30, maximum: 86400 })
   @IsOptional()
@@ -198,38 +204,4 @@ export class CreateWarehouseDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
-}
-
-export class ReceiveStockBalanceDto {
-  @ApiProperty({
-    format: 'uuid',
-    example: '77777777-7777-4777-8777-777777777777',
-  })
-  @IsUUID()
-  warehouseId!: string;
-
-  @ApiProperty({
-    format: 'uuid',
-    example: '11111111-1111-4111-8111-111111111111',
-  })
-  @IsUUID()
-  skuId!: string;
-
-  @ApiProperty({
-    example: '10.000',
-    description: 'Positive decimal quantity received (NUMERIC(18,3))',
-  })
-  @IsString()
-  @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/, {
-    message: 'qty must be a positive decimal with up to 3 fractional digits',
-  })
-  qty!: string;
-
-  @ApiPropertyOptional({
-    format: 'uuid',
-    description: 'Optional receipt reference UUID',
-  })
-  @IsOptional()
-  @IsUUID()
-  referenceId?: string;
 }

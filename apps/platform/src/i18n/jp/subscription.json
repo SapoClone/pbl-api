@@ -2,6 +2,8 @@
   "error": {
     "quota_exceeded": "店舗の使用量が新しいプランの上限を超えています",
     "same_plan_same_period": "この店舗は既にこの期間このプランです",
-    "payment_overlaps": "この期間の一部は既に支払い済みです"
+    "payment_overlaps": "この期間の一部は既に支払い済みです",
+    "payment_not_allowed": "無料プランまたは終了したサブスクリプションには支払いを記録できません",
+    "payment_note_required": "金額がプラン価格×月数と異なります。メモを入力してください"
   }
 }

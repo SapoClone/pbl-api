@@ -54,3 +54,29 @@ describe('publicUrlFor', () => {
     expect(publicUrlFor('T', 'I', 'png')).toBe('/static/t/T/p/I.png');
   });
 });
+
+describe('local adapters: head, presignPut, publicUrl', () => {
+  const key = 't/T/p/11111111-1111-4111-8111-111111111111.png';
+
+  it('memory: head reports size and type, presign points at the API', async () => {
+    const s = new InMemoryFileStorage();
+    expect(await s.head(key)).toBeNull();
+    await s.put(key, Buffer.from('abc'), 'image/png');
+    expect(await s.head(key)).toEqual({ size: 3, contentType: 'image/png' });
+    expect(await s.presignPut(key, 'image/png', 3)).toEqual({
+      url: '/catalog/api/v1/uploads/11111111-1111-4111-8111-111111111111/content',
+      headers: { 'Content-Type': 'image/png' },
+    });
+    expect(s.publicUrl(key)).toBe(`/static/${key}`);
+    expect(s.direct).toBe(false);
+  });
+
+  it('disk: head is null for a missing key', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'catalog-head-'));
+    const s = new LocalDiskFileStorage(dir);
+    expect(await s.head(key)).toBeNull();
+    await s.put(key, Buffer.from('abcd'), 'image/png');
+    expect(await s.head(key)).toEqual({ size: 4, contentType: 'image/png' });
+    await rm(dir, { recursive: true, force: true });
+  });
+});
