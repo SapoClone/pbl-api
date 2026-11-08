@@ -12,7 +12,8 @@ export default defineUserConfig({
   lang: 'en-US',
   title: 'NestJS boilerplate',
   description: 'NestJS boilerplate with best practices',
-  base: '/nestjs-boilerplate/',
+  // GitHub Pages serves this repository at https://sapoclone.github.io/pbl-api/ (set DOCS_BASE to build for another path)
+  base: process.env.DOCS_BASE ?? '/pbl-api/',
   bundler: viteBundler(),
   markdown: {
     toc: {
