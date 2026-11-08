@@ -23,8 +23,8 @@ route table without instantiating a provider, and the config validation gets dum
 The same documents are served live by each service at `/api-docs` when `APP_SWAGGER_ENABLED` is not `false`
 (production: only platform, behind basic auth; the gateway does not route `/api-docs`).
 
-**Published copy.** `docs/openapi/*.json` is committed, and GitHub Pages serves the `docs` folder, so
-`https://sapoclone.github.io/pbl-api/swagger/` shows the merged document in Swagger UI and `.../openapi/<service>.json`
+**Published copy.** `docs/openapi/*.json` is committed. The docs workflow (`deploy-docs.yml`) builds the VuePress site and
+copies `docs/swagger` and `docs/openapi` next to it, so `https://sapoclone.github.io/pbl-api/swagger/` shows the merged document in Swagger UI and `.../openapi/<service>.json`
 are the raw files. The `libs` job of CI runs `pnpm openapi` and fails on a diff, so a controller or krakend change
 needs the regenerated files in the same PR.
 

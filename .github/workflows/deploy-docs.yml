@@ -55,6 +55,13 @@ jobs:
       - name: Build VuePress site
         run: pnpm docs:build
 
+      # The API reference is a static page plus the generated OpenAPI files (docs/swagger, docs/openapi, committed and
+      # checked fresh by ci.yml): VuePress does not copy them, so they are added next to the built site
+      - name: Add the API reference
+        run: |
+          cp -r docs/swagger docs/.vuepress/dist/swagger
+          cp -r docs/openapi docs/.vuepress/dist/openapi
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
