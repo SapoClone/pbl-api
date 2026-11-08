@@ -54,33 +54,37 @@ describe('setupSwagger', () => {
     expect(createDocumentSpy).toHaveBeenCalled();
   });
 
-  it('should call SwaggerModule.setup with correct parameters and full microservice API catalog', () => {
+  it('serves the platform spec at api-docs, without the other services', () => {
     const setupSpy = jest.spyOn(SwaggerModule, 'setup');
     setupSwagger(app);
     expect(setupSpy).toHaveBeenCalledWith('api-docs', app, expect.any(Object), {
       customSiteTitle: 'TestApp',
     });
 
-    const mergedDoc = setupSpy.mock.calls[0][2] as OpenAPIObject;
-    expect(mergedDoc.paths['/inventory/api/v1/warehouses']).toBeDefined();
-    // direct "add stock" was removed (D15)
-    expect(
-      mergedDoc.paths['/inventory/api/v1/stock-balances/receipts'],
-    ).toBeUndefined();
-    expect(mergedDoc.paths['/internal/v1/reservations']).toBeDefined();
-    expect(mergedDoc.paths['/sales/api/v1/orders']).toBeDefined();
-    expect(mergedDoc.paths['/sales/api/v1/orders/checkouts']).toBeDefined();
-    expect(
-      mergedDoc.paths['/sales/api/v1/orders/checkouts/{id}/recover'],
-    ).toBeDefined();
-    expect(mergedDoc.paths['/insight/api/v1/audit-logs']).toBeDefined();
-    expect(
-      mergedDoc.paths['/insight/api/v1/sales-summary/daily'],
-    ).toBeDefined();
-    expect(mergedDoc.components?.schemas?.CreateCheckoutReqDto).toBeDefined();
-    expect(
-      mergedDoc.components?.schemas?.WarehouseReservationRes,
-    ).toBeDefined();
+    const doc = setupSpy.mock.calls[0][2] as OpenAPIObject;
+    // the other services are in their own /api-docs and in the merged document
+    expect(doc.paths['/sales/api/v1/orders']).toBeUndefined();
+    expect(doc.paths['/inventory/api/v1/warehouses']).toBeUndefined();
+    expect(doc.servers?.map((s) => s.url)).toContain('http://localhost:8080');
+  });
+
+  it('lists the admin tags first, with a note on the admin token', () => {
+    const setupSpy = jest.spyOn(SwaggerModule, 'setup');
+    setupSwagger(app);
+    const tags = (setupSpy.mock.calls[0][2] as OpenAPIObject).tags ?? [];
+    expect(tags.slice(0, 8).map((t) => t.name)).toEqual([
+      'admin-auth',
+      'admin-tenants',
+      'admin-accounts',
+      'admin-admins',
+      'admin-plans',
+      'admin-subscriptions',
+      'admin-usage',
+      'admin-settings',
+    ]);
+    for (const tag of tags.slice(1, 8)) {
+      expect(tag.description).toContain('platform_admin');
+    }
   });
 
   it('should not register basic auth when no credentials are configured', () => {

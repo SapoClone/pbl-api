@@ -1,0 +1,7400 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "PblHealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Service health check",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "PblHealthController_liveExplicit",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "PblHealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Readiness probe (Database and Redis)",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/finance/accounts": {
+      "get": {
+        "operationId": "FinancialJournalController_listAccounts[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FinancialAccountEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List tenant financial chart of accounts",
+        "tags": [
+          "finance-journal"
+        ]
+      },
+      "post": {
+        "operationId": "FinancialJournalController_createAccount[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFinancialAccountDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialAccountEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a custom financial account",
+        "tags": [
+          "finance-journal"
+        ]
+      }
+    },
+    "/api/v1/finance/accounts": {
+      "get": {
+        "operationId": "FinancialJournalController_listAccounts[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FinancialAccountEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List tenant financial chart of accounts",
+        "tags": [
+          "finance-journal"
+        ]
+      },
+      "post": {
+        "operationId": "FinancialJournalController_createAccount[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFinancialAccountDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialAccountEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a custom financial account",
+        "tags": [
+          "finance-journal"
+        ]
+      }
+    },
+    "/v1/finance/journals": {
+      "get": {
+        "operationId": "FinancialJournalController_listJournals[0]",
+        "parameters": [
+          {
+            "name": "journalType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "POSTED",
+                "REVERSED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List posted financial journals with filtering",
+        "tags": [
+          "finance-journal"
+        ]
+      },
+      "post": {
+        "operationId": "FinancialJournalController_postJournal[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostJournalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Post a balanced financial journal",
+        "tags": [
+          "finance-journal"
+        ]
+      }
+    },
+    "/api/v1/finance/journals": {
+      "get": {
+        "operationId": "FinancialJournalController_listJournals[1]",
+        "parameters": [
+          {
+            "name": "journalType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "POSTED",
+                "REVERSED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List posted financial journals with filtering",
+        "tags": [
+          "finance-journal"
+        ]
+      },
+      "post": {
+        "operationId": "FinancialJournalController_postJournal[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostJournalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Post a balanced financial journal",
+        "tags": [
+          "finance-journal"
+        ]
+      }
+    },
+    "/v1/finance/journals/{id}": {
+      "get": {
+        "operationId": "FinancialJournalController_getJournal[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get financial journal details and balanced lines",
+        "tags": [
+          "finance-journal"
+        ]
+      }
+    },
+    "/api/v1/finance/journals/{id}": {
+      "get": {
+        "operationId": "FinancialJournalController_getJournal[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get financial journal details and balanced lines",
+        "tags": [
+          "finance-journal"
+        ]
+      }
+    },
+    "/v1/finance/journals/{id}/reverse": {
+      "post": {
+        "operationId": "FinancialJournalController_reverseJournal[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseJournalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reverse a posted financial journal using compensating entries",
+        "tags": [
+          "finance-journal"
+        ]
+      }
+    },
+    "/api/v1/finance/journals/{id}/reverse": {
+      "post": {
+        "operationId": "FinancialJournalController_reverseJournal[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseJournalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reverse a posted financial journal using compensating entries",
+        "tags": [
+          "finance-journal"
+        ]
+      }
+    },
+    "/v1/finance/cash-accounts": {
+      "post": {
+        "operationId": "CashAccountsController_createCashAccount[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCashAccountDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashAccountEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a cash drawer, safe, bank, or e-wallet account",
+        "tags": [
+          "finance-cash-accounts"
+        ]
+      },
+      "get": {
+        "operationId": "CashAccountsController_listCashAccounts[0]",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "INACTIVE",
+                "CLOSED"
+              ]
+            }
+          },
+          {
+            "name": "accountType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CASH_DRAWER",
+                "SAFE",
+                "BANK",
+                "E_WALLET"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CashAccountEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List tenant cash and bank accounts",
+        "tags": [
+          "finance-cash-accounts"
+        ]
+      }
+    },
+    "/api/v1/finance/cash-accounts": {
+      "post": {
+        "operationId": "CashAccountsController_createCashAccount[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCashAccountDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashAccountEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a cash drawer, safe, bank, or e-wallet account",
+        "tags": [
+          "finance-cash-accounts"
+        ]
+      },
+      "get": {
+        "operationId": "CashAccountsController_listCashAccounts[1]",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "INACTIVE",
+                "CLOSED"
+              ]
+            }
+          },
+          {
+            "name": "accountType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CASH_DRAWER",
+                "SAFE",
+                "BANK",
+                "E_WALLET"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CashAccountEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List tenant cash and bank accounts",
+        "tags": [
+          "finance-cash-accounts"
+        ]
+      }
+    },
+    "/v1/finance/cash-accounts/{id}": {
+      "get": {
+        "operationId": "CashAccountsController_getCashAccount[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashAccountEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get cash account details and current balance",
+        "tags": [
+          "finance-cash-accounts"
+        ]
+      },
+      "patch": {
+        "operationId": "CashAccountsController_updateCashAccount[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCashAccountDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashAccountEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update or close a cash account",
+        "tags": [
+          "finance-cash-accounts"
+        ]
+      }
+    },
+    "/api/v1/finance/cash-accounts/{id}": {
+      "get": {
+        "operationId": "CashAccountsController_getCashAccount[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashAccountEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get cash account details and current balance",
+        "tags": [
+          "finance-cash-accounts"
+        ]
+      },
+      "patch": {
+        "operationId": "CashAccountsController_updateCashAccount[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCashAccountDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashAccountEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update or close a cash account",
+        "tags": [
+          "finance-cash-accounts"
+        ]
+      }
+    },
+    "/v1/finance/cashbook/categories": {
+      "get": {
+        "operationId": "CashbookController_listCategories[0]",
+        "parameters": [
+          {
+            "name": "direction",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CashbookCategoryEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List cashbook receipt and expense categories",
+        "tags": [
+          "finance-cashbook"
+        ]
+      },
+      "post": {
+        "operationId": "CashbookController_createCategory[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCashbookCategoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookCategoryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a custom cashbook category",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/api/v1/finance/cashbook/categories": {
+      "get": {
+        "operationId": "CashbookController_listCategories[1]",
+        "parameters": [
+          {
+            "name": "direction",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CashbookCategoryEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List cashbook receipt and expense categories",
+        "tags": [
+          "finance-cashbook"
+        ]
+      },
+      "post": {
+        "operationId": "CashbookController_createCategory[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCashbookCategoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookCategoryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a custom cashbook category",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/v1/finance/cashbook/receipts": {
+      "post": {
+        "operationId": "CashbookController_createReceipt[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCashbookVoucherDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a cashbook receipt voucher (PT)",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/api/v1/finance/cashbook/receipts": {
+      "post": {
+        "operationId": "CashbookController_createReceipt[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCashbookVoucherDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a cashbook receipt voucher (PT)",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/v1/finance/cashbook/expenses": {
+      "post": {
+        "operationId": "CashbookController_createExpense[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCashbookVoucherDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a cashbook expense voucher (PC)",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/api/v1/finance/cashbook/expenses": {
+      "post": {
+        "operationId": "CashbookController_createExpense[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCashbookVoucherDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a cashbook expense voucher (PC)",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/v1/finance/cashbook/entries": {
+      "get": {
+        "operationId": "CashbookController_listEntries[0]",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "cashAccountId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "RECEIPT",
+                "EXPENSE"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "APPROVED",
+                "POSTED",
+                "REVERSED",
+                "CANCELLED"
+              ]
+            }
+          },
+          {
+            "name": "sourceType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List cashbook entries with filtering and pagination",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/api/v1/finance/cashbook/entries": {
+      "get": {
+        "operationId": "CashbookController_listEntries[1]",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "cashAccountId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "RECEIPT",
+                "EXPENSE"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "APPROVED",
+                "POSTED",
+                "REVERSED",
+                "CANCELLED"
+              ]
+            }
+          },
+          {
+            "name": "sourceType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List cashbook entries with filtering and pagination",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/v1/finance/cashbook/export": {
+      "get": {
+        "operationId": "CashbookController_exportEntries[0]",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "cashAccountId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "RECEIPT",
+                "EXPENSE"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "APPROVED",
+                "POSTED",
+                "REVERSED",
+                "CANCELLED"
+              ]
+            }
+          },
+          {
+            "name": "sourceType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export cashbook entries as CSV",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/api/v1/finance/cashbook/export": {
+      "get": {
+        "operationId": "CashbookController_exportEntries[1]",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "cashAccountId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "RECEIPT",
+                "EXPENSE"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "APPROVED",
+                "POSTED",
+                "REVERSED",
+                "CANCELLED"
+              ]
+            }
+          },
+          {
+            "name": "sourceType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export cashbook entries as CSV",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/v1/finance/cashbook/entries/{id}": {
+      "get": {
+        "operationId": "CashbookController_getEntry[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get cashbook voucher details",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/api/v1/finance/cashbook/entries/{id}": {
+      "get": {
+        "operationId": "CashbookController_getEntry[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get cashbook voucher details",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/v1/finance/cashbook/entries/{id}/approve": {
+      "post": {
+        "operationId": "CashbookController_approveEntry[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve a DRAFT cashbook voucher",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/api/v1/finance/cashbook/entries/{id}/approve": {
+      "post": {
+        "operationId": "CashbookController_approveEntry[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve a DRAFT cashbook voucher",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/v1/finance/cashbook/entries/{id}/post": {
+      "post": {
+        "operationId": "CashbookController_postEntry[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostCashbookEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Post a cashbook voucher, atomically writing a balanced journal and updating cash account balance",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/api/v1/finance/cashbook/entries/{id}/post": {
+      "post": {
+        "operationId": "CashbookController_postEntry[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostCashbookEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Post a cashbook voucher, atomically writing a balanced journal and updating cash account balance",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/v1/finance/cashbook/entries/{id}/reverse": {
+      "post": {
+        "operationId": "CashbookController_reverseEntry[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseCashbookEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reverse a POSTED cashbook voucher using a compensating reversal voucher and journal",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/api/v1/finance/cashbook/entries/{id}/reverse": {
+      "post": {
+        "operationId": "CashbookController_reverseEntry[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseCashbookEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashbookEntryEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reverse a POSTED cashbook voucher using a compensating reversal voucher and journal",
+        "tags": [
+          "finance-cashbook"
+        ]
+      }
+    },
+    "/v1/finance/customers/{id}/credit-profile": {
+      "get": {
+        "operationId": "CreditAuthorizationController_getCreditProfile[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer credit limit, posted debt, held credit exposure, and available credit",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/api/v1/finance/customers/{id}/credit-profile": {
+      "get": {
+        "operationId": "CreditAuthorizationController_getCreditProfile[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer credit limit, posted debt, held credit exposure, and available credit",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/v1/finance/customers/{id}/credit-limit": {
+      "put": {
+        "operationId": "CreditAuthorizationController_updateCreditLimit[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerCreditLimitDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a customer credit limit",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/api/v1/finance/customers/{id}/credit-limit": {
+      "put": {
+        "operationId": "CreditAuthorizationController_updateCreditLimit[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerCreditLimitDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a customer credit limit",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/internal/v1/finance/credit-authorizations": {
+      "post": {
+        "operationId": "CreditAuthorizationController_createAuthorization[0]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCreditAuthorizationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Atomically authorize customer credit exposure and create a HELD credit hold",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/api/internal/v1/finance/credit-authorizations": {
+      "post": {
+        "operationId": "CreditAuthorizationController_createAuthorization[1]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCreditAuthorizationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Atomically authorize customer credit exposure and create a HELD credit hold",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/internal/v1/finance/credit-authorizations/by-key/{key}": {
+      "get": {
+        "operationId": "CreditAuthorizationController_getAuthorizationByKey[0]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Recover credit authorization outcome by original idempotency key",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/api/internal/v1/finance/credit-authorizations/by-key/{key}": {
+      "get": {
+        "operationId": "CreditAuthorizationController_getAuthorizationByKey[1]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Recover credit authorization outcome by original idempotency key",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/internal/v1/finance/credit-authorizations/{id}": {
+      "get": {
+        "operationId": "CreditAuthorizationController_getAuthorization[0]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Get credit authorization by ID",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/api/internal/v1/finance/credit-authorizations/{id}": {
+      "get": {
+        "operationId": "CreditAuthorizationController_getAuthorization[1]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Get credit authorization by ID",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/internal/v1/finance/credit-authorizations/{id}/commit": {
+      "post": {
+        "operationId": "CreditAuthorizationController_commitAuthorization[0]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommitCreditAuthorizationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Commit HELD credit authorization into an authoritative CustomerReceivable and balanced journal",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/api/internal/v1/finance/credit-authorizations/{id}/commit": {
+      "post": {
+        "operationId": "CreditAuthorizationController_commitAuthorization[1]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommitCreditAuthorizationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Commit HELD credit authorization into an authoritative CustomerReceivable and balanced journal",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/internal/v1/finance/credit-authorizations/{id}/release": {
+      "post": {
+        "operationId": "CreditAuthorizationController_releaseAuthorization[0]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseCreditAuthorizationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Release HELD credit authorization and restore available credit",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/api/internal/v1/finance/credit-authorizations/{id}/release": {
+      "post": {
+        "operationId": "CreditAuthorizationController_releaseAuthorization[1]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseCreditAuthorizationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Release HELD credit authorization and restore available credit",
+        "tags": [
+          "finance-credit-authorization"
+        ]
+      }
+    },
+    "/v1/finance/receivables": {
+      "post": {
+        "operationId": "ReceivablesController_recognizeReceivable[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecognizeReceivableDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recognize a customer receivable (AR)",
+        "tags": [
+          "finance-receivables"
+        ]
+      },
+      "get": {
+        "operationId": "ReceivablesController_listReceivables[0]",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "PARTIALLY_PAID",
+                "PAID",
+                "WRITTEN_OFF",
+                "REVERSED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List customer receivables",
+        "tags": [
+          "finance-receivables"
+        ]
+      }
+    },
+    "/api/v1/finance/receivables": {
+      "post": {
+        "operationId": "ReceivablesController_recognizeReceivable[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecognizeReceivableDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recognize a customer receivable (AR)",
+        "tags": [
+          "finance-receivables"
+        ]
+      },
+      "get": {
+        "operationId": "ReceivablesController_listReceivables[1]",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "PARTIALLY_PAID",
+                "PAID",
+                "WRITTEN_OFF",
+                "REVERSED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List customer receivables",
+        "tags": [
+          "finance-receivables"
+        ]
+      }
+    },
+    "/v1/finance/receivables/{id}": {
+      "get": {
+        "operationId": "ReceivablesController_getReceivable[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerReceivableEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer receivable details",
+        "tags": [
+          "finance-receivables"
+        ]
+      }
+    },
+    "/api/v1/finance/receivables/{id}": {
+      "get": {
+        "operationId": "ReceivablesController_getReceivable[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerReceivableEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer receivable details",
+        "tags": [
+          "finance-receivables"
+        ]
+      }
+    },
+    "/v1/finance/customers/{id}/debt": {
+      "get": {
+        "operationId": "ReceivablesController_getCustomerDebt[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer outstanding debt summary, open receivables, and immutable debt subledger",
+        "tags": [
+          "finance-receivables"
+        ]
+      }
+    },
+    "/api/v1/finance/customers/{id}/debt": {
+      "get": {
+        "operationId": "ReceivablesController_getCustomerDebt[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer outstanding debt summary, open receivables, and immutable debt subledger",
+        "tags": [
+          "finance-receivables"
+        ]
+      }
+    },
+    "/v1/finance/receivables/{id}/payments": {
+      "post": {
+        "operationId": "ReceivablesController_recordPaymentForReceivable[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordReceivablePaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record a partial or full payment against a specific receivable",
+        "tags": [
+          "finance-receivables"
+        ]
+      }
+    },
+    "/api/v1/finance/receivables/{id}/payments": {
+      "post": {
+        "operationId": "ReceivablesController_recordPaymentForReceivable[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordReceivablePaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record a partial or full payment against a specific receivable",
+        "tags": [
+          "finance-receivables"
+        ]
+      }
+    },
+    "/v1/finance/customers/{id}/debt/payments": {
+      "post": {
+        "operationId": "ReceivablesController_recordPaymentForCustomer[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordReceivablePaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record a customer debt payment allocated across one or more open receivables",
+        "tags": [
+          "finance-receivables"
+        ]
+      }
+    },
+    "/api/v1/finance/customers/{id}/debt/payments": {
+      "post": {
+        "operationId": "ReceivablesController_recordPaymentForCustomer[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordReceivablePaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record a customer debt payment allocated across one or more open receivables",
+        "tags": [
+          "finance-receivables"
+        ]
+      }
+    },
+    "/v1/finance/payables": {
+      "post": {
+        "operationId": "PayablesController_recognizePayable[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecognizePayableDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recognize a supplier payable obligation (AP)",
+        "tags": [
+          "finance-payables"
+        ]
+      },
+      "get": {
+        "operationId": "PayablesController_listPayables[0]",
+        "parameters": [
+          {
+            "name": "supplierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "purchaseOrderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "PARTIALLY_PAID",
+                "PAID",
+                "ADJUSTED",
+                "REVERSED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List supplier payables",
+        "tags": [
+          "finance-payables"
+        ]
+      }
+    },
+    "/api/v1/finance/payables": {
+      "post": {
+        "operationId": "PayablesController_recognizePayable[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecognizePayableDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recognize a supplier payable obligation (AP)",
+        "tags": [
+          "finance-payables"
+        ]
+      },
+      "get": {
+        "operationId": "PayablesController_listPayables[1]",
+        "parameters": [
+          {
+            "name": "supplierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "purchaseOrderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "PARTIALLY_PAID",
+                "PAID",
+                "ADJUSTED",
+                "REVERSED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List supplier payables",
+        "tags": [
+          "finance-payables"
+        ]
+      }
+    },
+    "/v1/finance/payables/{id}": {
+      "get": {
+        "operationId": "PayablesController_getPayable[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierPayableEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get supplier payable details",
+        "tags": [
+          "finance-payables"
+        ]
+      }
+    },
+    "/api/v1/finance/payables/{id}": {
+      "get": {
+        "operationId": "PayablesController_getPayable[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierPayableEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get supplier payable details",
+        "tags": [
+          "finance-payables"
+        ]
+      }
+    },
+    "/v1/finance/suppliers/{id}/debt": {
+      "get": {
+        "operationId": "PayablesController_getSupplierDebt[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get supplier outstanding payable balance, open payables, and immutable debt subledger",
+        "tags": [
+          "finance-payables"
+        ]
+      }
+    },
+    "/api/v1/finance/suppliers/{id}/debt": {
+      "get": {
+        "operationId": "PayablesController_getSupplierDebt[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get supplier outstanding payable balance, open payables, and immutable debt subledger",
+        "tags": [
+          "finance-payables"
+        ]
+      }
+    },
+    "/v1/finance/payables/{id}/payments": {
+      "post": {
+        "operationId": "PayablesController_recordSupplierPayment[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordSupplierPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record a partial or full payment against a supplier payable",
+        "tags": [
+          "finance-payables"
+        ]
+      }
+    },
+    "/api/v1/finance/payables/{id}/payments": {
+      "post": {
+        "operationId": "PayablesController_recordSupplierPayment[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordSupplierPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record a partial or full payment against a supplier payable",
+        "tags": [
+          "finance-payables"
+        ]
+      }
+    },
+    "/v1/finance/payables/{id}/return-credits": {
+      "post": {
+        "operationId": "PayablesController_applyReturnCredit[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplySupplierReturnCreditDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Apply a verified supplier return credit adjustment to a payable",
+        "tags": [
+          "finance-payables"
+        ]
+      }
+    },
+    "/api/v1/finance/payables/{id}/return-credits": {
+      "post": {
+        "operationId": "PayablesController_applyReturnCredit[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplySupplierReturnCreditDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Apply a verified supplier return credit adjustment to a payable",
+        "tags": [
+          "finance-payables"
+        ]
+      }
+    },
+    "/v1/finance/settlements/confirm": {
+      "post": {
+        "operationId": "SettlementsController_confirm[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSettlementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm and record an order payment settlement",
+        "tags": [
+          "finance-settlements"
+        ]
+      }
+    },
+    "/api/v1/finance/settlements/confirm": {
+      "post": {
+        "operationId": "SettlementsController_confirm[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSettlementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm and record an order payment settlement",
+        "tags": [
+          "finance-settlements"
+        ]
+      }
+    },
+    "/v1/finance/settlements/webhooks/provider-callback": {
+      "post": {
+        "operationId": "SettlementsController_providerCallback[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderWebhookCallbackDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Idempotently process an external payment provider callback",
+        "tags": [
+          "finance-settlements"
+        ]
+      }
+    },
+    "/api/v1/finance/settlements/webhooks/provider-callback": {
+      "post": {
+        "operationId": "SettlementsController_providerCallback[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderWebhookCallbackDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Idempotently process an external payment provider callback",
+        "tags": [
+          "finance-settlements"
+        ]
+      }
+    },
+    "/v1/finance/settlements": {
+      "get": {
+        "operationId": "SettlementsController_list[0]",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "settlementStatus",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "AUTHORIZED",
+                "CAPTURED",
+                "SETTLEMENT_PENDING",
+                "SETTLED",
+                "FAILED",
+                "REVERSED",
+                "RECONCILIATION_REQUIRED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List payment settlements",
+        "tags": [
+          "finance-settlements"
+        ]
+      }
+    },
+    "/api/v1/finance/settlements": {
+      "get": {
+        "operationId": "SettlementsController_list[1]",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "settlementStatus",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "AUTHORIZED",
+                "CAPTURED",
+                "SETTLEMENT_PENDING",
+                "SETTLED",
+                "FAILED",
+                "REVERSED",
+                "RECONCILIATION_REQUIRED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List payment settlements",
+        "tags": [
+          "finance-settlements"
+        ]
+      }
+    },
+    "/v1/finance/settlements/{id}": {
+      "get": {
+        "operationId": "SettlementsController_getOne[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentSettlementEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get payment settlement by id",
+        "tags": [
+          "finance-settlements"
+        ]
+      }
+    },
+    "/api/v1/finance/settlements/{id}": {
+      "get": {
+        "operationId": "SettlementsController_getOne[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentSettlementEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get payment settlement by id",
+        "tags": [
+          "finance-settlements"
+        ]
+      }
+    },
+    "/v1/finance/refunds": {
+      "post": {
+        "operationId": "RefundsController_create[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRefundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a refund operation against an order",
+        "tags": [
+          "finance-refunds"
+        ]
+      },
+      "get": {
+        "operationId": "RefundsController_list[0]",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "REQUESTED",
+                "APPROVED",
+                "REJECTED",
+                "EXECUTING",
+                "PENDING_CONFIRMATION",
+                "COMPLETED",
+                "FAILED",
+                "RECONCILIATION_REQUIRED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List refund operations",
+        "tags": [
+          "finance-refunds"
+        ]
+      }
+    },
+    "/api/v1/finance/refunds": {
+      "post": {
+        "operationId": "RefundsController_create[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRefundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a refund operation against an order",
+        "tags": [
+          "finance-refunds"
+        ]
+      },
+      "get": {
+        "operationId": "RefundsController_list[1]",
+        "parameters": [
+          {
+            "name": "orderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "REQUESTED",
+                "APPROVED",
+                "REJECTED",
+                "EXECUTING",
+                "PENDING_CONFIRMATION",
+                "COMPLETED",
+                "FAILED",
+                "RECONCILIATION_REQUIRED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List refund operations",
+        "tags": [
+          "finance-refunds"
+        ]
+      }
+    },
+    "/v1/finance/refunds/{id}": {
+      "get": {
+        "operationId": "RefundsController_getOne[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundOperationEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get refund operation by id",
+        "tags": [
+          "finance-refunds"
+        ]
+      }
+    },
+    "/api/v1/finance/refunds/{id}": {
+      "get": {
+        "operationId": "RefundsController_getOne[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundOperationEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get refund operation by id",
+        "tags": [
+          "finance-refunds"
+        ]
+      }
+    },
+    "/v1/finance/refunds/{id}/approve": {
+      "post": {
+        "operationId": "RefundsController_approve[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundOperationEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve a requested refund operation",
+        "tags": [
+          "finance-refunds"
+        ]
+      }
+    },
+    "/api/v1/finance/refunds/{id}/approve": {
+      "post": {
+        "operationId": "RefundsController_approve[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundOperationEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve a requested refund operation",
+        "tags": [
+          "finance-refunds"
+        ]
+      }
+    },
+    "/v1/finance/refunds/{id}/execute": {
+      "post": {
+        "operationId": "RefundsController_execute[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRefundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundOperationEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Execute an approved refund operation",
+        "tags": [
+          "finance-refunds"
+        ]
+      }
+    },
+    "/api/v1/finance/refunds/{id}/execute": {
+      "post": {
+        "operationId": "RefundsController_execute[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRefundDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundOperationEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Execute an approved refund operation",
+        "tags": [
+          "finance-refunds"
+        ]
+      }
+    },
+    "/v1/finance/refunds/{id}/confirm-outcome": {
+      "post": {
+        "operationId": "RefundsController_confirmOutcome[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmRefundOutcomeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundOperationEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm external provider outcome for a PENDING_CONFIRMATION or RECONCILIATION_REQUIRED refund",
+        "tags": [
+          "finance-refunds"
+        ]
+      }
+    },
+    "/api/v1/finance/refunds/{id}/confirm-outcome": {
+      "post": {
+        "operationId": "RefundsController_confirmOutcome[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmRefundOutcomeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundOperationEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm external provider outcome for a PENDING_CONFIRMATION or RECONCILIATION_REQUIRED refund",
+        "tags": [
+          "finance-refunds"
+        ]
+      }
+    },
+    "/v1/finance/cod/receivables": {
+      "post": {
+        "operationId": "CodController_createReceivable[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCodReceivableDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recognize a COD carrier receivable",
+        "tags": [
+          "finance-cod"
+        ]
+      },
+      "get": {
+        "operationId": "CodController_listReceivables[0]",
+        "parameters": [
+          {
+            "name": "carrierCode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "COD_RECEIVABLE_RECOGNIZED",
+                "SETTLEMENT_EXPECTED",
+                "SETTLEMENT_RECEIVED",
+                "RECONCILED",
+                "DISCREPANCY"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List COD carrier receivables",
+        "tags": [
+          "finance-cod"
+        ]
+      }
+    },
+    "/api/v1/finance/cod/receivables": {
+      "post": {
+        "operationId": "CodController_createReceivable[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCodReceivableDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recognize a COD carrier receivable",
+        "tags": [
+          "finance-cod"
+        ]
+      },
+      "get": {
+        "operationId": "CodController_listReceivables[1]",
+        "parameters": [
+          {
+            "name": "carrierCode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "COD_RECEIVABLE_RECOGNIZED",
+                "SETTLEMENT_EXPECTED",
+                "SETTLEMENT_RECEIVED",
+                "RECONCILED",
+                "DISCREPANCY"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List COD carrier receivables",
+        "tags": [
+          "finance-cod"
+        ]
+      }
+    },
+    "/v1/finance/cod/settlement-batches": {
+      "post": {
+        "operationId": "CodController_importBatch[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCodSettlementBatchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Import and optionally reconcile a carrier COD settlement statement batch",
+        "tags": [
+          "finance-cod"
+        ]
+      },
+      "get": {
+        "operationId": "CodController_listBatches[0]",
+        "parameters": [
+          {
+            "name": "carrierCode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "IMPORTED",
+                "RECONCILED",
+                "DISCREPANCY_DETECTED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List COD settlement batches",
+        "tags": [
+          "finance-cod"
+        ]
+      }
+    },
+    "/api/v1/finance/cod/settlement-batches": {
+      "post": {
+        "operationId": "CodController_importBatch[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCodSettlementBatchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Import and optionally reconcile a carrier COD settlement statement batch",
+        "tags": [
+          "finance-cod"
+        ]
+      },
+      "get": {
+        "operationId": "CodController_listBatches[1]",
+        "parameters": [
+          {
+            "name": "carrierCode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "IMPORTED",
+                "RECONCILED",
+                "DISCREPANCY_DETECTED"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List COD settlement batches",
+        "tags": [
+          "finance-cod"
+        ]
+      }
+    },
+    "/v1/finance/cod/settlement-batches/{id}": {
+      "get": {
+        "operationId": "CodController_getBatch[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get COD settlement batch and lines by id",
+        "tags": [
+          "finance-cod"
+        ]
+      }
+    },
+    "/api/v1/finance/cod/settlement-batches/{id}": {
+      "get": {
+        "operationId": "CodController_getBatch[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get COD settlement batch and lines by id",
+        "tags": [
+          "finance-cod"
+        ]
+      }
+    },
+    "/v1/finance/cod/settlement-batches/{id}/reconcile": {
+      "post": {
+        "operationId": "CodController_reconcileBatch[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileCodBatchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reconcile an imported COD settlement batch",
+        "tags": [
+          "finance-cod"
+        ]
+      }
+    },
+    "/api/v1/finance/cod/settlement-batches/{id}/reconcile": {
+      "post": {
+        "operationId": "CodController_reconcileBatch[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileCodBatchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reconcile an imported COD settlement batch",
+        "tags": [
+          "finance-cod"
+        ]
+      }
+    },
+    "/v1/finance/shifts/reconcile": {
+      "post": {
+        "operationId": "ReconciliationController_reconcileShift[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileShiftCashDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reconcile POS shift cash drawer",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/finance/shifts/reconcile": {
+      "post": {
+        "operationId": "ReconciliationController_reconcileShift[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileShiftCashDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reconcile POS shift cash drawer",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/v1/finance/shifts/reconciliations": {
+      "get": {
+        "operationId": "ReconciliationController_listShiftReconciliations[0]",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ShiftCashReconciliationEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List POS shift cash reconciliations",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/finance/shifts/reconciliations": {
+      "get": {
+        "operationId": "ReconciliationController_listShiftReconciliations[1]",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ShiftCashReconciliationEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List POS shift cash reconciliations",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/v1/finance/adjustments": {
+      "post": {
+        "operationId": "ReconciliationController_createAdjustment[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFinancialAdjustmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Request a controlled financial adjustment",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      },
+      "get": {
+        "operationId": "ReconciliationController_listAdjustments[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FinancialAdjustmentEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List financial adjustments",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/finance/adjustments": {
+      "post": {
+        "operationId": "ReconciliationController_createAdjustment[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFinancialAdjustmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Request a controlled financial adjustment",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      },
+      "get": {
+        "operationId": "ReconciliationController_listAdjustments[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FinancialAdjustmentEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List financial adjustments",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/v1/finance/adjustments/{id}/approve": {
+      "post": {
+        "operationId": "ReconciliationController_approveAdjustment[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialAdjustmentEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve and post a financial adjustment (enforces maker-checker separation)",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/finance/adjustments/{id}/approve": {
+      "post": {
+        "operationId": "ReconciliationController_approveAdjustment[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancialAdjustmentEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve and post a financial adjustment (enforces maker-checker separation)",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/v1/finance/settlements/reconciliation-runs": {
+      "post": {
+        "operationId": "ReconciliationController_triggerRun[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerReconciliationRunDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Trigger an operational financial reconciliation run",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/finance/settlements/reconciliation-runs": {
+      "post": {
+        "operationId": "ReconciliationController_triggerRun[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerReconciliationRunDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Trigger an operational financial reconciliation run",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/v1/finance/settlements/reconciliation-runs/{id}": {
+      "get": {
+        "operationId": "ReconciliationController_getRun[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get reconciliation run and issues by id",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/finance/settlements/reconciliation-runs/{id}": {
+      "get": {
+        "operationId": "ReconciliationController_getRun[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get reconciliation run and issues by id",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/v1/finance/reconciliation-issues": {
+      "get": {
+        "operationId": "ReconciliationController_listIssues[0]",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "INVESTIGATING",
+                "RESOLVED",
+                "IGNORED"
+              ]
+            }
+          },
+          {
+            "name": "issueType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List financial reconciliation issues",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/finance/reconciliation-issues": {
+      "get": {
+        "operationId": "ReconciliationController_listIssues[1]",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPEN",
+                "INVESTIGATING",
+                "RESOLVED",
+                "IGNORED"
+              ]
+            }
+          },
+          {
+            "name": "issueType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List financial reconciliation issues",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/v1/finance/reconciliation-issues/{id}/resolve": {
+      "post": {
+        "operationId": "ReconciliationController_resolveIssue[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveReconciliationIssueDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationIssueEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Resolve an open financial reconciliation issue",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/finance/reconciliation-issues/{id}/resolve": {
+      "post": {
+        "operationId": "ReconciliationController_resolveIssue[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveReconciliationIssueDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationIssueEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Resolve an open financial reconciliation issue",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/v1/finance/summary": {
+      "get": {
+        "operationId": "ReconciliationController_getSummary[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get tenant financial summary and subledger KPIs",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/finance/summary": {
+      "get": {
+        "operationId": "ReconciliationController_getSummary[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get tenant financial summary and subledger KPIs",
+        "tags": [
+          "finance-reconciliation"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "SapoClone - finance service",
+    "description": "OpenAPI specification of the finance microservice",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "FinancialAccountEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateFinancialAccountDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "accountType": {
+            "type": "string",
+            "enum": [
+              "ASSET",
+              "LIABILITY",
+              "EQUITY",
+              "REVENUE",
+              "CONTRA_REVENUE",
+              "EXPENSE"
+            ]
+          },
+          "normalSide": {
+            "type": "string",
+            "enum": [
+              "DEBIT",
+              "CREDIT"
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "accountType",
+          "normalSide"
+        ]
+      },
+      "PostJournalLineDto": {
+        "type": "object",
+        "properties": {
+          "accountCode": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "debitAmount": {
+            "type": "number"
+          },
+          "creditAmount": {
+            "type": "number"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "partyType": {
+            "type": "string",
+            "enum": [
+              "CUSTOMER",
+              "SUPPLIER",
+              "CARRIER"
+            ]
+          },
+          "partyId": {
+            "type": "string"
+          },
+          "referenceType": {
+            "type": "string"
+          },
+          "referenceId": {
+            "type": "string"
+          },
+          "memo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountCode"
+        ]
+      },
+      "PostJournalDto": {
+        "type": "object",
+        "properties": {
+          "journalType": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "sourceType": {
+            "type": "string",
+            "maxLength": 48
+          },
+          "sourceId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "lines": {
+            "minItems": 2,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostJournalLineDto"
+            }
+          }
+        },
+        "required": [
+          "journalType",
+          "sourceType",
+          "sourceId",
+          "lines"
+        ]
+      },
+      "ReverseJournalDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotencyKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "CreateCashAccountDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "accountType": {
+            "type": "string",
+            "enum": [
+              "CASH_DRAWER",
+              "SAFE",
+              "BANK",
+              "E_WALLET"
+            ]
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "bankName": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "accountNumber": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ]
+      },
+      "CashAccountEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateCashAccountDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "CLOSED"
+            ]
+          },
+          "bankName": {
+            "type": "string",
+            "maxLength": 120
+          }
+        }
+      },
+      "CashbookCategoryEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateCashbookCategoryDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "RECEIPT",
+              "EXPENSE"
+            ]
+          },
+          "glAccountCode": {
+            "type": "string",
+            "maxLength": 32
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "direction"
+        ]
+      },
+      "CreateCashbookVoucherDto": {
+        "type": "object",
+        "properties": {
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "categoryCode": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "amount": {
+            "type": "number"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "shiftId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "voucherType": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "sourceType": {
+            "type": "string",
+            "maxLength": 48
+          },
+          "sourceId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "partyType": {
+            "enum": [
+              "CUSTOMER",
+              "SUPPLIER",
+              "CARRIER"
+            ],
+            "type": "string"
+          },
+          "partyId": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "referenceDoc": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "autoPost": {
+            "type": "boolean"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "cashAccountId",
+          "amount"
+        ]
+      },
+      "CashbookEntryEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "PostCashbookEntryDto": {
+        "type": "object",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
+      },
+      "ReverseCashbookEntryDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "UpdateCustomerCreditLimitDto": {
+        "type": "object",
+        "properties": {
+          "creditLimit": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "creditLimit"
+        ]
+      },
+      "CreateCreditAuthorizationDto": {
+        "type": "object",
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "callerService": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "ttlSeconds": {
+            "type": "number",
+            "minimum": 30,
+            "maximum": 86400
+          },
+          "overrideApprovedBy": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "overrideReason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "customerId",
+          "amount"
+        ]
+      },
+      "CommitCreditAuthorizationDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actorId": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "ReleaseCreditAuthorizationDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "actorId": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "RecognizeReceivableDto": {
+        "type": "object",
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceType": {
+            "type": "string",
+            "maxLength": 48
+          },
+          "sourceId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "overrideApprovedBy": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "customerId",
+          "amount"
+        ]
+      },
+      "CustomerReceivableEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "ReceivableAllocationLineDto": {
+        "type": "object",
+        "properties": {
+          "receivableId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "receivableId",
+          "amount"
+        ]
+      },
+      "RecordReceivablePaymentDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "paymentMethod": {
+            "enum": [
+              "CASH",
+              "BANK_TRANSFER",
+              "CARD",
+              "E_WALLET"
+            ],
+            "type": "string"
+          },
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "overpaymentPolicy": {
+            "enum": [
+              "REJECT",
+              "PREPAYMENT"
+            ],
+            "type": "string"
+          },
+          "allocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceivableAllocationLineDto"
+            }
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      },
+      "RecognizePayableDto": {
+        "type": "object",
+        "properties": {
+          "supplierId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "purchaseOrderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "receiptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceType": {
+            "type": "string",
+            "maxLength": 48
+          },
+          "sourceId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "supplierId",
+          "amount"
+        ]
+      },
+      "SupplierPayableEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "PayableAllocationLineDto": {
+        "type": "object",
+        "properties": {
+          "payableId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "payableId",
+          "amount"
+        ]
+      },
+      "RecordSupplierPaymentDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "paymentMethod": {
+            "type": "string",
+            "enum": [
+              "CASH",
+              "BANK_TRANSFER"
+            ]
+          },
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "allocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayableAllocationLineDto"
+            }
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      },
+      "ApplySupplierReturnCreditDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          },
+          "returnRefId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "amount",
+          "returnRefId"
+        ]
+      },
+      "ConfirmSettlementDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "checkoutId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "shiftId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenderRef": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "paymentMethod": {
+            "type": "string",
+            "enum": [
+              "CASH",
+              "BANK_TRANSFER",
+              "CARD",
+              "EWALLET",
+              "COD",
+              "ON_ACCOUNT"
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "externalTxId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "requestedAmount": {
+            "type": "number"
+          },
+          "confirmedAmount": {
+            "type": "number"
+          },
+          "settledAmount": {
+            "type": "number"
+          },
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ambiguousOutcome": {
+            "type": "boolean"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "orderId",
+          "paymentMethod",
+          "requestedAmount"
+        ]
+      },
+      "ProviderWebhookCallbackDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "externalTxId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "checkoutId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenderRef": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "paymentMethod": {
+            "type": "string",
+            "enum": [
+              "BANK_TRANSFER",
+              "CARD",
+              "EWALLET"
+            ]
+          },
+          "confirmedAmount": {
+            "type": "number"
+          },
+          "requestedAmount": {
+            "type": "number"
+          },
+          "providerStatus": {
+            "type": "string",
+            "enum": [
+              "CONFIRMED",
+              "SETTLED",
+              "FAILED",
+              "PENDING",
+              "AMBIGUOUS"
+            ]
+          },
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "provider",
+          "externalTxId",
+          "orderId",
+          "confirmedAmount"
+        ]
+      },
+      "PaymentSettlementEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateRefundDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "salesRefundRequestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "returnId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "settlementId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "shiftId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "CASH",
+              "BANK_TRANSFER",
+              "CARD",
+              "EWALLET",
+              "CUSTOMER_CREDIT"
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "amount": {
+            "type": "number"
+          },
+          "autoApprove": {
+            "type": "boolean"
+          },
+          "autoExecute": {
+            "type": "boolean"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "orderId",
+          "method",
+          "amount"
+        ]
+      },
+      "RefundOperationEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "ExecuteRefundDto": {
+        "type": "object",
+        "properties": {
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalRefundRef": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "simulateProviderTimeout": {
+            "type": "boolean"
+          },
+          "requireReconciliationOnTimeout": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ConfirmRefundOutcomeDto": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "COMPLETED",
+              "FAILED",
+              "RECONCILIATION_REQUIRED"
+            ]
+          },
+          "externalRefundRef": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "failureReason": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "CreateCodReceivableDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fulfillmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "carrierCode": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "trackingNumber": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "expectedCodAmount": {
+            "type": "number"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "orderId",
+          "carrierCode",
+          "trackingNumber",
+          "expectedCodAmount"
+        ]
+      },
+      "CodSettlementBatchLineDto": {
+        "type": "object",
+        "properties": {
+          "trackingNumber": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fulfillmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reportedCodAmount": {
+            "type": "number"
+          },
+          "carrierFeeAmount": {
+            "type": "number"
+          },
+          "netPayoutAmount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "trackingNumber",
+          "reportedCodAmount",
+          "netPayoutAmount"
+        ]
+      },
+      "ImportCodSettlementBatchDto": {
+        "type": "object",
+        "properties": {
+          "carrierCode": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "statementRef": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "fileChecksum": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "autoReconcile": {
+            "type": "boolean"
+          },
+          "lines": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodSettlementBatchLineDto"
+            }
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "carrierCode",
+          "statementRef",
+          "lines"
+        ]
+      },
+      "ReconcileCodBatchDto": {
+        "type": "object",
+        "properties": {
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ReconcileShiftCashDto": {
+        "type": "object",
+        "properties": {
+          "shiftId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "shiftCode": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "staffId": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "cashAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "openingCash": {
+            "type": "number"
+          },
+          "confirmedCashSales": {
+            "type": "number"
+          },
+          "confirmedCashRefunds": {
+            "type": "number"
+          },
+          "otherCashReceipts": {
+            "type": "number"
+          },
+          "otherCashExpenses": {
+            "type": "number"
+          },
+          "actualCountedCash": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "shiftId",
+          "branchId",
+          "openingCash",
+          "confirmedCashSales",
+          "actualCountedCash"
+        ]
+      },
+      "ShiftCashReconciliationEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateFinancialAdjustmentDto": {
+        "type": "object",
+        "properties": {
+          "adjustmentType": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "targetType": {
+            "type": "string",
+            "enum": [
+              "RECEIVABLE",
+              "PAYABLE",
+              "CASH_ACCOUNT"
+            ]
+          },
+          "targetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "DECREASE",
+              "INCREASE"
+            ]
+          },
+          "reasonCode": {
+            "type": "string",
+            "maxLength": 48
+          },
+          "explanation": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "adjustmentType",
+          "targetType",
+          "targetId",
+          "amount",
+          "direction",
+          "reasonCode",
+          "explanation"
+        ]
+      },
+      "FinancialAdjustmentEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "TriggerReconciliationRunDto": {
+        "type": "object",
+        "properties": {
+          "reconciliationType": {
+            "type": "string",
+            "maxLength": 32
+          }
+        }
+      },
+      "ResolveReconciliationIssueDto": {
+        "type": "object",
+        "properties": {
+          "resolutionNote": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "INVESTIGATING",
+              "RESOLVED",
+              "IGNORED"
+            ]
+          }
+        },
+        "required": [
+          "resolutionNote"
+        ]
+      },
+      "ReconciliationIssueEntity": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}

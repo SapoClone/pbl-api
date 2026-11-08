@@ -1,0 +1,1623 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "PblHealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Service health check",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "PblHealthController_liveExplicit",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "PblHealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Readiness probe (Database and Redis)",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/integrations/connections": {
+      "post": {
+        "operationId": "ConnectionsController_createConnection",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChannelConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a marketplace channel connection with encrypted credentials",
+        "tags": [
+          "integration-connections"
+        ]
+      },
+      "get": {
+        "operationId": "ConnectionsController_listConnections",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List tenant marketplace channel connections (tokens redacted)",
+        "tags": [
+          "integration-connections"
+        ]
+      }
+    },
+    "/api/v1/integrations/connections/{id}": {
+      "get": {
+        "operationId": "ConnectionsController_getConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get channel connection details (tokens redacted)",
+        "tags": [
+          "integration-connections"
+        ]
+      },
+      "delete": {
+        "operationId": "ConnectionsController_disconnectConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Disconnect marketplace channel and wipe active tokens",
+        "tags": [
+          "integration-connections"
+        ]
+      }
+    },
+    "/api/v1/integrations/connections/{id}/health": {
+      "get": {
+        "operationId": "ConnectionsController_getConnectionHealth",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get channel connection health, token expiry, circuit breaker, and capability matrix",
+        "tags": [
+          "integration-connections"
+        ]
+      }
+    },
+    "/api/v1/integrations/connections/{id}/authorize": {
+      "post": {
+        "operationId": "ConnectionsController_authorizeConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthorizeChannelConnectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Initiate OAuth authorization flow or complete OAuth callback",
+        "tags": [
+          "integration-connections"
+        ]
+      }
+    },
+    "/api/v1/integrations/connections/{id}/refresh": {
+      "post": {
+        "operationId": "ConnectionsController_refreshConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshConnectionTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Refresh connection access token using lease-coordinated CAS",
+        "tags": [
+          "integration-connections"
+        ]
+      }
+    },
+    "/api/v1/integrations/connections/{id}/pause": {
+      "post": {
+        "operationId": "ConnectionsController_pauseConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Pause marketplace synchronization for connection",
+        "tags": [
+          "integration-connections"
+        ]
+      }
+    },
+    "/api/v1/integrations/connections/{id}/resume": {
+      "post": {
+        "operationId": "ConnectionsController_resumeConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Resume marketplace synchronization for connection",
+        "tags": [
+          "integration-connections"
+        ]
+      }
+    },
+    "/api/v1/integrations/sku-mappings": {
+      "post": {
+        "operationId": "SkuMappingController_createMapping",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSkuMappingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkuMappingEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create an external-to-internal Catalog variant SKU mapping",
+        "tags": [
+          "integration-sku-mappings"
+        ]
+      },
+      "get": {
+        "operationId": "SkuMappingController_listMappings",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "internalVariantId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SkuMappingEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List SKU mappings for tenant",
+        "tags": [
+          "integration-sku-mappings"
+        ]
+      }
+    },
+    "/api/v1/integrations/sku-mappings/{id}": {
+      "get": {
+        "operationId": "SkuMappingController_getMapping",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkuMappingEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get SKU mapping by ID",
+        "tags": [
+          "integration-sku-mappings"
+        ]
+      },
+      "patch": {
+        "operationId": "SkuMappingController_updateMapping",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSkuMappingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkuMappingEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update SKU mapping and increment mapping_version (preserving historical order snapshots)",
+        "tags": [
+          "integration-sku-mappings"
+        ]
+      },
+      "delete": {
+        "operationId": "SkuMappingController_deleteMapping",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete SKU mapping",
+        "tags": [
+          "integration-sku-mappings"
+        ]
+      }
+    },
+    "/api/v1/integrations/connections/{id}/sync/orders": {
+      "post": {
+        "operationId": "SyncJobsController_triggerOrderSync",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerConnectionSyncDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enqueue incremental order synchronization job for a connection",
+        "tags": [
+          "integration-sync-jobs"
+        ]
+      }
+    },
+    "/api/v1/integrations/connections/{id}/sync/inventory": {
+      "post": {
+        "operationId": "SyncJobsController_triggerInventorySync",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerConnectionSyncDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enqueue inventory availability publication job for a connection",
+        "tags": [
+          "integration-sync-jobs"
+        ]
+      }
+    },
+    "/api/v1/integrations/connections/{id}/sync/products": {
+      "post": {
+        "operationId": "SyncJobsController_triggerProductSync",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerConnectionSyncDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enqueue product listing discovery and mapping sync job",
+        "tags": [
+          "integration-sync-jobs"
+        ]
+      }
+    },
+    "/api/v1/integrations/sync-jobs": {
+      "get": {
+        "operationId": "SyncJobsController_listSyncJobs",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SyncJobEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List background synchronization jobs",
+        "tags": [
+          "integration-sync-jobs"
+        ]
+      }
+    },
+    "/api/v1/integrations/sync-jobs/{id}": {
+      "get": {
+        "operationId": "SyncJobsController_getSyncJob",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncJobEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get synchronization job details",
+        "tags": [
+          "integration-sync-jobs"
+        ]
+      }
+    },
+    "/api/v1/integrations/sync-jobs/{id}/retry": {
+      "post": {
+        "operationId": "SyncJobsController_retrySyncJob",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrySyncJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncJobEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replay a failed or dead-lettered synchronization job",
+        "tags": [
+          "integration-sync-jobs"
+        ]
+      }
+    },
+    "/api/v1/integrations/conflicts": {
+      "get": {
+        "operationId": "ConflictsController_listConflicts",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "conflictType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SyncConflictEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List SKU mapping, stock shortage, and order state conflicts",
+        "tags": [
+          "integration-conflicts"
+        ]
+      }
+    },
+    "/api/v1/integrations/conflicts/{id}": {
+      "get": {
+        "operationId": "ConflictsController_getConflict",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncConflictEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get synchronization conflict details",
+        "tags": [
+          "integration-conflicts"
+        ]
+      }
+    },
+    "/api/v1/integrations/conflicts/{id}/resolve": {
+      "post": {
+        "operationId": "ConflictsController_resolveConflict",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveSyncConflictDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Resolve a synchronization conflict and optionally map SKU + retry",
+        "tags": [
+          "integration-conflicts"
+        ]
+      }
+    },
+    "/api/v1/integrations/conflicts/{id}/retry": {
+      "post": {
+        "operationId": "ConflictsController_retryConflict",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrySyncConflictDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retry order import after resolving SKU mapping or stock conflict",
+        "tags": [
+          "integration-conflicts"
+        ]
+      }
+    },
+    "/api/v1/integrations/reconciliation-runs": {
+      "post": {
+        "operationId": "ReconciliationController_executeReconciliationRun",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerReconciliationRunDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Execute an operational reconciliation run across orders, SKU mappings, inventory publications, and DLQ",
+        "tags": [
+          "integration-reconciliation"
+        ]
+      },
+      "get": {
+        "operationId": "ReconciliationController_listReconciliationRuns",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IntegrationReconciliationRunEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List operational reconciliation runs",
+        "tags": [
+          "integration-reconciliation"
+        ]
+      }
+    },
+    "/api/v1/integrations/reconciliation-runs/{id}": {
+      "get": {
+        "operationId": "ReconciliationController_getReconciliationRun",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get reconciliation run details and discrepancy issues",
+        "tags": [
+          "integration-reconciliation"
+        ]
+      }
+    },
+    "/webhooks/v1/{provider}/{connectionKey}": {
+      "post": {
+        "operationId": "WebhooksController_receiveWebhook",
+        "parameters": [
+          {
+            "name": "provider",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "connectionKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Ingest and verify external marketplace webhook (Shopee v2 / Lazada) with raw-body HMAC verification and durable inbox persistence",
+        "tags": [
+          "integration-webhooks"
+        ]
+      }
+    },
+    "/internal/v1/branches/{branchId}/blockers": {
+      "get": {
+        "operationId": "BranchBlockersController_get",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "branchId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "[Internal] Why this branch cannot be deactivated or deleted",
+        "tags": [
+          "internal"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "SapoClone - integration service",
+    "description": "OpenAPI specification of the integration microservice",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "CreateChannelConnectionDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "SHOPEE",
+              "LAZADA"
+            ]
+          },
+          "externalShopId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "shopName": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "safetyStockBuffer": {
+            "type": "number",
+            "minimum": 0
+          },
+          "stockAllocationPercent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "webhookSecret": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "partnerId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "accessToken": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "refreshToken": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "provider",
+          "externalShopId",
+          "shopName",
+          "branchId",
+          "webhookSecret"
+        ]
+      },
+      "AuthorizeChannelConnectionDto": {
+        "type": "object",
+        "properties": {
+          "redirectUri": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "authorizationCode": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "stateNonce": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "externalShopId": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
+      },
+      "RefreshConnectionTokenDto": {
+        "type": "object",
+        "properties": {
+          "workerId": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
+      },
+      "CreateSkuMappingDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalItemId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "externalSkuId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "externalSkuCode": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "externalProductName": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "internalVariantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalPrice": {
+            "type": "number",
+            "minimum": 0
+          },
+          "mappingMode": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "EXACT_SKU_AUTO"
+            ]
+          }
+        },
+        "required": [
+          "connectionId",
+          "externalItemId",
+          "externalSkuId",
+          "internalVariantId"
+        ]
+      },
+      "SkuMappingEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateSkuMappingDto": {
+        "type": "object",
+        "properties": {
+          "internalVariantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalSkuCode": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "externalProductName": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "CONFLICT",
+              "NEEDS_REVIEW"
+            ]
+          },
+          "externalPrice": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "TriggerConnectionSyncDto": {
+        "type": "object",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "externalOrderId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "executeImmediately": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SyncJobEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "RetrySyncJobDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "executeImmediately": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SyncConflictEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "ResolveSyncConflictDto": {
+        "type": "object",
+        "properties": {
+          "resolutionStatus": {
+            "type": "string",
+            "enum": [
+              "RESOLVED",
+              "IGNORED"
+            ]
+          },
+          "resolutionAction": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "resolutionNotes": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "internalVariantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "retryAfterResolve": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "resolutionStatus",
+          "resolutionAction"
+        ]
+      },
+      "RetrySyncConflictDto": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "string",
+            "maxLength": 255
+          }
+        }
+      },
+      "TriggerReconciliationRunDto": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "runType": {
+            "type": "string",
+            "enum": [
+              "INCREMENTAL",
+              "FULL",
+              "ORDER_VERIFICATION",
+              "INVENTORY_VERIFICATION"
+            ]
+          },
+          "autoRecoverSafeItems": {
+            "type": "boolean"
+          }
+        }
+      },
+      "IntegrationReconciliationRunEntity": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}

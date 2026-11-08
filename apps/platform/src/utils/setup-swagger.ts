@@ -4,7 +4,73 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { timingSafeEqual } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
-import { mergeMicroserviceOpenApi } from './microservices-openapi';
+
+const ADMIN_TOKEN_NOTE =
+  'Needs an admin token (`sub_type = platform_admin`, from `POST /api/v1/admin/auth/login`); a store token is refused.';
+
+/**
+ * Tag order in Swagger UI follows this list. The platform-admin groups come
+ * first; tags a controller uses but this list lacks would sink to the bottom.
+ */
+export const PLATFORM_SWAGGER_TAGS: { name: string; description: string }[] = [
+  {
+    name: 'admin-auth',
+    description: `Platform-admin sign-in, refresh and sign-out. Login is public; the rest ${ADMIN_TOKEN_NOTE.toLowerCase()}`,
+  },
+  {
+    name: 'admin-tenants',
+    description: `Stores: list, create, edit, suspend and reactivate. ${ADMIN_TOKEN_NOTE}`,
+  },
+  {
+    name: 'admin-accounts',
+    description: `Store users' accounts and their sessions. ${ADMIN_TOKEN_NOTE}`,
+  },
+  {
+    name: 'admin-admins',
+    description: `Platform administrators (super admin only). ${ADMIN_TOKEN_NOTE}`,
+  },
+  {
+    name: 'admin-plans',
+    description: `Subscription plans and their limits. ${ADMIN_TOKEN_NOTE}`,
+  },
+  {
+    name: 'admin-subscriptions',
+    description: `Store subscriptions, payments and plan changes. ${ADMIN_TOKEN_NOTE}`,
+  },
+  {
+    name: 'admin-usage',
+    description: `Usage of each store against its plan limits. ${ADMIN_TOKEN_NOTE}`,
+  },
+  {
+    name: 'admin-settings',
+    description: `Platform-wide settings. ${ADMIN_TOKEN_NOTE}`,
+  },
+  {
+    name: 'auth',
+    description:
+      'Store sign-in, registration, token refresh and switching the selected store',
+  },
+  {
+    name: 'accounts',
+    description: "The signed-in user's own account, password and sessions",
+  },
+  {
+    name: 'tenants',
+    description: 'Stores: the current store, its members and invitations',
+  },
+  { name: 'branches', description: 'Branches of the current store' },
+  { name: 'permissions', description: 'Permission codes that roles grant' },
+  { name: 'roles', description: 'Roles of the current store' },
+  {
+    name: 'staff-schedules',
+    description: 'Work shifts and who is on duty',
+  },
+  {
+    name: 'health',
+    description:
+      'Liveness and readiness probes (/health, /health/live, /health/ready)',
+  },
+];
 
 function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
@@ -53,7 +119,7 @@ function setupSwagger(app: INestApplication) {
   const config = new DocumentBuilder()
     .setTitle(appName)
     .setDescription(
-      'SapoClone Full Microservices API — Unified OpenAPI specification covering Platform (IAM, Accounts, Tenants, Branches), Inventory (Warehouses, Stock Balances, East-West Reservations), Sales (POS Orders, Checkout State Machine & Timeout Recovery), Insight (Audit Logs & Daily Sales Summary), and Domain Services.',
+      'SapoClone platform service: IAM, accounts, stores, branches, roles and the platform-admin API. The other services document themselves at their own /api-docs, and every client-facing route is in the merged gateway document (docs/guides/openapi.md).',
     )
     .setVersion('1.0')
     .setContact(
@@ -73,9 +139,8 @@ function setupSwagger(app: INestApplication) {
     )
     .addServer('https://example.com', 'Staging')
     .build();
-  const document = mergeMicroserviceOpenApi(
-    SwaggerModule.createDocument(app, config),
-  );
+  config.tags = PLATFORM_SWAGGER_TAGS;
+  const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document, {
     customSiteTitle: appName,
   });

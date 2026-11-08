@@ -11,6 +11,7 @@ This is a boilerplate for NestJS projects. It is a starting point for building a
 - [Testing](testing.md)
 - [Deployment](deployment.md)
 - [Technologies](technologies.md)
+- [API reference (Swagger UI, all services)](swagger/index.html) and [how it is generated](guides/openapi.md)
 - [Troubleshooting](troubleshooting.md)
 - Convention
   - [Naming cheatsheet](conventions/naming-cheatsheet.md)

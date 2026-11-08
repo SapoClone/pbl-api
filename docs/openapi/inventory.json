@@ -1,0 +1,4150 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/stock-receipts/{id}/submit": {
+      "post": {
+        "operationId": "DocumentsController_submitReceipt",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send a draft receipt for approval",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/stock-receipts/{id}/approve": {
+      "post": {
+        "description": "Same posting as POST :id/post, from PENDING_APPROVAL only.",
+        "operationId": "DocumentsController_approveReceipt",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve a pending receipt: posts the stock",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/stock-receipts/{id}/reject": {
+      "post": {
+        "operationId": "DocumentsController_rejectReceipt",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send a pending receipt back to draft",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/stock-receipts/{id}/cancel": {
+      "post": {
+        "operationId": "DocumentsController_cancelReceipt",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a draft or pending receipt",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/stock-issues/{id}/cancel": {
+      "post": {
+        "operationId": "DocumentsController_cancelIssue",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a draft stock issue",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/stock-transfers/{id}/cancel": {
+      "post": {
+        "description": "A DRAFT is cancelled with inventory.update. A DISPATCHED or PARTIALLY_RECEIVED transfer needs inventory.approve (403 otherwise): the units not yet received go back to the source at the dispatch cost with a reversing ledger row and an inventory.stock.changed event (D17). Any other state answers 409.",
+        "operationId": "DocumentsController_cancelTransfer",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a transfer (a draft, or after dispatch)",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/stocktakes/{id}/cancel": {
+      "post": {
+        "operationId": "DocumentsController_cancelStocktake",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a stock take that is not approved",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/suppliers/directory": {
+      "get": {
+        "description": "Paginated, phone masked, with openPurchaseOrderCount and debtBalance.",
+        "operationId": "DocumentsController_suppliersDirectory",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "name, code or phone",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Suppliers screen list (contract GET /suppliers)",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/suppliers/{id}": {
+      "get": {
+        "operationId": "DocumentsController_supplier",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Supplier detail with the full phone and balances",
+        "tags": [
+          "documents"
+        ]
+      },
+      "delete": {
+        "operationId": "DocumentsController_deleteSupplier",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft-delete a supplier without open POs or debt",
+        "tags": [
+          "documents"
+        ]
+      },
+      "patch": {
+        "operationId": "ProcurementController_updateSupplier",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Supplier UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSupplierDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated supplier"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update or deactivate a supplier",
+        "tags": [
+          "procurement"
+        ]
+      }
+    },
+    "/api/v1/purchase-orders/directory": {
+      "get": {
+        "operationId": "DocumentsController_poDirectory",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "PO code or supplier name",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "pending_approval",
+                "approved",
+                "partially_received",
+                "received",
+                "cancelled"
+              ]
+            }
+          },
+          {
+            "name": "supplierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "created on or after (ISO)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "created on or before (a bare date takes the whole day)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "expectedDate",
+                "totalAmount"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Purchasing screen list (contract GET /purchase-orders)",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/purchase-orders/summary": {
+      "get": {
+        "operationId": "DocumentsController_poSummary",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Purchasing KPI cards",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/purchase-orders/export": {
+      "get": {
+        "operationId": "DocumentsController_poExport",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "PO code or supplier name",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "pending_approval",
+                "approved",
+                "partially_received",
+                "received",
+                "cancelled"
+              ]
+            }
+          },
+          {
+            "name": "supplierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "created on or after (ISO)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "created on or before (a bare date takes the whole day)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "expectedDate",
+                "totalAmount"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Purchase orders as CSV, same filters as the list",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/purchase-orders/{id}/cancel": {
+      "post": {
+        "operationId": "DocumentsController_cancelPo",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReasonDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel a PO before anything is received",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/stock-levels": {
+      "get": {
+        "description": "Rows {branchId, variantId, sku, name, onHand, reserved, available, minQuantity, maxQuantity, level}; filters q, variantIds, level, branchId; sort available|onHand|name.",
+        "operationId": "StockViewsController_list",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "SKU code, name or barcode",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "variantIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated catalog variant ids",
+            "schema": {
+              "maxItems": 200,
+              "example": "uuid,uuid",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "level",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ok",
+                "below_min",
+                "out_of_stock"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "name",
+              "type": "string",
+              "enum": [
+                "available",
+                "onHand",
+                "name"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated stock rows"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Stock per branch and variant (contract GET /stock)",
+        "tags": [
+          "stock-views"
+        ]
+      }
+    },
+    "/api/v1/stock/summary": {
+      "get": {
+        "operationId": "StockViewsController_summary",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "description": "Omit for every branch the caller can see",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Stock KPI cards and stock by branch",
+        "tags": [
+          "stock-views"
+        ]
+      }
+    },
+    "/api/v1/stock/lookup": {
+      "get": {
+        "operationId": "StockViewsController_lookup",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "code",
+            "required": true,
+            "in": "query",
+            "description": "SKU or barcode, exact match",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Find a variant by SKU or barcode with its stock",
+        "tags": [
+          "stock-views"
+        ]
+      }
+    },
+    "/api/v1/stock/export": {
+      "get": {
+        "operationId": "StockViewsController_export",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "SKU code, name or barcode",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "variantIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated catalog variant ids",
+            "schema": {
+              "maxItems": 200,
+              "example": "uuid,uuid",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "level",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ok",
+                "below_min",
+                "out_of_stock"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "name",
+              "type": "string",
+              "enum": [
+                "available",
+                "onHand",
+                "name"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Stock as CSV, same filters as the list",
+        "tags": [
+          "stock-views"
+        ]
+      }
+    },
+    "/api/v1/ledger-entries": {
+      "get": {
+        "description": "The warehouse ledger as {changeQty, balanceAfter, refType, refId, refCode, actor}; actor.name is null (the ledger keeps the id only).",
+        "operationId": "StockViewsController_ledger",
+        "parameters": [
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "variantId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "refType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "receipt",
+                "issue",
+                "transfer_out",
+                "transfer_in",
+                "stock_take",
+                "sale",
+                "sale_shortfall",
+                "reservation_release"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "ISO date or timestamp (inclusive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "ISO date or timestamp (a bare date includes that whole day)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Stock movement history per branch and variant",
+        "tags": [
+          "stock-views"
+        ]
+      }
+    },
+    "/api/v1/stock-thresholds": {
+      "post": {
+        "operationId": "StockViewsController_upsertThreshold",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBranchThresholdDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set the low-stock threshold of a variant in a branch (upsert)",
+        "tags": [
+          "stock-views"
+        ]
+      },
+      "get": {
+        "operationId": "StockQueryController_listThresholds",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "onlyAlerts",
+            "required": false,
+            "in": "query",
+            "description": "Only return thresholds currently in alert state (available < minQty)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of stock thresholds"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List stock thresholds and low-stock alerts",
+        "tags": [
+          "stocks"
+        ]
+      },
+      "put": {
+        "operationId": "StockQueryController_upsertThreshold",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertStockThresholdDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upserted stock threshold"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Configure minimum and maximum stock thresholds for a warehouse SKU",
+        "tags": [
+          "stocks"
+        ]
+      }
+    },
+    "/api/v1/stock-receipts": {
+      "post": {
+        "description": "Creates a DRAFT stock receipt for `warehouseId`; with `autoPost` (needs inventory.approve) it is posted at once. Honours `Idempotency-Key`: the same key returns the same receipt and posts nothing twice. Stock never enters without a document (D15): the older branch receive (`branchId`) answers 410.",
+        "operationId": "StockController_receive",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created stock receipt document"
+          },
+          "410": {
+            "description": "The older branch receive without a document was removed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a warehouse stock receipt document",
+        "tags": [
+          "stock"
+        ]
+      },
+      "get": {
+        "operationId": "ReceivingController_list",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "DRAFT",
+                "POSTED",
+                "CANCELLED"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of stock receipts"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List stock receipt documents",
+        "tags": [
+          "receiving"
+        ]
+      }
+    },
+    "/api/v1/stock": {
+      "get": {
+        "description": "Returns paginated branch stock rows with on-hand, reserved, and available quantities.",
+        "operationId": "StockController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Default 10, at most 100 (api-conventions §5)",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10,
+              "example": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "description": "Filter stock items by branch UUID",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated branch stock levels"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List branch stock levels",
+        "tags": [
+          "stock"
+        ]
+      }
+    },
+    "/api/v1/stock-balances": {
+      "get": {
+        "description": "Returns decimal(12,3) on-hand, reserved, and available quantities across warehouses.",
+        "operationId": "StockController_listStockBalances",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "description": "Optional warehouse UUID filter",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of warehouse stock balances"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List warehouse stock balances",
+        "tags": [
+          "stock"
+        ]
+      }
+    },
+    "/api/v1/warehouses": {
+      "post": {
+        "description": "Creates a warehouse (BRANCH, CENTRAL, or QUARANTINE). A code that exists is a 409 WAREHOUSE_CODE_CONFLICT and nothing is overwritten. A BRANCH warehouse needs an active branch of the caller; CENTRAL and QUARANTINE have none.",
+        "operationId": "WarehousesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateM2WarehouseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Warehouse created"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a warehouse",
+        "tags": [
+          "warehouses"
+        ]
+      },
+      "get": {
+        "description": "Lists warehouses with optional status, kind, or branchId filter.",
+        "operationId": "WarehousesController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "INACTIVE"
+              ]
+            }
+          },
+          {
+            "name": "kind",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BRANCH",
+                "CENTRAL",
+                "QUARANTINE"
+              ]
+            }
+          },
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of warehouses"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List tenant warehouses",
+        "tags": [
+          "warehouses"
+        ]
+      }
+    },
+    "/api/v1/warehouses/{id}": {
+      "get": {
+        "operationId": "WarehousesController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Warehouse UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Warehouse details"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retrieve warehouse details by ID",
+        "tags": [
+          "warehouses"
+        ]
+      },
+      "patch": {
+        "description": "Updates warehouse metadata or deactivates it after verifying zero on-hand, reserved, and in-transit stock.",
+        "operationId": "WarehousesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Warehouse UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateM2WarehouseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated warehouse"
+          },
+          "409": {
+            "description": "WAREHOUSE_HAS_PENDING_OPERATIONS when stock or holds remain"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update or deactivate a warehouse",
+        "tags": [
+          "warehouses"
+        ]
+      }
+    },
+    "/internal/v1/branches/{branchId}/sale-warehouse": {
+      "get": {
+        "operationId": "BranchWarehouseController_resolve",
+        "parameters": [
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "branchId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "[Internal] Resolve the warehouse a sale of a branch uses",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/api/v1/stocks": {
+      "get": {
+        "description": "Returns paginated on-hand, reserved, available, in-transit quantities and weighted-average cost valuation.",
+        "operationId": "StockQueryController_listStocks",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "skuId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "belowThreshold",
+            "required": false,
+            "in": "query",
+            "description": "Filter only rows below min_qty threshold",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated stock balances"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List warehouse stock balances",
+        "tags": [
+          "stocks"
+        ]
+      }
+    },
+    "/api/v1/stocks/{skuId}": {
+      "get": {
+        "operationId": "StockQueryController_getStockBySku",
+        "parameters": [
+          {
+            "name": "skuId",
+            "required": true,
+            "in": "path",
+            "description": "Catalog variant / SKU UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregated and warehouse breakdown for the SKU"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get aggregated and per-warehouse stock for a SKU",
+        "tags": [
+          "stocks"
+        ]
+      }
+    },
+    "/api/v1/stock-movements": {
+      "get": {
+        "description": "Returns paginated stock movement history with qtyBefore, qtyDelta, onHandAfter, unitCost, and source references.",
+        "operationId": "StockQueryController_listMovements",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "skuId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "movementType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "referenceType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "referenceId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated inventory ledger entries"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List immutable inventory ledger movements",
+        "tags": [
+          "stocks"
+        ]
+      }
+    },
+    "/api/v1/stocks/reconcile": {
+      "post": {
+        "description": "Compares authoritative stock_balance against physical ledger movements, HELD reservation lines, and in-transit transfer quantities without overwriting balances.",
+        "operationId": "StockQueryController_reconcile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Reconciliation report"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Run operational stock reconciliation",
+        "tags": [
+          "stocks"
+        ]
+      }
+    },
+    "/api/v1/stock-receipts/{id}": {
+      "get": {
+        "operationId": "ReceivingController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Stock receipt UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stock receipt details"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get stock receipt details by ID",
+        "tags": [
+          "receiving"
+        ]
+      }
+    },
+    "/api/v1/stock-receipts/{id}/post": {
+      "post": {
+        "description": "Atomically increments stock_balance, updates weighted-average unit cost, writes immutable ledger entries, and emits inventory.stock.received.",
+        "operationId": "ReceivingController_post",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Stock receipt UUID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Posted stock receipt"
+          },
+          "409": {
+            "description": "STOCK_RECEIPT_ALREADY_POSTED"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve and post a DRAFT stock receipt",
+        "tags": [
+          "receiving"
+        ]
+      }
+    },
+    "/api/v1/stock-issues": {
+      "post": {
+        "operationId": "IssuingController_create",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStockIssueDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created stock issue document"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a stock issue document (DRAFT or auto-posted)",
+        "tags": [
+          "issuing"
+        ]
+      },
+      "get": {
+        "operationId": "IssuingController_list",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of stock issues"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List stock issue documents",
+        "tags": [
+          "issuing"
+        ]
+      }
+    },
+    "/api/v1/stock-issues/{id}": {
+      "get": {
+        "operationId": "IssuingController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Stock issue UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stock issue details"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get stock issue details by ID",
+        "tags": [
+          "issuing"
+        ]
+      }
+    },
+    "/api/v1/stock-issues/{id}/post": {
+      "post": {
+        "description": "Atomically verifies available unreserved stock (on_hand - reserved >= qty), deducts on_hand_qty, writes ledger entries, and emits inventory.stock.issued.",
+        "operationId": "IssuingController_post",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Stock issue UUID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Posted stock issue"
+          },
+          "409": {
+            "description": "INSUFFICIENT_STOCK or STOCK_ISSUE_ALREADY_POSTED"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve and post a DRAFT stock issue",
+        "tags": [
+          "issuing"
+        ]
+      }
+    },
+    "/api/v1/stock-transfers": {
+      "post": {
+        "operationId": "TransfersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStockTransferDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created stock transfer"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a warehouse-to-warehouse stock transfer (DRAFT)",
+        "tags": [
+          "transfers"
+        ]
+      },
+      "get": {
+        "operationId": "TransfersController_list",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of stock transfers"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List stock transfers",
+        "tags": [
+          "transfers"
+        ]
+      }
+    },
+    "/api/v1/stock-transfers/{id}": {
+      "get": {
+        "operationId": "TransfersController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Stock transfer UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stock transfer details"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get stock transfer details by ID",
+        "tags": [
+          "transfers"
+        ]
+      }
+    },
+    "/api/v1/stock-transfers/{id}/dispatch": {
+      "post": {
+        "description": "Deducts source warehouse on_hand_qty, increments destination warehouse in_transit_qty, writes TRANSFER_DISPATCH ledger entries, and emits inventory.transfer.dispatched.",
+        "operationId": "TransfersController_dispatch",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Stock transfer UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dispatched stock transfer"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Dispatch a DRAFT stock transfer from source warehouse",
+        "tags": [
+          "transfers"
+        ]
+      }
+    },
+    "/api/v1/stock-transfers/{id}/receive": {
+      "post": {
+        "description": "Decrements destination in_transit_qty, increments destination on_hand_qty with weighted-average cost carry-over, writes TRANSFER_RECEIPT ledger entries, and supports partial receipt or discrepancy tracking.",
+        "operationId": "TransfersController_receive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Stock transfer UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiveStockTransferDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated stock transfer after receiving"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Receive a DISPATCHED or PARTIALLY_RECEIVED stock transfer at destination warehouse",
+        "tags": [
+          "transfers"
+        ]
+      }
+    },
+    "/api/v1/stocktakes": {
+      "post": {
+        "operationId": "StocktakeController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStocktakeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created stocktake document"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a physical stocktake document and capture stock snapshot",
+        "tags": [
+          "stocktake"
+        ]
+      },
+      "get": {
+        "operationId": "StocktakeController_list",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of stocktakes"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List stocktake documents",
+        "tags": [
+          "stocktake"
+        ]
+      }
+    },
+    "/api/v1/stocktakes/{id}": {
+      "get": {
+        "operationId": "StocktakeController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Stocktake UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stocktake details"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get stocktake document details by ID",
+        "tags": [
+          "stocktake"
+        ]
+      }
+    },
+    "/api/v1/stocktakes/{id}/counts": {
+      "post": {
+        "operationId": "StocktakeController_recordCounts",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Stocktake UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordStocktakeCountsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stocktake updated with physical counts and variances"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record physically counted quantities for a stocktake",
+        "tags": [
+          "stocktake"
+        ]
+      }
+    },
+    "/api/v1/stocktakes/{id}/approve": {
+      "post": {
+        "description": "Rejects with 409 STOCKTAKE_STALE_SNAPSHOT if stock changed during counting (unless forceRebase=true) and rejects with 409 STOCKTAKE_BELOW_RESERVED if counted_qty < reserved_qty.",
+        "operationId": "StocktakeController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Stocktake UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveStocktakeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Approved stocktake and applied stock adjustments"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve a stocktake and apply variance adjustments to stock_balance",
+        "tags": [
+          "stocktake"
+        ]
+      }
+    },
+    "/api/v1/suppliers": {
+      "post": {
+        "operationId": "ProcurementController_createSupplier",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSupplierDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created supplier"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a supplier",
+        "tags": [
+          "procurement"
+        ]
+      },
+      "get": {
+        "operationId": "ProcurementController_listSuppliers",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "ACTIVE",
+                "INACTIVE"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of suppliers"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List or search suppliers",
+        "tags": [
+          "procurement"
+        ]
+      }
+    },
+    "/api/v1/purchase-orders": {
+      "post": {
+        "operationId": "ProcurementController_createPurchaseOrder",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePurchaseOrderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created purchase order"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a purchase order (DRAFT)",
+        "tags": [
+          "procurement"
+        ]
+      },
+      "get": {
+        "operationId": "ProcurementController_listPurchaseOrders",
+        "parameters": [
+          {
+            "name": "supplierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of purchase orders"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List purchase orders",
+        "tags": [
+          "procurement"
+        ]
+      }
+    },
+    "/api/v1/purchase-orders/{id}": {
+      "get": {
+        "operationId": "ProcurementController_getPurchaseOrderById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Purchase order UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Purchase order details"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get purchase order details by ID",
+        "tags": [
+          "procurement"
+        ]
+      }
+    },
+    "/api/v1/purchase-orders/{id}/approve": {
+      "post": {
+        "operationId": "ProcurementController_approvePurchaseOrder",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Purchase order UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Approved purchase order"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve a DRAFT purchase order and emit inventory.purchase_order.approved",
+        "tags": [
+          "procurement"
+        ]
+      }
+    },
+    "/api/v1/purchase-orders/{id}/receive": {
+      "post": {
+        "description": "Validates remaining ordered quantities, creates and posts a linked StockReceipt, updates weighted-average cost on stock_balance, and transitions the PO to PARTIALLY_RECEIVED or RECEIVED.",
+        "operationId": "ProcurementController_receivePurchaseOrder",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Purchase order UUID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceivePurchaseOrderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated purchase order and posted receipt"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Receive goods against an APPROVED or PARTIALLY_RECEIVED purchase order",
+        "tags": [
+          "procurement"
+        ]
+      }
+    },
+    "/internal/reservations": {
+      "post": {
+        "description": "Idempotently holds branch stock for a sales order. Returns 201 when created, 200 on replay, or 409 on stock shortage.",
+        "operationId": "ReservationsController_reserve",
+        "parameters": [
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "description": "Service token: the value of INTERNAL_S2S_TOKEN",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReserveStockReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Branch stock reserved for the order"
+          },
+          "409": {
+            "description": "Out of stock or reservation payload mismatch"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "[Internal] Reserve branch stock for an order",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/reservations/{orderId}": {
+      "delete": {
+        "description": "Idempotently releases branch stock held for an order.",
+        "operationId": "ReservationsController_release",
+        "parameters": [
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "description": "Service token: the value of INTERNAL_S2S_TOKEN",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderId",
+            "required": true,
+            "in": "path",
+            "description": "Order UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Reservation released"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "[Internal] Release branch stock reservation for an order",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/reservations": {
+      "post": {
+        "description": "Atomically checks available warehouse stock (qty_on_hand - qty_reserved) using row-level locks, increments qty_reserved, and writes an outbox event.",
+        "operationId": "WarehouseReservationsController_create",
+        "parameters": [
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "description": "Service token: the value of INTERNAL_S2S_TOKEN. Checked before X-Tenant-Id is honoured",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Deterministic idempotency key (UUID) per checkout attempt",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Tenant UUID for internal East-West request isolation",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Existing warehouse reservation replayed"
+          },
+          "201": {
+            "description": "Warehouse reservation created"
+          },
+          "409": {
+            "description": "Insufficient stock or idempotency payload mismatch"
+          }
+        },
+        "summary": "[Internal] Create or replay a warehouse stock reservation",
+        "tags": [
+          "internal"
+        ]
+      },
+      "get": {
+        "operationId": "WarehouseReservationsController_listByOrder",
+        "parameters": [
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "description": "Service token: the value of INTERNAL_S2S_TOKEN. Checked before X-Tenant-Id is honoured",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-order-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Tenant UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of reservations for the order"
+          }
+        },
+        "summary": "[Internal] List warehouse reservations by orderId for timeout recovery",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/reservations/by-key/{idempotencyKey}": {
+      "get": {
+        "description": "Used by Sales timeout recovery when the original reservation response timed out before reservationId was received.",
+        "operationId": "WarehouseReservationsController_getByKey",
+        "parameters": [
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "description": "Service token: the value of INTERNAL_S2S_TOKEN. Checked before X-Tenant-Id is honoured",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotencyKey",
+            "required": true,
+            "in": "path",
+            "description": "Idempotency key",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Tenant UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Warehouse reservation details"
+          }
+        },
+        "summary": "[Internal] Inspect a warehouse stock reservation by Idempotency-Key",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/reservations/{reservationId}": {
+      "get": {
+        "description": "Used by Sales timeout recovery to inspect whether an in-flight reservation succeeded.",
+        "operationId": "WarehouseReservationsController_getById",
+        "parameters": [
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "description": "Service token: the value of INTERNAL_S2S_TOKEN. Checked before X-Tenant-Id is honoured",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reservationId",
+            "required": true,
+            "in": "path",
+            "description": "Reservation UUID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Tenant UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Warehouse reservation details"
+          }
+        },
+        "summary": "[Internal] Inspect a warehouse stock reservation by ID",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/reservations/{reservationId}/commit": {
+      "post": {
+        "description": "Transitions a HELD reservation to COMMITTED and deducts both qty_on_hand and qty_reserved.",
+        "operationId": "WarehouseReservationsController_commit",
+        "parameters": [
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "description": "Service token: the value of INTERNAL_S2S_TOKEN. Checked before X-Tenant-Id is honoured",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reservationId",
+            "required": true,
+            "in": "path",
+            "description": "Reservation UUID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Tenant UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reservation committed"
+          }
+        },
+        "summary": "[Internal] Commit a reserved warehouse stock hold",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/reservations/{reservationId}/release": {
+      "post": {
+        "description": "Idempotently transitions a HELD reservation to RELEASED and restores qty_reserved.",
+        "operationId": "WarehouseReservationsController_release",
+        "parameters": [
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "description": "Service token: the value of INTERNAL_S2S_TOKEN. Checked before X-Tenant-Id is honoured",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reservationId",
+            "required": true,
+            "in": "path",
+            "description": "Reservation UUID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "description": "Tenant UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reservation released"
+          }
+        },
+        "summary": "[Internal] Release a warehouse stock reservation",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/branches/{branchId}/blockers": {
+      "get": {
+        "operationId": "BranchBlockersController_get",
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "branchId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "[Internal] Why this branch cannot be deactivated or deleted",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/internal/v1/return-receipts": {
+      "post": {
+        "operationId": "ReturnReceiptsController_create",
+        "parameters": [
+          {
+            "name": "x-internal-token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStockReceiptDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "[Internal] Post a return receipt (idempotent)",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "PblHealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Service health check",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "PblHealthController_liveExplicit",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "PblHealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Readiness probe (Database and Redis)",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "SapoClone - inventory service",
+    "description": "OpenAPI specification of the inventory microservice",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "ReasonDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 300
+          }
+        }
+      },
+      "UpsertBranchThresholdDto": {
+        "type": "object",
+        "properties": {
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "variantId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Catalog variant id"
+          },
+          "minQuantity": {
+            "type": "number",
+            "minimum": 0,
+            "example": 10
+          },
+          "maxQuantity": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "example": null
+          }
+        },
+        "required": [
+          "branchId",
+          "variantId",
+          "minQuantity"
+        ]
+      },
+      "CreateM2WarehouseDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 32,
+            "example": "WH-MAIN"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "Main Store Warehouse"
+          },
+          "kind": {
+            "enum": [
+              "BRANCH",
+              "CENTRAL",
+              "QUARANTINE"
+            ],
+            "type": "string",
+            "default": "BRANCH"
+          },
+          "branchId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid",
+            "example": "1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a"
+          },
+          "isDefault": {
+            "type": "boolean",
+            "default": false
+          },
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "example": "123 Nguyen Hue, District 1, HCMC"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ]
+      },
+      "UpdateM2WarehouseDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "Updated Warehouse Name"
+          },
+          "kind": {
+            "enum": [
+              "BRANCH",
+              "CENTRAL",
+              "QUARANTINE"
+            ],
+            "type": "string"
+          },
+          "branchId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string"
+          }
+        }
+      },
+      "UpsertStockThresholdDto": {
+        "type": "object",
+        "properties": {
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "skuId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "minQty": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$",
+            "example": "10.000",
+            "description": "Minimum available stock threshold (NUMERIC(18,3))"
+          },
+          "maxQty": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$",
+            "example": "500.000",
+            "description": "Optional maximum stock threshold (NUMERIC(18,3))"
+          }
+        },
+        "required": [
+          "warehouseId",
+          "skuId",
+          "minQty"
+        ]
+      },
+      "CreateStockIssueItemDto": {
+        "type": "object",
+        "properties": {
+          "skuId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "qty": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$",
+            "example": "2.000",
+            "description": "Quantity to issue in base unit (NUMERIC(18,3))"
+          }
+        },
+        "required": [
+          "skuId",
+          "qty"
+        ]
+      },
+      "CreateStockIssueDto": {
+        "type": "object",
+        "properties": {
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "PXK-001"
+          },
+          "reasonCode": {
+            "enum": [
+              "MANUAL_WITHDRAWAL",
+              "DAMAGED",
+              "DISPOSAL",
+              "SAMPLE",
+              "SUPPLIER_RETURN"
+            ],
+            "type": "string",
+            "example": "DAMAGED"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "autoPost": {
+            "type": "boolean",
+            "default": false
+          },
+          "items": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateStockIssueItemDto"
+            }
+          }
+        },
+        "required": [
+          "warehouseId",
+          "reasonCode",
+          "items"
+        ]
+      },
+      "CreateStockTransferItemDto": {
+        "type": "object",
+        "properties": {
+          "skuId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "qty": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$",
+            "example": "20.000",
+            "description": "Quantity to transfer (NUMERIC(18,3))"
+          }
+        },
+        "required": [
+          "skuId",
+          "qty"
+        ]
+      },
+      "CreateStockTransferDto": {
+        "type": "object",
+        "properties": {
+          "fromWarehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "toWarehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "PCK-001"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "items": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateStockTransferItemDto"
+            }
+          }
+        },
+        "required": [
+          "fromWarehouseId",
+          "toWarehouseId",
+          "items"
+        ]
+      },
+      "ReceiveStockTransferLineDto": {
+        "type": "object",
+        "properties": {
+          "skuId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "receivedQty": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$",
+            "example": "8.000",
+            "description": "Quantity physically received into destination (NUMERIC(18,3))"
+          },
+          "discrepancyQty": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$",
+            "example": "2.000",
+            "description": "Optional lost/damaged discrepancy quantity (NUMERIC(18,3))"
+          },
+          "discrepancyReason": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "skuId",
+          "receivedQty"
+        ]
+      },
+      "ReceiveStockTransferDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "If omitted, receives the full remaining in-transit quantity for all lines",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceiveStockTransferLineDto"
+            }
+          },
+          "resolveDiscrepancy": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, marks a transfer with recorded discrepancy as resolved (RECEIVED)"
+          }
+        }
+      },
+      "CreateStocktakeDto": {
+        "type": "object",
+        "properties": {
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "PKK-001"
+          },
+          "freezeMovement": {
+            "type": "boolean",
+            "default": false
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "skuIds": {
+            "description": "Optional list of SKU UUIDs to snapshot immediately",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "warehouseId"
+        ]
+      },
+      "RecordStocktakeCountLineDto": {
+        "type": "object",
+        "properties": {
+          "skuId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "countedQty": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$",
+            "example": "75.000",
+            "description": "Physically counted quantity (non-negative NUMERIC(18,3))"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "skuId",
+          "countedQty"
+        ]
+      },
+      "RecordStocktakeCountsDto": {
+        "type": "object",
+        "properties": {
+          "counts": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordStocktakeCountLineDto"
+            }
+          },
+          "refreshSnapshot": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, refreshes snapshot version to current stock_balance version when recording counts"
+          }
+        },
+        "required": [
+          "counts"
+        ]
+      },
+      "ApproveStocktakeDto": {
+        "type": "object",
+        "properties": {
+          "forceRebase": {
+            "type": "boolean",
+            "default": false,
+            "description": "Default false: rejects with 409 STOCKTAKE_STALE_SNAPSHOT if stock moved since snapshot was captured"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "CreateSupplierDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "SUP-VN-01"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "example": "Viet Tien Garment Corp"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 32,
+            "example": "0901234567"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 160,
+            "example": "supply@viettien.com.vn"
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "taxCode": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ]
+      },
+      "UpdateSupplierDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "taxCode": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string"
+          }
+        }
+      },
+      "CreatePurchaseOrderItemDto": {
+        "type": "object",
+        "properties": {
+          "skuId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderedQty": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$",
+            "example": "100.000",
+            "description": "Ordered quantity (NUMERIC(18,3))"
+          },
+          "unitCost": {
+            "type": "number",
+            "minimum": 0,
+            "example": 100000,
+            "description": "Agreed unit cost per base unit (integer VND)"
+          },
+          "unitName": {
+            "type": "string",
+            "maxLength": 32,
+            "default": "PCS"
+          },
+          "conversionFactor": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$",
+            "default": "1.0000"
+          }
+        },
+        "required": [
+          "skuId",
+          "orderedQty",
+          "unitCost"
+        ]
+      },
+      "CreatePurchaseOrderDto": {
+        "type": "object",
+        "properties": {
+          "supplierId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "PO-2026-001"
+          },
+          "expectedDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "example": "2026-10-28",
+            "description": "YYYY-MM-DD"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "items": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreatePurchaseOrderItemDto"
+            }
+          }
+        },
+        "required": [
+          "supplierId",
+          "warehouseId",
+          "items"
+        ]
+      },
+      "ReceivePurchaseOrderLineDto": {
+        "type": "object",
+        "properties": {
+          "skuId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "qty": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$",
+            "example": "50.000",
+            "description": "Base quantity received in this shipment (NUMERIC(18,3))"
+          },
+          "unitCost": {
+            "type": "number",
+            "minimum": 0,
+            "example": 100000,
+            "description": "Optional unit cost override (defaults to PO line unitCost) (integer VND)"
+          }
+        },
+        "required": [
+          "skuId",
+          "qty"
+        ]
+      },
+      "ReceivePurchaseOrderDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "If omitted, receives the full remaining unreceived quantity for all PO lines",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceivePurchaseOrderLineDto"
+            }
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "StockLineDto": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "AO-01",
+            "description": "Product SKU code"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1000000,
+            "example": 10
+          }
+        },
+        "required": [
+          "sku",
+          "quantity"
+        ]
+      },
+      "ReserveStockReqDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "33333333-3333-4333-8333-333333333333",
+            "description": "Order UUID used as the reservation idempotency key"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a"
+          },
+          "lines": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StockLineDto"
+            }
+          }
+        },
+        "required": [
+          "orderId",
+          "branchId",
+          "lines"
+        ]
+      },
+      "CreateStockReceiptItemDto": {
+        "type": "object",
+        "properties": {
+          "skuId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "qty": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,3})?$",
+            "example": "10.000",
+            "description": "Quantity in packaging or base unit (NUMERIC(18,3))"
+          },
+          "unitCost": {
+            "type": "number",
+            "minimum": 0,
+            "example": 100000,
+            "description": "Unit cost per base unit (integer VND)"
+          },
+          "unitName": {
+            "type": "string",
+            "maxLength": 32,
+            "default": "PCS"
+          },
+          "conversionFactor": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d{1,4})?$",
+            "default": "1.0000",
+            "description": "Conversion factor to base unit (NUMERIC(18,4))"
+          }
+        },
+        "required": [
+          "skuId",
+          "qty"
+        ]
+      },
+      "CreateStockReceiptDto": {
+        "type": "object",
+        "properties": {
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "PNK-001"
+          },
+          "sourceType": {
+            "enum": [
+              "MANUAL",
+              "PURCHASE_ORDER",
+              "RETURN",
+              "ADJUSTMENT"
+            ],
+            "type": "string",
+            "default": "MANUAL"
+          },
+          "purchaseOrderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "supplierId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "autoPost": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, immediately posts the receipt in the same transaction"
+          },
+          "items": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateStockReceiptItemDto"
+            }
+          }
+        },
+        "required": [
+          "warehouseId",
+          "items"
+        ]
+      }
+    }
+  }
+}

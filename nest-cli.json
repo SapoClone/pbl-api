@@ -9,7 +9,18 @@
     "typeCheck": true,
     "deleteOutDir": true,
     "webpack": false,
-    "tsConfigPath": "apps/platform/tsconfig.app.json"
+    "tsConfigPath": "apps/platform/tsconfig.app.json",
+    "plugins": [
+      {
+        "name": "@nestjs/swagger",
+        "options": {
+          "classValidatorShim": true,
+          "introspectComments": true,
+          "dtoFileNameSuffix": [".dto.ts", ".req.dto.ts", ".res.dto.ts", ".res.ts"],
+          "controllerFileNameSuffix": [".controller.ts"]
+        }
+      }
+    ]
   },
   "projects": {
     "platform": {
