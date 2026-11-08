@@ -7,8 +7,12 @@
   },
   "servers": [
     {
+      "url": "https://api.sapo.makeasy.id.vn",
+      "description": "Production gateway"
+    },
+    {
       "url": "http://localhost:8080",
-      "description": "KrakenD API gateway"
+      "description": "Local gateway"
     }
   ],
   "tags": [
