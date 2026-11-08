@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SapoClone API reference</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css"
+    />
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; }
+      header { padding: 16px 24px; background: #1b2733; color: #e8eef4; }
+      header h1 { margin: 0 0 6px; font-size: 20px; }
+      header p { margin: 4px 0; font-size: 14px; line-height: 1.5; }
+      header a { color: #8fd0ff; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>SapoClone API reference</h1>
+      <p>
+        Every client-facing route as the gateway serves it (<code>/&lt;service&gt;</code> + the service path),
+        generated from the controllers. This page is read-only: the gateway does not accept requests from this
+        site, so there is no Try it out.
+      </p>
+      <p>
+        Raw documents:
+        <a href="../openapi/openapi.json">merged (gateway)</a> &middot;
+        <a href="../openapi/platform.json">platform</a> &middot;
+        <a href="../openapi/catalog.json">catalog</a> &middot;
+        <a href="../openapi/inventory.json">inventory</a> &middot;
+        <a href="../openapi/sales.json">sales</a> &middot;
+        <a href="../openapi/finance.json">finance</a> &middot;
+        <a href="../openapi/integration.json">integration</a> &middot;
+        <a href="../openapi/insight.json">insight</a> &middot;
+        <a href="../openapi/customer.json">customer</a>
+        &middot; <a href="../guides/openapi.html">How it is generated</a>
+      </p>
+    </header>
+    <div id="swagger-ui"></div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+    <script>
+      window.onload = function () {
+        window.ui = SwaggerUIBundle({
+          url: '../openapi/openapi.json',
+          dom_id: '#swagger-ui',
+          deepLinking: true,
+          docExpansion: 'none',
+          supportedSubmitMethods: [],
+        });
+      };
+    </script>
+  </body>
+</html>

@@ -1,5 +1,5 @@
 import { Controller, Get, Header, Query, Res } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AllowedBranches, CurrentUser, RequirePermission } from '@pbl/auth';
 import type { Response } from 'express';
 import { AuditQueryService } from '../../audit/audit-query.service';
@@ -35,18 +35,33 @@ export class ScreensController {
     private readonly notifications: NotificationsService,
   ) {}
 
+  @ApiOperation({
+    summary: 'List audit logs',
+    description:
+      'Tenant-wide audit trail (no branch scope), filtered and paged. Needs `reports.view`.',
+  })
   @Get('audit-logs')
   @RequirePermission('reports.view')
   auditLogs(@Query() query: ListAuditLogsReqDto) {
     return this.audit.auditLogs(query);
   }
 
+  @ApiOperation({
+    summary: 'Dashboard KPIs',
+    description:
+      "Headline numbers for the dashboard over a period; aggregates the caller's allowed branches, a foreign `branchId` is 404. Needs `dashboard.view`.",
+  })
   @Get('dashboard/kpis')
   @RequirePermission('dashboard.view')
   kpis(@Query() query: KpisReqDto, @AllowedBranches() scope: string[] | null) {
     return this.reports.kpis(query, scope);
   }
 
+  @ApiOperation({
+    summary: 'Daily sales summary',
+    description:
+      "Sales per day over a date range, within the caller's branch scope. Needs `reports.view`.",
+  })
   @Get('sales-summary/daily')
   @RequirePermission('reports.view')
   dailySales(
@@ -56,6 +71,11 @@ export class ScreensController {
     return this.reports.dailySales(query, scope);
   }
 
+  @ApiOperation({
+    summary: 'Hourly sales summary',
+    description:
+      "Sales per hour of a day, within the caller's branch scope. Needs `dashboard.view`.",
+  })
   @Get('sales-summary/hourly')
   @RequirePermission('dashboard.view')
   hourly(
@@ -65,6 +85,11 @@ export class ScreensController {
     return this.reports.hourly(query, scope);
   }
 
+  @ApiOperation({
+    summary: 'Sales by channel',
+    description:
+      "Sales split by sales channel over a range, within the caller's branch scope. Needs `dashboard.view`.",
+  })
   @Get('sales-summary/by-channel')
   @RequirePermission('dashboard.view')
   byChannel(
@@ -74,6 +99,11 @@ export class ScreensController {
     return this.reports.byChannel(query, scope);
   }
 
+  @ApiOperation({
+    summary: 'Top-selling products',
+    description:
+      "Best-selling products over a range, within the caller's branch scope. Needs `dashboard.view`.",
+  })
   @Get('sales-summary/top-products')
   @RequirePermission('dashboard.view')
   topProducts(
@@ -83,6 +113,11 @@ export class ScreensController {
     return this.reports.topProducts(query, scope);
   }
 
+  @ApiOperation({
+    summary: 'Sales by branch',
+    description:
+      "Sales per branch over a range, limited to the caller's allowed branches. Needs `reports.view`.",
+  })
   @Get('sales-summary/by-branch')
   @RequirePermission('reports.view')
   byBranch(
@@ -92,6 +127,11 @@ export class ScreensController {
     return this.reports.byBranch(query, scope);
   }
 
+  @ApiOperation({
+    summary: 'Dashboard attention items',
+    description:
+      "Things that need the caller's attention (low stock, pending approvals and similar), within the branch scope. Needs `dashboard.view`.",
+  })
   @Get('attention-items')
   @RequirePermission('dashboard.view')
   attentionItems(
@@ -102,6 +142,11 @@ export class ScreensController {
     return this.notifications.attentionItems(accountId, query, scope);
   }
 
+  @ApiOperation({
+    summary: 'Export a report as CSV',
+    description:
+      'Streams the chosen report as a CSV attachment (`text/csv`). Needs `reports.view`.',
+  })
   @Get('reports/export')
   @RequirePermission('reports.view')
   @Header('Content-Type', 'text/csv; charset=utf-8')

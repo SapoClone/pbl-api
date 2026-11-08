@@ -1,0 +1,5172 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "PblHealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Service health check",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "PblHealthController_liveExplicit",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "PblHealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Readiness probe (Database and Redis)",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/customer-groups": {
+      "post": {
+        "operationId": "GroupsController_createGroup[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCustomerGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerGroupEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a customer group (VIP, Wholesale, Member)",
+        "tags": [
+          "customer-groups"
+        ]
+      },
+      "get": {
+        "operationId": "GroupsController_listGroups[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List customer groups for current tenant",
+        "tags": [
+          "customer-groups"
+        ]
+      }
+    },
+    "/api/v1/customer-groups": {
+      "post": {
+        "operationId": "GroupsController_createGroup[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCustomerGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerGroupEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a customer group (VIP, Wholesale, Member)",
+        "tags": [
+          "customer-groups"
+        ]
+      },
+      "get": {
+        "operationId": "GroupsController_listGroups[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List customer groups for current tenant",
+        "tags": [
+          "customer-groups"
+        ]
+      }
+    },
+    "/v1/customer-groups/{id}": {
+      "patch": {
+        "operationId": "GroupsController_updateGroup[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerGroupEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update or deactivate a customer group",
+        "tags": [
+          "customer-groups"
+        ]
+      },
+      "delete": {
+        "operationId": "GroupsController_deleteGroup[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete an empty, non-seeded customer group (204)",
+        "tags": [
+          "customer-groups"
+        ]
+      }
+    },
+    "/api/v1/customer-groups/{id}": {
+      "patch": {
+        "operationId": "GroupsController_updateGroup[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerGroupEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update or deactivate a customer group",
+        "tags": [
+          "customer-groups"
+        ]
+      },
+      "delete": {
+        "operationId": "GroupsController_deleteGroup[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete an empty, non-seeded customer group (204)",
+        "tags": [
+          "customer-groups"
+        ]
+      }
+    },
+    "/v1/customers/{id}/assign-group": {
+      "post": {
+        "operationId": "GroupsController_assignGroup[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignCustomerGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Assign or unassign a customer to a customer group",
+        "tags": [
+          "customer-groups"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/assign-group": {
+      "post": {
+        "operationId": "GroupsController_assignGroup[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignCustomerGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Assign or unassign a customer to a customer group",
+        "tags": [
+          "customer-groups"
+        ]
+      }
+    },
+    "/v1/membership-tiers": {
+      "post": {
+        "operationId": "MembershipsController_createTier[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMembershipTierDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTierEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a membership tier (Member, Silver, Gold, Platinum)",
+        "tags": [
+          "membership-tiers"
+        ]
+      },
+      "get": {
+        "operationId": "MembershipsController_listTiers[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MembershipTierEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List membership tiers for current tenant",
+        "tags": [
+          "membership-tiers"
+        ]
+      }
+    },
+    "/api/v1/membership-tiers": {
+      "post": {
+        "operationId": "MembershipsController_createTier[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMembershipTierDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTierEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a membership tier (Member, Silver, Gold, Platinum)",
+        "tags": [
+          "membership-tiers"
+        ]
+      },
+      "get": {
+        "operationId": "MembershipsController_listTiers[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MembershipTierEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List membership tiers for current tenant",
+        "tags": [
+          "membership-tiers"
+        ]
+      }
+    },
+    "/v1/membership-tiers/{id}": {
+      "patch": {
+        "operationId": "MembershipsController_updateTier[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMembershipTierDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTierEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a membership tier configuration",
+        "tags": [
+          "membership-tiers"
+        ]
+      }
+    },
+    "/api/v1/membership-tiers/{id}": {
+      "patch": {
+        "operationId": "MembershipsController_updateTier[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMembershipTierDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipTierEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a membership tier configuration",
+        "tags": [
+          "membership-tiers"
+        ]
+      }
+    },
+    "/v1/customers/{id}/membership": {
+      "get": {
+        "operationId": "MembershipsController_getCustomerMembership[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer membership tier and qualification progress",
+        "tags": [
+          "membership-tiers"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/membership": {
+      "get": {
+        "operationId": "MembershipsController_getCustomerMembership[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer membership tier and qualification progress",
+        "tags": [
+          "membership-tiers"
+        ]
+      }
+    },
+    "/v1/loyalty/settings": {
+      "get": {
+        "operationId": "LoyaltyController_getSettings[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoyaltySettingEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get tenant loyalty program configuration",
+        "tags": [
+          "loyalty"
+        ]
+      },
+      "put": {
+        "operationId": "LoyaltyController_updateSettings[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLoyaltySettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoyaltySettingEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update tenant loyalty program configuration",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/v1/loyalty/settings": {
+      "get": {
+        "operationId": "LoyaltyController_getSettings[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoyaltySettingEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get tenant loyalty program configuration",
+        "tags": [
+          "loyalty"
+        ]
+      },
+      "put": {
+        "operationId": "LoyaltyController_updateSettings[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLoyaltySettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoyaltySettingEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update tenant loyalty program configuration",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/v1/loyalty-settings": {
+      "get": {
+        "operationId": "LoyaltyController_getScreenSettings[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Loyalty settings in the screen-contract shape (enabled, pointsExpireMonths)",
+        "tags": [
+          "loyalty"
+        ]
+      },
+      "patch": {
+        "operationId": "LoyaltyController_patchScreenSettings[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchLoyaltySettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Partial update of the loyalty settings (screen-contract shape)",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/v1/loyalty-settings": {
+      "get": {
+        "operationId": "LoyaltyController_getScreenSettings[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Loyalty settings in the screen-contract shape (enabled, pointsExpireMonths)",
+        "tags": [
+          "loyalty"
+        ]
+      },
+      "patch": {
+        "operationId": "LoyaltyController_patchScreenSettings[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchLoyaltySettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Partial update of the loyalty settings (screen-contract shape)",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/v1/customers/{id}/loyalty-transactions": {
+      "get": {
+        "operationId": "LoyaltyController_listScreenTransactions[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Loyalty ledger page in the screen-contract shape: { data, pagination }",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/loyalty-transactions": {
+      "get": {
+        "operationId": "LoyaltyController_listScreenTransactions[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Loyalty ledger page in the screen-contract shape: { data, pagination }",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/v1/customers/{id}/loyalty-adjustments": {
+      "post": {
+        "operationId": "LoyaltyController_adjustScreenPoints[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoyaltyAdjustmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Manual points adjustment (screen-contract body { points, reason }); 201 with the transaction and the new balance",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/loyalty-adjustments": {
+      "post": {
+        "operationId": "LoyaltyController_adjustScreenPoints[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoyaltyAdjustmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Manual points adjustment (screen-contract body { points, reason }); 201 with the transaction and the new balance",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/v1/customers/{id}/loyalty": {
+      "get": {
+        "operationId": "LoyaltyController_getCustomerLoyalty[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer loyalty account balance (posted, held, available, qualifying)",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/loyalty": {
+      "get": {
+        "operationId": "LoyaltyController_getCustomerLoyalty[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer loyalty account balance (posted, held, available, qualifying)",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/v1/customers/{id}/loyalty/transactions": {
+      "get": {
+        "operationId": "LoyaltyController_listCustomerTransactions[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List immutable loyalty ledger transactions for a customer",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/loyalty/transactions": {
+      "get": {
+        "operationId": "LoyaltyController_listCustomerTransactions[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List immutable loyalty ledger transactions for a customer",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/v1/customers/{id}/loyalty/adjustments": {
+      "post": {
+        "operationId": "LoyaltyController_adjustCustomerPoints[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualLoyaltyAdjustmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Privileged manual loyalty point adjustment with mandatory reason and idempotency",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/loyalty/adjustments": {
+      "post": {
+        "operationId": "LoyaltyController_adjustCustomerPoints[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualLoyaltyAdjustmentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Privileged manual loyalty point adjustment with mandatory reason and idempotency",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/v1/loyalty/reconcile": {
+      "post": {
+        "operationId": "LoyaltyController_reconcileLoyalty[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Run loyalty wallet vs. ledger & hold reconciliation and expire overdue holds",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/v1/loyalty/reconcile": {
+      "post": {
+        "operationId": "LoyaltyController_reconcileLoyalty[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Run loyalty wallet vs. ledger & hold reconciliation and expire overdue holds",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/internal/v1/loyalty/accounts/{customerId}": {
+      "get": {
+        "operationId": "LoyaltyController_getInternalLoyaltyAccount[0]",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Get customer loyalty account balance for checkout",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/internal/v1/loyalty/accounts/{customerId}": {
+      "get": {
+        "operationId": "LoyaltyController_getInternalLoyaltyAccount[1]",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Get customer loyalty account balance for checkout",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/internal/v1/loyalty/holds": {
+      "post": {
+        "operationId": "LoyaltyController_createInternalHold[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLoyaltyHoldDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Atomically hold loyalty points for POS checkout",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/internal/v1/loyalty/holds": {
+      "post": {
+        "operationId": "LoyaltyController_createInternalHold[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLoyaltyHoldDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Atomically hold loyalty points for POS checkout",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/internal/v1/loyalty/holds/{id}": {
+      "get": {
+        "operationId": "LoyaltyController_getInternalHold[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Inspect a loyalty point hold",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/internal/v1/loyalty/holds/{id}": {
+      "get": {
+        "operationId": "LoyaltyController_getInternalHold[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Inspect a loyalty point hold",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/internal/v1/loyalty/holds/{id}/commit": {
+      "post": {
+        "operationId": "LoyaltyController_commitInternalHold[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommitLoyaltyHoldDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Commit HELD loyalty points into an immutable REDEEM ledger entry",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/internal/v1/loyalty/holds/{id}/commit": {
+      "post": {
+        "operationId": "LoyaltyController_commitInternalHold[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommitLoyaltyHoldDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Commit HELD loyalty points into an immutable REDEEM ledger entry",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/internal/v1/loyalty/holds/{id}/release": {
+      "post": {
+        "operationId": "LoyaltyController_releaseInternalHold[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseLoyaltyHoldDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Release HELD loyalty points on checkout cancellation",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/api/internal/v1/loyalty/holds/{id}/release": {
+      "post": {
+        "operationId": "LoyaltyController_releaseInternalHold[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseLoyaltyHoldDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S: Release HELD loyalty points on checkout cancellation",
+        "tags": [
+          "loyalty"
+        ]
+      }
+    },
+    "/v1/customers/duplicates": {
+      "get": {
+        "operationId": "DataManagementController_findDuplicates[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detect duplicate customer profiles within the tenant",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/api/v1/customers/duplicates": {
+      "get": {
+        "operationId": "DataManagementController_findDuplicates[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detect duplicate customer profiles within the tenant",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/v1/customers/merge": {
+      "post": {
+        "operationId": "DataManagementController_mergeCustomers[0]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeCustomersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Merge source customer into target customer with atomic loyalty ledger transfer",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/api/v1/customers/merge": {
+      "post": {
+        "operationId": "DataManagementController_mergeCustomers[1]",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeCustomersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Merge source customer into target customer with atomic loyalty ledger transfer",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/v1/customers/import-template": {
+      "get": {
+        "operationId": "DataManagementController_importTemplate[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "CSV template for POST /customers/import",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/api/v1/customers/import-template": {
+      "get": {
+        "operationId": "DataManagementController_importTemplate[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "CSV template for POST /customers/import",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/v1/customers/import": {
+      "post": {
+        "operationId": "DataManagementController_importCustomers[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Import customers from a CSV file (multipart: file, dryRun); dryRun rolls the run back",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/api/v1/customers/import": {
+      "post": {
+        "operationId": "DataManagementController_importCustomers[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Import customers from a CSV file (multipart: file, dryRun); dryRun rolls the run back",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/v1/customers/import-jobs": {
+      "post": {
+        "operationId": "DataManagementController_createImportJob[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImportJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDataJobEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a customer CSV/batch import job with row-level validation",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/api/v1/customers/import-jobs": {
+      "post": {
+        "operationId": "DataManagementController_createImportJob[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImportJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDataJobEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a customer CSV/batch import job with row-level validation",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/v1/customers/import-jobs/{id}": {
+      "get": {
+        "operationId": "DataManagementController_getImportJob[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDataJobEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer import job status and row errors",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/api/v1/customers/import-jobs/{id}": {
+      "get": {
+        "operationId": "DataManagementController_getImportJob[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDataJobEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer import job status and row errors",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/v1/customers/export-jobs": {
+      "post": {
+        "operationId": "DataManagementController_createExportJob[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExportJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDataJobEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a formula-injection-safe customer CSV export job with phones masked unless the caller holds customers.update",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/api/v1/customers/export-jobs": {
+      "post": {
+        "operationId": "DataManagementController_createExportJob[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExportJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDataJobEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a formula-injection-safe customer CSV export job with phones masked unless the caller holds customers.update",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/v1/customers/export-jobs/{id}": {
+      "get": {
+        "operationId": "DataManagementController_getExportJob[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDataJobEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer export job status and CSV output",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/api/v1/customers/export-jobs/{id}": {
+      "get": {
+        "operationId": "DataManagementController_getExportJob[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDataJobEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer export job status and CSV output",
+        "tags": [
+          "customer-data-management"
+        ]
+      }
+    },
+    "/v1/customers/{id}/addresses": {
+      "post": {
+        "operationId": "AddressesController_addAddress[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCustomerAddressDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAddressEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add an address to a customer profile",
+        "tags": [
+          "customer-addresses"
+        ]
+      },
+      "get": {
+        "operationId": "AddressesController_listAddresses[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CustomerAddressEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active addresses for a customer",
+        "tags": [
+          "customer-addresses"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/addresses": {
+      "post": {
+        "operationId": "AddressesController_addAddress[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCustomerAddressDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAddressEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add an address to a customer profile",
+        "tags": [
+          "customer-addresses"
+        ]
+      },
+      "get": {
+        "operationId": "AddressesController_listAddresses[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CustomerAddressEntity"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active addresses for a customer",
+        "tags": [
+          "customer-addresses"
+        ]
+      }
+    },
+    "/v1/customers/{id}/addresses/{addressId}": {
+      "patch": {
+        "operationId": "AddressesController_updateAddress[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "addressId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerAddressDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAddressEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a customer address",
+        "tags": [
+          "customer-addresses"
+        ]
+      },
+      "delete": {
+        "operationId": "AddressesController_deleteAddress[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "addressId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft-deactivate a customer address",
+        "tags": [
+          "customer-addresses"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/addresses/{addressId}": {
+      "patch": {
+        "operationId": "AddressesController_updateAddress[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "addressId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerAddressDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAddressEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a customer address",
+        "tags": [
+          "customer-addresses"
+        ]
+      },
+      "delete": {
+        "operationId": "AddressesController_deleteAddress[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "addressId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft-deactivate a customer address",
+        "tags": [
+          "customer-addresses"
+        ]
+      }
+    },
+    "/v1/customers/{id}/addresses/{addressId}/set-default": {
+      "post": {
+        "operationId": "AddressesController_setDefaultAddress[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "addressId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAddressEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set an address as the single active default address",
+        "tags": [
+          "customer-addresses"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/addresses/{addressId}/set-default": {
+      "post": {
+        "operationId": "AddressesController_setDefaultAddress[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "addressId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAddressEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set an address as the single active default address",
+        "tags": [
+          "customer-addresses"
+        ]
+      }
+    },
+    "/v1/customers": {
+      "post": {
+        "operationId": "ProfilesController_createCustomer[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCustomerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a customer profile with an initialized loyalty account",
+        "tags": [
+          "customers"
+        ]
+      },
+      "get": {
+        "operationId": "ProfilesController_listCustomers[0]",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search by name, code, phone, or email",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "INACTIVE",
+                "ANONYMIZED"
+              ]
+            }
+          },
+          {
+            "name": "customerGroupId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "membershipTierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "required": false,
+            "in": "query",
+            "description": "Screen contract: comma-separated group codes (retail, member, vip, wholesale); `all` is ignored",
+            "schema": {
+              "maxLength": 200,
+              "example": "member,vip",
+              "type": "string"
+            }
+          },
+          {
+            "name": "spendMin",
+            "required": false,
+            "in": "query",
+            "description": "Minimum total spent, whole VND",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "spendMax",
+            "required": false,
+            "in": "query",
+            "description": "Maximum total spent, whole VND",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "tagId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "totalSpent",
+                "lastPurchaseAt",
+                "createdAt"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Cursor (customer UUID) for keyset pagination",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List and search customer profiles with cursor/offset pagination",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers": {
+      "post": {
+        "operationId": "ProfilesController_createCustomer[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCustomerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a customer profile with an initialized loyalty account",
+        "tags": [
+          "customers"
+        ]
+      },
+      "get": {
+        "operationId": "ProfilesController_listCustomers[1]",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search by name, code, phone, or email",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "INACTIVE",
+                "ANONYMIZED"
+              ]
+            }
+          },
+          {
+            "name": "customerGroupId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "membershipTierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "required": false,
+            "in": "query",
+            "description": "Screen contract: comma-separated group codes (retail, member, vip, wholesale); `all` is ignored",
+            "schema": {
+              "maxLength": 200,
+              "example": "member,vip",
+              "type": "string"
+            }
+          },
+          {
+            "name": "spendMin",
+            "required": false,
+            "in": "query",
+            "description": "Minimum total spent, whole VND",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "spendMax",
+            "required": false,
+            "in": "query",
+            "description": "Maximum total spent, whole VND",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "tagId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "totalSpent",
+                "lastPurchaseAt",
+                "createdAt"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Cursor (customer UUID) for keyset pagination",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List and search customer profiles with cursor/offset pagination",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/v1/customers/summary": {
+      "get": {
+        "operationId": "ProfilesController_getKpiSummary[0]",
+        "parameters": [
+          {
+            "name": "month",
+            "required": false,
+            "in": "query",
+            "description": "YYYY-MM, default: current month (UTC)",
+            "schema": {
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+              "example": "2026-10",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "KPI cards and group tab counts of the customer screen",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/summary": {
+      "get": {
+        "operationId": "ProfilesController_getKpiSummary[1]",
+        "parameters": [
+          {
+            "name": "month",
+            "required": false,
+            "in": "query",
+            "description": "YYYY-MM, default: current month (UTC)",
+            "schema": {
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+              "example": "2026-10",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "KPI cards and group tab counts of the customer screen",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/v1/customers/export": {
+      "get": {
+        "operationId": "ProfilesController_exportCustomers[0]",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "INACTIVE",
+                "ANONYMIZED"
+              ]
+            }
+          },
+          {
+            "name": "customerGroupId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "membershipTierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 200,
+              "example": "member,vip",
+              "type": "string"
+            }
+          },
+          {
+            "name": "spendMin",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "spendMax",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "tagId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "totalSpent",
+                "lastPurchaseAt",
+                "createdAt"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Direct CSV export of the filtered list; phones masked unless the caller holds customers.update",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/export": {
+      "get": {
+        "operationId": "ProfilesController_exportCustomers[1]",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "INACTIVE",
+                "ANONYMIZED"
+              ]
+            }
+          },
+          {
+            "name": "customerGroupId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "membershipTierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "group",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 200,
+              "example": "member,vip",
+              "type": "string"
+            }
+          },
+          {
+            "name": "spendMin",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "spendMax",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "tagId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "totalSpent",
+                "lastPurchaseAt",
+                "createdAt"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Direct CSV export of the filtered list; phones masked unless the caller holds customers.update",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/v1/customers/lookup": {
+      "get": {
+        "operationId": "ProfilesController_lookupCustomer[0]",
+        "parameters": [
+          {
+            "name": "phone",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "0912345678",
+              "type": "string"
+            }
+          },
+          {
+            "name": "code",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "KH000001",
+              "type": "string"
+            }
+          },
+          {
+            "name": "email",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "nguyenvana@example.com",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fast exact customer lookup by normalized phone, code, or email",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/lookup": {
+      "get": {
+        "operationId": "ProfilesController_lookupCustomer[1]",
+        "parameters": [
+          {
+            "name": "phone",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "0912345678",
+              "type": "string"
+            }
+          },
+          {
+            "name": "code",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "KH000001",
+              "type": "string"
+            }
+          },
+          {
+            "name": "email",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "nguyenvana@example.com",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fast exact customer lookup by normalized phone, code, or email",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/v1/customers/{id}": {
+      "get": {
+        "operationId": "ProfilesController_getCustomerById[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer profile by ID",
+        "tags": [
+          "customers"
+        ]
+      },
+      "patch": {
+        "operationId": "ProfilesController_updateCustomer[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update customer profile with optional optimistic version check",
+        "tags": [
+          "customers"
+        ]
+      },
+      "delete": {
+        "operationId": "ProfilesController_deactivateCustomer[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "anonymize",
+            "required": false,
+            "in": "query",
+            "description": "When true, irreversibly anonymizes PII fields (GDPR/privacy)",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "reason",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deactivate or privacy-anonymize a customer profile",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}": {
+      "get": {
+        "operationId": "ProfilesController_getCustomerById[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer profile by ID",
+        "tags": [
+          "customers"
+        ]
+      },
+      "patch": {
+        "operationId": "ProfilesController_updateCustomer[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update customer profile with optional optimistic version check",
+        "tags": [
+          "customers"
+        ]
+      },
+      "delete": {
+        "operationId": "ProfilesController_deactivateCustomer[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "anonymize",
+            "required": false,
+            "in": "query",
+            "description": "When true, irreversibly anonymizes PII fields (GDPR/privacy)",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "reason",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deactivate or privacy-anonymize a customer profile",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/v1/customers/{id}/summary": {
+      "get": {
+        "operationId": "ProfilesController_getCustomerSummary[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get 360-degree customer summary (profile, loyalty, purchase projection, financial summary)",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/summary": {
+      "get": {
+        "operationId": "ProfilesController_getCustomerSummary[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get 360-degree customer summary (profile, loyalty, purchase projection, financial summary)",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/v1/customers/{id}/purchase-summary": {
+      "get": {
+        "operationId": "ProfilesController_getPurchaseSummary[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer purchase summary from event-driven read model",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/purchase-summary": {
+      "get": {
+        "operationId": "ProfilesController_getPurchaseSummary[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get customer purchase summary from event-driven read model",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/v1/customers/{id}/orders": {
+      "get": {
+        "operationId": "ProfilesController_listCustomerOrders[0]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List customer historical orders from event-driven projection",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/v1/customers/{id}/orders": {
+      "get": {
+        "operationId": "ProfilesController_listCustomerOrders[1]",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List customer historical orders from event-driven projection",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/internal/v1/customers/{id}/eligibility": {
+      "get": {
+        "operationId": "ProfilesController_getCustomerEligibility[0]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S endpoint for Sales/POS to fetch customer eligibility, discounts, and loyalty balance",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/api/internal/v1/customers/{id}/eligibility": {
+      "get": {
+        "operationId": "ProfilesController_getCustomerEligibility[1]",
+        "parameters": [
+          {
+            "name": "x-tenant-id",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-internal-call",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Internal S2S endpoint for Sales/POS to fetch customer eligibility, discounts, and loyalty balance",
+        "tags": [
+          "customers"
+        ]
+      }
+    },
+    "/v1/customer-tags": {
+      "get": {
+        "operationId": "TagsController_listTags[0]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List customer tags of the store",
+        "tags": [
+          "customer-tags"
+        ]
+      },
+      "post": {
+        "operationId": "TagsController_createTag[0]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCustomerTagDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a customer tag (unique name per store)",
+        "tags": [
+          "customer-tags"
+        ]
+      }
+    },
+    "/api/v1/customer-tags": {
+      "get": {
+        "operationId": "TagsController_listTags[1]",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List customer tags of the store",
+        "tags": [
+          "customer-tags"
+        ]
+      },
+      "post": {
+        "operationId": "TagsController_createTag[1]",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCustomerTagDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a customer tag (unique name per store)",
+        "tags": [
+          "customer-tags"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "SapoClone - customer service",
+    "description": "OpenAPI specification of the customer microservice",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "CreateCustomerGroupDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "defaultDiscountRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CustomerGroupEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateCustomerGroupDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "defaultDiscountRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          },
+          "forceDeactivate": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AssignCustomerGroupDto": {
+        "type": "object",
+        "properties": {
+          "customerGroupId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "customerGroupId"
+        ]
+      },
+      "CustomerEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateMembershipTierDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "minPoints": {
+            "type": "number",
+            "minimum": 0
+          },
+          "discountRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "benefits": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "name",
+          "minPoints"
+        ]
+      },
+      "MembershipTierEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateMembershipTierDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "minPoints": {
+            "type": "number",
+            "minimum": 0
+          },
+          "discountRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "benefits": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          }
+        }
+      },
+      "LoyaltySettingEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateLoyaltySettingsDto": {
+        "type": "object",
+        "properties": {
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "earnAmountPerPoint": {
+            "type": "number",
+            "minimum": 1
+          },
+          "redeemValuePerPoint": {
+            "type": "number",
+            "minimum": 1
+          },
+          "minRedeemPoints": {
+            "type": "number",
+            "minimum": 1
+          },
+          "maxRedeemPointsPerOrder": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
+          "holdTtlSeconds": {
+            "type": "number",
+            "minimum": 30
+          },
+          "pointsExpirationDays": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          }
+        }
+      },
+      "PatchLoyaltySettingsDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "earnAmountPerPoint": {
+            "type": "number",
+            "minimum": 1
+          },
+          "redeemValuePerPoint": {
+            "type": "number",
+            "minimum": 1
+          },
+          "pointsExpireMonths": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 120
+          },
+          "minRedeemPoints": {
+            "type": "number",
+            "minimum": 1
+          },
+          "maxRedeemPointsPerOrder": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
+          "holdTtlSeconds": {
+            "type": "number",
+            "minimum": 30
+          }
+        }
+      },
+      "LoyaltyAdjustmentDto": {
+        "type": "object",
+        "properties": {
+          "points": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "points",
+          "reason"
+        ]
+      },
+      "ManualLoyaltyAdjustmentDto": {
+        "type": "object",
+        "properties": {
+          "pointsDelta": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 255
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "pointsDelta",
+          "reason"
+        ]
+      },
+      "CreateLoyaltyHoldDto": {
+        "type": "object",
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "points": {
+            "type": "number",
+            "minimum": 1
+          },
+          "sourceRefType": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "sourceRefId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "callerService": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "ttlSeconds": {
+            "type": "number",
+            "minimum": 1
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "customerId",
+          "points",
+          "sourceRefId"
+        ]
+      },
+      "CommitLoyaltyHoldDto": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actorId": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "ReleaseLoyaltyHoldDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "actorId": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "MergeCustomersDto": {
+        "type": "object",
+        "properties": {
+          "sourceCustomerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetCustomerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 255,
+            "example": "Duplicate phone / email profile"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128,
+            "example": "merge-idem-001"
+          }
+        },
+        "required": [
+          "sourceCustomerId",
+          "targetCustomerId"
+        ]
+      },
+      "ImportCustomerRowDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 32,
+            "example": "KH000100"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "example": "Tran Thi B"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 32,
+            "example": "0987654321"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 160,
+            "example": "tranthib@example.com"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 32,
+            "example": "POS"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000,
+            "example": "VIP customer"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CreateImportJobDto": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportCustomerRowDto"
+            }
+          },
+          "csvContent": {
+            "type": "string",
+            "description": "Raw CSV string with header: code,name,phone,email,source,note"
+          },
+          "conflictPolicy": {
+            "enum": [
+              "SKIP",
+              "UPDATE"
+            ],
+            "type": "string",
+            "default": "SKIP"
+          }
+        }
+      },
+      "CustomerDataJobEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateExportJobDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ANONYMIZED"
+            ],
+            "type": "string"
+          },
+          "customerGroupId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "membershipTierId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "CreateCustomerAddressDto": {
+        "type": "object",
+        "properties": {
+          "recipientName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "addressLine": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "ward": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "district": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "province": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "isDefault": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recipientName",
+          "addressLine"
+        ]
+      },
+      "CustomerAddressEntity": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateCustomerAddressDto": {
+        "type": "object",
+        "properties": {
+          "recipientName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 32
+          },
+          "addressLine": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "ward": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "district": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "province": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "isDefault": {
+            "type": "boolean"
+          }
+        }
+      },
+      "InitialCustomerAddressDto": {
+        "type": "object",
+        "properties": {
+          "recipientName": {
+            "type": "string",
+            "maxLength": 160,
+            "example": "Nguyen Van A"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 32,
+            "example": "0912345678"
+          },
+          "addressLine": {
+            "type": "string",
+            "maxLength": 255,
+            "example": "123 Le Loi"
+          },
+          "ward": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "Phuong Ben Nghe"
+          },
+          "district": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "Quan 1"
+          },
+          "province": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "TP. Ho Chi Minh"
+          }
+        },
+        "required": [
+          "addressLine"
+        ]
+      },
+      "ContractCustomerAddressDto": {
+        "type": "object",
+        "properties": {
+          "recipientName": {
+            "type": "string",
+            "maxLength": 160,
+            "example": "Nguyen Van A"
+          },
+          "recipientPhone": {
+            "type": "string",
+            "maxLength": 32,
+            "example": "0912345678"
+          },
+          "province": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "TP. Ho Chi Minh"
+          },
+          "district": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "Quan Phu Nhuan"
+          },
+          "ward": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "Phuong Cau Kieu"
+          },
+          "addressLine": {
+            "type": "string",
+            "maxLength": 255,
+            "example": "24 duong Hoa Mai"
+          },
+          "isDefault": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "province",
+          "district",
+          "ward",
+          "addressLine"
+        ]
+      },
+      "CreateCustomerLoyaltyDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "initialPoints": {
+            "type": "number",
+            "minimum": 0,
+            "example": 0
+          }
+        }
+      },
+      "CreateCustomerDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 32,
+            "example": "KH000001"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "example": "Nguyen Van A"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 32,
+            "example": "0912 345 678"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 160,
+            "example": "nguyenvana@example.com"
+          },
+          "gender": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "MALE",
+              "FEMALE",
+              "OTHER"
+            ],
+            "example": "MALE",
+            "description": "Case-insensitive: `female` and `FEMALE` are the same"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "example": "1995-05-20"
+          },
+          "dob": {
+            "type": "string",
+            "nullable": true,
+            "example": "1995-05-20",
+            "description": "Screen-contract alias of dateOfBirth (dateOfBirth wins)"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 32,
+            "example": "POS"
+          },
+          "customerGroupId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "membershipTierId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "debtLimit": {
+            "type": "number",
+            "minimum": 0,
+            "example": 5000000,
+            "description": "Whole VND"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000,
+            "example": "Khach hang than thiet"
+          },
+          "initialAddress": {
+            "$ref": "#/components/schemas/InitialCustomerAddressDto"
+          },
+          "addresses": {
+            "maxItems": 10,
+            "description": "Screen-contract addresses (cannot be combined with initialAddress); the first isDefault, else the first, is the default",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractCustomerAddressDto"
+            }
+          },
+          "groupId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid",
+            "description": "Screen-contract alias of customerGroupId"
+          },
+          "tagIds": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "loyalty": {
+            "$ref": "#/components/schemas/CreateCustomerLoyaltyDto"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateCustomerLoyaltyDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateCustomerDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "example": "Nguyen Van A Updated"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 32,
+            "example": "+84912345678"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 160,
+            "example": "updated@example.com"
+          },
+          "gender": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "MALE",
+              "FEMALE",
+              "OTHER"
+            ],
+            "example": "FEMALE",
+            "description": "Case-insensitive"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "nullable": true,
+            "example": "1995-05-20"
+          },
+          "dob": {
+            "type": "string",
+            "nullable": true,
+            "example": "1995-05-20",
+            "description": "Screen-contract alias of dateOfBirth (dateOfBirth wins)"
+          },
+          "groupId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid",
+            "description": "Screen-contract alias of customerGroupId"
+          },
+          "tagIds": {
+            "maxItems": 20,
+            "description": "Replaces the customer tags; [] clears them",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "loyalty": {
+            "$ref": "#/components/schemas/UpdateCustomerLoyaltyDto"
+          },
+          "customerGroupId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "membershipTierId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string",
+            "example": "ACTIVE"
+          },
+          "debtLimit": {
+            "type": "number",
+            "minimum": 0,
+            "example": 5000000,
+            "description": "Whole VND"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Expected version for optimistic concurrency control",
+            "example": 1
+          }
+        }
+      },
+      "CreateCustomerTagDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 60,
+            "example": "Quà tặng"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    }
+  }
+}

@@ -130,9 +130,7 @@ describe('M7.5 Monorepo-Wide DDD & Hexagonal Architecture Fitness Suite (Rules A
       'ensures apps/%s never queries or mutates another microservice PostgreSQL schema',
       (service) => {
         const srcDir = path.join(WORKSPACE_ROOT, 'apps', service, 'src');
-        const files = collectTsFiles(srcDir).filter(
-          (f) => !f.endsWith('microservices-openapi.ts'),
-        );
+        const files = collectTsFiles(srcDir);
         const otherSchemas = SERVICES.filter((s) => s !== service);
 
         for (const file of files) {

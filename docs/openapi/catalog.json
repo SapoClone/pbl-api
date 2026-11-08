@@ -1,0 +1,3022 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/categories": {
+      "post": {
+        "description": "Creates a root or child category (maximum depth 3 levels, tenant-scoped unique sibling name and slug).",
+        "operationId": "CategoriesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCategoryReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created category"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a product category",
+        "tags": [
+          "categories"
+        ]
+      },
+      "get": {
+        "description": "Returns paginated tenant categories.",
+        "operationId": "CategoriesController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search by category name or slug",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "INACTIVE"
+              ]
+            }
+          },
+          {
+            "name": "parentId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by parentId",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated categories"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List or search categories",
+        "tags": [
+          "categories"
+        ]
+      }
+    },
+    "/api/v1/categories/tree": {
+      "get": {
+        "operationId": "CategoriesController_getTree",
+        "parameters": [
+          {
+            "name": "activeOnly",
+            "required": false,
+            "in": "query",
+            "description": "If true, only returns ACTIVE categories",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Category tree"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get hierarchical category tree (up to 3 levels)",
+        "tags": [
+          "categories"
+        ]
+      }
+    },
+    "/api/v1/categories/{id}": {
+      "get": {
+        "operationId": "CategoriesController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Category UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Category details"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retrieve category by ID",
+        "tags": [
+          "categories"
+        ]
+      },
+      "patch": {
+        "operationId": "CategoriesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Category UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCategoryReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated category"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update category name or slug",
+        "tags": [
+          "categories"
+        ]
+      },
+      "delete": {
+        "description": "Deletes a category only if it has no child categories and no product references; otherwise returns 409 CATEGORY_IN_USE.",
+        "operationId": "CategoriesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Category UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete an unreferenced category",
+        "tags": [
+          "categories"
+        ]
+      }
+    },
+    "/api/v1/categories/{id}/status": {
+      "patch": {
+        "description": "Rejects deactivation with 409 CATEGORY_IN_USE if active products or active child categories (without cascade=true) exist.",
+        "operationId": "CategoriesController_updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Category UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCategoryStatusReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated category"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Activate or deactivate a category",
+        "tags": [
+          "categories"
+        ]
+      }
+    },
+    "/api/v1/categories/{id}/reparent": {
+      "post": {
+        "description": "Uses a recursive CTE with row locks to prevent cycles and enforce the 3-level depth limit across all descendants.",
+        "operationId": "CategoriesController_reparent",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Category UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReparentCategoryReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reparented category"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reparent a category and its subtree transactionally",
+        "tags": [
+          "categories"
+        ]
+      }
+    },
+    "/api/v1/brands": {
+      "post": {
+        "operationId": "BrandsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBrandReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created brand"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a product brand",
+        "tags": [
+          "brands"
+        ]
+      },
+      "get": {
+        "operationId": "BrandsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search by brand name",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "INACTIVE"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated brands"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List or search brands",
+        "tags": [
+          "brands"
+        ]
+      }
+    },
+    "/api/v1/brands/{id}": {
+      "get": {
+        "operationId": "BrandsController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Brand UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Brand details"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retrieve brand by ID",
+        "tags": [
+          "brands"
+        ]
+      },
+      "patch": {
+        "operationId": "BrandsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Brand UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBrandReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated brand"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update brand details or status",
+        "tags": [
+          "brands"
+        ]
+      },
+      "delete": {
+        "operationId": "BrandsController_deactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Brand UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deactivated brand"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deactivate brand (preserves historical product references)",
+        "tags": [
+          "brands"
+        ]
+      }
+    },
+    "/api/v1/attributes": {
+      "post": {
+        "operationId": "AttributesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAttributeReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created attribute"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a product attribute (e.g. Color, Size, Material)",
+        "tags": [
+          "attributes"
+        ]
+      },
+      "get": {
+        "operationId": "AttributesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of attributes"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List tenant attributes with their values",
+        "tags": [
+          "attributes"
+        ]
+      }
+    },
+    "/api/v1/attributes/{id}": {
+      "patch": {
+        "operationId": "AttributesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Attribute UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAttributeReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated attribute"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update attribute name",
+        "tags": [
+          "attributes"
+        ]
+      }
+    },
+    "/api/v1/attributes/{id}/values": {
+      "post": {
+        "operationId": "AttributesController_createValue",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Attribute UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAttributeValueReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created attribute value"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a value to an attribute (e.g. Black, M)",
+        "tags": [
+          "attributes"
+        ]
+      },
+      "get": {
+        "operationId": "AttributesController_listValues",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Attribute UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of attribute values"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List values belonging to an attribute",
+        "tags": [
+          "attributes"
+        ]
+      }
+    },
+    "/api/v1/products": {
+      "post": {
+        "description": "Creates a tenant-scoped product, its base unit conversion, and optionally its default sellable variant, publishing catalog.product.created via transactional outbox.",
+        "operationId": "ProductsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created product"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a product (with optional default variant)",
+        "tags": [
+          "products"
+        ]
+      },
+      "get": {
+        "operationId": "ProductsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "afterCursor",
+            "required": false,
+            "in": "query",
+            "description": "Optional keyset cursor (`<createdAtISO>_<uuid>`) for deep O(1) pagination",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search by product name",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "ACTIVE",
+                "INACTIVE",
+                "ARCHIVED"
+              ]
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "brandId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "name",
+                "updatedAt"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "DESC",
+              "type": "string",
+              "enum": [
+                "ASC",
+                "DESC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated products"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List and filter products (offset + keyset cursor pagination)",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/products/summary": {
+      "get": {
+        "operationId": "ProductsController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Product, variant, active and inactive variant counts",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/products/export": {
+      "get": {
+        "operationId": "ProductsController_export",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search name, SKU and barcode",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
+          },
+          {
+            "name": "barcode",
+            "required": false,
+            "in": "query",
+            "description": "Exact barcode match",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "ids",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated variant ids, at most 100",
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "inactive",
+                "archived"
+              ]
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "name",
+                "price",
+                "skuCode"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "DESC",
+              "type": "string",
+              "enum": [
+                "ASC",
+                "DESC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export variants as CSV (UTF-8 BOM, at most 10,000 rows)",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/variants": {
+      "get": {
+        "description": "One row per variant. Filters: q (name, SKU, barcode), barcode (exact), ids (comma-separated), status, categoryId, sort, order.",
+        "operationId": "ProductsController_listVariants",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search name, SKU and barcode",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
+          },
+          {
+            "name": "barcode",
+            "required": false,
+            "in": "query",
+            "description": "Exact barcode match",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "ids",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated variant ids, at most 100",
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "inactive",
+                "archived"
+              ]
+            }
+          },
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "name",
+                "price",
+                "skuCode"
+              ]
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "DESC",
+              "type": "string",
+              "enum": [
+                "ASC",
+                "DESC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List or search variants (table rows and product pickers)",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/variants/{id}": {
+      "delete": {
+        "operationId": "ProductsController_removeVariant",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Variant UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft-delete a variant",
+        "tags": [
+          "products"
+        ]
+      },
+      "get": {
+        "operationId": "ProductsController_getVariantById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Variant UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Variant details"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retrieve variant by ID",
+        "tags": [
+          "products"
+        ]
+      },
+      "patch": {
+        "operationId": "ProductsController_updateVariant",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Variant UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVariantReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated variant"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update variant (SKU, barcode, base price, weight, optimistic version)",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/products/lookup": {
+      "get": {
+        "operationId": "ProductsController_lookup",
+        "parameters": [
+          {
+            "name": "sku",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 64,
+              "example": "TSHIRT-BLK-M",
+              "type": "string"
+            }
+          },
+          {
+            "name": "barcode",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 64,
+              "example": "8938505974192",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching variant and parent product"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Exact indexed lookup by SKU code or barcode",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/products/{id}": {
+      "get": {
+        "operationId": "ProductsController_getById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product details"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retrieve product details, variants, and unit conversions",
+        "tags": [
+          "products"
+        ]
+      },
+      "patch": {
+        "operationId": "ProductsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProductReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated product"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update product details (supports optimistic locking via version)",
+        "tags": [
+          "products"
+        ]
+      },
+      "delete": {
+        "operationId": "ProductsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Soft-deleted"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft-delete product and archive its variants (preserves historical SKU/variant references)",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/products/{id}/status": {
+      "patch": {
+        "operationId": "ProductsController_updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProductStatusReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated product"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Transition product lifecycle status (DRAFT/ACTIVE/INACTIVE/ARCHIVED)",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/products/{id}/variants": {
+      "post": {
+        "description": "Validates SKU normalization, GS1/EAN-13 barcode checksum, and canonical single-value-per-attribute combination signature.",
+        "operationId": "ProductsController_createVariant",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVariantReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created variant"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a single variant under a product",
+        "tags": [
+          "products"
+        ]
+      },
+      "get": {
+        "operationId": "ProductsController_listProductVariants",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of variants"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List variants belonging to a product",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/products/{id}/variants/generate": {
+      "post": {
+        "description": "Validates Cartesian product size (max 100), generates canonical combination signatures, and creates all variants atomically in a single transaction.",
+        "operationId": "ProductsController_generateVariants",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateVariantsReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Generated variants"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Generate Cartesian attribute-combination variants transactionally",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/variants/{id}/status": {
+      "patch": {
+        "operationId": "ProductsController_updateVariantStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Variant UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVariantStatusReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated variant"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Activate, deactivate, or archive a variant",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/products/{id}/units": {
+      "post": {
+        "operationId": "ProductsController_addUnit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUnitConversionReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created unit conversion"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a packaging unit conversion to a product (e.g. Pack = 6)",
+        "tags": [
+          "products"
+        ]
+      },
+      "get": {
+        "operationId": "ProductsController_listUnits",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of unit conversions"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List unit conversions for a product",
+        "tags": [
+          "products"
+        ]
+      }
+    },
+    "/api/v1/price-lists": {
+      "post": {
+        "operationId": "PricingController_createPriceList",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePriceListReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Price list created"
+          },
+          "409": {
+            "description": "PRICE_LIST_CONFLICT"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a catalog price list",
+        "tags": [
+          "pricing"
+        ]
+      },
+      "get": {
+        "operationId": "PricingController_listPriceLists",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Price lists retrieved"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List catalog price lists for the current tenant",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/api/v1/price-lists/{id}": {
+      "get": {
+        "operationId": "PricingController_getPriceListById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Price list retrieved"
+          },
+          "404": {
+            "description": "PRICE_LIST_NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a price list and its variant price items",
+        "tags": [
+          "pricing"
+        ]
+      },
+      "patch": {
+        "operationId": "PricingController_updatePriceList",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePriceListReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Price list updated"
+          },
+          "404": {
+            "description": "PRICE_LIST_NOT_FOUND"
+          },
+          "409": {
+            "description": "PRICE_LIST_CONFLICT or RESOURCE_VERSION_CONFLICT"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a catalog price list",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/api/v1/price-lists/{id}/items": {
+      "put": {
+        "operationId": "PricingController_upsertPriceListItems",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertPriceListItemsReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Price list items upserted"
+          },
+          "404": {
+            "description": "PRICE_LIST_NOT_FOUND or VARIANT_NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atomically upsert variant prices within a price list",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/api/v1/variants/{id}/price": {
+      "get": {
+        "operationId": "PricingController_resolvePrice",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "priceListId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "asOfDate",
+            "required": false,
+            "in": "query",
+            "description": "ISO date (YYYY-MM-DD) for effective date evaluation",
+            "schema": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "example": "2026-10-29",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Variant price resolved"
+          },
+          "404": {
+            "description": "VARIANT_NOT_FOUND or PRICE_NOT_CONFIGURED"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deterministically resolve the active sellable price for a variant",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/api/v1/uploads/images": {
+      "post": {
+        "description": "Returns an imageId, the URL to PUT the bytes to and the public URL. Send imageId in POST/PATCH /products (imageIds).",
+        "operationId": "UploadsController_createImage",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImageUploadReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Register an image upload (png/jpeg, up to 5 MB)",
+        "tags": [
+          "uploads"
+        ]
+      }
+    },
+    "/api/v1/uploads/imports": {
+      "post": {
+        "operationId": "UploadsController_createImport",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImportUploadReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Register a CSV upload for POST /product-imports",
+        "tags": [
+          "uploads"
+        ]
+      }
+    },
+    "/api/v1/uploads/{id}/complete": {
+      "post": {
+        "description": "Call after the PUT to uploadUrl. The API checks the object exists with the declared type and size, then marks the upload as uploaded. Repeating the call is safe.",
+        "operationId": "UploadsController_complete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirm the file reached the object store (HEAD check)",
+        "tags": [
+          "uploads"
+        ]
+      }
+    },
+    "/api/v1/uploads/{id}/content": {
+      "put": {
+        "operationId": "UploadsController_content",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Local driver only: upload the bytes through the API (404 when UPLOADS_DRIVER=s3)",
+        "tags": [
+          "uploads"
+        ]
+      }
+    },
+    "/api/v1/product-imports": {
+      "post": {
+        "description": "Columns: name, skuCode, price (whole VND), optional barcode, baseUnit, category (existing category name). Up to 1,000 rows.",
+        "operationId": "ImportsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductImportReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start importing an uploaded CSV (create or update by SKU)",
+        "tags": [
+          "product-imports"
+        ]
+      }
+    },
+    "/api/v1/product-imports/{id}": {
+      "get": {
+        "operationId": "ImportsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Progress and row errors of an import",
+        "tags": [
+          "product-imports"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "PblHealthController_live",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Service health check",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "PblHealthController_liveExplicit",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "PblHealthController_ready",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Readiness probe (Database and Redis)",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "SapoClone - catalog service",
+    "description": "OpenAPI specification of the catalog microservice",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "CreateCategoryReqDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Clothing"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 140,
+            "example": "clothing"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid",
+            "description": "Optional parent category UUID (max depth 3)"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateCategoryReqDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Men Clothing"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 140,
+            "example": "men-clothing"
+          }
+        }
+      },
+      "UpdateCategoryStatusReqDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string",
+            "example": "INACTIVE"
+          },
+          "cascade": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, cascades deactivation to child categories"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "ReparentCategoryReqDto": {
+        "type": "object",
+        "properties": {
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid",
+            "example": null,
+            "description": "New parent category UUID, or null to move to root level"
+          }
+        },
+        "required": [
+          "parentId"
+        ]
+      },
+      "CreateBrandReqDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Local Basic"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "example": "Vietnamese minimalist basics brand"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateBrandReqDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Local Basic Studio"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string"
+          }
+        }
+      },
+      "CreateAttributeReqDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "example": "Color"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateAttributeReqDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "example": "Colour"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CreateAttributeValueReqDto": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Black"
+          }
+        },
+        "required": [
+          "value"
+        ]
+      },
+      "ProductImageDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 255,
+            "example": "tenants/t1/products/tshirt-front.jpg"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 500,
+            "example": "https://cdn.sapoclone.local/tshirt-front.jpg"
+          },
+          "altText": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 160,
+            "example": "Front view"
+          },
+          "sortOrder": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9,
+            "example": 0
+          }
+        },
+        "required": [
+          "key",
+          "url",
+          "sortOrder"
+        ]
+      },
+      "CreateProductReqDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "example": "Áo thun cotton nam"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "example": "Basic cotton T-shirt"
+          },
+          "categoryId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "brandId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "baseUnit": {
+            "type": "string",
+            "maxLength": 40,
+            "example": "piece",
+            "default": "piece"
+          },
+          "status": {
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string",
+            "default": "ACTIVE"
+          },
+          "images": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductImageDto"
+            }
+          },
+          "imageIds": {
+            "maxItems": 10,
+            "description": "Ids from POST /uploads/images, in display order (the first is the cover). Replaces `images` when sent.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "createDefaultVariant": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, creates an initial default sellable variant in the same transaction"
+          },
+          "defaultSkuCode": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "TSHIRT-DEFAULT",
+            "description": "Optional SKU code for the initial default variant"
+          },
+          "defaultBarcode": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "8938505974192",
+            "description": "Optional barcode for the initial default variant"
+          },
+          "defaultBasePrice": {
+            "type": "number",
+            "minimum": 0,
+            "example": 199000,
+            "description": "Optional base price (whole VND) for the initial default variant"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateProductReqDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "example": "Áo thun cotton nam cao cấp"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          },
+          "categoryId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "brandId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "baseUnit": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "images": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductImageDto"
+            }
+          },
+          "imageIds": {
+            "maxItems": 10,
+            "description": "Ids from POST /uploads/images, in display order (the first is the cover). Replaces `images` when sent.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1,
+            "example": 1,
+            "description": "Expected current aggregate version for optimistic concurrency control (409 on mismatch)"
+          }
+        }
+      },
+      "UpdateProductStatusReqDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ],
+            "type": "string",
+            "example": "INACTIVE"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1,
+            "example": 1
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "VariantAttributeInputDto": {
+        "type": "object",
+        "properties": {
+          "attributeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attributeValueId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "attributeId",
+          "attributeValueId"
+        ]
+      },
+      "CreateVariantReqDto": {
+        "type": "object",
+        "properties": {
+          "skuCode": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "TSHIRT-BLK-M"
+          },
+          "barcode": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "example": "8938505974192"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 240,
+            "example": "Áo thun cotton nam (Black / M)"
+          },
+          "basePrice": {
+            "type": "number",
+            "minimum": 0,
+            "example": 199000,
+            "default": 0
+          },
+          "weight": {
+            "type": "string",
+            "nullable": true,
+            "example": "0.250"
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "isDefault": {
+            "type": "boolean",
+            "default": false
+          },
+          "attributes": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariantAttributeInputDto"
+            }
+          }
+        },
+        "required": [
+          "skuCode"
+        ]
+      },
+      "VariantGenerationAxisInputDto": {
+        "type": "object",
+        "properties": {
+          "attributeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "valueIds": {
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "AttributeValue UUIDs",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "attributeId",
+          "valueIds"
+        ]
+      },
+      "GenerateVariantsReqDto": {
+        "type": "object",
+        "properties": {
+          "skuPrefix": {
+            "type": "string",
+            "maxLength": 40,
+            "example": "TSHIRT"
+          },
+          "basePrice": {
+            "type": "number",
+            "minimum": 0,
+            "example": 199000,
+            "default": 0
+          },
+          "axes": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariantGenerationAxisInputDto"
+            }
+          },
+          "skuTokens": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "Black": "BLK",
+              "White": "WHT",
+              "M": "M",
+              "L": "L"
+            },
+            "description": "Optional map of attribute value text to custom SKU token (e.g. {\"Black\":\"BLK\",\"White\":\"WHT\"})"
+          }
+        },
+        "required": [
+          "skuPrefix",
+          "axes"
+        ]
+      },
+      "UpdateVariantReqDto": {
+        "type": "object",
+        "properties": {
+          "skuCode": {
+            "type": "string",
+            "maxLength": 64,
+            "example": "TSHIRT-BLK-M-V2"
+          },
+          "barcode": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "example": "8938505974192"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 240
+          },
+          "basePrice": {
+            "type": "number",
+            "minimum": 0,
+            "example": 219000
+          },
+          "weight": {
+            "type": "string",
+            "nullable": true,
+            "example": "0.280"
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1,
+            "example": 1
+          }
+        }
+      },
+      "UpdateVariantStatusReqDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE",
+              "ARCHIVED"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 1,
+            "example": 1
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "CreateUnitConversionReqDto": {
+        "type": "object",
+        "properties": {
+          "unitName": {
+            "type": "string",
+            "maxLength": 60,
+            "example": "Pack (6)"
+          },
+          "conversionFactor": {
+            "type": "string",
+            "example": "6.0000",
+            "description": "Positive conversion factor relative to product base unit"
+          },
+          "isBase": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "unitName",
+          "conversionFactor"
+        ]
+      },
+      "CreatePriceListReqDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Retail Default Price List"
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 8,
+            "example": "VND",
+            "default": "VND"
+          },
+          "isDefault": {
+            "type": "boolean",
+            "default": false
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string",
+            "default": "ACTIVE"
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "example": "2026-01-01"
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "example": "2026-12-31"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdatePriceListReqDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Retail Holiday Price List"
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 8,
+            "example": "VND"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string"
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "example": "2026-01-01"
+          },
+          "endDate": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "example": "2026-12-31"
+          },
+          "expectedVersion": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Expected version for optimistic locking"
+          }
+        }
+      },
+      "PriceListItemInputDto": {
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0,
+            "example": 199000,
+            "description": "Whole VND"
+          }
+        },
+        "required": [
+          "variantId",
+          "price"
+        ]
+      },
+      "UpsertPriceListItemsReqDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PriceListItemInputDto"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "CreateImageUploadReqDto": {
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "maxLength": 255,
+            "example": "binh-xanh.jpg"
+          },
+          "size": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5242880,
+            "example": 812345,
+            "description": "Bytes, 1 to 5 MB"
+          },
+          "contentType": {
+            "enum": [
+              "image/png",
+              "image/jpeg"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "fileName",
+          "size",
+          "contentType"
+        ]
+      },
+      "CreateImportUploadReqDto": {
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "maxLength": 255,
+            "example": "binh-xanh.jpg"
+          },
+          "size": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5242880,
+            "example": 812345,
+            "description": "Bytes, 1 to 5 MB"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "text/csv"
+            ]
+          }
+        },
+        "required": [
+          "fileName",
+          "size",
+          "contentType"
+        ]
+      },
+      "CreateProductImportReqDto": {
+        "type": "object",
+        "properties": {
+          "uploadId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "uploadId from POST /uploads/imports, content already PUT"
+          }
+        },
+        "required": [
+          "uploadId"
+        ]
+      }
+    }
+  }
+}

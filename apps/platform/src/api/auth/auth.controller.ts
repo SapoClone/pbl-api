@@ -32,7 +32,7 @@ export class AuthController {
     return await this.authService.signIn(userLogin, client);
   }
 
-  @ApiPublic()
+  @ApiPublic({ summary: 'Register an account' })
   @Post('email/register')
   async register(@Body() dto: RegisterReqDto): Promise<RegisterResDto> {
     return await this.authService.register(dto);
@@ -80,31 +80,31 @@ export class AuthController {
     return await this.authService.switchTenant(user, dto.tenantId, client);
   }
 
-  @ApiPublic()
+  @ApiPublic({ summary: 'Request a password reset (not implemented yet)' })
   @Post('forgot-password')
   async forgotPassword() {
     return 'forgot-password';
   }
 
-  @ApiPublic()
+  @ApiPublic({ summary: 'Verify a password reset code (not implemented yet)' })
   @Post('verify/forgot-password')
   async verifyForgotPassword() {
     return 'verify-forgot-password';
   }
 
-  @ApiPublic()
+  @ApiPublic({ summary: 'Reset the password (not implemented yet)' })
   @Post('reset-password')
   async resetPassword() {
     return 'reset-password';
   }
 
-  @ApiPublic()
+  @ApiPublic({ summary: 'Verify an email address (not implemented yet)' })
   @Get('verify/email')
   async verifyEmail() {
     return 'verify-email';
   }
 
-  @ApiPublic()
+  @ApiPublic({ summary: 'Resend the email verification (not implemented yet)' })
   @Post('verify/email/resend')
   async resendVerifyEmail() {
     return 'resend-verify-email';

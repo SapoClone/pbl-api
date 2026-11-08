@@ -336,7 +336,8 @@ docker compose run --rm --no-deps -v "$PWD:/work" -w /work platform sh -c \
 Event bus: `bash scripts/demo-events.sh` runs the login / permissions / selling demo through the
 gateway and asserts every step; `pnpm test:int` runs the bus, sales and insight against real Postgres and
 ElasticMQ (inside the image on Windows, see the guide). `node scripts/redrive-dlq.js <service>`
-moves dead letters back. Local SQS is ElasticMQ; queued messages:
+moves dead letters back. API docs: `pnpm openapi` generates the OpenAPI of every service and the merged gateway
+document from the controllers into `docs/openapi/` (git-ignored; `test:arch` guards it against `krakend.json`). Local SQS is ElasticMQ; queued messages:
 `http://localhost:9324/000000000000/email-verification?Action=ReceiveMessage`.
 
 ## Testing
