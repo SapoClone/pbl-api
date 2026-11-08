@@ -1,7 +1,9 @@
 import type { OpenAPIObject } from '@nestjs/swagger';
 
-/** Gateway-facing base URL of the merged document (krakend `port`). */
+/** Gateway-facing base URL of a local stack (krakend `port`). */
 export const GATEWAY_URL = 'http://localhost:8080';
+/** The deployed gateway: the default server, so the published page can send requests to it (see docs/swagger). */
+export const PRODUCTION_GATEWAY_URL = 'https://api.sapo.makeasy.id.vn';
 export const BEARER_SCHEME = 'bearerAuth';
 
 type Json = Record<string, any>;
@@ -229,7 +231,10 @@ export function mergeDocuments(input: MergeInput): {
         'Every client-facing route, as served by the KrakenD gateway: /<service> + the service path. Generated from the controllers; see docs/guides/openapi.md.',
       version: input.info?.version ?? '1.0',
     },
-    servers: [{ url: GATEWAY_URL, description: 'KrakenD API gateway' }],
+    servers: [
+      { url: PRODUCTION_GATEWAY_URL, description: 'Production gateway' },
+      { url: GATEWAY_URL, description: 'Local gateway' },
+    ],
     tags,
     paths,
     components: {

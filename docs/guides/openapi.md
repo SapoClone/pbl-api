@@ -24,9 +24,17 @@ The same documents are served live by each service at `/api-docs` when `APP_SWAG
 (production: only platform, behind basic auth; the gateway does not route `/api-docs`).
 
 **Published copy.** `docs/openapi/*.json` is committed, and GitHub Pages serves the `docs` folder, so
-`https://sapoclone.github.io/pbl-api/swagger/` shows the merged document in Swagger UI (read-only: the gateway does not
-allow that origin, so no Try it out) and `.../openapi/<service>.json` are the raw files. The `libs` job of CI runs
-`pnpm openapi` and fails on a diff, so a controller or krakend change needs the regenerated files in the same PR.
+`https://sapoclone.github.io/pbl-api/swagger/` shows the merged document in Swagger UI and `.../openapi/<service>.json`
+are the raw files. The `libs` job of CI runs `pnpm openapi` and fails on a diff, so a controller or krakend change
+needs the regenerated files in the same PR.
+
+**Trying requests from the page.** Try it out is on, and the default server is the production gateway
+(`PRODUCTION_GATEWAY_URL` in `scripts/openapi/merge.ts`; the local gateway is the second server). A browser only lets the
+page call the gateway when the gateway allows its origin: the repository variable `GATEWAY_CORS_ORIGINS` (read by the
+deploy workflow when it renders the gateway config) must contain `https://sapoclone.github.io`, and the gateway must be
+redeployed after changing it. The page shows what to do for a token: log in through the page, press Authorize, paste the
+`accessToken`. These are real requests to production: use a demo store. Authorization is kept in the browser
+(`persistAuthorization`), so do not use a shared computer.
 
 ## How the merged document maps to the gateway
 

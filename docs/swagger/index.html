@@ -21,8 +21,15 @@
       <h1>SapoClone API reference</h1>
       <p>
         Every client-facing route as the gateway serves it (<code>/&lt;service&gt;</code> + the service path),
-        generated from the controllers. This page is read-only: the gateway does not accept requests from this
-        site, so there is no Try it out.
+        generated from the controllers. <b>Try it out sends real requests to the production API.</b> Use a demo
+        store and demo data, never real customers.
+      </p>
+      <p>
+        To call a protected route: run <code>POST /platform/api/v1/auth/email/login</code> (store users) or
+        <code>POST /platform/api/v1/admin/auth/login</code> (platform admins, the <code>admin-*</code> routes) here,
+        copy the <code>accessToken</code>, press <b>Authorize</b> and paste it. A store token fails on admin routes
+        and an admin token on store routes (403). Tokens last 15 minutes. The server is selectable (production by
+        default; the local gateway works only from a page served on your own machine).
       </p>
       <p>
         Raw documents:
@@ -47,7 +54,9 @@
           dom_id: '#swagger-ui',
           deepLinking: true,
           docExpansion: 'none',
-          supportedSubmitMethods: [],
+          tryItOutEnabled: true,
+          persistAuthorization: true,
+          displayRequestDuration: true,
         });
       };
     </script>
