@@ -31,6 +31,7 @@ import { CreateCatalogTables1791900000200 } from '../src/migrations/179190000020
 import { CreateTenantPlanQuota1792800000000 } from '../src/migrations/1792800000000-create-tenant-plan-quota';
 import { AllowUploadCleanupSelect1793300000000 } from '../src/migrations/1793300000000-allow-upload-cleanup-select';
 import { CreateProductAttributes1793400000000 } from '../src/migrations/1793400000000-create-product-attributes';
+import { CreatePriceListBranches1793500000000 } from '../src/migrations/1793500000000-create-price-list-branches';
 import { AttributesService } from '../src/modules/attributes/attributes.service';
 import { ProductAttributesService } from '../src/modules/products/product-attributes';
 import { ProductsService } from '../src/modules/products/products.service';
@@ -111,6 +112,7 @@ describe('Product attributes (Postgres)', () => {
           CreateTenantPlanQuota1792800000000,
           AllowUploadCleanupSelect1793300000000,
           CreateProductAttributes1793400000000,
+          CreatePriceListBranches1793500000000,
         ],
       }),
     );

@@ -30,7 +30,7 @@ Key engineering challenges in M3 include:
 ### 2. Authoritative Price Waterfall & Pro-Rated Order Discount Allocation
 - All monetary values in VND use exact integer/fixed-point `BigInt` arithmetic (`NUMERIC(18,2)` / integer VND with `ROUND_HALF_UP`).
 - Line waterfall:
-  1. Resolve authoritative `unitPrice` and `status` (`ACTIVE`) from Catalog (`CatalogClient` + `catalog_variant_projection`). If the client supplied an `expectedUnitPrice` that differs from Catalog's current price, reject with `409 PRICE_CHANGED`.
+  1. Resolve authoritative `unitPrice` and `status` (`ACTIVE`) from Catalog (`CatalogClient` + `catalog_variant_projection`; *amended by [ADR-0024](0024-branch-pricing.md): for the branch of the sale, an active branch price in `catalog_branch_price_projection` replaces `unit_price`*). If the client supplied an `expectedUnitPrice` that differs from Catalog's current price, reject with `409 PRICE_CHANGED`.
   2. Compute `lineGross = round(qty * unitPrice)`.
   3. Apply item discount (`FIXED` or `PERCENT`), capped at `lineGross`: `lineAfterItemDiscount = lineGross - itemDiscountAmount`.
   4. Allocate order-level discount (`FIXED` or `PERCENT` + optional promotion/coupon) proportionally across lines based on `lineAfterItemDiscount`, assigning any rounding residual (1 VND) deterministically to the last positive line so $\sum \text{allocatedOrderDiscount}_i = \text{orderDiscountTotal}$.

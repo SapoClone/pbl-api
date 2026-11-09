@@ -1,5 +1,6 @@
 import { CreateTenantPlanQuota1792800000000 } from '../../src/migrations/1792800000000-create-tenant-plan-quota';
 import { CreateProductAttributes1793400000000 } from '../../src/migrations/1793400000000-create-product-attributes';
+import { CreatePriceListBranches1793500000000 } from '../../src/migrations/1793500000000-create-price-list-branches';
 import { PlanQuotaService } from '../../src/quota/plan-quota.service';
 /**
  * Reproducible Performance & EXPLAIN (ANALYZE, BUFFERS) Benchmark Suite
@@ -127,6 +128,7 @@ async function main() {
         CreateCatalogTables1791900000200,
         CreateTenantPlanQuota1792800000000,
         CreateProductAttributes1793400000000,
+        CreatePriceListBranches1793500000000,
       ],
     }),
   );

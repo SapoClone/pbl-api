@@ -1,10 +1,12 @@
 import { CreateTenantPlanQuota1792800000000 } from '../../apps/catalog/src/migrations/1792800000000-create-tenant-plan-quota';
 import { CreateProductAttributes1793400000000 } from '../../apps/catalog/src/migrations/1793400000000-create-product-attributes';
+import { CreatePriceListBranches1793500000000 } from '../../apps/catalog/src/migrations/1793500000000-create-price-list-branches';
 import { PlanQuotaService } from '../../apps/catalog/src/quota/plan-quota.service';
 import { CreateTenantStatus1793100000420 } from '../../apps/integration/src/migrations/1793100000420-create-tenant-status';
 import { DefaultBranchWarehouse1792700000000 } from '../../apps/inventory/src/migrations/1792700000000-default-branch-warehouse';
 import { CashShiftSession1792200000100 } from '../../apps/sales/src/migrations/1792200000100-cash-shift-session';
 import { CreateTenantStatus1793100000410 } from '../../apps/sales/src/migrations/1793100000410-create-tenant-status';
+import { CreateCatalogBranchPriceProjection1793500000000 } from '../../apps/sales/src/migrations/1793500000000-create-catalog-branch-price-projection';
 /**
  * Milestone M8 — Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios),
  * Multi-Tenant Isolation Across 7 Schemas, 7 Cross-Service Reconciliation Pairs,
@@ -516,6 +518,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           CreateCatalogTables1791900000200,
           CreateTenantPlanQuota1792800000000,
           CreateProductAttributes1793400000000,
+          CreatePriceListBranches1793500000000,
         ],
       }),
     );
@@ -698,6 +701,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           AllowOnAccountTender1792100000100,
           CashShiftSession1792200000100,
           CreateTenantStatus1793100000410,
+          CreateCatalogBranchPriceProjection1793500000000,
         ],
       }),
     );

@@ -93,12 +93,19 @@ export class CatalogClient {
     event: EventEnvelope<CatalogPriceChangedPayload>,
     manager: EntityManager,
   ): Promise<void> {
-    if (!event.payload.isDefault) {
-      return;
-    }
     await manager.query(`SELECT set_config('app.tenant_id', $1, true)`, [
       event.tenantId,
     ]);
+    // a list limited to branches sets the price of those branches only, never the price for everyone
+    if ((event.payload.branchIds ?? []).length > 0) {
+      await this.applyBranchPrice(event, manager);
+      return;
+    }
+    // a list for every branch: if it used to be limited to some, those branches stop using it
+    await this.applyBranchPrice(event, manager);
+    if (!event.payload.isDefault) {
+      return;
+    }
     const table = qualifiedTable(
       manager.connection,
       'catalog_variant_projection',
@@ -203,8 +210,116 @@ export class CatalogClient {
     );
   }
 
+  /**
+   * Keeps the price of a price list that is limited to branches: one row per variant, list and branch. The set of
+   * branches in the event is complete, so a branch that is no longer in it, and a list that is switched off, keep their
+   * row with `is_active = false` (never deleted), and only an event that is not older than the row changes it.
+   */
+  private async applyBranchPrice(
+    event: EventEnvelope<CatalogPriceChangedPayload>,
+    manager: EntityManager,
+  ): Promise<void> {
+    const p = event.payload;
+    const table = qualifiedTable(
+      manager.connection,
+      'catalog_branch_price_projection',
+    );
+    const branchIds = p.branchIds ?? [];
+    const isActive = p.isActive !== false;
+    const listVersion = Number(p.priceListVersion ?? 0);
+    const version = Number(p.aggregateVersion ?? 1);
+    const updatedAt =
+      p.updatedAt ?? event.occurredAt ?? new Date().toISOString();
+    for (const branchId of branchIds) {
+      await manager.query(
+        `
+        INSERT INTO ${table} AS t
+          (tenant_id, variant_id, price_list_id, branch_id, price, start_date, end_date,
+           is_active, list_version, aggregate_version, source_updated_at, synced_at)
+        VALUES ($1, $2, $3, $4, $5::bigint, $6::date, $7::date, $8, $9::int, $10::int, $11::timestamptz, now())
+        ON CONFLICT (tenant_id, variant_id, price_list_id, branch_id) DO UPDATE SET
+          price = EXCLUDED.price,
+          start_date = EXCLUDED.start_date,
+          end_date = EXCLUDED.end_date,
+          is_active = EXCLUDED.is_active,
+          list_version = EXCLUDED.list_version,
+          aggregate_version = EXCLUDED.aggregate_version,
+          source_updated_at = EXCLUDED.source_updated_at,
+          synced_at = now()
+        WHERE (t.list_version, t.aggregate_version, t.source_updated_at)
+              <= (EXCLUDED.list_version, EXCLUDED.aggregate_version, EXCLUDED.source_updated_at)
+        `,
+        [
+          event.tenantId,
+          p.variantId,
+          p.priceListId,
+          branchId,
+          toMoney(p.price),
+          p.effectiveFrom,
+          p.effectiveTo,
+          isActive,
+          listVersion,
+          version,
+          updatedAt,
+        ],
+      );
+    }
+    await manager.query(
+      `
+      UPDATE ${table}
+      SET is_active = false,
+          list_version = $5::int,
+          aggregate_version = $6::int,
+          source_updated_at = $7::timestamptz,
+          synced_at = now()
+      WHERE tenant_id = $1 AND variant_id = $2 AND price_list_id = $3
+        AND branch_id <> ALL($4::uuid[])
+        AND (list_version, aggregate_version, source_updated_at) <= ($5::int, $6::int, $7::timestamptz)
+      `,
+      [
+        event.tenantId,
+        p.variantId,
+        p.priceListId,
+        branchIds,
+        listVersion,
+        version,
+        updatedAt,
+      ],
+    );
+  }
+
+  /**
+   * The prices set for `branchId` among `variantIds` right now: a row of an active list that is inside its dates.
+   * Empty when the branch has none, so the caller keeps the price for every branch.
+   */
+  private async branchPrices(
+    em: EntityManager,
+    tenantId: string,
+    branchId: string,
+    variantIds: string[],
+  ): Promise<Map<string, number>> {
+    const prices = new Map<string, number>();
+    if (variantIds.length === 0) return prices;
+    const today = new Date().toISOString().slice(0, 10);
+    const rows: { variantId: string; price: string }[] = await em.query(
+      `
+      SELECT variant_id AS "variantId", price
+      FROM ${qualifiedTable(em.connection, 'catalog_branch_price_projection')}
+      WHERE tenant_id = $1 AND branch_id = $2 AND is_active = true
+        AND variant_id = ANY($3::uuid[])
+        AND (start_date IS NULL OR start_date <= $4::date)
+        AND (end_date IS NULL OR end_date >= $4::date)
+      `,
+      [tenantId, branchId, variantIds, today],
+    );
+    for (const row of rows) prices.set(row.variantId, toMoney(row.price));
+    return prices;
+  }
+
   async resolveVariants(
     identifiers: Array<string | { variantId?: string; skuCode?: string }>,
+    /** The branch of the sale: its own prices, when catalog set any, replace the price for every branch */
+    options: { branchId?: string } = {},
   ): Promise<Map<string, AuthoritativeCatalogVariant>> {
     const tenantId = TenantContext.require();
     const uuidRegex =
@@ -235,11 +350,12 @@ export class CatalogClient {
     }
 
     const prefix = getSchemaPrefix(this.dataSource);
+    let branchPrices = new Map<string, number>();
     const rows = await this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
         tenantId,
       ]);
-      return em.query(
+      const found = await em.query(
         `
         SELECT
           variant_id AS "variantId",
@@ -261,6 +377,15 @@ export class CatalogClient {
         `,
         [tenantId, Array.from(variantIds), Array.from(skuCodes)],
       );
+      if (options.branchId) {
+        branchPrices = await this.branchPrices(
+          em,
+          tenantId,
+          options.branchId,
+          found.map((r: { variantId: string }) => r.variantId),
+        );
+      }
+      return found;
     });
 
     for (const r of rows) {
@@ -273,7 +398,7 @@ export class CatalogClient {
         variantName: r.variantName,
         unitCode: r.unitCode ?? 'PCS',
         conversionFactor: String(r.conversionFactor ?? '1.0000'),
-        unitPrice: toMoney(r.unitPrice),
+        unitPrice: branchPrices.get(r.variantId) ?? toMoney(r.unitPrice),
         status: r.status,
       };
       result.set(r.variantId, mapped);
@@ -285,6 +410,28 @@ export class CatalogClient {
   }
 
   async lookupBySkuOrBarcode(query: {
+    sku?: string;
+    barcode?: string;
+    /** Show the price of this branch (see `resolveVariants`) */
+    branchId?: string;
+  }): Promise<AuthoritativeCatalogVariant> {
+    const found = await this.lookupFromProjection(query);
+    if (!query.branchId) return found;
+    const tenantId = TenantContext.require();
+    const price = await this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      return (
+        await this.branchPrices(em, tenantId, query.branchId!, [
+          found.variantId,
+        ])
+      ).get(found.variantId);
+    });
+    return price === undefined ? found : { ...found, unitPrice: price };
+  }
+
+  private async lookupFromProjection(query: {
     sku?: string;
     barcode?: string;
   }): Promise<AuthoritativeCatalogVariant> {

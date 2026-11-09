@@ -38,8 +38,9 @@ export class PosController {
     @Query('sku') sku?: string,
     @Query('barcode') barcode?: string,
     @Query('q') q?: string,
+    @Query('branchId') branchId?: string,
   ) {
-    return this.posService.lookupProduct({ sku, barcode, q });
+    return this.posService.lookupProduct({ sku, barcode, q, branchId });
   }
 
   @Post('quote')

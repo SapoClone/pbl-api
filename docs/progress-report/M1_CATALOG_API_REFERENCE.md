@@ -72,12 +72,12 @@
 
 | Method | Path | Roles | Success | Description |
 |---|---|---|---|---|
-| `POST` | `/api/v1/price-lists` | `owner`, `manager` | `201` | Create catalog price list (`isDefault`, `currency`, `startDate`, `endDate`) |
-| `GET` | `/api/v1/price-lists` | `owner`, `manager`, `cashier` | `200` | List tenant price lists |
+| `POST` | `/api/v1/price-lists` | `owner`, `manager` | `201` | Create catalog price list (`isDefault`, `currency`, `startDate`, `endDate`, `branchIds`: the branches it applies to, none = every branch; [ADR-0024](../decisions/0024-branch-pricing.md)) |
+| `GET` | `/api/v1/price-lists` | `owner`, `manager`, `cashier` | `200` | List tenant price lists, each with its `branchIds` |
 | `GET` | `/api/v1/price-lists/:id` | `owner`, `manager`, `cashier` | `200` | Get price list with all variant price items |
-| `PATCH` | `/api/v1/price-lists/:id` | `owner`, `manager` | `200` | Update price list metadata or default flag |
-| `PUT` | `/api/v1/price-lists/:id/items` | `owner`, `manager` | `200` | Atomically upsert variant prices and emit `catalog.price.changed` outbox events |
-| `GET` | `/api/v1/variants/:id/price` | `owner`, `manager`, `cashier` | `200` | Deterministically resolve active sellable price (`PRICE_LIST` -> `DEFAULT_PRICE_LIST` -> `VARIANT_BASE_PRICE`) |
+| `PATCH` | `/api/v1/price-lists/:id` | `owner`, `manager` | `200` | Update price list metadata, default flag, status or `branchIds` (replaces the set). A branch can have only one active list (`409 PRICE_LIST_BRANCH_CONFLICT`); the default list cannot name branches |
+| `PUT` | `/api/v1/price-lists/:id/items` | `owner`, `manager` | `200` | Atomically upsert variant prices and emit `catalog.price.changed` outbox events (with `branchIds`, `isActive` and `priceListVersion`) |
+| `GET` | `/api/v1/variants/:id/price` | `owner`, `manager`, `cashier` | `200` | Deterministically resolve active sellable price (`PRICE_LIST` -> `BRANCH_PRICE_LIST` -> `DEFAULT_PRICE_LIST` -> `VARIANT_BASE_PRICE`). `branchId` selects the active price list of that branch; `priceListId` + `branchId` is `409 PRICE_LIST_NOT_FOR_BRANCH` when the list names other branches |
 
 ---
 
@@ -91,6 +91,9 @@
 | `BRAND_NOT_FOUND` | `404` | Brand does not exist in active tenant |
 | `ATTRIBUTE_NOT_FOUND` | `404` | Attribute does not exist in active tenant |
 | `ATTRIBUTE_VALUE_NOT_FOUND` | `404` | Attribute value does not exist in active tenant |
+| `BRANCH_NOT_FOUND` | `404` | A price list names a branch that is unknown, inactive or deleted in this tenant (`details.branchIds`) |
+| `PRICE_LIST_BRANCH_CONFLICT` | `409` | A branch already has another active price list, or the default price list was given branches (or a list with branches was made the default) |
+| `PRICE_LIST_NOT_FOR_BRANCH` | `409` | The requested `priceListId` names branches and not the `branchId` of the lookup |
 | `ATTRIBUTE_NOT_ENABLED_FOR_PRODUCT` | `400` | A variant (or a generated axis) uses an attribute the product has not enabled; `details.attributeIds` lists them |
 | `ATTRIBUTE_IN_USE_BY_PRODUCT` | `409` | `PUT /products/:id/attributes` leaves out an attribute that a live variant of the product still carries |
 | `PRICE_LIST_NOT_FOUND` | `404` | Price list does not exist in active tenant |

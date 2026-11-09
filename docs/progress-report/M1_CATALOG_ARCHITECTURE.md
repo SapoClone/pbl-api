@@ -12,7 +12,7 @@ In accordance with **ADR-0010 (Eight-Service Decomposition)** and **ADR-0013 (Ca
 | **Products** | Product master record, lifecycle (`DRAFT`, `ACTIVE`, `INACTIVE`, `ARCHIVED`), image metadata, soft deletion | Physical stock, reserved stock, moving-average cost |
 | **Variants & SKUs** | Sellable SKU definitions, GS1/EAN-13 & Code128 barcodes, Cartesian combination generation, canonical `combination_signature` | `avg_cost_price`, `total_quantity_for_cost`, `quantity_on_hand`, `quantity_reserved` (owned by **Inventory**) |
 | **Units** | Product base unit and packaging unit conversions (`NUMERIC(18,4)`) | Warehouse bin conversions |
-| **Pricing** | Catalog price lists (`PriceList`, `PriceListItem`) and deterministic variant price resolution | Coupon redemption, cart-level promotions, order line discounts (owned by **Sales**) |
+| **Pricing** | Catalog price lists (`PriceList`, `PriceListItem`, `price_list_branches`: the branches a list applies to) and deterministic variant price resolution, per branch when asked (ADR-0024) | Coupon redemption, cart-level promotions, order line discounts (owned by **Sales**) |
 
 ## 2. Internal Hexagonal / Clean Architecture
 
@@ -55,7 +55,7 @@ Catalog enforces three independent layers of tenant isolation (per **ADR-0008** 
    - Every HTTP request passes through `JwtAccessGuard`, `RequireStoreGuard`, and `RolesGuard`, binding the verified JWT `tid` claim into `RequestContext` / `TenantContext`.
    - `TenantScopedRepository` automatically injects `tenant_id = :__pbl_tenant_id` into all queries and verifies tenant ownership before every write.
 2. **Composite Tenant-Aware Foreign Keys:**
-   - Every child table (`categories`, `attribute_values`, `products`, `product_variants`, `variant_attribute_values`, `product_attributes`, `unit_conversions`, `price_list_items`, `combo_items`, `price_list_channels`, `price_list_customer_groups`) declares composite foreign keys `(tenant_id, <fk_id>) REFERENCES <parent>(tenant_id, id)`, making cross-tenant entity linking impossible at the database constraint level.
+   - Every child table (`categories`, `attribute_values`, `products`, `product_variants`, `variant_attribute_values`, `product_attributes`, `unit_conversions`, `price_list_items`, `price_list_branches`, `combo_items`, `price_list_channels`, `price_list_customer_groups`) declares composite foreign keys `(tenant_id, <fk_id>) REFERENCES <parent>(tenant_id, id)`, making cross-tenant entity linking impossible at the database constraint level.
 3. **PostgreSQL `FORCE ROW LEVEL SECURITY`:**
    - Migration `1791900000200-create-catalog-tables.ts` calls `enableTenantRlsPolicy` (`ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY`) on all 13 Catalog tables using `tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid`.
    - Every service read and write executes inside `runInTenantTransaction` / `TenantScopedRepository.transaction`, which binds `SELECT set_config('app.tenant_id', $1, true)` transaction-locally (`is_local = true`).
@@ -70,7 +70,7 @@ All state-changing operations on products, variants, and price lists write domai
 - `catalog.variant.created` (`v1`)
 - `catalog.variant.updated` (`v1` — includes `previousSkuCode` when SKU is updated)
 - `catalog.variant.deactivated` (`v1`)
-- `catalog.price.changed` (`v1` — includes `previousPrice`, `price`, `currency`, `effectiveFrom`, `effectiveTo`)
+- `catalog.price.changed` (`v1` — includes `previousPrice`, `price`, `currency`, `effectiveFrom`, `effectiveTo`, and since [ADR-0024](../decisions/0024-branch-pricing.md) `branchIds` (the complete set of branches of the price list, `[]` = every branch), `isActive` and `priceListVersion`; a branch list is sent with `isDefault: false`)
 
 ## 5. Deferred M2/M3 Entities
 

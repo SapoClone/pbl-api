@@ -1,3 +1,4 @@
+import { CreateCatalogBranchPriceProjection1793500000000 } from '../src/migrations/1793500000000-create-catalog-branch-price-projection';
 /**
  * Phase 4 of sales against a real Postgres: the screen-contract views (list
  * filters, summary, export, detail, timeline, print), channels, registers,
@@ -223,6 +224,7 @@ describe('sales screen contract (Postgres)', () => {
           CreateCheckoutWorkflow1791800000300,
           CreateM3SalesCore1791900000200,
           CashShiftSession1792200000100,
+          CreateCatalogBranchPriceProjection1793500000000,
         ],
       }),
     });
