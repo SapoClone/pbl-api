@@ -50,15 +50,17 @@
 
 | Method | Path | Roles | Success | Description |
 |---|---|---|---|---|
-| `POST` | `/api/v1/products` | `owner`, `manager` | `201` | Create product, base unit conversion, and optional default variant |
+| `POST` | `/api/v1/products` | `owner`, `manager` | `201` | Create product, base unit conversion, optional `attributeIds` (the attributes it varies on), and optional default variant |
 | `GET` | `/api/v1/products` | `owner`, `manager`, `cashier` | `200` | List/search products (`page`, `limit`, `afterCursor`, `q`, `status`, `categoryId`, `brandId`) |
 | `GET` | `/api/v1/products/lookup` | `owner`, `manager`, `cashier` | `200` | Exact indexed lookup by `sku` or `barcode` (POS scanner path) |
 | `GET` | `/api/v1/products/:id` | `owner`, `manager`, `cashier` | `200` | Get product detail with variants, attributes, and unit conversions |
 | `PATCH` | `/api/v1/products/:id` | `owner`, `manager` | `200` | Update product master data (optimistic concurrency via `version`) |
 | `PATCH` | `/api/v1/products/:id/status` | `owner`, `manager` | `200` | Transition product status (`DRAFT`, `ACTIVE`, `INACTIVE`, `ARCHIVED`) |
 | `DELETE` | `/api/v1/products/:id` | `owner`, `manager` | `200` | Soft-delete product (`deleted_at`), archive product, and deactivate variants |
-| `POST` | `/api/v1/products/:id/variants` | `owner`, `manager` | `201` | Create single variant with attribute pairs, SKU, and optional EAN-13/Code128 barcode |
-| `POST` | `/api/v1/products/:id/variants/generate` | `owner`, `manager` | `201` | Atomically generate Cartesian variants from attribute axes (capped at 100) |
+| `GET` | `/api/v1/products/:id/attributes` | `owner`, `manager`, `cashier` | `200` | The attributes this product varies on, in order, each with every value of the store and `usedByVariants` ([ADR-0023](../decisions/0023-product-attributes.md)) |
+| `PUT` | `/api/v1/products/:id/attributes` | `owner`, `manager` | `200` | Set the attributes of the product (`attributeIds`, at most 10, in display order). `409 ATTRIBUTE_IN_USE_BY_PRODUCT` if a variant still uses one you leave out |
+| `POST` | `/api/v1/products/:id/variants` | `owner`, `manager` | `201` | Create single variant with attribute pairs, SKU, and optional EAN-13/Code128 barcode. Every attribute must be enabled for the product (`400 ATTRIBUTE_NOT_ENABLED_FOR_PRODUCT`) |
+| `POST` | `/api/v1/products/:id/variants/generate` | `owner`, `manager` | `201` | Atomically generate Cartesian variants from attribute axes (capped at 100). Every axis attribute must be enabled for the product |
 | `PATCH` | `/api/v1/variants/:id` | `owner`, `manager` | `200` | Update variant SKU, barcode, name, basePrice, weight, or attributes |
 | `PATCH` | `/api/v1/variants/:id/status` | `owner`, `manager` | `200` | Transition variant status (`ACTIVE`, `INACTIVE`, `ARCHIVED`) |
 | `POST` | `/api/v1/products/:id/units` | `owner`, `manager` | `201` | Add packaging unit conversion (`conversionFactor > 0`) |
@@ -89,6 +91,8 @@
 | `BRAND_NOT_FOUND` | `404` | Brand does not exist in active tenant |
 | `ATTRIBUTE_NOT_FOUND` | `404` | Attribute does not exist in active tenant |
 | `ATTRIBUTE_VALUE_NOT_FOUND` | `404` | Attribute value does not exist in active tenant |
+| `ATTRIBUTE_NOT_ENABLED_FOR_PRODUCT` | `400` | A variant (or a generated axis) uses an attribute the product has not enabled; `details.attributeIds` lists them |
+| `ATTRIBUTE_IN_USE_BY_PRODUCT` | `409` | `PUT /products/:id/attributes` leaves out an attribute that a live variant of the product still carries |
 | `PRICE_LIST_NOT_FOUND` | `404` | Price list does not exist in active tenant |
 | `PRICE_NOT_CONFIGURED` | `404` | No active price in selected/default price list and base price is `0.00` |
 | `CATEGORY_DEPTH_EXCEEDED` | `409` | Creating or reparenting a category results in tree depth `> 3` |

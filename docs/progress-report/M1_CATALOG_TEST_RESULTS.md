@@ -46,3 +46,11 @@
   3. Concurrent duplicate variant attribute combination -> 1 succeeds, 1 fails with `409 VARIANT_COMBINATION_EXISTS`.
   4. Stale optimistic `version` update -> fails with `409 RESOURCE_VERSION_CONFLICT`.
   5. Mid-batch collision during `generateVariants` -> complete transaction rollback (0 partial variants and 0 outbox events persisted).
+
+### 2.5. Product attributes (`apps/catalog/test/product-attributes.int-spec.ts`, 11 tests, real PostgreSQL, non-superuser role)
+- Each product lists only its own attributes while `GET /attributes` still lists the store's four; changing one product's attributes does not touch another's.
+- A variant, or a generated axis, using an attribute the product has not enabled -> `400 ATTRIBUTE_NOT_ENABLED_FOR_PRODUCT`, and nothing is created.
+- Removing an attribute that a variant still carries -> `409 ATTRIBUTE_IN_USE_BY_PRODUCT` with nothing changed; a free attribute is removed; the list order is kept.
+- Unknown or another store's attribute -> `404`; duplicate ids -> `400`; another store's product -> `404` for list and replace.
+- `usedByVariants` counts the product's variants per value.
+- Migration backfill: dropping the table and running the migration again gives each product the attributes its variants carry.

@@ -239,6 +239,14 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
 - **Bodies:** `{ "name": "Dung tích" }`; `{ "value": "300ml", "code": "300" }` (`code` is used in generated SKUs).
 - **Response:** list `{ data: [{ "id", "name": "Màu sắc", "values": [{ "id", "value": "Xanh", "code": "X" }] }], pagination }`; creates return 201.
 
+### GET /catalog/api/v1/products/{id}/attributes · PUT /catalog/api/v1/products/{id}/attributes
+- **Status:** new ([ADR-0023](../../decisions/0023-product-attributes.md)).
+- **Screens:** 51:2 Create product and the product edit form: the attributes of this product, not the whole store's list.
+- **Auth:** `products.view` for GET, `products.update` for PUT.
+- **PUT body:** `{ "attributeIds": ["…mau", "…dungtich"] }`. At most 10, no duplicates, in display order. It replaces the list.
+- **Response 200 (both):** `{ "productId": "…", "attributes": [ { "attributeId": "…", "name": "Màu sắc", "position": 0, "values": [ { "id": "…", "value": "Xanh", "usedByVariants": 2 } ] } ] }`. `values` are every value of the store for that attribute (the choices for a new variant); `usedByVariants` counts this product's variants.
+- **Errors:** 404 product or attribute not found; 400 duplicate ids; 409 `ATTRIBUTE_IN_USE_BY_PRODUCT` when a variant of the product still carries an attribute you leave out (nothing changes). Creating a variant or generating variants with an attribute the product has not enabled is 400 `ATTRIBUTE_NOT_ENABLED_FOR_PRODUCT`. `POST /products` accepts the same `attributeIds`.
+
 ### GET /catalog/api/v1/products/export
 - **Status:** new.
 - **Screens:** 13:325, button Xuất file (export file).

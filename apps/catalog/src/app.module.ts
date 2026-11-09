@@ -13,6 +13,7 @@ import { CATALOG_ENTITIES } from './infrastructure/persistence/catalog.entities'
 import { CreateCatalogTables1791900000200 } from './migrations/1791900000200-create-catalog-tables';
 import { CreateTenantPlanQuota1792800000000 } from './migrations/1792800000000-create-tenant-plan-quota';
 import { AllowUploadCleanupSelect1793300000000 } from './migrations/1793300000000-allow-upload-cleanup-select';
+import { CreateProductAttributes1793400000000 } from './migrations/1793400000000-create-product-attributes';
 import { AttributesController } from './modules/attributes/attributes.controller';
 import { AttributesService } from './modules/attributes/attributes.service';
 import { BrandsController } from './modules/brands/brands.controller';
@@ -23,6 +24,8 @@ import { ImportsController } from './modules/imports/imports.controller';
 import { ImportsService } from './modules/imports/imports.service';
 import { PricingController } from './modules/pricing/pricing.controller';
 import { PricingService } from './modules/pricing/pricing.service';
+import { ProductAttributesService } from './modules/products/product-attributes';
+import { ProductAttributesController } from './modules/products/product-attributes.controller';
 import { ProductsController } from './modules/products/products.controller';
 import { ProductsService } from './modules/products/products.service';
 import {
@@ -58,6 +61,7 @@ import { PlanQuotaService } from './quota/plan-quota.service';
         CreateCatalogTables1791900000200,
         CreateTenantPlanQuota1792800000000,
         AllowUploadCleanupSelect1793300000000,
+        CreateProductAttributes1793400000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'catalog' }),
@@ -68,6 +72,7 @@ import { PlanQuotaService } from './quota/plan-quota.service';
     BrandsController,
     AttributesController,
     ProductsController,
+    ProductAttributesController,
     PricingController,
     UploadsController,
     ImportsController,
@@ -77,6 +82,7 @@ import { PlanQuotaService } from './quota/plan-quota.service';
     BrandsService,
     AttributesService,
     ProductsService,
+    ProductAttributesService,
     PricingService,
     UploadsService,
     UploadsCleanupJob,

@@ -1,4 +1,5 @@
 import { CreateTenantPlanQuota1792800000000 } from '../src/migrations/1792800000000-create-tenant-plan-quota';
+import { CreateProductAttributes1793400000000 } from '../src/migrations/1793400000000-create-product-attributes';
 import { PlanQuotaService } from '../src/quota/plan-quota.service';
 /**
  * Real PostgreSQL Integration, Concurrency, Row-Level Security (non-superuser role),
@@ -98,6 +99,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           ...CONSUMER_MIGRATIONS,
           CreateCatalogTables1791900000200,
           CreateTenantPlanQuota1792800000000,
+          CreateProductAttributes1793400000000,
         ],
       }),
     );
@@ -156,7 +158,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
     await adminDs?.destroy();
   });
 
-  it('creates all 16 Catalog domain tables with RLS enabled and forced', async () => {
+  it('creates all 17 Catalog domain tables with RLS enabled and forced', async () => {
     const rlsRows: {
       relname: string;
       relrowsecurity: boolean;
@@ -182,6 +184,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
       'price_list_customer_groups',
       'price_list_items',
       'price_lists',
+      'product_attributes',
       'product_imports',
       'product_variants',
       'products',
@@ -282,6 +285,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           baseUnit: 'Cái',
           status: 'ACTIVE',
           createDefaultVariant: false,
+          attributeIds: [colorAttrId, sizeAttrId],
         });
         productId = product.id;
         expect(product.status).toBe('ACTIVE');
@@ -655,6 +659,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
         const prod = await productsService.createProduct({
           name: 'Linen Shirt',
           createDefaultVariant: false,
+          attributeIds: [attr.id],
         });
 
         const results = await Promise.allSettled([
@@ -739,6 +744,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
         const targetProd = await productsService.createProduct({
           name: 'Target Rollback Product',
           createDefaultVariant: false,
+          attributeIds: [sizeAttr.id],
         });
 
         const outboxBefore = await adminDs

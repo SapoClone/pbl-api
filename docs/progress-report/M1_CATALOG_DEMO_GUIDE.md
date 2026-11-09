@@ -82,8 +82,12 @@ PRODUCT_ID=$(curl -s -X POST http://localhost:8080/catalog/api/v1/products \
     \"brandId\": \"$BRAND_ID\",
     \"baseUnit\": \"Cái\",
     \"status\": \"ACTIVE\",
-    \"createDefaultVariant\": false
+    \"createDefaultVariant\": false,
+    \"attributeIds\": [\"$COLOR_ATTR_ID\", \"$SIZE_ATTR_ID\"]
   }" | jq -r '.id')
+
+# The product varies on Color and Size only. Variants may use no other attribute (400 ATTRIBUTE_NOT_ENABLED_FOR_PRODUCT);
+# to change the list later: PUT /products/$PRODUCT_ID/attributes {"attributeIds": [...]}
 
 # Generate 4 variants: TSHIRT-BLK-M, TSHIRT-BLK-L, TSHIRT-WHT-M, TSHIRT-WHT-L
 curl -s -X POST "http://localhost:8080/catalog/api/v1/products/$PRODUCT_ID/variants/generate" \
