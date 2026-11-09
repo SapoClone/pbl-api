@@ -40,7 +40,7 @@ During the M1 Catalog Core implementation, we must reconcile ERD v1, `SapoClone_
 - At most one active default price list per tenant is enforced by a partial unique index `UNIQUE (tenant_id) WHERE is_default = true AND status = 'ACTIVE'`.
 - Price resolution (`GET /api/v1/variants/:id/price`) deterministically evaluates:
   1. Explicitly requested active `priceListId` (if within `[start_date, end_date]` window) -> `PriceListItem` price;
-  2. Otherwise, the tenant's active default `PriceList` (if within `[start_date, end_date]` window) -> `PriceListItem` price;
+  2. Otherwise, the tenant's active default `PriceList` (if within `[start_date, end_date]` window) -> `PriceListItem` price (*amended by [ADR-0024](0024-branch-pricing.md): with a `branchId`, the active price list of that branch comes first*);
   3. Otherwise, falls back to the variant's `base_price` if configured (`> 0`), or returns `404 PRICE_NOT_CONFIGURED` when neither price list item nor base price is configured.
 - Channel-specific (`PriceListChannel`), customer-group-specific (`PriceListCustomerGroup`), and combo-bundle (`ComboItem`) rules are explicitly deferred until downstream `SalesChannel`, `CustomerGroup`, and `Inventory` bundle reservation contracts are finalized in M2/M3.
 

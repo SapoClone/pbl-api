@@ -22,7 +22,7 @@
 - Category hierarchy reparenting validation (`validateCategoryReparent`) rejecting self-parenting, cycles into descendants (`CATEGORY_CYCLE_DETECTED`), and subtree depth exceeding 3 (`CATEGORY_DEPTH_EXCEEDED`).
 - Precision-safe decimal money parsing (`parseAndFormatMoney`) without binary floating-point drift, and unit conversion factor validation (`parseAndFormatConversionFactor`).
 - Product & variant lifecycle state machine transitions (`validateProductLifecycleTransition`, `validateVariantWithProductLifecycle`).
-- Deterministic sellable price resolution (`resolveVariantPrice`: `PRICE_LIST` -> `DEFAULT_PRICE_LIST` -> `VARIANT_BASE_PRICE`).
+- Deterministic sellable price resolution (`resolveVariantPrice`: `PRICE_LIST` -> `BRANCH_PRICE_LIST` -> `DEFAULT_PRICE_LIST` -> `VARIANT_BASE_PRICE`; a branch list with no item, inactive or outside its dates is skipped).
 
 ### 2.2. Architectural Boundary Tests (`apps/catalog/src/catalog-architecture.spec.ts`)
 - Confirms `apps/catalog/src` never imports code from any other microservice (`apps/platform`, `apps/inventory`, `apps/sales`, `apps/customer`, `apps/finance`, `apps/integration`, `apps/insight`).
@@ -54,3 +54,15 @@
 - Unknown or another store's attribute -> `404`; duplicate ids -> `400`; another store's product -> `404` for list and replace.
 - `usedByVariants` counts the product's variants per value.
 - Migration backfill: dropping the table and running the migration again gives each product the attributes its variants carry.
+
+### 2.6. Branch pricing (`apps/catalog/test/branch-pricing.int-spec.ts`, 11 tests, real PostgreSQL, non-superuser role)
+- A price list limited to branches lists them back; unknown, inactive and another store's branches -> `404 BRANCH_NOT_FOUND`.
+- The default list cannot be given branches, and a list with branches cannot become the default -> `409 PRICE_LIST_BRANCH_CONFLICT`.
+- A branch has one active list: a second one is refused, switching the first off frees the branch, switching it back on is refused; two concurrent lists for one branch -> exactly one wins.
+- One variant, two branches, two prices; a branch without a list, no `branchId`, a missing item, a list outside its dates and an inactive list all fall back to the default price.
+- A named list that does not cover the branch -> `409 PRICE_LIST_NOT_FOR_BRANCH`; another store's lists and branches stay invisible.
+- Events carry `branchIds`, `isActive` and `priceListVersion`; a branch list is sent with `isDefault: false`; changing branches, status or dates sends one event per item again, a rename sends none.
+
+### 2.7. Branch prices in sales (`apps/sales/test/branch-price.int-spec.ts`, 12 tests, real PostgreSQL)
+- Two branches, two prices; the default price for everyone is used when the sale names no branch or the branch has none, and a branch price never changes it.
+- A late older event is ignored; a branch taken out of a list, a list switched off or made global, and dates all fall back; POS lookup by SKU and barcode shows the branch price; another store's branch prices are not used.

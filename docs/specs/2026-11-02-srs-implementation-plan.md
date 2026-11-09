@@ -186,7 +186,7 @@ Grouped, in suggested order:
   Vietnamese, export for every report, Excel import; import files up to 10 MB (code allows 5 MB).
 - **Shipping** (FR-M07-07): carrier webhooks or polling; failed delivery and returned-to-sender states.
 - **Mobile push** (FR-M12-02): device tokens are stored; nothing sends.
-- **Small features:** barcode generation and labels (FR-M04-04), branch price lists (FR-M03-05), currency and receipt
+- **Small features:** barcode generation and labels (FR-M04-04), branch price lists (FR-M03-05; built 2026-11-09, [ADR-0024](../decisions/0024-branch-pricing.md)), currency and receipt
   templates per branch (FR-M03-03), audit search by user, module and date (FR-M12-05), branch growth in the ranking
   (FR-M11-07), offline POS batch sync with the sale's own timestamp (FR-M06-09).
 - ***Thấp*:** combos (FR-M04-08, only an unused table), lots and expiry (FR-M05-09), commission (FR-M09-04), email

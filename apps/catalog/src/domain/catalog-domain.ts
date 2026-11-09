@@ -36,6 +36,12 @@ export const CatalogErrorCode = {
   INVALID_UNIT_CONVERSION: 'INVALID_UNIT_CONVERSION',
   INVALID_PRICE: 'INVALID_PRICE',
   PRICE_LIST_CONFLICT: 'PRICE_LIST_CONFLICT',
+  /** A price list names a branch that does not exist, or is inactive or deleted, in this store */
+  BRANCH_NOT_FOUND: 'BRANCH_NOT_FOUND',
+  /** A branch already has another active price list, or a list is both the global default and branch-scoped */
+  PRICE_LIST_BRANCH_CONFLICT: 'PRICE_LIST_BRANCH_CONFLICT',
+  /** The requested price list does not cover the branch of the price lookup */
+  PRICE_LIST_NOT_FOR_BRANCH: 'PRICE_LIST_NOT_FOR_BRANCH',
   PRICE_NOT_CONFIGURED: 'PRICE_NOT_CONFIGURED',
   RESOURCE_VERSION_CONFLICT: 'RESOURCE_VERSION_CONFLICT',
   TENANT_ACCESS_DENIED: 'TENANT_ACCESS_DENIED',
@@ -548,7 +554,11 @@ export interface ResolvedVariantPrice {
   skuCode: string;
   currency: string;
   amount: number;
-  source: 'PRICE_LIST' | 'DEFAULT_PRICE_LIST' | 'VARIANT_BASE_PRICE';
+  source:
+    | 'PRICE_LIST'
+    | 'BRANCH_PRICE_LIST'
+    | 'DEFAULT_PRICE_LIST'
+    | 'VARIANT_BASE_PRICE';
   priceListId: string | null;
   priceListName: string | null;
   effectiveFrom: string | null;
@@ -568,8 +578,9 @@ export function isPriceListEffectiveOn(
 /**
  * Deterministically resolves the price for a sellable variant given:
  * 1. An explicitly requested `selectedList` (must be ACTIVE and within effective dates)
- * 2. The tenant's `defaultList` (if ACTIVE, within effective dates, and has an item price)
- * 3. Fallback to the variant's `basePrice` if `> 0`, otherwise throws `PRICE_NOT_CONFIGURED`.
+ * 2. The active price list of the requested branch (`branchList`: ACTIVE, within effective dates, has an item price)
+ * 3. The tenant's `defaultList` (if ACTIVE, within effective dates, and has an item price)
+ * 4. Fallback to the variant's `basePrice` if `> 0`, otherwise throws `PRICE_NOT_CONFIGURED`.
  */
 export function resolveVariantPrice(params: {
   variantId: string;
@@ -578,6 +589,8 @@ export function resolveVariantPrice(params: {
   basePrice: number;
   asOfDate: string;
   selectedList?: PriceListCandidate | null;
+  /** The active price list that covers the branch of the lookup, if there is one */
+  branchList?: PriceListCandidate | null;
   defaultList?: PriceListCandidate | null;
 }): ResolvedVariantPrice {
   if (params.variantStatus !== 'ACTIVE') {
@@ -613,6 +626,24 @@ export function resolveVariantPrice(params: {
       priceListName: params.selectedList.name,
       effectiveFrom: params.selectedList.startDate,
       effectiveTo: params.selectedList.endDate,
+    };
+  }
+
+  if (
+    params.branchList &&
+    isPriceListEffectiveOn(params.branchList, params.asOfDate) &&
+    params.branchList.itemPrice !== null
+  ) {
+    return {
+      variantId: params.variantId,
+      skuCode: params.skuCode,
+      currency: params.branchList.currency,
+      amount: parseAndFormatMoney(params.branchList.itemPrice),
+      source: 'BRANCH_PRICE_LIST',
+      priceListId: params.branchList.id,
+      priceListName: params.branchList.name,
+      effectiveFrom: params.branchList.startDate,
+      effectiveTo: params.branchList.endDate,
     };
   }
 

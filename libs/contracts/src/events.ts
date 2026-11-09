@@ -689,6 +689,16 @@ export interface CatalogPriceChangedPayload {
   effectiveTo: string | null;
   aggregateVersion: number;
   updatedAt: string;
+  /**
+   * The branches the price list covers, as a complete set when the event is emitted (`[]` or absent: every branch).
+   * A branch-scoped list is always sent with `isDefault: false`, so a consumer that does not know this field ignores it
+   * instead of applying a branch price everywhere. Added to version 1.
+   */
+  branchIds?: string[];
+  /** Whether the list is ACTIVE; an inactive list stops applying to its branches */
+  isActive?: boolean;
+  /** The version of the price list, which changes when its branches, status or dates change (the item version does not) */
+  priceListVersion?: number;
 }
 
 // ---- customer & loyalty (M4 Customer & Loyalty Core — ADR-0016)

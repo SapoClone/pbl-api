@@ -19,11 +19,11 @@ export interface DomainEvent<TPayload = unknown> {
 
 | Bounded Context (Producer) | Event Type (`routingKey`) | Version | Subscribing Contexts (Consumers) | Business Meaning |
 |---|---|---|---|---|
-| **Platform** | `platform.branch.created` | `1` | `inventory`, `insight` | New retail branch created for a tenant |
-| **Platform** | `platform.branch.updated` | `1` | `inventory`, `insight` | Branch metadata or active status updated |
+| **Platform** | `platform.branch.created` | `1` | `inventory`, `catalog`, `insight` | New retail branch created for a tenant |
+| **Platform** | `platform.branch.updated` | `1` | `inventory`, `catalog`, `insight` | Branch metadata or active status updated |
 | **Catalog** | `catalog.product.created` / `updated` / `deactivated` | `1` | `inventory`, `sales`, `integration`, `insight` | Product master lifecycle changes |
 | **Catalog** | `catalog.variant.created` / `updated` / `deactivated` | `1` | `inventory`, `sales`, `integration`, `insight` | Sellable SKU variant created, updated, or deactivated |
-| **Catalog** | `catalog.price.changed` | `1` | `sales`, `integration`, `insight` | Variant base price or price book item updated |
+| **Catalog** | `catalog.price.changed` | `1` | `sales`, `integration`, `insight` | Variant base price or price book item updated; also sent again for every item when a price list's branches, status, dates or default flag change. Carries `branchIds`, `isActive` and `priceListVersion` ([ADR-0024](../../decisions/0024-branch-pricing.md)) |
 | **Inventory** | `inventory.stock.changed` | `1` | `sales`, `integration`, `insight` | Authoritative `on_hand_qty`, `reserved_qty`, `available_qty`, or `avg_unit_cost` changed |
 | **Inventory** | `inventory.stock.received` | `1` | `finance`, `insight` | Inbound stock receipt posted with supplier & unit cost |
 | **Inventory** | `inventory.stock.issued` | `1` | `finance`, `insight` | Outbound stock issued on fulfillment with WAC COGS snapshot |

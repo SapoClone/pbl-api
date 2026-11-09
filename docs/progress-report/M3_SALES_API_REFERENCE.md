@@ -17,7 +17,7 @@ All M3 Sales endpoints are exposed through KrakenD API Gateway (`krakend/krakend
 
 | Method | Path | Permission | Description |
 |---|---|---|---|
-| `GET` | `/v1/pos/lookup` | `sales:order:read` | Sub-millisecond barcode/SKU/keyword lookup against `catalog_variant_projection` (`409 PRODUCT_NOT_SELLABLE` if inactive) |
+| `GET` | `/v1/pos/lookup` | `sales:order:read` | Sub-millisecond barcode/SKU/keyword lookup against `catalog_variant_projection` (`409 PRODUCT_NOT_SELLABLE` if inactive). Optional `branchId` query parameter: the price shown is that branch's price when catalog set one (ADR-0024) |
 | `POST` | `/v1/pos/quote` | `sales:order:create` | Stateless pricing waterfall calculation (line discounts, order discount, coupon, largest-remainder allocation, tax, RBAC ceiling check) |
 | `POST` | `/v1/pos/drafts` | `sales:order:create` | Hold a POS cart as an `ACTIVE` draft invoice (enforces max 5 active drafts per staff per branch -> `409 DRAFT_LIMIT_EXCEEDED`) |
 | `GET` | `/v1/pos/drafts` | `sales:order:read` | List active held drafts for the current staff member (`?branchId=...`) |
