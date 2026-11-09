@@ -362,5 +362,65 @@ describe('Catalog Domain Invariants (M1)', () => {
       expect(fromBase.source).toBe('VARIANT_BASE_PRICE');
       expect(fromBase.amount).toBe(199000);
     });
+
+    describe('the price list of a branch', () => {
+      const list = (id: string, itemPrice: number | null, over = {}) => ({
+        id,
+        name: id,
+        currency: 'VND',
+        isDefault: false,
+        status: 'ACTIVE' as const,
+        startDate: null,
+        endDate: null,
+        itemPrice,
+        ...over,
+      });
+      const resolve = (
+        params: Partial<Parameters<typeof resolveVariantPrice>[0]>,
+      ) =>
+        resolveVariantPrice({
+          variantId: 'var-1',
+          skuCode: 'SKU',
+          variantStatus: 'ACTIVE',
+          basePrice: 199000,
+          asOfDate: '2026-10-29',
+          ...params,
+        });
+
+      it('beats the default list and the base price', () => {
+        const price = resolve({
+          branchList: list('pl-b1', 100000),
+          defaultList: list('pl-def', 120000, { isDefault: true }),
+        });
+        expect(price).toMatchObject({
+          source: 'BRANCH_PRICE_LIST',
+          amount: 100000,
+          priceListId: 'pl-b1',
+        });
+      });
+
+      it('loses to a price list that was asked for by name', () => {
+        const price = resolve({
+          selectedList: list('pl-vip', 90000),
+          branchList: list('pl-b1', 100000),
+        });
+        expect(price.source).toBe('PRICE_LIST');
+        expect(price.amount).toBe(90000);
+      });
+
+      it.each([
+        ['has no item for the variant', list('pl-b1', null)],
+        ['is inactive', list('pl-b1', 100000, { status: 'INACTIVE' })],
+        ['has not started', list('pl-b1', 100000, { startDate: '2027-01-01' })],
+        ['has ended', list('pl-b1', 100000, { endDate: '2026-01-01' })],
+      ])('is skipped when it %s', (_, branchList) => {
+        const price = resolve({
+          branchList,
+          defaultList: list('pl-def', 120000, { isDefault: true }),
+        });
+        expect(price.source).toBe('DEFAULT_PRICE_LIST');
+        expect(price.amount).toBe(120000);
+      });
+    });
   });
 });

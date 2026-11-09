@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsIn,
@@ -17,6 +18,9 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { PriceListStatus } from '../../domain/catalog-domain';
+
+/** The most branches one price list can name */
+export const MAX_PRICE_LIST_BRANCHES = 100;
 
 export class CreatePriceListReqDto {
   @ApiProperty({ example: 'Retail Default Price List', maxLength: 120 })
@@ -58,6 +62,19 @@ export class CreatePriceListReqDto {
     message: 'endDate must be formatted as YYYY-MM-DD',
   })
   endDate?: string | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: MAX_PRICE_LIST_BRANCHES,
+    description:
+      'The branches this price list applies to. Empty or left out: every branch. A branch can have only one active price list (409 PRICE_LIST_BRANCH_CONFLICT), and the default price list cannot be limited to branches.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_PRICE_LIST_BRANCHES)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  branchIds?: string[];
 }
 
 export class UpdatePriceListReqDto {
@@ -98,6 +115,19 @@ export class UpdatePriceListReqDto {
     message: 'endDate must be formatted as YYYY-MM-DD',
   })
   endDate?: string | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: MAX_PRICE_LIST_BRANCHES,
+    description:
+      'The branches this price list applies to. Empty or left out: every branch. A branch can have only one active price list (409 PRICE_LIST_BRANCH_CONFLICT), and the default price list cannot be limited to branches.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_PRICE_LIST_BRANCHES)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  branchIds?: string[];
 
   @ApiPropertyOptional({
     description: 'Expected version for optimistic locking',
@@ -144,6 +174,15 @@ export class ResolveVariantPriceQueryDto {
     message: 'asOfDate must be formatted as YYYY-MM-DD',
   })
   asOfDate?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The branch the price is for. Chooses the active price list of that branch before the default one; without it, only the default price list applies.',
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 }
 
 export interface PriceListItemRes {
@@ -165,6 +204,8 @@ export interface PriceListRes {
   startDate: string | null;
   endDate: string | null;
   version: number;
+  /** The branches the list applies to; empty means every branch */
+  branchIds: string[];
   items?: PriceListItemRes[];
   createdAt: string;
   updatedAt: string;

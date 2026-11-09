@@ -1,5 +1,6 @@
 import { CreateTenantPlanQuota1792800000000 } from '../src/migrations/1792800000000-create-tenant-plan-quota';
 import { CreateProductAttributes1793400000000 } from '../src/migrations/1793400000000-create-product-attributes';
+import { CreatePriceListBranches1793500000000 } from '../src/migrations/1793500000000-create-price-list-branches';
 import { PlanQuotaService } from '../src/quota/plan-quota.service';
 /**
  * Real PostgreSQL Integration, Concurrency, Row-Level Security (non-superuser role),
@@ -100,6 +101,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
           CreateCatalogTables1791900000200,
           CreateTenantPlanQuota1792800000000,
           CreateProductAttributes1793400000000,
+          CreatePriceListBranches1793500000000,
         ],
       }),
     );
@@ -158,7 +160,7 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
     await adminDs?.destroy();
   });
 
-  it('creates all 17 Catalog domain tables with RLS enabled and forced', async () => {
+  it('creates all 19 Catalog domain tables with RLS enabled and forced', async () => {
     const rlsRows: {
       relname: string;
       relrowsecurity: boolean;
@@ -177,9 +179,11 @@ describe('Catalog M1 Microservice (Real PostgreSQL + Non-Superuser RLS + Concurr
     expect(rlsRows.map((r) => r.relname)).toEqual([
       'attribute_values',
       'attributes',
+      'branch_projection',
       'brands',
       'categories',
       'combo_items',
+      'price_list_branches',
       'price_list_channels',
       'price_list_customer_groups',
       'price_list_items',

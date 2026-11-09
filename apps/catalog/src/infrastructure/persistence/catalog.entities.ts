@@ -359,6 +359,62 @@ export class PriceListEntity {
   updatedAt!: Date;
 }
 
+/** A branch a price list covers; a list without rows covers every branch. `isActive` copies the list's status. */
+@Entity('price_list_branches')
+export class PriceListBranchEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ name: 'price_list_id', type: 'uuid' })
+  priceListId!: string;
+
+  @Column({ name: 'branch_id', type: 'uuid' })
+  branchId!: string;
+
+  @Column({ name: 'is_active', type: 'boolean', default: true })
+  isActive!: boolean;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+}
+
+/** The branches of platform that catalog knows, kept by events: a price list can only name these (read-only for the app). */
+@Entity('branch_projection')
+export class BranchProjectionEntity {
+  @PrimaryColumn({
+    name: 'branch_id',
+    type: 'uuid',
+    primaryKeyConstraintName: 'PK_branch_projection_branch_id',
+  })
+  branchId!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ type: 'varchar', length: 20 })
+  code!: string;
+
+  @Column({ type: 'varchar', length: 150 })
+  name!: string;
+
+  @Column({ name: 'is_warehouse', type: 'boolean' })
+  isWarehouse!: boolean;
+
+  /** `active`, `inactive` or `deleted` */
+  @Column({ type: 'varchar', length: 20 })
+  status!: string;
+
+  /** The source's `updatedAt`: an older event is ignored */
+  @Column({ name: 'source_updated_at', type: 'timestamptz' })
+  sourceUpdatedAt!: Date;
+
+  @Column({ name: 'synced_at', type: 'timestamptz', default: () => 'now()' })
+  syncedAt!: Date;
+}
+
 @Entity('price_list_items')
 export class PriceListItemEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -509,6 +565,8 @@ export const CATALOG_ENTITIES = [
   UnitConversionEntity,
   PriceListEntity,
   PriceListItemEntity,
+  PriceListBranchEntity,
+  BranchProjectionEntity,
   UploadEntity,
   ProductImportEntity,
   TenantPlanQuotaEntity,

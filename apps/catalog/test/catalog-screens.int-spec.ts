@@ -1,6 +1,7 @@
 import { CreateTenantPlanQuota1792800000000 } from '../src/migrations/1792800000000-create-tenant-plan-quota';
 import { AllowUploadCleanupSelect1793300000000 } from '../src/migrations/1793300000000-allow-upload-cleanup-select';
 import { CreateProductAttributes1793400000000 } from '../src/migrations/1793400000000-create-product-attributes';
+import { CreatePriceListBranches1793500000000 } from '../src/migrations/1793500000000-create-price-list-branches';
 import { PlanQuotaService } from '../src/quota/plan-quota.service';
 /**
  * Phase 4 screen endpoints against a real PostgreSQL (non-superuser role, RLS forced):
@@ -135,6 +136,7 @@ describe('Catalog screen endpoints (real PostgreSQL, RLS)', () => {
           CreateTenantPlanQuota1792800000000,
           AllowUploadCleanupSelect1793300000000,
           CreateProductAttributes1793400000000,
+          CreatePriceListBranches1793500000000,
         ],
       }),
     );
