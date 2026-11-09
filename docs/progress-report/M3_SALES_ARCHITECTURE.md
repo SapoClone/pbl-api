@@ -7,7 +7,7 @@ The **Sales (`apps/sales`)** microservice is the authoritative system of record 
 | Bounded Context | Authoritative Owner | Integration Mechanism with Sales (`apps/sales`) |
 |---|---|---|
 | **Platform** (`apps/platform`) | Tenants, RBAC roles/permissions, branches | Event-driven `branch_projection` (`platform.branch.created`, `platform.branch.updated`) + JWT RS256 claims |
-| **Catalog** (`apps/catalog`) | Product master data, variants, SKUs, barcodes, retail prices | Event-driven `catalog_variant_projection` (`catalog.variant.*`, `catalog.price.changed`, `catalog.product.deactivated`) + local indexed read lookup |
+| **Catalog** (`apps/catalog`) | Product master data, variants, SKUs, barcodes, retail prices | Event-driven `catalog_variant_projection` (`catalog.variant.*`, `catalog.price.changed`, `catalog.product.deactivated`) + local indexed read lookup; prices set for one branch live in `catalog_branch_price_projection` and replace the price for every branch in that branch ([ADR-0024](../decisions/0024-branch-pricing.md)) |
 | **Inventory** (`apps/inventory`) | Warehouses, stock balances (`on_hand`, `reserved`, `available`), reservations, stock ledger | Synchronous S2S HTTP via `InventoryClient` (`/internal/inventory/reservations`, `/commit`, `/release`, `/returns/receive`) |
 | **Sales** (`apps/sales`) | Orders, order items, tenders, status history, POS shifts, POS drafts, checkout saga, promotions, coupons, returns, fulfillments | Owns `sales` PostgreSQL schema (`14` tenant-isolated tables + `outbox_event` + `inbox_processed`) |
 | **Customer** (`apps/customer`) | Customer profiles, loyalty tiers, debt limits | Validated by opaque `customer_id` UUID reference; consumes `sales.order.completed` |

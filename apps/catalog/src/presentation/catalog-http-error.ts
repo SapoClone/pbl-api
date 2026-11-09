@@ -88,6 +88,10 @@ const CONSTRAINT_TO_ERROR: Record<
     code: CatalogErrorCode.PRICE_LIST_CONFLICT,
     message: 'Another active default price list already exists for this tenant',
   },
+  UQ_price_list_branches_active_branch: {
+    code: CatalogErrorCode.PRICE_LIST_BRANCH_CONFLICT,
+    message: 'A branch can have only one active price list',
+  },
   UQ_price_list_items_unique: {
     code: CatalogErrorCode.PRICE_LIST_CONFLICT,
     message: 'Price list item already exists for this variant',

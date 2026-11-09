@@ -1881,6 +1881,16 @@
               "example": "2026-10-29",
               "type": "string"
             }
+          },
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "description": "The branch the price is for. Chooses the active price list of that branch before the default one; without it, only the default price list applies.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3048,6 +3058,16 @@
             "nullable": true,
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "example": "2026-12-31"
+          },
+          "branchIds": {
+            "uniqueItems": true,
+            "maxItems": 100,
+            "description": "The branches this price list applies to. Empty or left out: every branch. A branch can have only one active price list (409 PRICE_LIST_BRANCH_CONFLICT), and the default price list cannot be limited to branches.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         },
         "required": [
@@ -3090,6 +3110,16 @@
             "nullable": true,
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "example": "2026-12-31"
+          },
+          "branchIds": {
+            "uniqueItems": true,
+            "maxItems": 100,
+            "description": "The branches this price list applies to. Empty or left out: every branch. A branch can have only one active price list (409 PRICE_LIST_BRANCH_CONFLICT), and the default price list cannot be limited to branches.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
           "expectedVersion": {
             "type": "number",

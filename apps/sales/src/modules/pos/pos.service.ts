@@ -40,7 +40,13 @@ export class PosService {
     private readonly promotionsService: PromotionsService,
   ) {}
 
-  async lookupProduct(query: { sku?: string; barcode?: string; q?: string }) {
+  async lookupProduct(query: {
+    sku?: string;
+    barcode?: string;
+    q?: string;
+    /** Show the price of this branch */
+    branchId?: string;
+  }) {
     const raw = (query.sku ?? query.barcode ?? query.q ?? '').trim();
     if (!raw) {
       throw new SalesDomainError(
@@ -52,16 +58,26 @@ export class PosService {
 
     let found;
     if (query.sku) {
-      found = await this.catalogClient.lookupBySkuOrBarcode({ sku: query.sku });
+      found = await this.catalogClient.lookupBySkuOrBarcode({
+        sku: query.sku,
+        branchId: query.branchId,
+      });
     } else if (query.barcode) {
       found = await this.catalogClient.lookupBySkuOrBarcode({
         barcode: query.barcode,
+        branchId: query.branchId,
       });
     } else {
       try {
-        found = await this.catalogClient.lookupBySkuOrBarcode({ sku: raw });
+        found = await this.catalogClient.lookupBySkuOrBarcode({
+          sku: raw,
+          branchId: query.branchId,
+        });
       } catch {
-        found = await this.catalogClient.lookupBySkuOrBarcode({ barcode: raw });
+        found = await this.catalogClient.lookupBySkuOrBarcode({
+          barcode: raw,
+          branchId: query.branchId,
+        });
       }
     }
 
@@ -96,6 +112,7 @@ export class PosService {
         variantId: line.variantId,
         skuCode: line.skuCode,
       })),
+      { branchId: params.branchId },
     );
     if (params.allowPriceOverride) {
       for (const line of params.lines as (PosCartLineDto & {

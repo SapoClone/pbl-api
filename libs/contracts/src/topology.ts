@@ -204,7 +204,12 @@ export const TOPOLOGY = {
     ],
   },
   subscriptions: {
-    catalog: [PLATFORM_SUBSCRIPTION_CHANGED.type, PLATFORM_PLAN_CHANGED.type],
+    catalog: [
+      PLATFORM_SUBSCRIPTION_CHANGED.type,
+      PLATFORM_PLAN_CHANGED.type,
+      PLATFORM_BRANCH_CREATED.type,
+      PLATFORM_BRANCH_UPDATED.type,
+    ],
     platform: [CATALOG_USAGE_CHANGED.type],
     sales: [
       PLATFORM_BRANCH_CREATED.type,
