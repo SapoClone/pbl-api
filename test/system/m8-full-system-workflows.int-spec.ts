@@ -1,4 +1,5 @@
 import { CreateTenantPlanQuota1792800000000 } from '../../apps/catalog/src/migrations/1792800000000-create-tenant-plan-quota';
+import { CreateProductAttributes1793400000000 } from '../../apps/catalog/src/migrations/1793400000000-create-product-attributes';
 import { PlanQuotaService } from '../../apps/catalog/src/quota/plan-quota.service';
 import { CreateTenantStatus1793100000420 } from '../../apps/integration/src/migrations/1793100000420-create-tenant-status';
 import { DefaultBranchWarehouse1792700000000 } from '../../apps/inventory/src/migrations/1792700000000-default-branch-warehouse';
@@ -520,6 +521,7 @@ describe('M8 Full-System Distributed Workflows A through G (Real PostgreSQL Acro
           ...CONSUMER_MIGRATIONS,
           CreateCatalogTables1791900000200,
           CreateTenantPlanQuota1792800000000,
+          CreateProductAttributes1793400000000,
         ],
       }),
     );

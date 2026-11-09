@@ -68,6 +68,10 @@ const CONSTRAINT_TO_ERROR: Record<
     code: CatalogErrorCode.INVALID_VARIANT_COMBINATION,
     message: 'A variant cannot contain multiple values for the same attribute',
   },
+  UQ_product_attributes_product_attribute: {
+    code: CatalogErrorCode.INVALID_VARIANT_COMBINATION,
+    message: 'The same attribute was listed twice for the product',
+  },
   UQ_unit_conversions_product_unit: {
     code: CatalogErrorCode.INVALID_UNIT_CONVERSION,
     message: 'Unit name already exists for this product',

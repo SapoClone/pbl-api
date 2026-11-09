@@ -37,6 +37,7 @@ Only mine: contract list shape (one row per variant, `{data, pagination}`), `/pr
 | PATCH/DELETE /categories/{id} | Covered path (plus `/status`, `/reparent`) | Covered |
 | GET/POST /brands | Covered path | Covered |
 | GET/POST /attributes, POST /attributes/{id}/values | Covered path (plus PATCH, GET values) | Covered |
+| GET/PUT /products/{id}/attributes | Built 2026-11-09 ([ADR-0023](../../decisions/0023-product-attributes.md)): the attributes a product varies on; variants may only use those | Covered |
 | GET /products/export | Missing | Covered |
 | POST /product-imports, GET /product-imports/{id} | Missing | Missing |
 

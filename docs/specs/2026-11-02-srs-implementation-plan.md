@@ -130,7 +130,7 @@ Backend work, except where a row says web.
 |---|---|---|---|
 | FR-M04-01 | Built | Tree of at most 3 levels (`apps/catalog/src/domain/catalog-domain.ts:71`) | |
 | FR-M04-02 | Partial | `/catalog/.../products` CRUD, images by upload id | Product code; at most 5 images (code allows 10, `catalog-domain.ts:73`). |
-| FR-M04-03 | Partial | `products/{id}/variants/generate`, per-variant SKU, barcode, price | Cost price per variant. ADR-0013 keeps cost in inventory (`avg_unit_cost`); either show inventory's cost in the variant view or amend the SRS. |
+| FR-M04-03 | Partial | `products/{id}/variants/generate`, per-variant SKU, barcode, price; the attributes a product varies on (`products/{id}/attributes`, [ADR-0023](../decisions/0023-product-attributes.md)) | Cost price per variant. ADR-0013 keeps cost in inventory (`avg_unit_cost`); either show inventory's cost in the variant view or amend the SRS. |
 | FR-M04-05 | Partial | Price lists, `catalog.price.changed` (`modules/pricing/pricing.service.ts`) | Wholesale price; a price history table (items are overwritten in place). |
 | FR-M04-07 | Partial | `GET products` (name, status, category, brand), `GET variants` (name, SKU, barcode) | Price range filter; brand on variants; SKU and barcode search on products. |
 

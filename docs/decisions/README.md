@@ -29,5 +29,6 @@ large changes are built on them. Summary rules live in [`/CLAUDE.md`](../../CLAU
 | [0020](0020-permissions-and-branch-scope.md) | Permissions are role-based, carried in the token, with branch scope | Proposed |
 | [0021](0021-insight-m7-event-driven-projections-incremental-deltas-rebuild-and-reconciliation.md) | Insight M7 event-driven read projections, incremental delta rollups, rebuild workflows, and reconciliation | Accepted |
 | [0022](0022-platform-admin-identity.md) | Platform admins are a separate identity with store-less tokens | Accepted |
+| [0023](0023-product-attributes.md) | A product chooses the attributes it varies on (`product_attributes`); attributes and values stay shared by the store | Accepted |
 
 New record: copy [0000-template.md](0000-template.md), take the next number.

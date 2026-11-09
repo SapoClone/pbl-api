@@ -29,6 +29,8 @@ During the M1 Catalog Core implementation, we must reconcile ERD v1, `SapoClone_
 - Deactivating or deleting a category that has active child categories or active products returns `409 Conflict` (`CATEGORY_IN_USE`) rather than silently orphaning or deleting products.
 
 ### 4. Canonical Variant Attribute Combinations & Single-Value-Per-Attribute Rule
+*Amended by [ADR-0023](0023-product-attributes.md): a variant may only carry attributes its product has enabled (`product_attributes`).*
+
 - `variant_attribute_values` includes `attribute_id` alongside `variant_id` and `attribute_value_id`, with `UNIQUE (tenant_id, variant_id, attribute_id)` and composite foreign keys to `attribute_values (tenant_id, attribute_id, id)`. This guarantees at the database level that a variant can never be assigned two values for the same attribute (e.g., `Color=Black` and `Color=White`).
 - Each variant computes a deterministic `combination_signature` (sorted `attributeId:attributeValueId` pairs, or `'DEFAULT'` for the single default variant of an optionless product) enforced by `UNIQUE (tenant_id, product_id, combination_signature)`.
 - Batch variant generation caps the Cartesian product at a configurable maximum (default `100` variants per call) and executes atomically in a single transaction.

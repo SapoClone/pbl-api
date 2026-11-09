@@ -263,6 +263,28 @@ export class VariantAttributeValueEntity {
   attributeValueId!: string;
 }
 
+/** An attribute a product can vary on; variants of the product may only carry these (see the migration). */
+@Entity('product_attributes')
+export class ProductAttributeEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ name: 'product_id', type: 'uuid' })
+  productId!: string;
+
+  @Column({ name: 'attribute_id', type: 'uuid' })
+  attributeId!: string;
+
+  @Column({ type: 'integer', default: 0 })
+  position!: number;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+}
+
 @Entity('unit_conversions')
 export class UnitConversionEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -483,6 +505,7 @@ export const CATALOG_ENTITIES = [
   ProductEntity,
   ProductVariantEntity,
   VariantAttributeValueEntity,
+  ProductAttributeEntity,
   UnitConversionEntity,
   PriceListEntity,
   PriceListItemEntity,

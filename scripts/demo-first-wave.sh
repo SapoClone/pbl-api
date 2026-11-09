@@ -271,6 +271,9 @@ ok "two attribute values: S and M"
 prod=$(http POST "$catalog/products" "$store_token" "{\"name\":\"Ao thun\",\"categoryId\":\"$category_id\",\"brandId\":\"$brand_id\",\"baseUnit\":\"cai\"}")
 expect_status 201 "create a product" "$prod"
 product_id=$(jv "$prod" .id)
+expect_status 400 "a variant cannot use an attribute the product has not enabled" "$(http POST "$catalog/products/$product_id/variants" "$store_token" "{\"skuCode\":\"AO-X\",\"basePrice\":1000,\"attributes\":[{\"attributeId\":\"$attr_id\",\"attributeValueId\":\"$size_s\"}]}")"
+expect_status 200 "enable Size for this product" "$(http PUT "$catalog/products/$product_id/attributes" "$store_token" "{\"attributeIds\":[\"$attr_id\"]}")"
+expect_status 200 "list the attributes of the product" "$(http GET "$catalog/products/$product_id/attributes" "$store_token")"
 va=$(http POST "$catalog/products/$product_id/variants" "$store_token" "{\"skuCode\":\"AO-S\",\"barcode\":\"8938505974194\",\"basePrice\":120000,\"attributes\":[{\"attributeId\":\"$attr_id\",\"attributeValueId\":\"$size_s\"}]}")
 expect_status 201 "create variant AO-S at 120000 VND" "$va"
 variant_s=$(jv "$va" .id)
@@ -278,6 +281,7 @@ expect_eq "$va" .basePrice 120000 "the price is an integer VND amount"
 vb=$(http POST "$catalog/products/$product_id/variants" "$store_token" "{\"skuCode\":\"AO-M\",\"basePrice\":130000,\"attributes\":[{\"attributeId\":\"$attr_id\",\"attributeValueId\":\"$size_m\"}]}")
 expect_status 201 "create variant AO-M at 130000 VND" "$vb"
 variant_m=$(jv "$vb" .id)
+expect_status 409 "Size cannot be removed while a variant uses it" "$(http PUT "$catalog/products/$product_id/attributes" "$store_token" '{"attributeIds":[]}')"
 expect_status 422 "a fractional price is refused (integer VND)" "$(http POST "$catalog/products/$product_id/variants" "$store_token" '{"skuCode":"AO-L","basePrice":1000.5}')"
 expect_status 400 "a barcode with a bad checksum" "$(http POST "$catalog/products/$product_id/variants" "$store_token" '{"skuCode":"AO-XL","basePrice":1000,"barcode":"893000000001"}')"
 code=$(printf '%s' "$(http POST "$catalog/products/$product_id/variants" "$store_token" '{"skuCode":"AO-S","basePrice":1000}')" | status_of)

@@ -1594,6 +1594,90 @@
         ]
       }
     },
+    "/api/v1/products/{id}/attributes": {
+      "get": {
+        "description": "Attributes and values are shared by the store (`GET /attributes`); this lists only the ones this product uses.",
+        "operationId": "ProductAttributesController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductAttributesRes"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the attributes a product varies on, with their values",
+        "tags": [
+          "products"
+        ]
+      },
+      "put": {
+        "description": "Replaces the list. Variants can only carry attributes listed here (400 ATTRIBUTE_NOT_ENABLED_FOR_PRODUCT otherwise). Leaving out an attribute that a variant still uses is refused with 409 ATTRIBUTE_IN_USE_BY_PRODUCT.",
+        "operationId": "ProductAttributesController_replace",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetProductAttributesReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductAttributesRes"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set the attributes a product varies on",
+        "tags": [
+          "products"
+        ]
+      }
+    },
     "/api/v1/price-lists": {
       "post": {
         "operationId": "PricingController_createPriceList",
@@ -2504,6 +2588,16 @@
               "format": "uuid"
             }
           },
+          "attributeIds": {
+            "uniqueItems": true,
+            "maxItems": 10,
+            "description": "Attributes this product varies on (ids from GET /attributes), in display order. Can also be set later with PUT /products/:id/attributes.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "createDefaultVariant": {
             "type": "boolean",
             "default": false,
@@ -2821,6 +2915,98 @@
         "required": [
           "unitName",
           "conversionFactor"
+        ]
+      },
+      "ProductAttributeValueRes": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "value": {
+            "type": "string",
+            "example": "Đỏ"
+          },
+          "usedByVariants": {
+            "type": "number",
+            "description": "How many variants of this product carry this value"
+          }
+        },
+        "required": [
+          "id",
+          "value",
+          "usedByVariants"
+        ]
+      },
+      "ProductAttributeRes": {
+        "type": "object",
+        "properties": {
+          "attributeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Màu sắc"
+          },
+          "position": {
+            "type": "number",
+            "description": "Display order, starting at 0"
+          },
+          "values": {
+            "description": "Every value of the attribute in this store (the choices a variant form offers), not only the ones this product uses",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductAttributeValueRes"
+            }
+          }
+        },
+        "required": [
+          "attributeId",
+          "name",
+          "position",
+          "values"
+        ]
+      },
+      "ProductAttributesRes": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductAttributeRes"
+            }
+          }
+        },
+        "required": [
+          "productId",
+          "attributes"
+        ]
+      },
+      "SetProductAttributesReqDto": {
+        "type": "object",
+        "properties": {
+          "attributeIds": {
+            "uniqueItems": true,
+            "maxItems": 10,
+            "description": "The attributes this product varies on, in display order. Replaces the current list. An attribute that a variant of the product still uses cannot be left out (409).",
+            "example": [
+              "0c2a6b9c-6f6c-4d3e-9a0a-2f8c9e1a7b11"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "attributeIds"
         ]
       },
       "CreatePriceListReqDto": {

@@ -52,6 +52,10 @@ import { PlanQuotaService } from '../../quota/plan-quota.service';
 import { FILE_STORAGE, FileStorage } from '../uploads/file-storage';
 import { csvRow } from './csv';
 import {
+  assertAttributesEnabledForProduct,
+  enableAttributesForNewProduct,
+} from './product-attributes';
+import {
   CreateProductReqDto,
   CreateUnitConversionReqDto,
   CreateVariantReqDto,
@@ -653,6 +657,8 @@ export class ProductsService {
           version: 1,
         });
 
+        await enableAttributesForNewProduct(em, product.id, dto.attributeIds);
+
         const baseUnitConv = await scopedUnits.save({
           productId: product.id,
           unitName: baseUnit,
@@ -1243,6 +1249,11 @@ export class ProductsService {
         }
         validateVariantWithProductLifecycle(product.status, 'ACTIVE');
 
+        await assertAttributesEnabledForProduct(
+          em,
+          productId,
+          pairs.map((p) => p.attributeId),
+        );
         const resolvedAttrs = await this.verifyAndResolveVariantAttributes(
           em,
           pairs,
@@ -1329,6 +1340,7 @@ export class ProductsService {
         validateVariantWithProductLifecycle(product.status, 'ACTIVE');
 
         const attrIds = dto.axes.map((a) => a.attributeId);
+        await assertAttributesEnabledForProduct(em, productId, attrIds);
         const allValueIds = dto.axes.flatMap((a) => a.valueIds);
 
         const [attrs, vals] = await Promise.all([

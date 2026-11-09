@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsIn,
@@ -119,6 +120,19 @@ export class CreateProductReqDto {
   @ArrayMaxSize(10)
   @IsUUID('all', { each: true })
   imageIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 10,
+    description:
+      'Attributes this product varies on (ids from GET /attributes), in display order. Can also be set later with PUT /products/:id/attributes.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  attributeIds?: string[];
 
   @ApiPropertyOptional({
     default: false,
