@@ -1,0 +1,4165 @@
+{
+  "info": {
+    "name": "PBL Luồng 1 — Security & Authorization (RBAC, Tenant/Branch Isolation)",
+    "description": "Bộ kiểm thử API cho Luồng 1: phân quyền theo vai trò (FR-M02-05, FR-M02-06, NFR-SE-04) và cô lập tenant/chi nhánh (FR-M02-07, BR-01, NFR-SE-03). Dữ liệu được tạo bởi provision.mjs; collection dùng biến môi trường do provision sinh ra. Chạy: node run.mjs.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "platformBase",
+      "value": "http://localhost:8080/platform/api/v1"
+    },
+    {
+      "key": "catalogBase",
+      "value": "http://localhost:8080/catalog/api/v1"
+    },
+    {
+      "key": "inventoryBase",
+      "value": "http://localhost:8080/inventory/api/v1"
+    },
+    {
+      "key": "salesBase",
+      "value": "http://localhost:8080/sales/api/v1"
+    },
+    {
+      "key": "customerBase",
+      "value": "http://localhost:8080/customer/api/v1"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 — Preconditions (kiểm tra dữ liệu provision)",
+      "item": [
+        {
+          "id": "TC-SEC-SETUP-01",
+          "name": "TC-SEC-SETUP-01 — Năm vai trò mặc định tồn tại trong tenant A",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-SETUP-01 — Năm vai trò mặc định tồn tại trong tenant A",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Đủ 5 vai trò mặc định\", function () { const codes = pm.response.json().data.map(function (r) { return r.code; }); pm.expect(codes).to.include.members([\"owner\",\"branch_manager\",\"sales_staff\",\"warehouse_staff\",\"accountant\"]); });",
+                  "pm.test(\"Chỉ owner là isOwner\", function () { const owners = pm.response.json().data.filter(function (r) { return r.isOwner; }).map(function (r) { return r.code; }); pm.expect(owners).to.eql([\"owner\"]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-SETUP-02",
+          "name": "TC-SEC-SETUP-02 — Token của quản lý chi nhánh mang đúng tid/roles/perms/branches",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/context"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-SETUP-02 — Token của quản lý chi nhánh mang đúng tid/roles/perms/branches",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "function decodeJwt(token) {",
+                  "  const part = token.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\");",
+                  "  return JSON.parse(Buffer.from(part, \"base64\").toString(\"utf8\"));",
+                  "}",
+                  "const p = decodeJwt(pm.environment.get(\"managerToken\"));",
+                  "pm.test(\"tid là tenant A\", function () { pm.expect(p.tid).to.eql(pm.environment.get(\"tenantA\")); });",
+                  "pm.test(\"roles là branch_manager\", function () { pm.expect(p.roles).to.eql([\"branch_manager\"]); });",
+                  "pm.test(\"chỉ có chi nhánh A2\", function () { pm.expect(p.branches).to.eql([pm.environment.get(\"branchA2\")]); });",
+                  "pm.test(\"có settings.view nhưng không có settings.update\", function () { pm.expect(p.perms).to.include(\"settings.view\"); pm.expect(p.perms).to.not.include(\"settings.update\"); });",
+                  "pm.test(\"context chỉ trả chi nhánh A2\", function () { pm.expect(pm.response.json().branches.map(function (b) { return b.id; })).to.eql([pm.environment.get(\"branchA2\")]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-SETUP-03",
+          "name": "TC-SEC-SETUP-03 — Vai trò tùy chỉnh chỉ mang đúng 6 quyền đã cấp",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/context"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-SETUP-03 — Vai trò tùy chỉnh chỉ mang đúng 6 quyền đã cấp",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "function decodeJwt(token) {",
+                  "  const part = token.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\");",
+                  "  return JSON.parse(Buffer.from(part, \"base64\").toString(\"utf8\"));",
+                  "}",
+                  "const p = decodeJwt(pm.environment.get(\"customToken\"));",
+                  "pm.test(\"đúng 6 quyền\", function () { pm.expect(p.perms.slice().sort()).to.eql([\"customers.view\",\"inventory.view\",\"orders.view\",\"products.view\",\"settings.view\",\"staff.view\"]); });",
+                  "pm.test(\"role là mã vai trò tùy chỉnh\", function () { pm.expect(p.roles[0]).to.match(/^custom_viewer_/); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-SETUP-04",
+          "name": "TC-SEC-SETUP-04 — Token chủ cửa hàng A và B gắn đúng tenant, không lẫn nhau",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-SETUP-04 — Token chủ cửa hàng A và B gắn đúng tenant, không lẫn nhau",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "function decodeJwt(token) {",
+                  "  const part = token.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\");",
+                  "  return JSON.parse(Buffer.from(part, \"base64\").toString(\"utf8\"));",
+                  "}",
+                  "const a = decodeJwt(pm.environment.get(\"ownerToken\"));",
+                  "const b = decodeJwt(pm.environment.get(\"ownerBToken\"));",
+                  "pm.test(\"token A trỏ tenant A\", function () { pm.expect(a.tid).to.eql(pm.environment.get(\"tenantA\")); });",
+                  "pm.test(\"token B trỏ tenant B\", function () { pm.expect(b.tid).to.eql(pm.environment.get(\"tenantB\")); });",
+                  "pm.test(\"GET /tenants/current trả tenant B\", function () { pm.expect(pm.response.json().id).to.eql(pm.environment.get(\"tenantB\")); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 — Authentication guard (401)",
+      "item": [
+        {
+          "id": "TC-SEC-AUTH-01",
+          "name": "TC-SEC-AUTH-01 — Không có token → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-AUTH-01 — Không có token → 401",
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 401 Unauthorized\", function () { pm.expect(pm.response.json().error).to.eql(\"Unauthorized\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-AUTH-02",
+          "name": "TC-SEC-AUTH-02 — Chuỗi token không phải JWT → 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer not-a-jwt"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-AUTH-02 — Chuỗi token không phải JWT → 401",
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 401 Unauthorized\", function () { pm.expect(pm.response.json().error).to.eql(\"Unauthorized\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-AUTH-03",
+          "name": "TC-SEC-AUTH-03 — Token bị sửa payload, giữ chữ ký cũ → 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tamperedToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-AUTH-03 — Token bị sửa payload, giữ chữ ký cũ → 401",
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 401 Unauthorized\", function () { pm.expect(pm.response.json().error).to.eql(\"Unauthorized\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-AUTH-04",
+          "name": "TC-SEC-AUTH-04 — Token hết hạn (exp trong quá khứ, chữ ký hợp lệ) → 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{expiredToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-AUTH-04 — Token hết hạn (exp trong quá khứ, chữ ký hợp lệ) → 401",
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 401 Unauthorized\", function () { pm.expect(pm.response.json().error).to.eql(\"Unauthorized\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-AUTH-05",
+          "name": "TC-SEC-AUTH-05 — Sai loại xác thực (Basic thay vì Bearer) → 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic dXNlcjpwYXNz"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-AUTH-05 — Sai loại xác thực (Basic thay vì Bearer) → 401",
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 401 Unauthorized\", function () { pm.expect(pm.response.json().error).to.eql(\"Unauthorized\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-AUTH-06",
+          "name": "TC-SEC-AUTH-06 — Đăng xuất thu hồi access token ngay (POST /auth/logout)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{logoutSessionToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/auth/logout"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-AUTH-06 — Đăng xuất thu hồi access token ngay (POST /auth/logout)",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-AUTH-07",
+          "name": "TC-SEC-AUTH-07 — Access token sau đăng xuất bị từ chối → 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{logoutSessionToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-AUTH-07 — Access token sau đăng xuất bị từ chối → 401",
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 401 Unauthorized\", function () { pm.expect(pm.response.json().error).to.eql(\"Unauthorized\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-AUTH-08",
+          "name": "TC-SEC-AUTH-08 — Khóa thành viên (lock) có hiệu lực ngay với token cũ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/members/{{lockeeAccountId}}/lock"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-AUTH-08 — Khóa thành viên (lock) có hiệu lực ngay với token cũ",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-AUTH-09",
+          "name": "TC-SEC-AUTH-09 — Token của thành viên đã bị khóa → 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{lockeeToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-AUTH-09 — Token của thành viên đã bị khóa → 401",
+                  "pm.test(\"HTTP 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 401 Unauthorized\", function () { pm.expect(pm.response.json().error).to.eql(\"Unauthorized\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 — RBAC decision table: 6 vai trò × 5 thao tác",
+      "item": [
+        {
+          "id": "TC-SEC-RBAC-01",
+          "name": "TC-SEC-RBAC-01 — [owner] Xem sản phẩm (products.view) → 200",
+          "description": "Vai trò Chủ cửa hàng; quyền cần: products.view; mong đợi 200.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-01 — [owner] Xem sản phẩm (products.view) → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-02",
+          "name": "TC-SEC-RBAC-02 — [branch_manager] Xem sản phẩm (products.view) → 200",
+          "description": "Vai trò Quản lý chi nhánh; quyền cần: products.view; mong đợi 200.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-02 — [branch_manager] Xem sản phẩm (products.view) → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-03",
+          "name": "TC-SEC-RBAC-03 — [sales_staff] Xem sản phẩm (products.view) → 200",
+          "description": "Vai trò Nhân viên bán hàng; quyền cần: products.view; mong đợi 200.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-03 — [sales_staff] Xem sản phẩm (products.view) → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-04",
+          "name": "TC-SEC-RBAC-04 — [warehouse_staff] Xem sản phẩm (products.view) → 200",
+          "description": "Vai trò Nhân viên kho; quyền cần: products.view; mong đợi 200.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{warehouseToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-04 — [warehouse_staff] Xem sản phẩm (products.view) → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-05",
+          "name": "TC-SEC-RBAC-05 — [accountant] Xem sản phẩm (products.view) → 403",
+          "description": "Vai trò Kế toán; quyền cần: products.view; mong đợi 403.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accountantToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-05 — [accountant] Xem sản phẩm (products.view) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-06",
+          "name": "TC-SEC-RBAC-06 — [custom] Xem sản phẩm (products.view) → 200",
+          "description": "Vai trò Vai trò tùy chỉnh; quyền cần: products.view; mong đợi 200.",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-06 — [custom] Xem sản phẩm (products.view) → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-07",
+          "name": "TC-SEC-RBAC-07 — [owner] Tạo sản phẩm (products.create) → 422",
+          "description": "Vai trò Chủ cửa hàng; quyền cần: products.create; mong đợi 422.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-07 — [owner] Tạo sản phẩm (products.create) → 422",
+                  "pm.test(\"HTTP 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-08",
+          "name": "TC-SEC-RBAC-08 — [branch_manager] Tạo sản phẩm (products.create) → 422",
+          "description": "Vai trò Quản lý chi nhánh; quyền cần: products.create; mong đợi 422.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-08 — [branch_manager] Tạo sản phẩm (products.create) → 422",
+                  "pm.test(\"HTTP 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-09",
+          "name": "TC-SEC-RBAC-09 — [sales_staff] Tạo sản phẩm (products.create) → 403",
+          "description": "Vai trò Nhân viên bán hàng; quyền cần: products.create; mong đợi 403.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-09 — [sales_staff] Tạo sản phẩm (products.create) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-10",
+          "name": "TC-SEC-RBAC-10 — [warehouse_staff] Tạo sản phẩm (products.create) → 403",
+          "description": "Vai trò Nhân viên kho; quyền cần: products.create; mong đợi 403.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{warehouseToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-10 — [warehouse_staff] Tạo sản phẩm (products.create) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-11",
+          "name": "TC-SEC-RBAC-11 — [accountant] Tạo sản phẩm (products.create) → 403",
+          "description": "Vai trò Kế toán; quyền cần: products.create; mong đợi 403.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accountantToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-11 — [accountant] Tạo sản phẩm (products.create) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-12",
+          "name": "TC-SEC-RBAC-12 — [custom] Tạo sản phẩm (products.create) → 403",
+          "description": "Vai trò Vai trò tùy chỉnh; quyền cần: products.create; mong đợi 403.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-12 — [custom] Tạo sản phẩm (products.create) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-13",
+          "name": "TC-SEC-RBAC-13 — [owner] Sửa sản phẩm (products.update) → 404",
+          "description": "Vai trò Chủ cửa hàng; quyền cần: products.update; mong đợi 404.",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-13 — [owner] Sửa sản phẩm (products.update) → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-14",
+          "name": "TC-SEC-RBAC-14 — [branch_manager] Sửa sản phẩm (products.update) → 404",
+          "description": "Vai trò Quản lý chi nhánh; quyền cần: products.update; mong đợi 404.",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-14 — [branch_manager] Sửa sản phẩm (products.update) → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-15",
+          "name": "TC-SEC-RBAC-15 — [sales_staff] Sửa sản phẩm (products.update) → 403",
+          "description": "Vai trò Nhân viên bán hàng; quyền cần: products.update; mong đợi 403.",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-15 — [sales_staff] Sửa sản phẩm (products.update) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-16",
+          "name": "TC-SEC-RBAC-16 — [warehouse_staff] Sửa sản phẩm (products.update) → 403",
+          "description": "Vai trò Nhân viên kho; quyền cần: products.update; mong đợi 403.",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{warehouseToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-16 — [warehouse_staff] Sửa sản phẩm (products.update) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-17",
+          "name": "TC-SEC-RBAC-17 — [accountant] Sửa sản phẩm (products.update) → 403",
+          "description": "Vai trò Kế toán; quyền cần: products.update; mong đợi 403.",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accountantToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-17 — [accountant] Sửa sản phẩm (products.update) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-18",
+          "name": "TC-SEC-RBAC-18 — [custom] Sửa sản phẩm (products.update) → 403",
+          "description": "Vai trò Vai trò tùy chỉnh; quyền cần: products.update; mong đợi 403.",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-18 — [custom] Sửa sản phẩm (products.update) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-19",
+          "name": "TC-SEC-RBAC-19 — [owner] Xóa sản phẩm (products.delete) → 404",
+          "description": "Vai trò Chủ cửa hàng; quyền cần: products.delete; mong đợi 404.",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-19 — [owner] Xóa sản phẩm (products.delete) → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-20",
+          "name": "TC-SEC-RBAC-20 — [branch_manager] Xóa sản phẩm (products.delete) → 404",
+          "description": "Vai trò Quản lý chi nhánh; quyền cần: products.delete; mong đợi 404.",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-20 — [branch_manager] Xóa sản phẩm (products.delete) → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-21",
+          "name": "TC-SEC-RBAC-21 — [sales_staff] Xóa sản phẩm (products.delete) → 403",
+          "description": "Vai trò Nhân viên bán hàng; quyền cần: products.delete; mong đợi 403.",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-21 — [sales_staff] Xóa sản phẩm (products.delete) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-22",
+          "name": "TC-SEC-RBAC-22 — [warehouse_staff] Xóa sản phẩm (products.delete) → 403",
+          "description": "Vai trò Nhân viên kho; quyền cần: products.delete; mong đợi 403.",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{warehouseToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-22 — [warehouse_staff] Xóa sản phẩm (products.delete) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-23",
+          "name": "TC-SEC-RBAC-23 — [accountant] Xóa sản phẩm (products.delete) → 403",
+          "description": "Vai trò Kế toán; quyền cần: products.delete; mong đợi 403.",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accountantToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-23 — [accountant] Xóa sản phẩm (products.delete) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-24",
+          "name": "TC-SEC-RBAC-24 — [custom] Xóa sản phẩm (products.delete) → 403",
+          "description": "Vai trò Vai trò tùy chỉnh; quyền cần: products.delete; mong đợi 403.",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products/{{randomProductId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-24 — [custom] Xóa sản phẩm (products.delete) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-25",
+          "name": "TC-SEC-RBAC-25 — [owner] Duyệt phiếu nhập kho (inventory.approve) → 404",
+          "description": "Vai trò Chủ cửa hàng; quyền cần: inventory.approve; mong đợi 404.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{inventoryBase}}/stock-receipts/{{randomReceiptId}}/post"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-25 — [owner] Duyệt phiếu nhập kho (inventory.approve) → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-26",
+          "name": "TC-SEC-RBAC-26 — [branch_manager] Duyệt phiếu nhập kho (inventory.approve) → 404",
+          "description": "Vai trò Quản lý chi nhánh; quyền cần: inventory.approve; mong đợi 404.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{inventoryBase}}/stock-receipts/{{randomReceiptId}}/post"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-26 — [branch_manager] Duyệt phiếu nhập kho (inventory.approve) → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-27",
+          "name": "TC-SEC-RBAC-27 — [sales_staff] Duyệt phiếu nhập kho (inventory.approve) → 403",
+          "description": "Vai trò Nhân viên bán hàng; quyền cần: inventory.approve; mong đợi 403.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{inventoryBase}}/stock-receipts/{{randomReceiptId}}/post"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-27 — [sales_staff] Duyệt phiếu nhập kho (inventory.approve) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-28",
+          "name": "TC-SEC-RBAC-28 — [warehouse_staff] Duyệt phiếu nhập kho (inventory.approve) → 403",
+          "description": "Vai trò Nhân viên kho; quyền cần: inventory.approve; mong đợi 403.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{warehouseToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{inventoryBase}}/stock-receipts/{{randomReceiptId}}/post"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-28 — [warehouse_staff] Duyệt phiếu nhập kho (inventory.approve) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-29",
+          "name": "TC-SEC-RBAC-29 — [accountant] Duyệt phiếu nhập kho (inventory.approve) → 403",
+          "description": "Vai trò Kế toán; quyền cần: inventory.approve; mong đợi 403.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accountantToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{inventoryBase}}/stock-receipts/{{randomReceiptId}}/post"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-29 — [accountant] Duyệt phiếu nhập kho (inventory.approve) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-RBAC-30",
+          "name": "TC-SEC-RBAC-30 — [custom] Duyệt phiếu nhập kho (inventory.approve) → 403",
+          "description": "Vai trò Vai trò tùy chỉnh; quyền cần: inventory.approve; mong đợi 403.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{inventoryBase}}/stock-receipts/{{randomReceiptId}}/post"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-RBAC-30 — [custom] Duyệt phiếu nhập kho (inventory.approve) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Không có lỗi 5xx\", function () { pm.expect(pm.response.code).to.be.below(500); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 — RBAC bổ sung theo module",
+      "item": [
+        {
+          "id": "TC-SEC-X-01",
+          "name": "TC-SEC-X-01 — Sales tạo khách hàng (customers.create) → 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Khách do sales tạo {{runId}}\",\n  \"phone\": \"0912345679\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{customerBase}}/customers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-01 — Sales tạo khách hàng (customers.create) → 201",
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"lưu id khách hàng vừa tạo\", function () { pm.environment.set(\"salesCustomerId\", pm.response.json().id); pm.expect(pm.response.json().id).to.be.a(\"string\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-02",
+          "name": "TC-SEC-X-02 — Sales sửa khách hàng vừa tạo (customers.update) → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Khách đã sửa {{runId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{customerBase}}/customers/{{salesCustomerId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-02 — Sales sửa khách hàng vừa tạo (customers.update) → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-03",
+          "name": "TC-SEC-X-03 — Sales xóa khách hàng (customers.delete) → 403",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "url": "{{customerBase}}/customers/{{salesCustomerId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-03 — Sales xóa khách hàng (customers.delete) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-04",
+          "name": "TC-SEC-X-04 — Sales tạo đơn hàng (orders.create) → 422 do thiếu dữ liệu, không phải 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{salesBase}}/orders"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-04 — Sales tạo đơn hàng (orders.create) → 422 do thiếu dữ liệu, không phải 403",
+                  "pm.test(\"HTTP 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-05",
+          "name": "TC-SEC-X-05 — Kế toán tạo đơn hàng → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accountantToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{salesBase}}/orders"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-05 — Kế toán tạo đơn hàng → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-06",
+          "name": "TC-SEC-X-06 — Nhân viên kho tạo phiếu nhập với warehouseId không tồn tại → 404, không phải 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{warehouseToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{randomWarehouseId}}\",\n  \"items\": [\n    {\n      \"skuId\": \"{{randomProductId}}\",\n      \"qty\": \"1\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{inventoryBase}}/stock-receipts"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-06 — Nhân viên kho tạo phiếu nhập với warehouseId không tồn tại → 404, không phải 403",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-07",
+          "name": "TC-SEC-X-07 — Kế toán tạo phiếu nhập → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accountantToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{inventoryBase}}/stock-receipts"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-07 — Kế toán tạo phiếu nhập → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-08",
+          "name": "TC-SEC-X-08 — Kế toán xem đơn hàng (orders.view) → 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accountantToken}}"
+              }
+            ],
+            "url": "{{salesBase}}/orders"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-08 — Kế toán xem đơn hàng (orders.view) → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-09",
+          "name": "TC-SEC-X-09 — Nhân viên kho xem khách hàng (customers.view) → 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{warehouseToken}}"
+              }
+            ],
+            "url": "{{customerBase}}/customers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-09 — Nhân viên kho xem khách hàng (customers.view) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-10",
+          "name": "TC-SEC-X-10 — Quản lý chi nhánh thêm nhân viên (staff.create) → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-10 — Quản lý chi nhánh thêm nhân viên (staff.create) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-11",
+          "name": "TC-SEC-X-11 — Vai trò tùy chỉnh tạo vai trò khác (staff.update) → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Should fail {{runId}}\",\n  \"permissions\": [\n    \"products.view\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-11 — Vai trò tùy chỉnh tạo vai trò khác (staff.update) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-12",
+          "name": "TC-SEC-X-12 — Sales đọc danh sách vai trò (staff.view) → 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-12 — Sales đọc danh sách vai trò (staff.view) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-13",
+          "name": "TC-SEC-X-13 — Chủ cửa hàng thêm nhân viên với body rỗng → 422 (đã qua guard)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-13 — Chủ cửa hàng thêm nhân viên với body rỗng → 422 (đã qua guard)",
+                  "pm.test(\"HTTP 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-14",
+          "name": "TC-SEC-X-14 — Quản lý chi nhánh sửa cài đặt cửa hàng (settings.update) → 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-14 — Quản lý chi nhánh sửa cài đặt cửa hàng (settings.update) → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-15",
+          "name": "TC-SEC-X-15 — Chủ cửa hàng sửa cài đặt cửa hàng với body rỗng → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-15 — Chủ cửa hàng sửa cài đặt cửa hàng với body rỗng → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-X-16",
+          "name": "TC-SEC-X-16 — Quản lý chi nhánh (không có settings.update) sửa chi nhánh A2 → 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/branches/{{branchA2}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-X-16 — Quản lý chi nhánh (không có settings.update) sửa chi nhánh A2 → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 — Vai trò tùy chỉnh & mã lỗi 400/409",
+      "item": [
+        {
+          "id": "TC-SEC-ROLE-01",
+          "name": "TC-SEC-ROLE-01 — Tạo vai trò tùy chỉnh hợp lệ → 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Created Role {{runId}}\",\n  \"permissions\": [\n    \"products.view\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-01 — Tạo vai trò tùy chỉnh hợp lệ → 201",
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"lưu roleId vừa tạo\", function () { pm.environment.set(\"createdRoleId\", pm.response.json().id); pm.expect(pm.response.json().permissionCount).to.eql(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-02",
+          "name": "TC-SEC-ROLE-02 — Trùng tên vai trò → 409 R001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Created Role {{runId}}\",\n  \"permissions\": [\n    \"products.view\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-02 — Trùng tên vai trò → 409 R001",
+                  "pm.test(\"HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi R001\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"R001\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-03",
+          "name": "TC-SEC-ROLE-03 — Mã quyền không tồn tại → 400 R003",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bad Permission {{runId}}\",\n  \"permissions\": [\n    \"nope.nope\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-03 — Mã quyền không tồn tại → 400 R003",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi R003\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"R003\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-04",
+          "name": "TC-SEC-ROLE-04 — Sửa vai trò owner → 400 R002",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hacked\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/roles/{{ownerRoleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-04 — Sửa vai trò owner → 400 R002",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi R002\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"R002\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-05",
+          "name": "TC-SEC-ROLE-05 — Xóa vai trò owner → 400 R004",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/roles/{{ownerRoleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-05 — Xóa vai trò owner → 400 R004",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi R004\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"R004\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-06",
+          "name": "TC-SEC-ROLE-06 — Xóa vai trò mặc định (kế toán) → 400 R004",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/roles/{{accountantRoleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-06 — Xóa vai trò mặc định (kế toán) → 400 R004",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi R004\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"R004\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-07",
+          "name": "TC-SEC-ROLE-07 — Xóa vai trò đang có thành viên → 409 R005",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/roles/{{customRoleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-07 — Xóa vai trò đang có thành viên → 409 R005",
+                  "pm.test(\"HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi R005\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"R005\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-08",
+          "name": "TC-SEC-ROLE-08 — Xóa vai trò tùy chỉnh không có thành viên → 204",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/roles/{{unusedRoleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-08 — Xóa vai trò tùy chỉnh không có thành viên → 204",
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-09",
+          "name": "TC-SEC-ROLE-09 — Sales tạo vai trò → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sales Role {{runId}}\",\n  \"permissions\": [\n    \"products.view\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-09 — Sales tạo vai trò → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-10",
+          "name": "TC-SEC-ROLE-10 — Sales đọc vai trò → 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-10 — Sales đọc vai trò → 403",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-11",
+          "name": "TC-SEC-ROLE-11 — Thêm thành viên không chọn vai trò → 400 R007",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerBEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-11 — Thêm thành viên không chọn vai trò → 400 R007",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi R007\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"R007\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-12",
+          "name": "TC-SEC-ROLE-12 — Gán vai trò owner cho người khác → 400 R008",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerBEmail}}\",\n  \"roleId\": \"{{ownerRoleId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-12 — Gán vai trò owner cho người khác → 400 R008",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi R008\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"R008\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-13",
+          "name": "TC-SEC-ROLE-13 — Gán roleId không tồn tại → 400 R007",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ownerBEmail}}\",\n  \"roleId\": \"{{randomRoleId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-13 — Gán roleId không tồn tại → 400 R007",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi R007\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"R007\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-14",
+          "name": "TC-SEC-ROLE-14 — Thêm trùng thành viên → 400 T002",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{salesEmail}}\",\n  \"roleId\": \"{{salesRoleId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-14 — Thêm trùng thành viên → 400 T002",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi T002\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"T002\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-15",
+          "name": "TC-SEC-ROLE-15 — Đổi vai trò của owner → 400 T003",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleId\": \"{{managerRoleId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members/{{ownerAccountId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-15 — Đổi vai trò của owner → 400 T003",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi T003\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"T003\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-16",
+          "name": "TC-SEC-ROLE-16 — UUID không hợp lệ trên đường dẫn → 400",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/not-a-uuid"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-16 — UUID không hợp lệ trên đường dẫn → 400",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-17",
+          "name": "TC-SEC-ROLE-17 — Trùng mã chi nhánh → 400 B001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Trùng mã\",\n  \"code\": \"A2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/branches"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-17 — Trùng mã chi nhánh → 400 B001",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi B001\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"B001\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-18",
+          "name": "TC-SEC-ROLE-18 — Mã chi nhánh sai định dạng → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sai mã\",\n  \"code\": \"bad code!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/branches"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-18 — Mã chi nhánh sai định dạng → 422",
+                  "pm.test(\"HTTP 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-ROLE-19",
+          "name": "TC-SEC-ROLE-19 — Tạo tenant trùng subdomain → 400 T001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Trùng subdomain\",\n  \"subdomain\": \"{{tenantASubdomain}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-ROLE-19 — Tạo tenant trùng subdomain → 400 T001",
+                  "pm.test(\"HTTP 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi T001\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"T001\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 — Cô lập tenant",
+      "item": [
+        {
+          "id": "TC-SEC-TEN-01",
+          "name": "TC-SEC-TEN-01 — Tenant B đọc sản phẩm của A → 404, không lộ dữ liệu",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products/{{productAId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-01 — Tenant B đọc sản phẩm của A → 404, không lộ dữ liệu",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"không trả tên sản phẩm của tenant A\", function () { pm.expect(pm.response.text()).to.not.include(pm.environment.get(\"productAName\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-02",
+          "name": "TC-SEC-TEN-02 — Tenant B sửa sản phẩm của A → 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hacked by B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{catalogBase}}/products/{{productAId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-02 — Tenant B sửa sản phẩm của A → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-03",
+          "name": "TC-SEC-TEN-03 — Tenant B xóa sản phẩm của A → 404",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{catalogBase}}/products/{{productAId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-03 — Tenant B xóa sản phẩm của A → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-04",
+          "name": "TC-SEC-TEN-04 — Tenant B đọc khách hàng của A → 404, không lộ dữ liệu",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{customerBase}}/customers/{{customerAId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-04 — Tenant B đọc khách hàng của A → 404, không lộ dữ liệu",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"không trả tên khách hàng của tenant A\", function () { pm.expect(pm.response.text()).to.not.include(pm.environment.get(\"customerAName\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-05",
+          "name": "TC-SEC-TEN-05 — Tenant B sửa khách hàng của A → 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hacked by B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{customerBase}}/customers/{{customerAId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-05 — Tenant B sửa khách hàng của A → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-06",
+          "name": "TC-SEC-TEN-06 — Tenant B xóa khách hàng của A → 404",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{customerBase}}/customers/{{customerAId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-06 — Tenant B xóa khách hàng của A → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-07",
+          "name": "TC-SEC-TEN-07 — Tenant B đọc chi nhánh A1 → 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/{{branchA1}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-07 — Tenant B đọc chi nhánh A1 → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-08",
+          "name": "TC-SEC-TEN-08 — Tenant B đọc cài đặt chi nhánh A1 → 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/{{branchA1}}/settings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-08 — Tenant B đọc cài đặt chi nhánh A1 → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-09",
+          "name": "TC-SEC-TEN-09 — Tenant B đọc vai trò tùy chỉnh của A → 404 R006",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/roles/{{customRoleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-09 — Tenant B đọc vai trò tùy chỉnh của A → 404 R006",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi R006\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"R006\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-10",
+          "name": "TC-SEC-TEN-10 — Tenant B đọc thành viên của A → 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/members/{{managerAccountId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-10 — Tenant B đọc thành viên của A → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-11",
+          "name": "TC-SEC-TEN-11 — Tenant B sửa thành viên của A → 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleId\": \"{{salesRoleId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members/{{managerAccountId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-11 — Tenant B sửa thành viên của A → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-12",
+          "name": "TC-SEC-TEN-12 — Tenant B xóa thành viên của A → 404",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/members/{{managerAccountId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-12 — Tenant B xóa thành viên của A → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-13",
+          "name": "TC-SEC-TEN-13 — Danh sách thành viên tenant B không lẫn tài khoản tenant A",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-13 — Danh sách thành viên tenant B không lẫn tài khoản tenant A",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"không có owner A\", function () { const ids = pm.response.json().map(function (m) { return m.accountId; }); pm.expect(ids).to.not.include(pm.environment.get(\"ownerAccountId\")); });",
+                  "pm.test(\"không có quản lý A\", function () { const ids = pm.response.json().map(function (m) { return m.accountId; }); pm.expect(ids).to.not.include(pm.environment.get(\"managerAccountId\")); });",
+                  "pm.test(\"chỉ có owner B\", function () { pm.expect(pm.response.json()).to.have.length(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-14",
+          "name": "TC-SEC-TEN-14 — Danh sách vai trò tenant B không lẫn vai trò tenant A",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/roles"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-14 — Danh sách vai trò tenant B không lẫn vai trò tenant A",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"không có vai trò tùy chỉnh của A\", function () { const ids = pm.response.json().data.map(function (r) { return r.id; }); pm.expect(ids).to.not.include(pm.environment.get(\"customRoleId\")); pm.expect(ids).to.not.include(pm.environment.get(\"unusedRoleId\")); });",
+                  "pm.test(\"không có owner role của A\", function () { const ids = pm.response.json().data.map(function (r) { return r.id; }); pm.expect(ids).to.not.include(pm.environment.get(\"ownerRoleId\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-15",
+          "name": "TC-SEC-TEN-15 — GET /tenants/current của token B trả đúng tenant B",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-15 — GET /tenants/current của token B trả đúng tenant B",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"đúng tenant B\", function () { pm.expect(pm.response.json().id).to.eql(pm.environment.get(\"tenantB\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-16",
+          "name": "TC-SEC-TEN-16 — Chuyển sang tenant không phải thành viên → 404",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantA}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/auth/switch-tenant"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-16 — Chuyển sang tenant không phải thành viên → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-17",
+          "name": "TC-SEC-TEN-17 — Chèn tenantId của A vào body khi tạo chi nhánh → vẫn tạo ở B",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Chi nhánh chèn tenant\",\n  \"code\": \"{{unusedBranchCode}}\",\n  \"tenantId\": \"{{tenantA}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/branches"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-17 — Chèn tenantId của A vào body khi tạo chi nhánh → vẫn tạo ở B",
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"lưu id chi nhánh vừa tạo ở B\", function () { pm.environment.set(\"txBranchId\", pm.response.json().id); pm.expect(pm.response.json().code).to.eql(pm.environment.get(\"unusedBranchCode\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-18",
+          "name": "TC-SEC-TEN-18 — Query tenantId=A khi token B không thay đổi phạm vi dữ liệu",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches?tenantId={{tenantA}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-18 — Query tenantId=A khi token B không thay đổi phạm vi dữ liệu",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"không trả chi nhánh A1/A2\", function () { const ids = pm.response.json().data.map(function (b) { return b.id; }); pm.expect(ids).to.not.include(pm.environment.get(\"branchA1\")); pm.expect(ids).to.not.include(pm.environment.get(\"branchA2\")); });",
+                  "pm.test(\"có chi nhánh B1\", function () { const ids = pm.response.json().data.map(function (b) { return b.id; }); pm.expect(ids).to.include(pm.environment.get(\"branchB1\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-19",
+          "name": "TC-SEC-TEN-19 — Tenant A đọc chi nhánh B1 → 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/{{branchB1}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-19 — Tenant A đọc chi nhánh B1 → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-TEN-20",
+          "name": "TC-SEC-TEN-20 — Header X-Tenant-Id=A khi token B không thay đổi phạm vi dữ liệu",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerBToken}}"
+              },
+              {
+                "key": "X-Tenant-Id",
+                "value": "{{tenantA}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-TEN-20 — Header X-Tenant-Id=A khi token B không thay đổi phạm vi dữ liệu",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"không trả chi nhánh A1/A2\", function () { const ids = pm.response.json().data.map(function (b) { return b.id; }); pm.expect(ids).to.not.include(pm.environment.get(\"branchA1\")); pm.expect(ids).to.not.include(pm.environment.get(\"branchA2\")); });",
+                  "pm.test(\"có chi nhánh B1\", function () { const ids = pm.response.json().data.map(function (b) { return b.id; }); pm.expect(ids).to.include(pm.environment.get(\"branchB1\")); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 — Cô lập chi nhánh",
+      "item": [
+        {
+          "id": "TC-SEC-BRA-01",
+          "name": "TC-SEC-BRA-01 — Quản lý chỉ thấy chi nhánh A2 trong danh sách",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-BRA-01 — Quản lý chỉ thấy chi nhánh A2 trong danh sách",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"chỉ một chi nhánh\", function () { pm.expect(pm.response.json().data).to.have.length(1); });",
+                  "pm.test(\"đó là A2\", function () { pm.expect(pm.response.json().data[0].id).to.eql(pm.environment.get(\"branchA2\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-BRA-02",
+          "name": "TC-SEC-BRA-02 — Quản lý đọc chi nhánh A1 ngoài phạm vi → 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/{{branchA1}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-BRA-02 — Quản lý đọc chi nhánh A1 ngoài phạm vi → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-BRA-03",
+          "name": "TC-SEC-BRA-03 — Quản lý đọc cài đặt chi nhánh A1 ngoài phạm vi → 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/{{branchA1}}/settings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-BRA-03 — Quản lý đọc cài đặt chi nhánh A1 ngoài phạm vi → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-BRA-04",
+          "name": "TC-SEC-BRA-04 — Quản lý đọc cài đặt chi nhánh A2 trong phạm vi → 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/{{branchA2}}/settings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-BRA-04 — Quản lý đọc cài đặt chi nhánh A2 trong phạm vi → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-BRA-05",
+          "name": "TC-SEC-BRA-05 — Vai trò có settings.update nhưng giới hạn A2 sửa cài đặt A1 → 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{branchAdminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/branches/{{branchA1}}/settings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-BRA-05 — Vai trò có settings.update nhưng giới hạn A2 sửa cài đặt A1 → 404",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-BRA-06",
+          "name": "TC-SEC-BRA-06 — Vai trò có settings.update trong phạm vi A2 sửa cài đặt A2 → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{branchAdminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/branches/{{branchA2}}/settings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-BRA-06 — Vai trò có settings.update trong phạm vi A2 sửa cài đặt A2 → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-BRA-07",
+          "name": "TC-SEC-BRA-07 — Người bị giới hạn chi nhánh tạo chi nhánh mới → 403 B008",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{branchAdminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ngoài phạm vi\",\n  \"code\": \"OUT01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/branches"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-BRA-07 — Người bị giới hạn chi nhánh tạo chi nhánh mới → 403 B008",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Mã lỗi B008\", function () { pm.expect(pm.response.json().errorCode).to.eql(\"B008\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-BRA-08",
+          "name": "TC-SEC-BRA-08 — Context của quản lý chỉ trả chi nhánh A2 và branchCount=1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/tenants/current/context"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-BRA-08 — Context của quản lý chỉ trả chi nhánh A2 và branchCount=1",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"branchCount=1\", function () { pm.expect(pm.response.json().branchCount).to.eql(1); });",
+                  "pm.test(\"branches chỉ có A2\", function () { const ids = pm.response.json().branches.map(function (b) { return b.id; }); pm.expect(ids).to.eql([pm.environment.get(\"branchA2\")]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-BRA-09",
+          "name": "TC-SEC-BRA-09 — Sales không bị giới hạn chi nhánh thấy cả A1 và A2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-BRA-09 — Sales không bị giới hạn chi nhánh thấy cả A1 và A2",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"có A1\", function () { const ids = pm.response.json().data.map(function (b) { return b.id; }); pm.expect(ids).to.include(pm.environment.get(\"branchA1\")); });",
+                  "pm.test(\"có A2\", function () { const ids = pm.response.json().data.map(function (b) { return b.id; }); pm.expect(ids).to.include(pm.environment.get(\"branchA2\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-BRA-10",
+          "name": "TC-SEC-BRA-10 — Sales đọc chi nhánh A1 → 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{salesToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/{{branchA1}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-BRA-10 — Sales đọc chi nhánh A1 → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 — Thu hồi quyền tức thời (revocation)",
+      "item": [
+        {
+          "id": "TC-SEC-REV-01",
+          "name": "TC-SEC-REV-01 — Baseline: revokee có staff.create, thêm thành viên body rỗng → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{revokeeToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-REV-01 — Baseline: revokee có staff.create, thêm thành viên body rỗng → 422",
+                  "pm.test(\"HTTP 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-REV-02",
+          "name": "TC-SEC-REV-02 — Chủ cửa hàng thu hồi staff.create khỏi vai trò → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": [\n    \"staff.view\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/roles/{{revokeRoleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-REV-02 — Chủ cửa hàng thu hồi staff.create khỏi vai trò → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-REV-03",
+          "name": "TC-SEC-REV-03 — Token cũ (còn hạn) sau khi thu hồi staff.create phải bị 403 — yêu cầu thu hồi tức thời",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{revokeeToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-REV-03 — Token cũ (còn hạn) sau khi thu hồi staff.create phải bị 403 — yêu cầu thu hồi tức thời",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-REV-04",
+          "name": "TC-SEC-REV-04 — Revokee đăng nhập lại để lấy token mới → 200",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{revokeeEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/auth/email/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-REV-04 — Revokee đăng nhập lại để lấy token mới → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"lưu token mới\", function () { pm.environment.set(\"newRevokeeToken\", pm.response.json().accessToken); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-REV-05",
+          "name": "TC-SEC-REV-05 — Token mới sau đăng nhập lại bị 403 với staff.create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newRevokeeToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-REV-05 — Token mới sau đăng nhập lại bị 403 với staff.create",
+                  "pm.test(\"HTTP 403\", function () { pm.response.to.have.status(403); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"Từ chối 403 Forbidden\", function () { pm.expect(pm.response.json().error).to.eql(\"Forbidden\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-REV-06",
+          "name": "TC-SEC-REV-06 — Baseline: scopee đọc cài đặt A2 trong phạm vi → 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{scopeeToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/{{branchA2}}/settings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-REV-06 — Baseline: scopee đọc cài đặt A2 trong phạm vi → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-REV-07",
+          "name": "TC-SEC-REV-07 — Chủ cửa hàng đổi phạm vi của scopee sang A1 → 200",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchIds\": [\n    \"{{branchA1}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/tenants/current/members/{{scopeeAccountId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-REV-07 — Chủ cửa hàng đổi phạm vi của scopee sang A1 → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-REV-08",
+          "name": "TC-SEC-REV-08 — Token cũ của scopee sau khi đổi phạm vi phải bị 404 khi đọc A2 — yêu cầu thu hồi tức thời",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{scopeeToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/{{branchA2}}/settings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-REV-08 — Token cũ của scopee sau khi đổi phạm vi phải bị 404 khi đọc A2 — yêu cầu thu hồi tức thời",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-REV-09",
+          "name": "TC-SEC-REV-09 — Scopee đăng nhập lại để lấy token mới → 200",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{scopeeEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{platformBase}}/auth/email/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-REV-09 — Scopee đăng nhập lại để lấy token mới → 200",
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });",
+                  "pm.test(\"lưu token mới\", function () { pm.environment.set(\"newScopeeToken\", pm.response.json().accessToken); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "TC-SEC-REV-10",
+          "name": "TC-SEC-REV-10 — Token mới của scopee bị 404 khi đọc A2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newScopeeToken}}"
+              }
+            ],
+            "url": "{{platformBase}}/branches/{{branchA2}}/settings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// TC-SEC-REV-10 — Token mới của scopee bị 404 khi đọc A2",
+                  "pm.test(\"HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Thời gian phản hồi < 3000 ms\", function () { pm.expect(pm.response.responseTime).to.be.below(3000); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

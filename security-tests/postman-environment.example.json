@@ -1,0 +1,67 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "name": "PBL Security — ví dụ (được provision.mjs ghi đè)",
+  "values": [
+    {
+      "key": "platformBase",
+      "value": "http://localhost:8080/platform/api/v1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "catalogBase",
+      "value": "http://localhost:8080/catalog/api/v1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "inventoryBase",
+      "value": "http://localhost:8080/inventory/api/v1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "salesBase",
+      "value": "http://localhost:8080/sales/api/v1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "customerBase",
+      "value": "http://localhost:8080/customer/api/v1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "runId",
+      "value": "example",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "tenantA",
+      "value": "<provision sinh>",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "tenantB",
+      "value": "<provision sinh>",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "ownerToken",
+      "value": "<provision sinh>",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "ownerBToken",
+      "value": "<provision sinh>",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}

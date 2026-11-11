@@ -1,0 +1,14 @@
+node_modules/
+package-lock.json.bak
+
+# Kết quả chứa token/Authorization header — không commit
+results/security-environment.json
+results/provisioning.json
+results/newman.json
+results/report.html
+results/summary.json
+results/history/
+
+# Bằng chứng tổng hợp (không chứa token) được commit
+!results/summary.md
+!results/cases-table.md

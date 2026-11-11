@@ -1,0 +1,18 @@
+{
+  "name": "pbl-security-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Luồng 1 — Kiểm thử bảo mật & phân quyền API (RBAC, tenant/branch isolation) cho PBL",
+  "scripts": {
+    "build": "node build-collection.mjs",
+    "provision": "node provision.mjs",
+    "test": "node run.mjs",
+    "test:strict": "node run.mjs --strict"
+  },
+  "dependencies": {
+    "newman": "6.2.3",
+    "newman-reporter-htmlextra": "1.23.1",
+    "pg": "8.13.1"
+  }
+}
