@@ -12,7 +12,7 @@ Không đưa thay đổi có sẵn tại `docker/elasticmq.conf` vào commit. C�
 
 Từ root `pbl-api`, chạy `npm --prefix test/api/nguyen run test:api`. Lệnh tự bật Compose, seed tenant/chi nhánh/kho/SKU/tồn riêng, cài Newman và chạy collection. `README.md` ghi điều kiện tiên quyết và cách dùng stack đã có.
 
-Ba lượt đầu **BLOCKED trước seed** vì phiên agent không được truy cập Docker daemon. Lượt 4 từ PowerShell người dùng dừng ở **409 Q001** do tenant Free đã có chi nhánh mặc định. Bản sửa runner dùng `GET /branches` đã được xác minh ở lượt 5: seed thành công và Newman thực thi **71 HTTP request, 123 assertion, 6 assertion Failed**. Theo 25 case: **21 Passed, 4 Failed, 0 Blocked**. TC-NG-01/15 thất bại do assertion test mong `pending` trong khi API trả `new`; đã sửa generator/collection, chưa chạy lại. TC-NG-22/23 khác kịch bản yêu cầu và tiếp tục giữ Failed để triage. Chưa có lượt Newman thứ hai hoặc đối chiếu SQL trực tiếp. `attempt-5.summary.json`, `.newman.html`, `.log` là bằng chứng đã lọc; Newman JSON gốc nằm trong `test/api/nguyen/reports/` và không commit vì chứa token.
+Ba lượt đầu **BLOCKED trước seed** vì phiên agent không được truy cập Docker daemon. Lượt 4 từ PowerShell người dùng dừng ở **409 Q001** do tenant Free đã có chi nhánh mặc định. Bản sửa runner dùng `GET /branches` đã được xác minh ở lượt 5. Newman đã chạy **hai lượt trên tenant riêng**: lượt 5 có 21 Passed, 4 Failed; sau khi sửa assertion TC-NG-01/15, lượt 6 có **23 Passed, 2 Failed, 0 Blocked**, 71 HTTP request, 123 assertion, 4 assertion Failed. TC-NG-22/23 tái hiện ở cả hai lượt và cần triage. Chưa đối chiếu SQL trực tiếp. `attempt-5/6.summary.json`, `.newman.html`, `.log` là bằng chứng đã lọc; Newman JSON gốc nằm trong `test/api/nguyen/reports/` và không commit vì chứa token.
 
 Collection có 69 request cho TC-NG-01..25, gồm bước đọc lại order/tồn. Ca 25 gửi hai xác nhận gần đồng thời; ca 16 kiểm tranh chấp theo thứ tự. Các script Postman đã parse bằng Node VM; `run.mjs` qua `node --check`; DOCX OpenXML được parse hợp lệ. Những kiểm tra tĩnh này không thay thế cho thực thi API.
 
@@ -22,9 +22,9 @@ Ma trận FR-M07-02/03, FR-M05-08, BR-02/05 và từng ca nằm trong báo cáo 
 
 ## Các bước tiếp tục
 
-1. Từ PowerShell người dùng, chạy lại `node test/api/nguyen/run.mjs --existing-stack` sau khi TC-01/15 đã sửa assertion. Collection tạo tenant mới; stack đang bật nên không cần build lại.
-2. Đối chiếu `GET /sales/api/v1/orders/{id}`, `GET /inventory/api/v1/stock-levels?branchId=...` và SQL theo `tenant_id` riêng. Kết quả lần 1 được tóm tắt tại `attempt-5.summary.json`; không coi 22/23 Passed.
-3. Chạy lại toàn bộ ít nhất hai lần trên tenant mới. Lưu Newman JSON/HTML và response, lọc bearer token trước khi commit bằng chứng. Triage DEF-01/02 với chủ yêu cầu; cập nhật số liệu báo cáo Word bằng `generate_nguyen_report.py`.
+1. Từ PowerShell người dùng, chạy `node test/api/nguyen/verify_db.mjs test/api/nguyen/reports/2026-11-11T05-19-02-493Z.json test/api/nguyen/reports/2026-11-11T05-19-02-493Z.db.json` để lấy chứng cứ PostgreSQL chỉ đọc cho tenant lượt 6; lọc và chép `.db.json` vào evidence.
+2. Đối chiếu `GET /sales/api/v1/orders/{id}`, `GET /inventory/api/v1/stock-levels?branchId=...` với DB theo `tenant_id` riêng. Lượt 5/6 được tóm tắt tại `attempt-5/6.summary.json`; không coi 22/23 Passed.
+3. Hai lượt Newman đã hoàn tất. Triage DEF-01/02 với chủ yêu cầu; sau khi quyết định sửa nghiệp vụ hoặc cập nhật kịch bản, chạy lại toàn bộ và cập nhật số liệu báo cáo Word bằng `generate_nguyen_report.py`.
 4. Bổ sung BR-05 cấu hình và đa tenant nếu API thực tế hỗ trợ; xác minh ca 22/23 với chủ yêu cầu khi hành vi khác kỳ vọng.
 5. Push branch `test/nguyen-api-order-lifecycle-stock-reservation` khi GitHub truy cập được. Kiểm tra `git log -1 --oneline`, `git status --short`, `git push -u origin test/nguyen-api-order-lifecycle-stock-reservation` và xác nhận remote SHA.
 

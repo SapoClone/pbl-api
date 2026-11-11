@@ -22,6 +22,8 @@ Sau khi sửa generator: `python test/api/nguyen/generate_collection.py`. Có th
 
 Tóm tắt Newman JSON thành số ca và response lỗi đã lọc trường nhạy cảm: `node test/api/nguyen/summarize_newman.mjs test/api/nguyen/reports/<timestamp>.json docs/testing/evidence/nguyen/<run>.summary.json`. File `.html` của runner chỉ chứa tên request, HTTP và assertion; kiểm tra lại nội dung trước khi chia sẻ. `package-lock.json` cố định dependency Newman cho lần cài lại.
 
+Đối chiếu PostgreSQL chỉ đọc cho một lượt đã chạy: `node test/api/nguyen/verify_db.mjs test/api/nguyen/reports/<timestamp>.json test/api/nguyen/reports/<timestamp>.db.json`. Lệnh dùng tenant/warehouse/SKU và order ID trong Newman JSON, truy vấn `inventory.stock_balance`, `sales.orders` qua `docker compose exec`; output không chứa token. Trên máy không có quyền Docker, chạy lệnh này từ terminal đã chạy được bộ test.
+
 Đối chiếu qua `GET /sales/api/v1/orders/{id}` và `GET /inventory/api/v1/stock-levels?branchId=...` sau thao tác; collection chờ tồn hội tụ tối đa 45 lượt, cách nhau 1 giây. Nếu cần SQL, truy vấn các schema `sales`, `inventory` với `tenant_id` riêng của lượt chạy. Chạy toàn bộ lệnh lần thứ hai trên tenant mới trước khi báo ổn định.
 
 ## Phạm vi từng nhóm ca và giới hạn
