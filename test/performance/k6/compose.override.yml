@@ -1,0 +1,5 @@
+# Local performance testing only: start ElasticMQ without predefined queues (see docs/guides/performance-testing.md)
+services:
+  elasticmq:
+    volumes:
+      - ./test/performance/k6/elasticmq.conf:/opt/elasticmq.conf:ro
