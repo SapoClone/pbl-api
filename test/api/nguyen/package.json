@@ -1,0 +1,6 @@
+{
+  "name": "nguyen-order-api-tests",
+  "private": true,
+  "scripts": { "test:api": "node run.mjs" },
+  "devDependencies": { "newman": "6.2.1" }
+}

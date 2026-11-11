@@ -1,0 +1,2092 @@
+{
+  "info": {
+    "name": "Nguyen - API order lifecycle and stock reservation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Gateway-only API tests. Seeded by run.mjs. TC-NG-16 is sequential contention; TC-NG-25 sends concurrent confirmations. BR-05 observed format is recorded separately from the configurable SRS requirement."
+  },
+  "item": [
+    {
+      "name": "BASE stock before tests",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===12 && Number(row.reserved)===0 && Number(row.available)===12;",
+              "const key='retry:BASE stock before tests', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=12, reserved=0, available=12',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(12);pm.expect(Number(row.reserved)).to.eql(0);pm.expect(Number(row.available)).to.eql(12);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "primary create ONLINE ×2",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 2}], \"autoConfirm\": false}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const d=pm.response.json(); pm.test('Order id and code',()=>{pm.expect(d.id).to.be.a('string');pm.expect(d.code).to.match(/^HD-\\d{8}-\\d+$/);});pm.collectionVariables.set('primary',d.id);pm.collectionVariables.set('primaryVersion',d.version);pm.collectionVariables.set('primaryCode',d.code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-01 online pending",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=pending, fulfillmentStatus=unfulfilled',()=>{pm.expect(d.orderStatus).to.eql('pending');pm.expect(d.fulfillmentStatus).to.eql('unfulfilled');});pm.collectionVariables.set('primaryVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-02 confirm holds stock",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}/confirm",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"version\": {{primaryVersion}}}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('primaryVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-02 confirmed",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=confirmed, fulfillmentStatus=unfulfilled',()=>{pm.expect(d.orderStatus).to.eql('confirmed');pm.expect(d.fulfillmentStatus).to.eql('unfulfilled');});pm.collectionVariables.set('primaryVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-02 reservation delta",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===12 && Number(row.reserved)===2 && Number(row.available)===10;",
+              "const key='retry:TC-NG-02 reservation delta', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=12, reserved=2, available=10',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(12);pm.expect(Number(row.reserved)).to.eql(2);pm.expect(Number(row.available)).to.eql(10);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-03 ship before pack",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}/ship",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"version\": {{primaryVersion}}}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Domain error ORDER_INVALID_STATE',()=>pm.expect(pm.response.json().errorCode).to.eql('ORDER_INVALID_STATE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-03 state unchanged",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=confirmed, fulfillmentStatus=unfulfilled',()=>{pm.expect(d.orderStatus).to.eql('confirmed');pm.expect(d.fulfillmentStatus).to.eql('unfulfilled');});pm.collectionVariables.set('primaryVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-03 stock unchanged",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===12 && Number(row.reserved)===2 && Number(row.available)===10;",
+              "const key='retry:TC-NG-03 stock unchanged', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=12, reserved=2, available=10',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(12);pm.expect(Number(row.reserved)).to.eql(2);pm.expect(Number(row.available)).to.eql(10);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-04 pack",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}/pack",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"version\": {{primaryVersion}}}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('primaryVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-04 packing",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=confirmed, fulfillmentStatus=packing',()=>{pm.expect(d.orderStatus).to.eql('confirmed');pm.expect(d.fulfillmentStatus).to.eql('packing');});pm.collectionVariables.set('primaryVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-05 pack twice",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}/pack",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"version\": {{primaryVersion}}}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Domain error ORDER_INVALID_STATE',()=>pm.expect(pm.response.json().errorCode).to.eql('ORDER_INVALID_STATE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-05 state unchanged",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=confirmed, fulfillmentStatus=packing',()=>{pm.expect(d.orderStatus).to.eql('confirmed');pm.expect(d.fulfillmentStatus).to.eql('packing');});pm.collectionVariables.set('primaryVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-06 stale version",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}/ship",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"version\": 1}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Domain error RESOURCE_VERSION_CONFLICT',()=>pm.expect(pm.response.json().errorCode).to.eql('RESOURCE_VERSION_CONFLICT'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-06 state unchanged",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=confirmed, fulfillmentStatus=packing',()=>{pm.expect(d.orderStatus).to.eql('confirmed');pm.expect(d.fulfillmentStatus).to.eql('packing');});pm.collectionVariables.set('primaryVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-07 ship",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}/ship",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"version\": {{primaryVersion}}}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('primaryVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-07 shipping",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=confirmed, fulfillmentStatus=shipping',()=>{pm.expect(d.orderStatus).to.eql('confirmed');pm.expect(d.fulfillmentStatus).to.eql('shipping');});pm.collectionVariables.set('primaryVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-08 cancel while shipping",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}/cancel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"reason\": \"too late\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Domain error ORDER_INVALID_STATE',()=>pm.expect(pm.response.json().errorCode).to.eql('ORDER_INVALID_STATE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-08 state unchanged",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=confirmed, fulfillmentStatus=shipping',()=>{pm.expect(d.orderStatus).to.eql('confirmed');pm.expect(d.fulfillmentStatus).to.eql('shipping');});pm.collectionVariables.set('primaryVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-08 reservation unchanged",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===12 && Number(row.reserved)===2 && Number(row.available)===10;",
+              "const key='retry:TC-NG-08 reservation unchanged', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=12, reserved=2, available=10',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(12);pm.expect(Number(row.reserved)).to.eql(2);pm.expect(Number(row.available)).to.eql(10);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-09 delivered, unpaid",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}/complete",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"version\": {{primaryVersion}}}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('primaryVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-09 delivered",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=confirmed, fulfillmentStatus=delivered',()=>{pm.expect(d.orderStatus).to.eql('confirmed');pm.expect(d.fulfillmentStatus).to.eql('delivered');});pm.collectionVariables.set('primaryVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-09 committed stock",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===0 && Number(row.available)===10;",
+              "const key='retry:TC-NG-09 committed stock', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=0, available=10',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(0);pm.expect(Number(row.available)).to.eql(10);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-10 payment completes order",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}/payments",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"method\": \"transfer\", \"amount\": 240000}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.request.headers.add({key:'Idempotency-Key',value:pm.variables.replaceIn('{{$guid}}')});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-10 completed",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=completed, fulfillmentStatus=delivered',()=>{pm.expect(d.orderStatus).to.eql('completed');pm.expect(d.fulfillmentStatus).to.eql('delivered');});pm.collectionVariables.set('primaryVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-11 cancel completed",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}/cancel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"reason\": \"invalid\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Domain error ORDER_ALREADY_COMPLETED',()=>pm.expect(pm.response.json().errorCode).to.eql('ORDER_ALREADY_COMPLETED'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-11 state unchanged",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{primary}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=completed, fulfillmentStatus=delivered',()=>{pm.expect(d.orderStatus).to.eql('completed');pm.expect(d.fulfillmentStatus).to.eql('delivered');});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-11 stock unchanged",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===0 && Number(row.available)===10;",
+              "const key='retry:TC-NG-11 stock unchanged', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=0, available=10',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(0);pm.expect(Number(row.available)).to.eql(10);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cancellable create ONLINE ×3",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 3}], \"autoConfirm\": false}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const d=pm.response.json(); pm.test('Order id and code',()=>{pm.expect(d.id).to.be.a('string');pm.expect(d.code).to.match(/^HD-\\d{8}-\\d+$/);});pm.collectionVariables.set('cancellable',d.id);pm.collectionVariables.set('cancellableVersion',d.version);pm.collectionVariables.set('cancellableCode',d.code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-12 confirm second order",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{cancellable}}/confirm",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('cancellableVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-12 reserve three",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===3 && Number(row.available)===7;",
+              "const key='retry:TC-NG-12 reserve three', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=3, available=7',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(3);pm.expect(Number(row.available)).to.eql(7);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-13 cancel releases hold",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{cancellable}}/cancel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"reason\": \"customer request\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('cancellableVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-13 cancelled",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{cancellable}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=cancelled, fulfillmentStatus=unfulfilled',()=>{pm.expect(d.orderStatus).to.eql('cancelled');pm.expect(d.fulfillmentStatus).to.eql('unfulfilled');});pm.collectionVariables.set('cancellableVersion',d.version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-13 released",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===0 && Number(row.available)===10;",
+              "const key='retry:TC-NG-13 released', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=0, available=10',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(0);pm.expect(Number(row.available)).to.eql(10);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-14 confirm cancelled",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{cancellable}}/confirm",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Domain error ORDER_INVALID_STATE',()=>pm.expect(pm.response.json().errorCode).to.eql('ORDER_INVALID_STATE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-14 stock unchanged",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===0 && Number(row.available)===10;",
+              "const key='retry:TC-NG-14 stock unchanged', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=0, available=10',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(0);pm.expect(Number(row.available)).to.eql(10);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "shortage create ONLINE ×11",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 11}], \"autoConfirm\": false}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const d=pm.response.json(); pm.test('Order id and code',()=>{pm.expect(d.id).to.be.a('string');pm.expect(d.code).to.match(/^HD-\\d{8}-\\d+$/);});pm.collectionVariables.set('shortage',d.id);pm.collectionVariables.set('shortageVersion',d.version);pm.collectionVariables.set('shortageCode',d.code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-15 insufficient available",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{shortage}}/confirm",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Domain error INSUFFICIENT_STOCK',()=>pm.expect(pm.response.json().errorCode).to.eql('INSUFFICIENT_STOCK'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-15 remains pending",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{shortage}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=pending, fulfillmentStatus=unfulfilled',()=>{pm.expect(d.orderStatus).to.eql('pending');pm.expect(d.fulfillmentStatus).to.eql('unfulfilled');});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-15 no partial hold",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===0 && Number(row.available)===10;",
+              "const key='retry:TC-NG-15 no partial hold', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=0, available=10',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(0);pm.expect(Number(row.available)).to.eql(10);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "contentionA create ONLINE ×10",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 10}], \"autoConfirm\": false}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const d=pm.response.json(); pm.test('Order id and code',()=>{pm.expect(d.id).to.be.a('string');pm.expect(d.code).to.match(/^HD-\\d{8}-\\d+$/);});pm.collectionVariables.set('contentionA',d.id);pm.collectionVariables.set('contentionAVersion',d.version);pm.collectionVariables.set('contentionACode',d.code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "contentionB create ONLINE ×10",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 10}], \"autoConfirm\": false}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const d=pm.response.json(); pm.test('Order id and code',()=>{pm.expect(d.id).to.be.a('string');pm.expect(d.code).to.match(/^HD-\\d{8}-\\d+$/);});pm.collectionVariables.set('contentionB',d.id);pm.collectionVariables.set('contentionBVersion',d.version);pm.collectionVariables.set('contentionBCode',d.code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-16 first claimant takes last ten",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{contentionA}}/confirm",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('contentionAVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-16 second claimant rejected",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{contentionB}}/confirm",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('Domain error INSUFFICIENT_STOCK',()=>pm.expect(pm.response.json().errorCode).to.eql('INSUFFICIENT_STOCK'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-16 one hold only",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===10 && Number(row.available)===0;",
+              "const key='retry:TC-NG-16 one hold only', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=10, available=0',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(10);pm.expect(Number(row.available)).to.eql(0);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-16 cleanup first hold",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{contentionA}}/cancel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"reason\": \"cleanup\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('contentionAVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-16 released",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===0 && Number(row.available)===10;",
+              "const key='retry:TC-NG-16 released', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=0, available=10',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(0);pm.expect(Number(row.available)).to.eql(10);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "raceA create ONLINE ×10",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 10}], \"autoConfirm\": false}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const d=pm.response.json(); pm.test('Order id and code',()=>{pm.expect(d.id).to.be.a('string');pm.expect(d.code).to.match(/^HD-\\d{8}-\\d+$/);});pm.collectionVariables.set('raceA',d.id);pm.collectionVariables.set('raceAVersion',d.version);pm.collectionVariables.set('raceACode',d.code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "raceB create ONLINE ×10",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 10}], \"autoConfirm\": false}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const d=pm.response.json(); pm.test('Order id and code',()=>{pm.expect(d.id).to.be.a('string');pm.expect(d.code).to.match(/^HD-\\d{8}-\\d+$/);});pm.collectionVariables.set('raceB',d.id);pm.collectionVariables.set('raceBVersion',d.version);pm.collectionVariables.set('raceBCode',d.code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-25 concurrent confirmation, one hold",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{raceA}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const ids=['raceA','raceB'].map(k=>pm.collectionVariables.get(k));",
+              "const token=pm.environment.get('token'), base=pm.environment.get('base');",
+              "let results=[];",
+              "ids.forEach((id,index)=>pm.sendRequest({url:base+'/sales/api/v1/orders/'+id+'/confirm',method:'POST',header:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:{mode:'raw',raw:'{}'}},(err,res)=>{",
+              "  results[index]={error:err&&String(err),status:res&&res.code,body:res&&res.text()};",
+              "  if(results.filter(Boolean).length===2){",
+              "    pm.test('One concurrent reservation succeeds, one is refused',()=>pm.expect(results.map(x=>x.status).sort()).to.eql([200,409]));",
+              "    pm.test('Refusal is insufficient stock',()=>{const failed=results.find(x=>x.status===409);pm.expect(failed).to.exist;pm.expect(JSON.parse(failed.body).errorCode).to.eql('INSUFFICIENT_STOCK');});",
+              "    const winner=results.findIndex(x=>x.status===200);if(winner>=0)pm.collectionVariables.set('raceWinner',ids[winner]);",
+              "  }",
+              "}));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-25 only ten reserved",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===10 && Number(row.available)===0;",
+              "const key='retry:TC-NG-25 only ten reserved', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=10, available=0',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(10);pm.expect(Number(row.available)).to.eql(0);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-25 release winning reservation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{raceWinner}}/cancel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"reason\": \"race cleanup\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-25 stock restored",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===0 && Number(row.available)===10;",
+              "const key='retry:TC-NG-25 stock restored', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=0, available=10',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(0);pm.expect(Number(row.available)).to.eql(10);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "staffOrder create ONLINE ×1",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 1}], \"autoConfirm\": false}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const d=pm.response.json(); pm.test('Order id and code',()=>{pm.expect(d.id).to.be.a('string');pm.expect(d.code).to.match(/^HD-\\d{8}-\\d+$/);});pm.collectionVariables.set('staffOrder',d.id);pm.collectionVariables.set('staffOrderVersion',d.version);pm.collectionVariables.set('staffOrderCode',d.code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-17 staff confirms",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{staffOrder}}/confirm",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('staffOrderVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-18 staff cannot cancel",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{staffOrder}}/cancel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"reason\": \"forbidden\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 403', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-18 still confirmed",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{staffOrder}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json();pm.test('orderStatus=confirmed, fulfillmentStatus=unfulfilled',()=>{pm.expect(d.orderStatus).to.eql('confirmed');pm.expect(d.fulfillmentStatus).to.eql('unfulfilled');});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-18 hold unchanged",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/inventory/api/v1/stock-levels?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const row=pm.response.code===200 && pm.response.json().data.find(x=>x.variantId===pm.environment.get('variantId'));",
+              "const ok=!!row && Number(row.onHand)===10 && Number(row.reserved)===1 && Number(row.available)===9;",
+              "const key='retry:TC-NG-18 hold unchanged', tries=Number(pm.collectionVariables.get(key)||0);",
+              "if (!ok && tries<45) { pm.collectionVariables.set(key,tries+1); pm.execution.setNextRequest(pm.info.requestName); }",
+              "else { pm.collectionVariables.unset(key); pm.test('onHand=10, reserved=1, available=9',()=>{pm.expect(row,'seeded SKU').to.exist;pm.expect(Number(row.onHand)).to.eql(10);pm.expect(Number(row.reserved)).to.eql(1);pm.expect(Number(row.available)).to.eql(9);}); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-18 owner cleanup",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{staffOrder}}/cancel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"reason\": \"cleanup\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('staffOrderVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-19 accountant cannot create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accountantToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 1}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 403', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-20 no token cannot create",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{missingToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 1}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-21 code uniqueness and observed format",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{contentionB}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const a=pm.collectionVariables.get('primaryCode'),b=pm.response.json().code;pm.test('Unique per tenant',()=>pm.expect(b).not.eql(a));pm.test('Observed HD-yyyyMMdd-######',()=>pm.expect(b).to.match(/^HD-\\d{8}-\\d{6}$/));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "earlyComplete create ONLINE ×1",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 1}], \"autoConfirm\": false}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "const d=pm.response.json(); pm.test('Order id and code',()=>{pm.expect(d.id).to.be.a('string');pm.expect(d.code).to.match(/^HD-\\d{8}-\\d+$/);});pm.collectionVariables.set('earlyComplete',d.id);pm.collectionVariables.set('earlyCompleteVersion',d.version);pm.collectionVariables.set('earlyCompleteCode',d.code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-22 confirm delivery order",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{earlyComplete}}/confirm",
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('earlyCompleteVersion',pm.response.json().version);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-22 complete before ship must reject",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{earlyComplete}}/complete",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"version\": {{earlyCompleteVersion}}}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('ORDER_INVALID_STATE',()=>pm.expect(pm.response.json().errorCode).to.eql('ORDER_INVALID_STATE'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-23 online shortage flagged at creation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/omnichannel",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"channelType\": \"ONLINE\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 100}], \"autoConfirm\": true}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "pm.test('Shortage flag and pending order',()=>{const d=pm.response.json();pm.expect(d.shortageDetected).to.eql(true);pm.expect(d.exceptionCode).to.eql('stock_shortage');});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-24 list registers",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffToken}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/registers?branchId={{branchId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const r=pm.response.json().data[0];pm.test('Register exists',()=>pm.expect(r.id).to.exist);pm.collectionVariables.set('registerId',r.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-24 open cashier shift",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/shifts",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"registerId\": \"{{registerId}}\", \"openingCash\": 0}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('shiftId',pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-24 POS rejects shortage",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{staffToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/pos/checkout",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"branchId\": \"{{branchId}}\", \"warehouseId\": \"{{warehouseId}}\", \"shiftId\": \"{{shiftId}}\", \"lines\": [{\"variantId\": \"{{variantId}}\", \"qty\": 100}], \"tenders\": [{\"method\": \"CASH\", \"amount\": 12000000}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.request.headers.add({key:'Idempotency-Key',value:pm.variables.replaceIn('{{$guid}}')});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+              "pm.test('INSUFFICIENT_STOCK',()=>pm.expect(pm.response.json().errorCode).to.eql('INSUFFICIENT_STOCK'));"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "primary",
+      "value": ""
+    },
+    {
+      "key": "primaryVersion",
+      "value": ""
+    },
+    {
+      "key": "primaryCode",
+      "value": ""
+    },
+    {
+      "key": "cancellable",
+      "value": ""
+    },
+    {
+      "key": "cancellableVersion",
+      "value": ""
+    },
+    {
+      "key": "shortage",
+      "value": ""
+    },
+    {
+      "key": "contentionA",
+      "value": ""
+    },
+    {
+      "key": "contentionB",
+      "value": ""
+    },
+    {
+      "key": "raceA",
+      "value": ""
+    },
+    {
+      "key": "raceB",
+      "value": ""
+    },
+    {
+      "key": "raceWinner",
+      "value": ""
+    },
+    {
+      "key": "staffOrder",
+      "value": ""
+    }
+  ]
+}

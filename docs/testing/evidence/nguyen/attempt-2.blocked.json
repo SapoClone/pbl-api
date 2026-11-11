@@ -1,0 +1,8 @@
+{
+  "kind": "preflight-or-execution-failure",
+  "timestamp": "2026-11-11T04-44-43-859Z",
+  "result": "BLOCKED",
+  "reason": "docker exited 1: permission denied while trying to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine\n",
+  "newmanExecuted": false,
+  "passedCases": 0
+}

@@ -1,0 +1,13 @@
+$ docker compose up -d --build
+
+permission denied while trying to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
+
+exit=1
+
+BLOCKED/FAILED: Error: docker exited 1: permission denied while trying to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine
+
+    at command (file:///D:/BKDN/Nam4/KTPM/KTPM/pbl-api/test/api/nguyen/run.mjs:16:34)
+    at file:///D:/BKDN/Nam4/KTPM/KTPM/pbl-api/test/api/nguyen/run.mjs:98:51
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
