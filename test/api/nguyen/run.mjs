@@ -19,10 +19,12 @@ function command(name, args, cwd = repo) {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let token;
 async function api(method, path, body, auth = token) {
-  const response = await fetch(`${base}${path}`, { method, headers: {
+  let response;
+  try { response = await fetch(`${base}${path}`, { method, headers: {
     ...(auth ? { Authorization: `Bearer ${auth}` } : {}),
     ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-  }, body: body === undefined ? undefined : JSON.stringify(body) });
+  }, body: body === undefined ? undefined : JSON.stringify(body) }); }
+  catch (error) { throw new Error(`${method} ${path}: ${error.message} (${error.cause?.code || error.cause?.message || 'network error'})`, { cause: error }); }
   const raw = await response.text();
   let data;
   try { data = JSON.parse(raw); } catch { data = raw; }
@@ -124,6 +126,12 @@ let newmanRan = false;
 try {
   if (!process.argv.includes('--existing-stack')) command('docker', ['compose', '-f', 'docker-compose.yml', '-f', 'test/api/nguyen/compose.override.yml', 'up', '-d', '--build']);
   await until('API Gateway health', async () => (await fetch(`${base}/platform/health`)).ok, 90);
+  // Compose reports containers as started before the application endpoints are ready.
+  // This public, read-only route confirms that KrakenD can reach the platform app.
+  await until('Platform API readiness', async () => {
+    const response = await fetch(`${base}/platform/api/v1/auth/verify/email`);
+    return response.ok && (await response.text()).includes('verify-email');
+  }, 90);
   const env = await seed();
   const newman = join(here, 'node_modules', 'newman', 'bin', 'newman.js');
   if (!existsSync(newman)) command('npm', ['install', '--no-audit', '--no-fund'], here);
