@@ -20,6 +20,8 @@ Sau khi sửa generator: `python test/api/nguyen/generate_collection.py`. Có th
 
 `test/api/nguyen/reports/` lưu `.log`, Newman `.json` và `.html` khi tới bước Newman. JSON gốc có thể chứa access token, nên thư mục bị loại khỏi Git. Chỉ đưa bằng chứng đã lọc token vào `docs/testing/evidence/nguyen/`. Khi dừng trước Newman, runner ghi `.blocked.json/.blocked.html` để giải thích trở ngại; chúng **không phải** Newman report hay ca Passed. Mã thoát khác 0 là Failed hoặc Blocked.
 
+Tóm tắt Newman JSON thành số ca và response lỗi đã lọc trường nhạy cảm: `node test/api/nguyen/summarize_newman.mjs test/api/nguyen/reports/<timestamp>.json docs/testing/evidence/nguyen/<run>.summary.json`. File `.html` của runner chỉ chứa tên request, HTTP và assertion; kiểm tra lại nội dung trước khi chia sẻ. `package-lock.json` cố định dependency Newman cho lần cài lại.
+
 Đối chiếu qua `GET /sales/api/v1/orders/{id}` và `GET /inventory/api/v1/stock-levels?branchId=...` sau thao tác; collection chờ tồn hội tụ tối đa 45 lượt, cách nhau 1 giây. Nếu cần SQL, truy vấn các schema `sales`, `inventory` với `tenant_id` riêng của lượt chạy. Chạy toàn bộ lệnh lần thứ hai trên tenant mới trước khi báo ổn định.
 
 ## Phạm vi từng nhóm ca và giới hạn

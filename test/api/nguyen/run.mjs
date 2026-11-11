@@ -112,6 +112,10 @@ try {
   if (existsSync(jsonPath)) {
     const report = JSON.parse(readFileSync(jsonPath, 'utf8'));
     writeFileSync(jsonPath.replace(/\.json$/, '.html'), htmlFrom(report));
+    const summary = spawnSync(process.execPath, [join(here, 'summarize_newman.mjs'), jsonPath,
+      jsonPath.replace(/\.json$/, '.summary.json')], { cwd: repo, encoding: 'utf8' });
+    log.push(summary.stdout || '', summary.stderr || '');
+    if (summary.status !== 0) throw new Error(`Could not summarize Newman report: ${summary.stderr}`);
     // Newman exports request Authorization headers. Keep raw evidence local only.
   }
   exit = cmd.status ?? 1;

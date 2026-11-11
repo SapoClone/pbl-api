@@ -66,7 +66,7 @@
       ]
     },
     {
-      "name": "TC-NG-01 online pending",
+      "name": "TC-NG-01 online new",
       "request": {
         "method": "GET",
         "header": [
@@ -83,7 +83,7 @@
           "script": {
             "exec": [
               "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-              "const d=pm.response.json();pm.test('orderStatus=pending, fulfillmentStatus=unfulfilled',()=>{pm.expect(d.orderStatus).to.eql('pending');pm.expect(d.fulfillmentStatus).to.eql('unfulfilled');});pm.collectionVariables.set('primaryVersion',d.version);"
+              "const d=pm.response.json();pm.test('orderStatus=new, fulfillmentStatus=unfulfilled',()=>{pm.expect(d.orderStatus).to.eql('new');pm.expect(d.fulfillmentStatus).to.eql('unfulfilled');});pm.collectionVariables.set('primaryVersion',d.version);"
             ]
           }
         }
@@ -1097,7 +1097,7 @@
       ]
     },
     {
-      "name": "TC-NG-15 remains pending",
+      "name": "TC-NG-15 remains new",
       "request": {
         "method": "GET",
         "header": [
@@ -1114,7 +1114,7 @@
           "script": {
             "exec": [
               "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-              "const d=pm.response.json();pm.test('orderStatus=pending, fulfillmentStatus=unfulfilled',()=>{pm.expect(d.orderStatus).to.eql('pending');pm.expect(d.fulfillmentStatus).to.eql('unfulfilled');});"
+              "const d=pm.response.json();pm.test('orderStatus=new, fulfillmentStatus=unfulfilled',()=>{pm.expect(d.orderStatus).to.eql('new');pm.expect(d.fulfillmentStatus).to.eql('unfulfilled');});"
             ]
           }
         }

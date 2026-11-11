@@ -50,7 +50,7 @@ else {{ pm.collectionVariables.unset(key); pm.test('onHand={onhand}, reserved={r
 
 stock('BASE stock before tests',12,0)
 create('primary',2)
-detail('TC-NG-01 online pending', 'primary','pending','unfulfilled',True)
+detail('TC-NG-01 online new', 'primary','new','unfulfilled',True)
 action('TC-NG-02 confirm holds stock','confirm','primary',{'version':'{{primaryVersion}}'},200)
 detail('TC-NG-02 confirmed','primary','confirmed','unfulfilled',True)
 stock('TC-NG-02 reservation delta',12,2)
@@ -89,7 +89,7 @@ stock('TC-NG-14 stock unchanged',10,0)
 
 create('shortage',11)
 action('TC-NG-15 insufficient available','confirm','shortage',{},409,'INSUFFICIENT_STOCK')
-detail('TC-NG-15 remains pending','shortage','pending','unfulfilled')
+detail('TC-NG-15 remains new','shortage','new','unfulfilled')
 stock('TC-NG-15 no partial hold',10,0)
 
 create('contentionA',10)
