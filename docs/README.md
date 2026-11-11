@@ -9,6 +9,7 @@ This is a boilerplate for NestJS projects. It is a starting point for building a
 - [Database](database.md)
 - [Security](security.md)
 - [Testing](testing.md)
+- [Performance testing with k6](guides/performance-testing.md)
 - [Deployment](deployment.md)
 - [Technologies](technologies.md)
 - [API reference (Swagger UI, all services)](https://sapoclone.github.io/pbl-api/swagger/) and [how it is generated](guides/openapi.md)
