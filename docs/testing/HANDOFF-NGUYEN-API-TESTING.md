@@ -30,4 +30,4 @@ Ma trận FR-M07-02/03, FR-M05-08, BR-02/05 và từng ca nằm trong báo cáo 
 
 ## Commit và push
 
-Commit cục bộ chứa các file nêu trên. Xem SHA bằng `git log -1 --oneline`; push chưa xác nhận vì `git ls-remote origin` lỗi kết nối (`getaddrinfo() thread failed to start`). Trạng thái này chỉ thay đổi sau khi lệnh push và đối chiếu remote thành công.
+Commit triển khai cục bộ: `484d472` (`test: add Nguyen gateway order and inventory API suite with blocked evidence`). Lệnh `git push -u origin test/nguyen-api-order-lifecycle-stock-reservation` cũng thất bại với `getaddrinfo() thread failed to start`; push chưa xác nhận. Trạng thái này chỉ thay đổi sau khi lệnh push và đối chiếu remote thành công.
