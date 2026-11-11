@@ -1,0 +1,828 @@
+$ docker compose -f docker-compose.yml -f test/api/nguyen/compose.override.yml up -d --build
+#1 [internal] load local bake definitions
+#1 reading from stdin 4.57kB done
+#1 DONE 0.0s
+
+#2 [krakend internal] load build definition from Dockerfile
+#2 transferring dockerfile: 891B 0.0s done
+#2 DONE 0.0s
+
+#3 [catalog internal] load build definition from Dockerfile.dev
+#3 transferring dockerfile: 318B 0.0s done
+#3 DONE 0.0s
+
+#4 [inventory internal] load metadata for docker.io/library/node:24-alpine
+#4 ...
+
+#5 [auth] devopsfaith/krakend:pull token for registry-1.docker.io
+#5 DONE 0.0s
+
+#6 [auth] krakend/builder:pull token for registry-1.docker.io
+#6 DONE 0.0s
+
+#7 [auth] library/node:pull token for registry-1.docker.io
+#7 DONE 0.0s
+
+#8 [krakend internal] load metadata for docker.io/devopsfaith/krakend:2.6.3
+#8 DONE 2.2s
+
+#4 [insight internal] load metadata for docker.io/library/node:24-alpine
+#4 DONE 2.2s
+
+#9 [krakend internal] load metadata for docker.io/krakend/builder:2.6.3
+#9 DONE 2.2s
+
+#10 [krakend internal] load .dockerignore
+#10 transferring context: 2B done
+#10 DONE 0.0s
+
+#11 [platform internal] load .dockerignore
+#11 transferring context: 108B 0.0s done
+#11 DONE 0.0s
+
+#12 [finance internal] load build context
+#12 ...
+
+#13 [krakend internal] load build context
+#13 transferring context: 241B 0.0s done
+#13 DONE 0.1s
+
+#14 [krakend builder 1/4] FROM docker.io/krakend/builder:2.6.3@sha256:fc579c9630b5248b6e86d9cfb693365faa37e3a413b98b906768f3eeaf788932
+#14 resolve docker.io/krakend/builder:2.6.3@sha256:fc579c9630b5248b6e86d9cfb693365faa37e3a413b98b906768f3eeaf788932 0.1s done
+#14 DONE 0.1s
+
+#12 [integration internal] load build context
+#12 ...
+
+#15 [finance 1/6] FROM docker.io/library/node:24-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8
+#15 resolve docker.io/library/node:24-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8 0.1s done
+#15 DONE 0.2s
+
+#16 [krakend stage-1 1/3] FROM docker.io/devopsfaith/krakend:2.6.3@sha256:4c678c224f6751224b4419ad88310797d5d6c2f896bfb2a69b43c6de697754e1
+#16 resolve docker.io/devopsfaith/krakend:2.6.3@sha256:4c678c224f6751224b4419ad88310797d5d6c2f896bfb2a69b43c6de697754e1 0.2s done
+#16 DONE 0.2s
+
+#17 [krakend builder 3/4] COPY plugins/error-body/ ./
+#17 CACHED
+
+#18 [krakend builder 4/4] RUN go test ./...  && go build -buildmode=plugin -o /out/pbl-error-body.so .
+#18 CACHED
+
+#19 [krakend stage-1 2/3] COPY --from=builder /out/pbl-error-body.so /opt/krakend/plugins/pbl-error-body.so
+#19 CACHED
+
+#20 [krakend builder 2/4] WORKDIR /src
+#20 CACHED
+
+#21 [krakend stage-1 3/3] COPY krakend.json /etc/krakend/krakend.json
+#21 CACHED
+
+#12 [integration internal] load build context
+#12 ...
+
+#22 [krakend] exporting to image
+#22 exporting layers 0.0s done
+#22 exporting manifest sha256:f449c93e2d05e3f8c266b3fa43c71e5fe8f54b7dcf729d1bdee289a9448eb1b4 done
+#22 exporting config sha256:9e5dccfb460044f07182e5c5d172e5dfd960f421ec3d872586131fab2029ee97 done
+#22 exporting attestation manifest sha256:1458d50163bc9009345839a7627240c0f7e4ca45fc5d86259788bd66575e4c3c 0.0s done
+#22 exporting manifest list sha256:4440b0843e4b3702917f62c9ba3affb5bb8dc33a377202785a1c956d135878f7 0.0s done
+#22 naming to docker.io/library/pbl-krakend:2.6.3 done
+#22 unpacking to docker.io/library/pbl-krakend:2.6.3 0.0s done
+#22 DONE 0.3s
+
+#12 [integration internal] load build context
+#12 ...
+
+#23 [krakend] resolving provenance for metadata file
+#23 DONE 0.0s
+
+#12 [integration internal] load build context
+#12 transferring context: 3.70MB 2.1s done
+#12 DONE 2.1s
+
+#24 [catalog 5/6] RUN pnpm install
+#24 CACHED
+
+#25 [integration 5/6] RUN pnpm install
+#25 CACHED
+
+#26 [customer 5/6] RUN pnpm install
+#26 CACHED
+
+#27 [finance 5/6] RUN pnpm install
+#27 CACHED
+
+#28 [inventory 5/6] RUN pnpm install
+#28 CACHED
+
+#29 [platform 5/6] RUN pnpm install
+#29 CACHED
+
+#30 [sales 5/6] RUN pnpm install
+#30 CACHED
+
+#31 [integration 3/6] WORKDIR /app
+#31 CACHED
+
+#32 [integration 2/6] RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
+#32 CACHED
+
+#33 [integration 4/6] COPY package.json pnpm-lock.yaml ./
+#33 CACHED
+
+#34 [insight 5/6] RUN pnpm install
+#34 CACHED
+
+#35 [integration 6/6] COPY . .
+#35 ...
+
+#36 [catalog 6/6] COPY . .
+#36 ...
+
+#37 [customer 6/6] COPY . .
+#37 ...
+
+#38 [sales 6/6] COPY . .
+#38 DONE 9.2s
+
+#39 [inventory 6/6] COPY . .
+#39 DONE 9.3s
+
+#40 [finance 6/6] COPY . .
+#40 DONE 9.2s
+
+#41 [insight 6/6] COPY . .
+#41 DONE 9.2s
+
+#35 [integration 6/6] COPY . .
+#35 DONE 9.3s
+
+#42 [platform 6/6] COPY . .
+#42 DONE 9.3s
+
+#36 [catalog 6/6] COPY . .
+#36 DONE 9.3s
+
+#37 [customer 6/6] COPY . .
+#37 DONE 9.3s
+
+#43 [insight] exporting to image
+#43 exporting layers
+#43 ...
+
+#44 [customer] exporting to image
+#44 ...
+
+#45 [sales] exporting to image
+#45 exporting layers 7.8s done
+#45 exporting manifest sha256:e59c0e2de65223fd30177e9f6c4894f8523569e4ba93ff44021e09fa3e770a4c 0.1s done
+#45 exporting config sha256:ee170105e05294ae5338ae11781d5a080cb6cb4e82e7b853ec430d2bcc0a05d0
+#45 exporting config sha256:ee170105e05294ae5338ae11781d5a080cb6cb4e82e7b853ec430d2bcc0a05d0 0.1s done
+#45 exporting attestation manifest sha256:135eac5a9ff65d998bfee5c928b6d752399e9bfc06554a66a2c1cd62df9d1b3e 0.1s done
+#45 exporting manifest list sha256:2921ddc4b68adf2923b90e9a8dab3ce2a9c8e8551f90a1b5f45596145ddf8068
+#45 ...
+
+#43 [insight] exporting to image
+#43 exporting layers 7.9s done
+#43 exporting manifest sha256:99514f6b325444e751e362b4cdeff5abc9c4964188b6b8645f94e8539cbe3274 0.1s done
+#43 exporting config sha256:6d2ba821f067f23f240765258721e842f6ea9741d0f0a712c863357994c2d5cc
+#43 exporting config sha256:6d2ba821f067f23f240765258721e842f6ea9741d0f0a712c863357994c2d5cc 0.1s done
+#43 exporting attestation manifest sha256:5c659adc127971d90eff34d188894e148533469e0d7e159c6f9cf3722d218110
+#43 exporting attestation manifest sha256:5c659adc127971d90eff34d188894e148533469e0d7e159c6f9cf3722d218110 0.2s done
+#43 exporting manifest list sha256:30bf28a5d04c69c3c921832c96b294c590d43e45396f3aef431ef0ba0e52804b
+#43 exporting manifest list sha256:30bf28a5d04c69c3c921832c96b294c590d43e45396f3aef431ef0ba0e52804b 0.1s done
+#43 naming to docker.io/library/pbl-api-insight:latest 0.0s done
+#43 unpacking to docker.io/library/pbl-api-insight:latest
+#43 ...
+
+#46 [finance] exporting to image
+#46 exporting layers 8.0s done
+#46 exporting manifest sha256:203dbc23f5ba23e93106055cd636ab53b511a79ac5ebd11e8ffe05c4a87ae1bd 0.1s done
+#46 exporting config sha256:1f03b363f814c8f25682e27c05d820de1850d7583df7e6aa74b3330f119135fc 0.1s done
+#46 exporting attestation manifest sha256:d28fdd805b10f92ef6ef45280c22f9bdfab26c3eb094ef2ca24cac26a8ce5a36 0.1s done
+#46 exporting manifest list sha256:09f7a4808d024f3eedaddcb0a494bed252525a9671ee0f060b622d3cea78bd6d 0.1s done
+#46 naming to docker.io/library/pbl-api-finance:latest 0.0s done
+#46 unpacking to docker.io/library/pbl-api-finance:latest
+#46 ...
+
+#47 [platform] exporting to image
+#47 exporting layers 7.9s done
+#47 exporting manifest sha256:0d2450dded2bd9a1483ad88e7e1ab20aae8d015558399fc4a84986a35f3ccdc0 0.1s done
+#47 exporting config sha256:5d7f4f00a11bf8d1ba6535cd555f93d8f9d7eaaa5b1486add344b6518128d3e5 0.1s done
+#47 exporting attestation manifest sha256:34059826f1719b91b47dafe6ce3ac2379d03c1deeddf2ba04e65fb51c517d38c 0.1s done
+#47 exporting manifest list sha256:d0631055d9e0a7259e6db4b63a9ffc94c0f03b69847c27faaa2b0c94fef9e4d0 0.1s done
+#47 naming to docker.io/library/pbl-api-platform:latest 0.0s done
+#47 unpacking to docker.io/library/pbl-api-platform:latest
+#47 ...
+
+#48 [catalog] exporting to image
+#48 exporting layers 8.0s done
+#48 exporting manifest sha256:73aed46ba002bea13bf6c34fb2db0f81d5c410f72314eb8ad74f546523422f82 0.1s done
+#48 exporting config sha256:b9056f59aad9d3bba048d14f8cd0b96a03f330f67616cec17c03a8c47c78aefe 0.1s done
+#48 exporting attestation manifest sha256:d9817bdfe65f29b13f0ccb06cd7066bbb61185af954293981dbf3478c49c7ad2 0.1s done
+#48 exporting manifest list sha256:e3b4c1610fb47ddf6d270bc99d2c7976179cff7ab956a6cba0b78fc0f55a39c0 0.1s done
+#48 naming to docker.io/library/pbl-api-catalog:latest 0.0s done
+#48 unpacking to docker.io/library/pbl-api-catalog:latest
+#48 ...
+
+#49 [integration] exporting to image
+#49 exporting layers 8.0s done
+#49 exporting manifest sha256:144c47999f442e73d1e332dfedc09764aeaf6465a224386fea613bb0bc0f07fd 0.1s done
+#49 exporting config sha256:80b6412da16e3b4af27cbc56e40ebb583fb9ae04364d48428d99845e6f99c7bd 0.1s done
+#49 exporting attestation manifest sha256:b8e5c27e713ce4a5a7de8296859cc419ebbff321e5b21bc2918ffe77fb11851f 0.1s done
+#49 exporting manifest list sha256:801ab09103ebc478231dc35a2deeb0d00e5d6ad990d5ae3c3a03bce3913a605b 0.1s done
+#49 naming to docker.io/library/pbl-api-integration:latest 0.0s done
+#49 unpacking to docker.io/library/pbl-api-integration:latest
+#49 ...
+
+#50 [inventory] exporting to image
+#50 exporting layers 8.0s done
+#50 exporting manifest sha256:cb82fcc467252a07b2645b300b1df6bb6b52cd1803bc9941a2676677d5263be5 0.1s done
+#50 exporting config sha256:b686734ab39407e23ceee88a63ba02e3a50f17d9d7a269e4acbf8feb392b81ad 0.1s done
+#50 exporting attestation manifest sha256:511ffe4930d5d826cf23261dc7fe7cbd894e5eaa56906c25f7f850b035118b52 0.1s done
+#50 exporting manifest list sha256:0414cafe90e6b65cc7163a4f1f9a9b509cc4fc2b1152ac61d85bdf6640ff4c23 0.1s done
+#50 naming to docker.io/library/pbl-api-inventory:latest 0.0s done
+#50 unpacking to docker.io/library/pbl-api-inventory:latest
+#50 ...
+
+#44 [customer] exporting to image
+#44 exporting layers 7.9s done
+#44 exporting manifest sha256:3a8b2c2f5ea86c140a1566b61130437cf99df415aadaeba4f5b1939ba14dda5f 0.1s done
+#44 exporting config sha256:ffaf9fe51d57ee6d1069dc587131ec937f00fb0ce7b7ba2fa4784f335812d06d 0.1s done
+#44 exporting attestation manifest sha256:7a69d1c0a439bec28fb84c096df13eebc0a3584af2765eeec2ebabaaa3c41cf9 0.1s done
+#44 exporting manifest list sha256:fe9a41c1c891ed96cc6a516e6c22a904273f164891d4a2d98352fb56f633b769 0.1s done
+#44 naming to docker.io/library/pbl-api-customer:latest 0.0s done
+#44 unpacking to docker.io/library/pbl-api-customer:latest
+#44 ...
+
+#45 [sales] exporting to image
+#45 exporting manifest list sha256:2921ddc4b68adf2923b90e9a8dab3ce2a9c8e8551f90a1b5f45596145ddf8068 0.1s done
+#45 naming to docker.io/library/pbl-api-sales:latest 0.1s done
+#45 unpacking to docker.io/library/pbl-api-sales:latest 8.3s done
+#45 DONE 16.8s
+
+#44 [customer] exporting to image
+#44 unpacking to docker.io/library/pbl-api-customer:latest 8.0s done
+#44 ...
+
+#50 [inventory] exporting to image
+#50 unpacking to docker.io/library/pbl-api-inventory:latest 8.0s done
+#50 DONE 16.7s
+
+#47 [platform] exporting to image
+#47 unpacking to docker.io/library/pbl-api-platform:latest 8.0s done
+#47 DONE 16.6s
+
+#43 [insight] exporting to image
+#43 unpacking to docker.io/library/pbl-api-insight:latest 8.0s done
+#43 DONE 16.7s
+
+#49 [integration] exporting to image
+#49 unpacking to docker.io/library/pbl-api-integration:latest 8.0s done
+#49 DONE 16.7s
+
+#46 [finance] exporting to image
+#46 unpacking to docker.io/library/pbl-api-finance:latest 8.0s done
+#46 DONE 16.8s
+
+#44 [customer] exporting to image
+#44 DONE 16.7s
+
+#48 [catalog] exporting to image
+#48 unpacking to docker.io/library/pbl-api-catalog:latest 8.0s done
+#48 DONE 16.7s
+
+#51 [sales] resolving provenance for metadata file
+#51 DONE 0.5s
+
+#52 [platform] resolving provenance for metadata file
+#52 DONE 0.4s
+
+#53 [catalog] resolving provenance for metadata file
+#53 DONE 0.4s
+
+#54 [insight] resolving provenance for metadata file
+#54 DONE 0.3s
+
+#55 [customer] resolving provenance for metadata file
+#55 DONE 0.2s
+
+#56 [integration] resolving provenance for metadata file
+#56 DONE 0.1s
+
+#57 [finance] resolving provenance for metadata file
+#57 DONE 0.2s
+
+#58 [inventory] resolving provenance for metadata file
+#58 DONE 0.0s
+
+ Image pbl-krakend:2.6.3 Building
+ Image pbl-api-customer Building
+ Image pbl-api-integration Building
+ Image pbl-api-inventory Building
+ Image pbl-api-finance Building
+ Image pbl-api-insight Building
+ Image pbl-api-platform Building
+ Image pbl-api-sales Building
+ Image pbl-api-catalog Building
+ Image pbl-api-customer Built
+ Image pbl-api-sales Built
+ Image pbl-api-inventory Built
+ Image pbl-api-platform Built
+ Image pbl-api-integration Built
+ Image pbl-api-catalog Built
+ Image pbl-api-finance Built
+ Image pbl-api-insight Built
+ Image pbl-krakend:2.6.3 Built
+ Container pbl-api-postgres-1 Running
+ Container pbl-api-redis-1 Running
+ Container pbl-api-elasticmq-1 Running
+ Container pbl-api-krakend-1 Running
+ Container pbl-api-customer-1 Recreate
+ Container pbl-api-catalog-1 Recreate
+ Container pbl-api-finance-1 Recreate
+ Container pbl-api-inventory-1 Recreate
+ Container pbl-api-insight-1 Recreate
+ Container pbl-api-sales-1 Recreate
+ Container pbl-api-integration-1 Recreate
+ Container pbl-api-platform-1 Recreate
+ Container pbl-api-platform-1 Recreated
+ Container pbl-api-sales-1 Recreated
+ Container pbl-api-catalog-1 Recreated
+ Container pbl-api-finance-1 Recreated
+ Container pbl-api-inventory-1 Recreated
+ Container pbl-api-customer-1 Recreated
+ Container pbl-api-insight-1 Recreated
+ Container pbl-api-integration-1 Recreated
+ Container pbl-api-postgres-1 Waiting
+ Container pbl-api-postgres-1 Healthy
+ Container pbl-api-sales-1 Starting
+ Container pbl-api-integration-1 Starting
+ Container pbl-api-inventory-1 Starting
+ Container pbl-api-platform-1 Starting
+ Container pbl-api-customer-1 Starting
+ Container pbl-api-finance-1 Starting
+ Container pbl-api-catalog-1 Starting
+ Container pbl-api-insight-1 Starting
+ Container pbl-api-sales-1 Started
+ Container pbl-api-integration-1 Started
+ Container pbl-api-inventory-1 Started
+ Container pbl-api-platform-1 Started
+ Container pbl-api-customer-1 Started
+ Container pbl-api-finance-1 Started
+ Container pbl-api-catalog-1 Started
+ Container pbl-api-insight-1 Started
+
+exit=0
+
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/login -> 200
+
+POST /platform/api/v1/tenants -> 201
+
+GET /platform/api/v1/branches -> 200
+
+POST /inventory/api/v1/warehouses -> 404 {"timestamp":"2026-11-11T06:13:31.341Z","statusCode":404,"error":"Not Found","message":"Branch 1ea00457-4008-4cc0-b002-8aea9fbdd42a not found","errorCode":"BRANCH_NOT_FOUND"}
+
+POST /inventory/api/v1/warehouses -> 201
+
+POST /catalog/api/v1/products -> 201
+
+GET /inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a -> 200
+
+GET /sales/api/v1/orders?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a&limit=1 -> 200
+
+POST /inventory/api/v1/stock-receipts -> 201
+
+POST /inventory/api/v1/stock-receipts/68018b17-2a7a-48c1-b274-e06251d81599/submit -> 200
+
+POST /inventory/api/v1/stock-receipts/68018b17-2a7a-48c1-b274-e06251d81599/approve -> 200
+
+GET /inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a -> 200
+
+POST /platform/api/v1/tenants/current/members -> 201
+
+POST /platform/api/v1/tenants/current/members -> 201
+
+POST /platform/api/v1/auth/email/login -> 200
+
+POST /platform/api/v1/auth/email/login -> 200
+
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/login -> 200
+
+POST /platform/api/v1/tenants -> 201
+
+GET /platform/api/v1/branches -> 200
+
+POST /catalog/api/v1/products -> 201
+
+POST /sales/api/v1/orders/omnichannel -> 404 {"errorCode":"PRICE_NOT_CONFIGURED","message":"Variant 3ebe0b37-15a6-4c8b-bede-6d211d04b48d not found in Catalog"}
+
+POST /sales/api/v1/orders/omnichannel -> 201
+
+newman
+
+Nguyen - API order lifecycle and stock reservation
+
+→ BASE stock before tests
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 64ms]
+  √  HTTP 200
+  √  onHand=12, reserved=0, available=12
+
+→ primary create ONLINE ×2
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.65kB, 88ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-01 online new
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.68kB, 20ms]
+  √  HTTP 200
+  √  orderStatus=new, fulfillmentStatus=unfulfilled
+
+→ TC-NG-02 confirm holds stock
+  POST http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0/confirm [200 OK, 3.12kB, 76ms]
+  √  HTTP 200
+
+→ TC-NG-02 confirmed
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.69kB, 17ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=unfulfilled
+
+→ TC-NG-02 reservation delta
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 17ms]
+  √  HTTP 200
+  √  onHand=12, reserved=2, available=10
+
+→ TC-NG-03 ship before pack
+  POST http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0/ship [409 Conflict, 475B, 16ms]
+  √  HTTP 409
+  √  Domain error ORDER_INVALID_STATE
+
+→ TC-NG-03 state unchanged
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.69kB, 18ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=unfulfilled
+
+→ TC-NG-03 stock unchanged
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 30ms]
+  √  HTTP 200
+  √  onHand=12, reserved=2, available=10
+
+→ TC-NG-04 pack
+  POST http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0/pack [200 OK, 1.68kB, 34ms]
+  √  HTTP 200
+
+→ TC-NG-04 packing
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.68kB, 30ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=packing
+
+→ TC-NG-05 pack twice
+  POST http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0/pack [409 Conflict, 474B, 15ms]
+  √  HTTP 409
+  √  Domain error ORDER_INVALID_STATE
+
+→ TC-NG-05 state unchanged
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.68kB, 16ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=packing
+
+→ TC-NG-06 stale version
+  POST http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0/ship [409 Conflict, 480B, 14ms]
+  √  HTTP 409
+  √  Domain error RESOURCE_VERSION_CONFLICT
+
+→ TC-NG-06 state unchanged
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.68kB, 13ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=packing
+
+→ TC-NG-07 ship
+  POST http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0/ship [200 OK, 1.77kB, 42ms]
+  √  HTTP 200
+
+→ TC-NG-07 shipping
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.77kB, 16ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=shipping
+
+→ TC-NG-08 cancel while shipping
+  POST http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0/cancel [409 Conflict, 475B, 16ms]
+  √  HTTP 409
+  √  Domain error ORDER_INVALID_STATE
+
+→ TC-NG-08 state unchanged
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.77kB, 16ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=shipping
+
+→ TC-NG-08 reservation unchanged
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 22ms]
+  √  HTTP 200
+  √  onHand=12, reserved=2, available=10
+
+→ TC-NG-09 delivered, unpaid
+  POST http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0/complete [200 OK, 1.77kB, 68ms]
+  √  HTTP 200
+
+→ TC-NG-09 delivered
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.77kB, 14ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=delivered
+
+→ TC-NG-09 committed stock
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 17ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ TC-NG-10 payment completes order
+  POST http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0/payments [201 Created, 563B, 40ms]
+  √  HTTP 201
+
+→ TC-NG-10 completed
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.91kB, 18ms]
+  √  HTTP 200
+  √  orderStatus=completed, fulfillmentStatus=delivered
+
+→ TC-NG-11 cancel completed
+  POST http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0/cancel [409 Conflict, 496B, 17ms]
+  √  HTTP 409
+  √  Domain error ORDER_ALREADY_COMPLETED
+
+→ TC-NG-11 state unchanged
+  GET http://localhost:8080/sales/api/v1/orders/95f14a94-7862-48ad-b226-1b4609883df0 [200 OK, 1.91kB, 14ms]
+  √  HTTP 200
+  √  orderStatus=completed, fulfillmentStatus=delivered
+
+→ TC-NG-11 stock unchanged
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 19ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ cancellable create ONLINE ×3
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.65kB, 47ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-12 confirm second order
+  POST http://localhost:8080/sales/api/v1/orders/5ae0f5d7-47b6-40a5-aba0-bf573a7d0fe9/confirm [200 OK, 3.12kB, 51ms]
+  √  HTTP 200
+
+→ TC-NG-12 reserve three
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 722B, 14ms]
+  √  HTTP 200
+  √  onHand=10, reserved=3, available=7
+
+→ TC-NG-13 cancel releases hold
+  POST http://localhost:8080/sales/api/v1/orders/5ae0f5d7-47b6-40a5-aba0-bf573a7d0fe9/cancel [200 OK, 3.61kB, 47ms]
+  √  HTTP 200
+
+→ TC-NG-13 cancelled
+  GET http://localhost:8080/sales/api/v1/orders/5ae0f5d7-47b6-40a5-aba0-bf573a7d0fe9 [200 OK, 1.67kB, 12ms]
+  √  HTTP 200
+  √  orderStatus=cancelled, fulfillmentStatus=unfulfilled
+
+→ TC-NG-13 released
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 16ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ TC-NG-14 confirm cancelled
+  POST http://localhost:8080/sales/api/v1/orders/5ae0f5d7-47b6-40a5-aba0-bf573a7d0fe9/confirm [409 Conflict, 449B, 13ms]
+  √  HTTP 409
+  √  Domain error ORDER_INVALID_STATE
+
+→ TC-NG-14 stock unchanged
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 14ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ shortage create ONLINE ×11
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.66kB, 42ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-15 insufficient available
+  POST http://localhost:8080/sales/api/v1/orders/35cb4e48-7ec5-405c-8007-a49d8827bd41/confirm [409 Conflict, 793B, 27ms]
+  √  HTTP 409
+  √  Domain error INSUFFICIENT_STOCK
+
+→ TC-NG-15 remains new
+  GET http://localhost:8080/sales/api/v1/orders/35cb4e48-7ec5-405c-8007-a49d8827bd41 [200 OK, 1.69kB, 13ms]
+  √  HTTP 200
+  √  orderStatus=new, fulfillmentStatus=unfulfilled
+
+→ TC-NG-15 no partial hold
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 14ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ contentionA create ONLINE ×10
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.66kB, 42ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ contentionB create ONLINE ×10
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.66kB, 41ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-16 first claimant takes last ten
+  POST http://localhost:8080/sales/api/v1/orders/edf7035e-2a87-462f-8946-f7b5c8d0e36c/confirm [200 OK, 3.13kB, 50ms]
+  √  HTTP 200
+
+→ TC-NG-16 second claimant rejected
+  POST http://localhost:8080/sales/api/v1/orders/0d5d2fb0-c669-4e97-afeb-715f0cf62992/confirm [409 Conflict, 791B, 27ms]
+  √  HTTP 409
+  √  Domain error INSUFFICIENT_STOCK
+
+→ TC-NG-16 one hold only
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 733B, 15ms]
+  √  HTTP 200
+  √  onHand=10, reserved=10, available=0
+
+→ TC-NG-16 cleanup first hold
+  POST http://localhost:8080/sales/api/v1/orders/edf7035e-2a87-462f-8946-f7b5c8d0e36c/cancel [200 OK, 3.6kB, 43ms]
+  √  HTTP 200
+
+→ TC-NG-16 released
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 13ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ raceA create ONLINE ×10
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.66kB, 36ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ raceB create ONLINE ×10
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.66kB, 39ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-25 concurrent confirmation, one hold
+  GET http://localhost:8080/sales/api/v1/orders/8296bd78-5ea1-4dd0-8fa0-36447af18fa4 [200 OK, 1.69kB, 14ms]
+  √  HTTP 200
+  POST http://localhost:8080/sales/api/v1/orders/8296bd78-5ea1-4dd0-8fa0-36447af18fa4/confirm   POST http://localhost:8080/sales/api/v1/orders/be9c87cb-84ab-4534-81ce-2be63656fd77/confirm [200 OK, 3.13kB, 53ms]
+[409 Conflict, 791B, 60ms]
+  √  One concurrent reservation succeeds, one is refused
+  √  Refusal is insufficient stock
+
+→ TC-NG-25 only ten reserved
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 733B, 17ms]
+  √  HTTP 200
+  √  onHand=10, reserved=10, available=0
+
+→ TC-NG-25 release winning reservation
+  POST http://localhost:8080/sales/api/v1/orders/8296bd78-5ea1-4dd0-8fa0-36447af18fa4/cancel [200 OK, 3.61kB, 51ms]
+  √  HTTP 200
+
+→ TC-NG-25 stock restored
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 723B, 13ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ staffOrder create ONLINE ×1
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.65kB, 47ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-17 staff confirms
+  POST http://localhost:8080/sales/api/v1/orders/02a72f18-5322-4d66-a871-732750811760/confirm [200 OK, 3.12kB, 68ms]
+  √  HTTP 200
+
+→ TC-NG-18 staff cannot cancel
+  POST http://localhost:8080/sales/api/v1/orders/02a72f18-5322-4d66-a871-732750811760/cancel [403 Forbidden, 461B, 8ms]
+  √  HTTP 403
+
+→ TC-NG-18 still confirmed
+  GET http://localhost:8080/sales/api/v1/orders/02a72f18-5322-4d66-a871-732750811760 [200 OK, 1.69kB, 14ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=unfulfilled
+
+→ TC-NG-18 hold unchanged
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 722B, 13ms]
+  √  HTTP 200
+  √  onHand=10, reserved=1, available=9
+
+→ TC-NG-18 owner cleanup
+  POST http://localhost:8080/sales/api/v1/orders/02a72f18-5322-4d66-a871-732750811760/cancel [200 OK, 3.59kB, 42ms]
+  √  HTTP 200
+
+→ TC-NG-19 accountant cannot create
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [403 Forbidden, 461B, 7ms]
+  √  HTTP 403
+
+→ TC-NG-20 no token cannot create
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [401 Unauthorized, 258B, 6ms]
+  √  HTTP 401
+
+→ TC-NG-21 code uniqueness and observed format
+  GET http://localhost:8080/sales/api/v1/orders/0d5d2fb0-c669-4e97-afeb-715f0cf62992 [200 OK, 1.69kB, 24ms]
+  √  HTTP 200
+  √  Unique per tenant
+  √  Observed HD-yyyyMMdd-######
+
+→ earlyComplete create ONLINE ×1
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.65kB, 43ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-22 confirm delivery order
+  POST http://localhost:8080/sales/api/v1/orders/1656562d-b3ad-4d0a-bd0e-7f9c2b3ed0a4/confirm [200 OK, 3.12kB, 50ms]
+  √  HTTP 200
+
+→ TC-NG-22 complete before ship must reject
+  POST http://localhost:8080/sales/api/v1/orders/1656562d-b3ad-4d0a-bd0e-7f9c2b3ed0a4/complete [200 OK, 1.77kB, 58ms]
+  1. HTTP 409
+  2. ORDER_INVALID_STATE
+
+→ TC-NG-23 online shortage flagged at creation
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [409 Conflict, 793B, 47ms]
+  3. HTTP 201
+  4. Shortage flag and pending order
+
+→ TC-NG-24 list registers
+  GET http://localhost:8080/sales/api/v1/registers?branchId=1ea00457-4008-4cc0-b002-8aea9fbdd42a [200 OK, 531B, 17ms]
+  √  HTTP 200
+  √  Register exists
+
+→ TC-NG-24 open cashier shift
+  POST http://localhost:8080/sales/api/v1/shifts [201 Created, 814B, 36ms]
+  √  HTTP 201
+
+→ TC-NG-24 POS rejects shortage
+  POST http://localhost:8080/sales/api/v1/pos/checkout [409 Conflict, 806B, 53ms]
+  √  HTTP 409
+  √  INSUFFICIENT_STOCK
+
+→ TC-NG-26 same code may exist in another tenant
+  GET http://localhost:8080/sales/api/v1/orders/e5360f04-9cc5-4a5b-87c0-e6812f30d536 [200 OK, 1.66kB, 12ms]
+  √  HTTP 200
+  √  Tenant B reads its own first order
+  √  Tenant B sequence starts independently
+  √  Order code is tenant-scoped
+
+┌─────────────────────────┬──────────────────┬──────────────────┐
+│                         │         executed │           failed │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│              iterations │                1 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│                requests │               72 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│            test-scripts │               70 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│      prerequest-scripts │                2 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│              assertions │              127 │                4 │
+├─────────────────────────┴──────────────────┴──────────────────┤
+│ total run duration: 1m 19.5s                                  │
+├───────────────────────────────────────────────────────────────┤
+│ total data received: 88.5kB (approx)                          │
+├───────────────────────────────────────────────────────────────┤
+│ average response time: 29ms [min: 6ms, max: 88ms, s.d.: 18ms] │
+└───────────────────────────────────────────────────────────────┘
+
+[31m  # [39m[31m failure        [39m[31m detail                                                   [39m
+[90m    [39m[90m                [39m[90m                                                          [39m
+ 1.  AssertionError  HTTP 409
+                     expected response to have status code 409 but got 200
+                     at assertion:0 in test-script
+                     inside "TC-NG-22 complete before ship must reject"
+[90m    [39m[90m                [39m[90m                                                          [39m
+ 2.  AssertionError  ORDER_INVALID_STATE
+                     expected undefined to deeply equal 'ORDER_INVALID_STATE'
+                     at assertion:1 in test-script
+                     inside "TC-NG-22 complete before ship must reject"
+[90m    [39m[90m                [39m[90m                                                          [39m
+ 3.  AssertionError  HTTP 201
+                     expected response to have status code 201 but got 409
+                     at assertion:0 in test-script
+                     inside "TC-NG-23 online shortage flagged at creation"
+[90m    [39m[90m                [39m[90m                                                          [39m
+ 4.  AssertionError  Shortage flag and pending order
+                     expected undefined to deeply equal true
+                     at assertion:1 in test-script
+                     inside "TC-NG-23 online shortage flagged at creation"
+
+(node:25404) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+Newman exit=1
+
+24 passed, 2 failed, 0 blocked
+
+
+DB verification: D:\BKDN\Nam4\KTPM\KTPM\pbl-api\test\api\nguyen\reports\2026-11-11T06-11-42-449Z.db.json
+
+
+BLOCKED/FAILED: Error: Newman failed: 1
+    at file:///D:/BKDN/Nam4/KTPM/KTPM/pbl-api/test/api/nguyen/run.mjs:159:25
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

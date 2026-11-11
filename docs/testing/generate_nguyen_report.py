@@ -54,13 +54,13 @@ p('BÁO CÁO KIỂM THỬ API',1)
 p('Vòng đời đơn online, giữ tồn và mã đơn',2)
 p('Dự án: Nền tảng SaaS quản trị bán lẻ đa kênh | Thành viên: Nguyên')
 p('Ngày 11/11/2026 | Branch: test/nguyen-api-order-lifecycle-stock-reservation')
-p('TRẠNG THÁI: Lượt mới trên bộ 26 ca: 24 Passed, 2 Failed, 0 Blocked. TC-22/23 là sai khác nghiệp vụ còn mở; chưa đạt exit criteria sản phẩm.')
+p('TRẠNG THÁI: Hai lượt bộ 26 ca đều có 24 Passed, 2 Failed, 0 Blocked. TC-22/23 là sai khác nghiệp vụ còn mở; chưa đạt exit criteria sản phẩm.')
 p('Đối chiếu: Testing-Scenario-v2.docx; SRS-Nen-tang-SaaS-Quan-tri-Ban-le-Da-kenh_v1.1.docx; BaoCao-KiemThu-Luong5-ChuyenKho.docx.')
 p('MỤC LỤC',1,True)
 for entry in ('I. Record of Changes','II. Testing Documentation','1. Scope of Testing','2. Test Strategy & Approach','3. Test Plan','4. Static Testing - Cross-Review Log','5. Test Cases & Reports','5.1 Kết quả','5.2 Test case','5.3 Ma trận truy vết','5.4 Defect Report','5.5 Bằng chứng','5.6 Chạy lại'):
     p(entry)
 p('I. Record of Changes',1,True)
-table(['Phiên bản','Ngày','Người thực hiện','Thay đổi'],[['0.7','11/11/2026','Nguyên / hỗ trợ kỹ thuật','Bộ 26 ca đã chạy: 24 Passed, 2 Failed; TC-26 đa tenant Passed. DB xác nhận lại DEF-01/02; format cấu hình BR-05 vẫn thiếu API.']])
+table(['Phiên bản','Ngày','Người thực hiện','Thay đổi'],[['0.8','11/11/2026','Nguyên / hỗ trợ kỹ thuật','Hai lượt bộ 26 ca, gồm lệnh npm một bước: đều 24 Passed, 2 Failed; TC-26 đa tenant Passed. PostgreSQL xác nhận lại DEF-01/02; format cấu hình BR-05 vẫn thiếu API.']])
 p('II. Testing Documentation',1)
 p('1. Scope of Testing',2)
 p('Phần 3 Testing Scenario v2: Nguyên phụ trách API Chức năng 5 (vòng đời đơn online) và Chức năng 6 (giữ tồn/mã đơn). Dùng Postman + Newman qua API Gateway. Yêu cầu FR-M07-02/03, FR-M05-08, BR-02/05. Ca phân quyền giới hạn ở đơn hàng. Không kiểm UI hoặc hiệu năng.')
@@ -77,7 +77,7 @@ p('3. Test Plan',2)
 table(['Mục','Kế hoạch / thực tế'],[
  ['Môi trường','Docker Compose (PostgreSQL, Redis, ElasticMQ, KrakenD và services), Gateway 8080, Node.js, Newman 6.2.1.'],
  ['Entry','Docker/Gateway và seed thành công từ PowerShell người dùng ở lượt 5; Newman thực thi toàn bộ collection.'],
- ['Exit','Bộ 26 ca đã chạy: 24 Passed, 2 Failed; TC-22/23 Failed và DB xác nhận. Format cấu hình BR-05 thiếu API; exit nghiệp vụ chưa đạt.'],
+ ['Exit','Hai lượt bộ 26 ca: cùng 24 Passed, 2 Failed; TC-22/23 Failed và DB xác nhận. Lệnh npm một bước đã chạy đủ. Format cấu hình BR-05 thiếu API; exit nghiệp vụ chưa đạt.'],
  ['Dữ liệu','Mỗi lượt có tenant A, 3 người dùng, chi nhánh/kho/SKU, nhập 12 đơn vị; tenant B và mã đơn đầu tiên cho TC-26.']])
 p('4. Static Testing - Cross-Review Log',2)
 table(['ID','Quan sát tĩnh','Xử lý'],[
@@ -90,9 +90,9 @@ p('5. Test Cases & Reports',1,True)
 p('5.1 Kết quả',2)
 table(['Chỉ số','Giá trị','Bằng chứng'],[
  ['Thiết kế','26 ca, 70 collection items','TC-26 kiểm sequence của tenant B qua Gateway.'],
- ['Passed / Failed / Blocked','24 / 2 / 0','Lượt 2026-11-11T06-05-07-797Z: TC-22/23 Failed; TC-26 Passed.'],
- ['Newman','72 HTTP request; 127 assertion; 4 Failed','Báo cáo attempt-7.summary.json và attempt-7.newman.html; exit code 1 do hai ca Failed.'],
- ['Đối chiếu API/DB','Đã có','GET order/stock qua gateway; PostgreSQL lượt mới: TC-22 FULFILLED, stock 9/0/9; TC-23 lưu đơn x100 PENDING không cờ; 0 mã trùng.'],
+ ['Passed / Failed / Blocked','24 / 2 / 0','Cả hai lượt 26 ca; TC-22/23 Failed, TC-26 Passed.'],
+ ['Newman','72 HTTP request; 127 assertion; 4 Failed','Lượt npm một bước 2026-11-11T06-11-42-449Z: attempt-8.summary.json và attempt-8.newman.html; exit code 1 do hai ca Failed.'],
+ ['Đối chiếu API/DB','Đã có','GET order/stock qua gateway; PostgreSQL lượt npm: TC-22 FULFILLED, stock 9/0/9; TC-23 lưu đơn x100 PENDING không cờ; 0 mã trùng.'],
  ['Push origin','Chưa có','GitHub không truy cập được từ phiên này.']])
 p('5.2 Danh sách test case',2)
 table(['ID','Kịch bản / dữ liệu','Yêu cầu','Kỳ vọng','Thực tế'],[[f'TC-NG-{id}',title,ref,expected,('FAILED: API trả 200/delivered, mong 409' if id == '22' else 'FAILED: API trả 409 INSUFFICIENT_STOCK, mong 201/cờ thiếu tồn' if id == '23' else 'PASSED qua Newman lượt mới')] for id,title,ref,expected in cases])
@@ -113,10 +113,10 @@ table(['ID','Mô tả','Trạng thái'],[
  ['GAP-01','TC-26 đã thử hai tenant; chưa thử cấu hình format vì chưa có hợp đồng API.','Coverage / Partial'],
  ['GAP-02','Hai request gần đồng thời phụ thuộc lịch thực thi thực tế.','Giới hạn ca 25'],
  ['DEF-03 / BR-05','sales-code.generator.ts cố định HD-yyyyMMdd-######; không đọc thiết lập tenant. SRS yêu cầu format cấu hình được.','Sai khác tĩnh / cần thiết kế API']])
-p('DEF-01 tái hiện: tạo đơn ONLINE một SKU x1 trên tenant thử, xác nhận, gọi POST /sales/api/v1/orders/{id}/complete với version hiện hành khi chưa pack/ship. Kỳ vọng theo Testing Scenario v2: 409 ORDER_INVALID_STATE, đơn/tồn không đổi. Ba lượt Newman nhận 200/delivered; PostgreSQL lượt mới xác nhận FULFILLED và stock 9/0/9 sau khi bắt đầu từ 10 và giữ 1. Xem attempt-7.summary.json và attempt-7.db.json.')
-p('DEF-02 tái hiện: sau khi nhập 12 và hoàn tất đơn x2, tạo đơn ONLINE x100 với autoConfirm=true qua POST /sales/api/v1/orders/omnichannel. Kỳ vọng theo Testing Scenario v2: 201, đơn có cờ thiếu hàng. Ba lượt Newman nhận 409 INSUFFICIENT_STOCK. PostgreSQL lượt mới xác nhận đơn 63789b02-73f3-46bc-b3b7-afa5184b0e75, mã HD-20261111-000010, qty 100, PENDING/UNFULFILLED, exceptionCode null vẫn lưu; response không trả ID. Client retry có nguy cơ tạo thêm đơn. Xem attempt-7.db.json và DEFECTS-NGUYEN-API.md; cần thống nhất phạm vi public autoConfirm với chủ yêu cầu.')
+p('DEF-01 tái hiện: tạo đơn ONLINE một SKU x1 trên tenant thử, xác nhận, gọi POST /sales/api/v1/orders/{id}/complete với version hiện hành khi chưa pack/ship. Kỳ vọng theo Testing Scenario v2: 409 ORDER_INVALID_STATE, đơn/tồn không đổi. Bốn lượt Newman nhận 200/delivered; PostgreSQL lượt npm xác nhận FULFILLED và stock 9/0/9 sau khi bắt đầu từ 10 và giữ 1. Xem attempt-8.summary.json và attempt-8.db.json.')
+p('DEF-02 tái hiện: sau khi nhập 12 và hoàn tất đơn x2, tạo đơn ONLINE x100 với autoConfirm=true qua POST /sales/api/v1/orders/omnichannel. Kỳ vọng theo Testing Scenario v2: 201, đơn có cờ thiếu hàng. Bốn lượt Newman nhận 409 INSUFFICIENT_STOCK. PostgreSQL lượt npm xác nhận đơn 840f6521-1f92-4cb2-b3d1-75384d1a8c24, mã HD-20261111-000010, qty 100, PENDING/UNFULFILLED, exceptionCode null vẫn lưu; response không trả ID. Client retry có nguy cơ tạo thêm đơn. Xem attempt-8.db.json và DEFECTS-NGUYEN-API.md; cần thống nhất phạm vi public autoConfirm với chủ yêu cầu.')
 p('5.5 Bằng chứng',2)
-p('docs/testing/evidence/nguyen/: attempt-1..3 Docker permission denied; attempt-4 seed Q001; attempt-5/6 và attempt-7 gồm log, summary JSON và Newman HTML đã lọc. Lượt Compose 05-57-50 bị chặn trước Newman vì fetch failed lúc seed; sau đó runner chờ platform API readiness. Attempt-7: 24/26 Passed, 4 assertion Failed; attempt-7.db.json chỉ đọc theo tenant xác nhận stock 9/0/9, order TC-22 FULFILLED, order TC-23 x100 PENDING không cờ, 0 mã trùng. Raw Newman JSON nằm trong test/api/nguyen/reports/ vì chứa token; không commit.')
+p('docs/testing/evidence/nguyen/: attempt-1..3 Docker permission denied; attempt-4 seed Q001; attempt-5/6 chạy 25 ca; attempt-7/8 chạy đủ 26 ca, gồm summary JSON, Newman HTML và log đã lọc. Lượt Compose 05-57-50 bị chặn trước Newman vì fetch failed lúc seed; runner sau đó chờ platform API readiness. Attempt-8 là lệnh npm một bước: 24/26 Passed, 4 assertion Failed; attempt-8.db.json chỉ đọc theo tenant xác nhận stock 9/0/9, order TC-22 FULFILLED, order TC-23 x100 PENDING không cờ, 0 mã trùng. Raw Newman JSON nằm trong test/api/nguyen/reports/ vì chứa token; không commit.')
 p('5.6 Chạy lại',2)
 p('Bật Docker Desktop và xác nhận docker info. Tại pbl-api chạy npm --prefix test/api/nguyen run test:api. Xem reports/*.log, *.json, *.html, đối chiếu order/stock bằng API, chạy lại trên tenant mới. Ghi defect từ response; lọc token trước khi chia sẻ. Xem README và HANDOFF-NGUYEN-API-TESTING.md.')
 

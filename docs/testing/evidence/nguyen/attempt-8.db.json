@@ -1,0 +1,27 @@
+{
+  "source": "Read-only PostgreSQL query through docker compose, scoped to Newman tenant",
+  "tenantId": "fd9923dd-a1dc-4be3-967f-62fe21996956",
+  "warehouseId": "412bc31c-baff-4ab1-b4df-cdd06c0e3518",
+  "variantId": "e280105c-36f9-456a-8287-f5ed0e8c389f",
+  "stock": {
+    "onHand": 9,
+    "reserved": 0,
+    "available": 9
+  },
+  "earlyComplete": {
+    "id": "1656562d-b3ad-4d0a-bd0e-7f9c2b3ed0a4",
+    "orderStatus": "CONFIRMED",
+    "fulfillmentStatus": "FULFILLED",
+    "fulfillmentStage": null
+  },
+  "ordersInTenant": 10,
+  "shortageOrder": {
+    "id": "840f6521-1f92-4cb2-b3d1-75384d1a8c24",
+    "code": "HD-20261111-000010",
+    "orderStatus": "PENDING",
+    "fulfillmentStatus": "UNFULFILLED",
+    "exceptionCode": null,
+    "lineQty": 100
+  },
+  "duplicateOrderCodes": 0
+}
