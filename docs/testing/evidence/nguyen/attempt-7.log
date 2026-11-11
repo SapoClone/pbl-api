@@ -1,0 +1,451 @@
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/login -> 200
+
+POST /platform/api/v1/tenants -> 201
+
+GET /platform/api/v1/branches -> 200
+
+POST /inventory/api/v1/warehouses -> 404 {"timestamp":"2026-11-11T06:05:09.024Z","statusCode":404,"error":"Not Found","message":"Branch 10542604-b9f2-488a-9403-f9b5c56ede9f not found","errorCode":"BRANCH_NOT_FOUND"}
+
+POST /inventory/api/v1/warehouses -> 201
+
+POST /catalog/api/v1/products -> 201
+
+GET /inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f -> 200
+
+GET /sales/api/v1/orders?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f&limit=1 -> 200
+
+POST /inventory/api/v1/stock-receipts -> 201
+
+POST /inventory/api/v1/stock-receipts/c12348b3-7830-4ea4-a76a-d79137a02d61/submit -> 200
+
+POST /inventory/api/v1/stock-receipts/c12348b3-7830-4ea4-a76a-d79137a02d61/approve -> 200
+
+GET /inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f -> 200
+
+POST /platform/api/v1/tenants/current/members -> 201
+
+POST /platform/api/v1/tenants/current/members -> 201
+
+POST /platform/api/v1/auth/email/login -> 200
+
+POST /platform/api/v1/auth/email/login -> 200
+
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/login -> 200
+
+POST /platform/api/v1/tenants -> 201
+
+GET /platform/api/v1/branches -> 200
+
+POST /catalog/api/v1/products -> 201
+
+POST /sales/api/v1/orders/omnichannel -> 404 {"errorCode":"PRICE_NOT_CONFIGURED","message":"Variant 454766fe-f26c-4426-9c88-268a7a9d4858 not found in Catalog"}
+
+POST /sales/api/v1/orders/omnichannel -> 201
+
+newman
+
+Nguyen - API order lifecycle and stock reservation
+
+→ BASE stock before tests
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 77ms]
+  √  HTTP 200
+  √  onHand=12, reserved=0, available=12
+
+→ primary create ONLINE ×2
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.65kB, 81ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-01 online new
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.68kB, 26ms]
+  √  HTTP 200
+  √  orderStatus=new, fulfillmentStatus=unfulfilled
+
+→ TC-NG-02 confirm holds stock
+  POST http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e/confirm [200 OK, 3.12kB, 81ms]
+  √  HTTP 200
+
+→ TC-NG-02 confirmed
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.69kB, 18ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=unfulfilled
+
+→ TC-NG-02 reservation delta
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 18ms]
+  √  HTTP 200
+  √  onHand=12, reserved=2, available=10
+
+→ TC-NG-03 ship before pack
+  POST http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e/ship [409 Conflict, 475B, 31ms]
+  √  HTTP 409
+  √  Domain error ORDER_INVALID_STATE
+
+→ TC-NG-03 state unchanged
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.69kB, 26ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=unfulfilled
+
+→ TC-NG-03 stock unchanged
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 29ms]
+  √  HTTP 200
+  √  onHand=12, reserved=2, available=10
+
+→ TC-NG-04 pack
+  POST http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e/pack [200 OK, 1.68kB, 58ms]
+  √  HTTP 200
+
+→ TC-NG-04 packing
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.68kB, 20ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=packing
+
+→ TC-NG-05 pack twice
+  POST http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e/pack [409 Conflict, 474B, 14ms]
+  √  HTTP 409
+  √  Domain error ORDER_INVALID_STATE
+
+→ TC-NG-05 state unchanged
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.68kB, 28ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=packing
+
+→ TC-NG-06 stale version
+  POST http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e/ship [409 Conflict, 480B, 23ms]
+  √  HTTP 409
+  √  Domain error RESOURCE_VERSION_CONFLICT
+
+→ TC-NG-06 state unchanged
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.68kB, 15ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=packing
+
+→ TC-NG-07 ship
+  POST http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e/ship [200 OK, 1.77kB, 48ms]
+  √  HTTP 200
+
+→ TC-NG-07 shipping
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.77kB, 17ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=shipping
+
+→ TC-NG-08 cancel while shipping
+  POST http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e/cancel [409 Conflict, 475B, 20ms]
+  √  HTTP 409
+  √  Domain error ORDER_INVALID_STATE
+
+→ TC-NG-08 state unchanged
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.77kB, 16ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=shipping
+
+→ TC-NG-08 reservation unchanged
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 20ms]
+  √  HTTP 200
+  √  onHand=12, reserved=2, available=10
+
+→ TC-NG-09 delivered, unpaid
+  POST http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e/complete [200 OK, 1.77kB, 94ms]
+  √  HTTP 200
+
+→ TC-NG-09 delivered
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.77kB, 15ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=delivered
+
+→ TC-NG-09 committed stock
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 15ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ TC-NG-10 payment completes order
+  POST http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e/payments [201 Created, 563B, 51ms]
+  √  HTTP 201
+
+→ TC-NG-10 completed
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.91kB, 15ms]
+  √  HTTP 200
+  √  orderStatus=completed, fulfillmentStatus=delivered
+
+→ TC-NG-11 cancel completed
+  POST http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e/cancel [409 Conflict, 496B, 14ms]
+  √  HTTP 409
+  √  Domain error ORDER_ALREADY_COMPLETED
+
+→ TC-NG-11 state unchanged
+  GET http://localhost:8080/sales/api/v1/orders/98d729bd-0c9e-4c49-8560-098ad9035e3e [200 OK, 1.91kB, 14ms]
+  √  HTTP 200
+  √  orderStatus=completed, fulfillmentStatus=delivered
+
+→ TC-NG-11 stock unchanged
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 34ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ cancellable create ONLINE ×3
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.65kB, 71ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-12 confirm second order
+  POST http://localhost:8080/sales/api/v1/orders/83841084-c8e1-48ef-8ecf-bdf12cde139b/confirm [200 OK, 3.12kB, 57ms]
+  √  HTTP 200
+
+→ TC-NG-12 reserve three
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 722B, 14ms]
+  √  HTTP 200
+  √  onHand=10, reserved=3, available=7
+
+→ TC-NG-13 cancel releases hold
+  POST http://localhost:8080/sales/api/v1/orders/83841084-c8e1-48ef-8ecf-bdf12cde139b/cancel [200 OK, 3.61kB, 58ms]
+  √  HTTP 200
+
+→ TC-NG-13 cancelled
+  GET http://localhost:8080/sales/api/v1/orders/83841084-c8e1-48ef-8ecf-bdf12cde139b [200 OK, 1.67kB, 16ms]
+  √  HTTP 200
+  √  orderStatus=cancelled, fulfillmentStatus=unfulfilled
+
+→ TC-NG-13 released
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 17ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ TC-NG-14 confirm cancelled
+  POST http://localhost:8080/sales/api/v1/orders/83841084-c8e1-48ef-8ecf-bdf12cde139b/confirm [409 Conflict, 449B, 17ms]
+  √  HTTP 409
+  √  Domain error ORDER_INVALID_STATE
+
+→ TC-NG-14 stock unchanged
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 28ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ shortage create ONLINE ×11
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.66kB, 52ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-15 insufficient available
+  POST http://localhost:8080/sales/api/v1/orders/3e870b78-1ea8-4094-bc69-46e512162cec/confirm [409 Conflict, 793B, 34ms]
+  √  HTTP 409
+  √  Domain error INSUFFICIENT_STOCK
+
+→ TC-NG-15 remains new
+  GET http://localhost:8080/sales/api/v1/orders/3e870b78-1ea8-4094-bc69-46e512162cec [200 OK, 1.69kB, 14ms]
+  √  HTTP 200
+  √  orderStatus=new, fulfillmentStatus=unfulfilled
+
+→ TC-NG-15 no partial hold
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 14ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ contentionA create ONLINE ×10
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.66kB, 44ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ contentionB create ONLINE ×10
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.66kB, 45ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-16 first claimant takes last ten
+  POST http://localhost:8080/sales/api/v1/orders/09a2be1f-288a-43a1-ad81-ac01b61893c7/confirm [200 OK, 3.13kB, 66ms]
+  √  HTTP 200
+
+→ TC-NG-16 second claimant rejected
+  POST http://localhost:8080/sales/api/v1/orders/3aefccdf-66e2-473d-91f0-f16e6c48ab6f/confirm [409 Conflict, 791B, 30ms]
+  √  HTTP 409
+  √  Domain error INSUFFICIENT_STOCK
+
+→ TC-NG-16 one hold only
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 733B, 14ms]
+  √  HTTP 200
+  √  onHand=10, reserved=10, available=0
+
+→ TC-NG-16 cleanup first hold
+  POST http://localhost:8080/sales/api/v1/orders/09a2be1f-288a-43a1-ad81-ac01b61893c7/cancel [200 OK, 3.6kB, 47ms]
+  √  HTTP 200
+
+→ TC-NG-16 released
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 17ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ raceA create ONLINE ×10
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.66kB, 43ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ raceB create ONLINE ×10
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.66kB, 44ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-25 concurrent confirmation, one hold
+  GET http://localhost:8080/sales/api/v1/orders/1f8b9423-38e3-4702-8ce8-caa53f729546 [200 OK, 1.69kB, 19ms]
+  √  HTTP 200
+  POST http://localhost:8080/sales/api/v1/orders/1f8b9423-38e3-4702-8ce8-caa53f729546/confirm   POST http://localhost:8080/sales/api/v1/orders/898b3867-23ae-4dd1-88c2-513c62708cda/confirm [200 OK, 3.13kB, 70ms]
+[409 Conflict, 791B, 79ms]
+  √  One concurrent reservation succeeds, one is refused
+  √  Refusal is insufficient stock
+
+→ TC-NG-25 only ten reserved
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 733B, 21ms]
+  √  HTTP 200
+  √  onHand=10, reserved=10, available=0
+
+→ TC-NG-25 release winning reservation
+  POST http://localhost:8080/sales/api/v1/orders/1f8b9423-38e3-4702-8ce8-caa53f729546/cancel [200 OK, 3.61kB, 47ms]
+  √  HTTP 200
+
+→ TC-NG-25 stock restored
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 723B, 13ms]
+  √  HTTP 200
+  √  onHand=10, reserved=0, available=10
+
+→ staffOrder create ONLINE ×1
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.65kB, 74ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-17 staff confirms
+  POST http://localhost:8080/sales/api/v1/orders/eca9798e-307d-47df-bcf3-4a89abb3fe56/confirm [200 OK, 3.12kB, 62ms]
+  √  HTTP 200
+
+→ TC-NG-18 staff cannot cancel
+  POST http://localhost:8080/sales/api/v1/orders/eca9798e-307d-47df-bcf3-4a89abb3fe56/cancel [403 Forbidden, 461B, 9ms]
+  √  HTTP 403
+
+→ TC-NG-18 still confirmed
+  GET http://localhost:8080/sales/api/v1/orders/eca9798e-307d-47df-bcf3-4a89abb3fe56 [200 OK, 1.69kB, 13ms]
+  √  HTTP 200
+  √  orderStatus=confirmed, fulfillmentStatus=unfulfilled
+
+→ TC-NG-18 hold unchanged
+  GET http://localhost:8080/inventory/api/v1/stock-levels?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 722B, 15ms]
+  √  HTTP 200
+  √  onHand=10, reserved=1, available=9
+
+→ TC-NG-18 owner cleanup
+  POST http://localhost:8080/sales/api/v1/orders/eca9798e-307d-47df-bcf3-4a89abb3fe56/cancel [200 OK, 3.59kB, 52ms]
+  √  HTTP 200
+
+→ TC-NG-19 accountant cannot create
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [403 Forbidden, 461B, 8ms]
+  √  HTTP 403
+
+→ TC-NG-20 no token cannot create
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [401 Unauthorized, 258B, 3ms]
+  √  HTTP 401
+
+→ TC-NG-21 code uniqueness and observed format
+  GET http://localhost:8080/sales/api/v1/orders/3aefccdf-66e2-473d-91f0-f16e6c48ab6f [200 OK, 1.69kB, 14ms]
+  √  HTTP 200
+  √  Unique per tenant
+  √  Observed HD-yyyyMMdd-######
+
+→ earlyComplete create ONLINE ×1
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [201 Created, 2.65kB, 60ms]
+  √  HTTP 201
+  √  Order id and code
+
+→ TC-NG-22 confirm delivery order
+  POST http://localhost:8080/sales/api/v1/orders/c88449e7-c656-446d-9444-67df4fee428a/confirm [200 OK, 3.12kB, 87ms]
+  √  HTTP 200
+
+→ TC-NG-22 complete before ship must reject
+  POST http://localhost:8080/sales/api/v1/orders/c88449e7-c656-446d-9444-67df4fee428a/complete [200 OK, 1.77kB, 73ms]
+  1. HTTP 409
+  2. ORDER_INVALID_STATE
+
+→ TC-NG-23 online shortage flagged at creation
+  POST http://localhost:8080/sales/api/v1/orders/omnichannel [409 Conflict, 793B, 60ms]
+  3. HTTP 201
+  4. Shortage flag and pending order
+
+→ TC-NG-24 list registers
+  GET http://localhost:8080/sales/api/v1/registers?branchId=10542604-b9f2-488a-9403-f9b5c56ede9f [200 OK, 531B, 24ms]
+  √  HTTP 200
+  √  Register exists
+
+→ TC-NG-24 open cashier shift
+  POST http://localhost:8080/sales/api/v1/shifts [201 Created, 814B, 35ms]
+  √  HTTP 201
+
+→ TC-NG-24 POS rejects shortage
+  POST http://localhost:8080/sales/api/v1/pos/checkout [409 Conflict, 806B, 58ms]
+  √  HTTP 409
+  √  INSUFFICIENT_STOCK
+
+→ TC-NG-26 same code may exist in another tenant
+  GET http://localhost:8080/sales/api/v1/orders/b6ffdced-0d5a-485a-bf0f-69cbdf6a1b19 [200 OK, 1.66kB, 14ms]
+  √  HTTP 200
+  √  Tenant B reads its own first order
+  √  Tenant B sequence starts independently
+  √  Order code is tenant-scoped
+
+┌─────────────────────────┬──────────────────┬──────────────────┐
+│                         │         executed │           failed │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│              iterations │                1 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│                requests │               72 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│            test-scripts │               70 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│      prerequest-scripts │                2 │                0 │
+├─────────────────────────┼──────────────────┼──────────────────┤
+│              assertions │              127 │                4 │
+├─────────────────────────┴──────────────────┴──────────────────┤
+│ total run duration: 1m 20.1s                                  │
+├───────────────────────────────────────────────────────────────┤
+│ total data received: 88.5kB (approx)                          │
+├───────────────────────────────────────────────────────────────┤
+│ average response time: 35ms [min: 3ms, max: 94ms, s.d.: 23ms] │
+└───────────────────────────────────────────────────────────────┘
+
+[31m  # [39m[31m failure        [39m[31m detail                                                   [39m
+[90m    [39m[90m                [39m[90m                                                          [39m
+ 1.  AssertionError  HTTP 409
+                     expected response to have status code 409 but got 200
+                     at assertion:0 in test-script
+                     inside "TC-NG-22 complete before ship must reject"
+[90m    [39m[90m                [39m[90m                                                          [39m
+ 2.  AssertionError  ORDER_INVALID_STATE
+                     expected undefined to deeply equal 'ORDER_INVALID_STATE'
+                     at assertion:1 in test-script
+                     inside "TC-NG-22 complete before ship must reject"
+[90m    [39m[90m                [39m[90m                                                          [39m
+ 3.  AssertionError  HTTP 201
+                     expected response to have status code 201 but got 409
+                     at assertion:0 in test-script
+                     inside "TC-NG-23 online shortage flagged at creation"
+[90m    [39m[90m                [39m[90m                                                          [39m
+ 4.  AssertionError  Shortage flag and pending order
+                     expected undefined to deeply equal true
+                     at assertion:1 in test-script
+                     inside "TC-NG-23 online shortage flagged at creation"
+
+(node:24476) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+Newman exit=1
+
+24 passed, 2 failed, 0 blocked
+
+
+DB verification: D:\BKDN\Nam4\KTPM\KTPM\pbl-api\test\api\nguyen\reports\2026-11-11T06-05-07-797Z.db.json
+
+
+BLOCKED/FAILED: Error: Newman failed: 1
+    at file:///D:/BKDN/Nam4/KTPM/KTPM/pbl-api/test/api/nguyen/run.mjs:159:25
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

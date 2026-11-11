@@ -1,0 +1,216 @@
+{
+  "source": "Newman JSON, response fields allowlisted; bearer tokens and environment excluded",
+  "timestamp": 1794377114525,
+  "requests": 72,
+  "assertions": 127,
+  "failedAssertions": 4,
+  "caseTotals": {
+    "passed": 24,
+    "failed": 2,
+    "blocked": 0
+  },
+  "cases": [
+    {
+      "id": "TC-NG-01",
+      "result": "PASSED",
+      "executedRequests": 1,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-02",
+      "result": "PASSED",
+      "executedRequests": 3,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-03",
+      "result": "PASSED",
+      "executedRequests": 3,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-04",
+      "result": "PASSED",
+      "executedRequests": 2,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-05",
+      "result": "PASSED",
+      "executedRequests": 2,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-06",
+      "result": "PASSED",
+      "executedRequests": 2,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-07",
+      "result": "PASSED",
+      "executedRequests": 2,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-08",
+      "result": "PASSED",
+      "executedRequests": 3,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-09",
+      "result": "PASSED",
+      "executedRequests": 3,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-10",
+      "result": "PASSED",
+      "executedRequests": 2,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-11",
+      "result": "PASSED",
+      "executedRequests": 3,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-12",
+      "result": "PASSED",
+      "executedRequests": 2,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-13",
+      "result": "PASSED",
+      "executedRequests": 3,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-14",
+      "result": "PASSED",
+      "executedRequests": 2,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-15",
+      "result": "PASSED",
+      "executedRequests": 3,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-16",
+      "result": "PASSED",
+      "executedRequests": 5,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-17",
+      "result": "PASSED",
+      "executedRequests": 1,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-18",
+      "result": "PASSED",
+      "executedRequests": 4,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-19",
+      "result": "PASSED",
+      "executedRequests": 1,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-20",
+      "result": "PASSED",
+      "executedRequests": 1,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-21",
+      "result": "PASSED",
+      "executedRequests": 1,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-22",
+      "result": "FAILED",
+      "executedRequests": 2,
+      "failedAssertions": 2
+    },
+    {
+      "id": "TC-NG-23",
+      "result": "FAILED",
+      "executedRequests": 1,
+      "failedAssertions": 2
+    },
+    {
+      "id": "TC-NG-24",
+      "result": "PASSED",
+      "executedRequests": 3,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-25",
+      "result": "PASSED",
+      "executedRequests": 6,
+      "failedAssertions": 0
+    },
+    {
+      "id": "TC-NG-26",
+      "result": "PASSED",
+      "executedRequests": 1,
+      "failedAssertions": 0
+    }
+  ],
+  "failures": [
+    {
+      "request": "TC-NG-22 complete before ship must reject",
+      "assertion": "HTTP 409",
+      "reason": "expected response to have status code 409 but got 200",
+      "httpStatus": 200,
+      "response": {
+        "id": "c88449e7-c656-446d-9444-67df4fee428a",
+        "orderStatus": "confirmed",
+        "fulfillmentStatus": "delivered",
+        "exceptionCode": null
+      }
+    },
+    {
+      "request": "TC-NG-22 complete before ship must reject",
+      "assertion": "ORDER_INVALID_STATE",
+      "reason": "expected undefined to deeply equal 'ORDER_INVALID_STATE'",
+      "httpStatus": 200,
+      "response": {
+        "id": "c88449e7-c656-446d-9444-67df4fee428a",
+        "orderStatus": "confirmed",
+        "fulfillmentStatus": "delivered",
+        "exceptionCode": null
+      }
+    },
+    {
+      "request": "TC-NG-23 online shortage flagged at creation",
+      "assertion": "HTTP 201",
+      "reason": "expected response to have status code 201 but got 409",
+      "httpStatus": 409,
+      "response": {
+        "errorCode": "INSUFFICIENT_STOCK",
+        "message": "Insufficient warehouse stock to confirm order"
+      }
+    },
+    {
+      "request": "TC-NG-23 online shortage flagged at creation",
+      "assertion": "Shortage flag and pending order",
+      "reason": "expected undefined to deeply equal true",
+      "httpStatus": 409,
+      "response": {
+        "errorCode": "INSUFFICIENT_STOCK",
+        "message": "Insufficient warehouse stock to confirm order"
+      }
+    }
+  ]
+}
