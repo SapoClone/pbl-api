@@ -12,9 +12,9 @@ Yêu cầu Docker Desktop/Engine với Compose v2, Node.js 20+, npm và kết n�
 npm --prefix test/api/nguyen run test:api
 ```
 
-Runner gọi `docker compose up -d --build`, chờ gateway, tạo tenant và người dùng riêng, đọc chi nhánh mặc định (gói Free chỉ cho phép một chi nhánh), tạo warehouse, SKU, nhập 12 đơn vị bằng receipt, cài Newman 6.2.1 nếu thiếu, rồi chạy collection. Mỗi lần chạy tạo dữ liệu nhận diện duy nhất, không xóa volume hoặc DB. Muốn dùng stack đang bật: `node test/api/nguyen/run.mjs --existing-stack`. Có thể đặt `GATEWAY_URL` (thí dụ `http://localhost:8081`); nếu runner tự khởi động Compose thì cũng đặt `GATEWAY_HOST_PORT=8081`.
+Runner gọi `docker compose up -d --build`, chờ gateway, tạo tenant A và người dùng riêng, đọc chi nhánh mặc định (gói Free chỉ cho phép một chi nhánh), tạo warehouse, SKU, nhập 12 đơn vị bằng receipt. Runner còn tạo tenant B, sản phẩm và đơn đầu tiên để TC-NG-26 so sánh mã; sau đó cài Newman 6.2.1 nếu thiếu và chạy collection. Mỗi lần chạy tạo dữ liệu nhận diện duy nhất, không xóa volume hoặc DB. Muốn dùng stack đang bật: `node test/api/nguyen/run.mjs --existing-stack`. Có thể đặt `GATEWAY_URL` (thí dụ `http://localhost:8081`); nếu runner tự khởi động Compose thì cũng đặt `GATEWAY_HOST_PORT=8081`.
 
-Sau khi sửa generator: `python test/api/nguyen/generate_collection.py`. Có thể import `nguyen.postman_collection.json` vào Postman để xem các bước. Chạy thủ công phải cấp `base`, `token`, `staffToken`, `accountantToken`, `branchId`, `warehouseId`, `variantId` của một tenant thử nghiệm mới; lệnh một bước tự cấp các biến này.
+Sau khi sửa generator: `python test/api/nguyen/generate_collection.py`. Có thể import `nguyen.postman_collection.json` vào Postman để xem các bước. Chạy thủ công phải cấp `base`, `token`, `staffToken`, `accountantToken`, `branchId`, `warehouseId`, `variantId`, `tenantBToken`, `tenantBOrderId`, `tenantBCode`, `tenantBId` của hai tenant thử nghiệm mới; lệnh một bước tự cấp các biến này.
 
 ## Kết quả và bằng chứng
 
@@ -30,8 +30,8 @@ Tóm tắt Newman JSON thành số ca và response lỗi đã lọc trường nh
 
 - TC-NG-01..14, 22: chuyển trạng thái, version, hủy, giao và thanh toán.
 - TC-NG-15..16, 23..25: thiếu tồn, POS, giữ tồn, tranh tồn tuần tự và hai xác nhận gửi gần đồng thời. Ca 25 không bảo đảm scheduler xử lý đúng cùng một thời điểm.
-- TC-NG-17..20: quyền; TC-NG-21: mã duy nhất trong một tenant và regex hiện hành.
-- BR-05 yêu cầu định dạng mã **cấu hình được**. Regex ca 21 chưa kiểm cấu hình hoặc cùng mã giữa hai tenant; đây là khoảng trống cần bổ sung khi có môi trường và API cấu hình phù hợp.
+- TC-NG-17..20: quyền; TC-NG-21: mã duy nhất trong một tenant và regex hiện hành; TC-NG-26: sequence/mã ở tenant B qua Gateway.
+- BR-05 yêu cầu định dạng mã **cấu hình được**. `sales-code.generator.ts` cố định sáu chữ số, không đọc cấu hình tenant; chưa có API cấu hình format để kiểm thử động. Ghi DEF-03, chỉ kết luận phần này sau khi nhóm Sales thiết kế và triển khai cấu hình.
 - Ca 22 và 23 cố ý kiểm kỳ vọng theo kịch bản/SRS có thể khác logic hiện hành. Chỉ lập defect nghiệp vụ sau khi thu response thực tế và xác nhận với yêu cầu.
 
 ## Khắc phục sự cố

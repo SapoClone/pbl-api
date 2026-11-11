@@ -20,6 +20,6 @@ Ngày kiểm thử: 11/11/2026. Môi trường: Docker Compose local, KrakenD `l
 
 ## Giới hạn và quyết định cần làm rõ
 
-- BR-05 yêu cầu format mã cấu hình được. TC-NG-21 đã xác minh mã không trùng trong tenant và regex sáu chữ số hiện hành; chưa kiểm API cấu hình và hai tenant.
+- **DEF-03 / BR-05 (sai khác tĩnh):** SRS yêu cầu mã đơn duy nhất trong tenant và format cấu hình được. `apps/sales/src/infrastructure/persistence/sales-code.generator.ts` cố định `HD-yyyyMMdd-######`, chỉ nhận `tenantId`, prefix và thời gian; không đọc cấu hình format theo tenant. TC-NG-21 đã xác minh mã không trùng trong tenant và regex hiện hành. TC-NG-26 mới thiết kế để kiểm hai tenant, chưa chạy. Cần hợp đồng API/thiết lập format trước khi có thể viết ca cấu hình động; không gán Passed cho phần này.
 - Bằng chứng PostgreSQL dùng truy vấn chỉ đọc theo `tenant_id` của lượt hai. JSON gốc của Newman chứa token và chỉ lưu local trong `test/api/nguyen/reports/`; các bản trong `docs/testing/evidence/nguyen/` đã giới hạn trường và không chứa token.
 - Chưa sửa mã nghiệp vụ. Sau khi thống nhất quy tắc, giao chủ module Sales sửa, sau đó chạy lại toàn bộ collection và đối chiếu DB.

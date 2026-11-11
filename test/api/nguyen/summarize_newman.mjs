@@ -6,7 +6,7 @@ if (!input || !output) throw new Error('Usage: node summarize_newman.mjs <newman
 const report = JSON.parse(readFileSync(input, 'utf8'));
 const failures = report.run?.failures || [];
 const executions = report.run?.executions || [];
-const cases = Array.from({ length: 25 }, (_, index) => {
+const cases = Array.from({ length: 26 }, (_, index) => {
   const id = `TC-NG-${String(index + 1).padStart(2, '0')}`;
   const executed = executions.filter(e => e.item?.name?.includes(id));
   const failed = failures.filter(f => f.source?.name?.includes(id));

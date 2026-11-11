@@ -2,7 +2,7 @@
   "info": {
     "name": "Nguyen - API order lifecycle and stock reservation",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Gateway-only API tests. Seeded by run.mjs. TC-NG-16 is sequential contention; TC-NG-25 sends concurrent confirmations. BR-05 observed format is recorded separately from the configurable SRS requirement."
+    "description": "Gateway-only API tests. Seeded by run.mjs. TC-NG-16 is sequential contention; TC-NG-25 sends concurrent confirmations. TC-NG-26 checks tenant-scoped codes. BR-05 configurable format has no public configuration contract yet."
   },
   "item": [
     {
@@ -2033,6 +2033,33 @@
             "exec": [
               "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
               "pm.test('INSUFFICIENT_STOCK',()=>pm.expect(pm.response.json().errorCode).to.eql('INSUFFICIENT_STOCK'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-NG-26 same code may exist in another tenant",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{tenantBToken}}"
+          }
+        ],
+        "url": "{{base}}/sales/api/v1/orders/{{tenantBOrderId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "const d=pm.response.json(), a=pm.collectionVariables.get('primaryCode'), b=pm.environment.get('tenantBCode');",
+              "pm.test('Tenant B reads its own first order',()=>{pm.expect(d.id).to.eql(pm.environment.get('tenantBOrderId'));pm.expect(d.code).to.eql(b);});",
+              "pm.test('Tenant B sequence starts independently',()=>pm.expect(b).to.match(/^HD-\\d{8}-000001$/));",
+              "pm.test('Order code is tenant-scoped',()=>{pm.expect(pm.environment.get('tenantBId')).not.eql(pm.environment.get('tenantId'));if(a.slice(3,11)===b.slice(3,11))pm.expect(b).to.eql(a);});"
             ]
           }
         }

@@ -150,8 +150,14 @@ req('TC-NG-24 POS rejects shortage','POST','/sales/api/v1/pos/checkout',
     assert_status(409,"pm.test('INSUFFICIENT_STOCK',()=>pm.expect(pm.response.json().errorCode).to.eql('INSUFFICIENT_STOCK'));"),auth='staffToken',
     pre="pm.request.headers.add({key:'Idempotency-Key',value:pm.variables.replaceIn('{{$guid}}')});")
 
+req('TC-NG-26 same code may exist in another tenant','GET','/sales/api/v1/orders/{{tenantBOrderId}}',None,
+    assert_status(200,"""const d=pm.response.json(), a=pm.collectionVariables.get('primaryCode'), b=pm.environment.get('tenantBCode');
+pm.test('Tenant B reads its own first order',()=>{pm.expect(d.id).to.eql(pm.environment.get('tenantBOrderId'));pm.expect(d.code).to.eql(b);});
+pm.test('Tenant B sequence starts independently',()=>pm.expect(b).to.match(/^HD-\\d{8}-000001$/));
+pm.test('Order code is tenant-scoped',()=>{pm.expect(pm.environment.get('tenantBId')).not.eql(pm.environment.get('tenantId'));if(a.slice(3,11)===b.slice(3,11))pm.expect(b).to.eql(a);});"""),auth='tenantBToken')
+
 collection = {'info':{'name':'Nguyen - API order lifecycle and stock reservation','schema':'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
-    'description':'Gateway-only API tests. Seeded by run.mjs. TC-NG-16 is sequential contention; TC-NG-25 sends concurrent confirmations. BR-05 observed format is recorded separately from the configurable SRS requirement.'},
+    'description':'Gateway-only API tests. Seeded by run.mjs. TC-NG-16 is sequential contention; TC-NG-25 sends concurrent confirmations. TC-NG-26 checks tenant-scoped codes. BR-05 configurable format has no public configuration contract yet.'},
     'item':items,'variable':[{'key':x,'value':''} for x in ['primary','primaryVersion','primaryCode','cancellable','cancellableVersion','shortage','contentionA','contentionB','raceA','raceB','raceWinner','staffOrder']]}
 output = here / 'nguyen.postman_collection.json'
 output.write_text(json.dumps(collection,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')

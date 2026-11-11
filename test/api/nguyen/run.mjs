@@ -83,7 +83,31 @@ async function seed() {
   const staffToken = (await api('POST', `${p}/auth/email/login`, { email: staff, password, tenantId: tenant.tenant.id }, null)).accessToken;
   const accountantToken = (await api('POST', `${p}/auth/email/login`, { email: accountant, password, tenantId: tenant.tenant.id }, null)).accessToken;
   if (![token, staffToken, accountantToken, variantId].every(Boolean)) throw new Error('Seed lacks a token or variant');
-  return { base, token, staffToken, accountantToken, branchId: branch.id, warehouseId: warehouse.id, variantId, tenantId: tenant.tenant.id };
+  // BR-05: a second store starts its own HD sequence. Use a separate owner so
+  // this remains independent of the first account's store quota.
+  const ownerB = `nguyen-b-${unique}@example.com`;
+  await api('POST', `${p}/auth/email/register`, { email: ownerB, password, name: 'Nguyen tenant B' }, null);
+  const accountBToken = (await api('POST', `${p}/auth/email/login`, { email: ownerB, password }, null)).accessToken;
+  const tenantB = await api('POST', `${p}/tenants`, { name: `Nguyen B ${unique}`, subdomain: `nguyen-b-${unique}` }, accountBToken);
+  const tenantBToken = tenantB.auth.accessToken;
+  const branchB = (await api('GET', `${p}/branches`, undefined, tenantBToken)).data?.[0];
+  if (!branchB?.id) throw new Error('Tenant B lacks a default branch');
+  const productB = await api('POST', `${c}/products`, { name: 'Tenant B product', baseUnit: 'cai', createDefaultVariant: true,
+    defaultSkuCode: `NGB-${unique}`.slice(0, 30), defaultBasePrice: 120000 }, tenantBToken);
+  let firstB;
+  await until('tenant B sales projections', async () => {
+    try {
+      firstB = await api('POST', '/sales/api/v1/orders/omnichannel', { branchId: branchB.id, channelType: 'ONLINE',
+        lines: [{ variantId: productB.variants[0].id, qty: 1 }], autoConfirm: false }, tenantBToken);
+      return true;
+    } catch (e) {
+      if (!/branch|sku|variant|catalog|not found|price/i.test(String(e))) throw e;
+      return false;
+    }
+  });
+  if (!firstB?.id || !/^HD-\d{8}-000001$/.test(firstB.code)) throw new Error('Tenant B did not receive its first order code');
+  return { base, token, staffToken, accountantToken, branchId: branch.id, warehouseId: warehouse.id, variantId,
+    tenantId: tenant.tenant.id, tenantBToken, tenantBOrderId: firstB.id, tenantBCode: firstB.code, tenantBId: tenantB.tenant.id };
 }
 function htmlFrom(report) {
   const rows = (report.run?.executions || []).map(e => {
