@@ -8,6 +8,7 @@ import {
   VndMoney,
   assertCanCancelOrder,
   assertDiscountAuthority,
+  calculateItemDiscount,
   calculateOrderQuote,
   calculateReturnRefund,
   calculateShiftCloseSummary,
@@ -578,6 +579,551 @@ describe('Sales M3 Pure Domain Layer', () => {
       expect(33334 + second.totalRefundAmount).toBe(100001);
       expect(second.isFullOrderReturn).toBe(true);
       expect(Number.isSafeInteger(second.lines[0].unitRefundAmount)).toBe(true);
+    });
+  });
+
+  describe('Chức năng 3 (Hius): Bổ sung kiểm thử giá trị biên & tổ hợp cho Tính chiết khấu và giới hạn theo quyền (FR-M06-03, FR-M06-05, BR-02)', () => {
+    describe('UT-DISC-BVA: Kiểm tra biên phần trăm (%) và tính toán chiết khấu (calculateItemDiscount)', () => {
+      const lineGross = 100000n;
+
+      it.each([
+        { percent: 0, expectedDiscount: 0n, desc: 'Mốc 0% (không chiết khấu)' },
+        {
+          percent: 10,
+          expectedDiscount: 10000n,
+          desc: 'Mốc 10% (trần sales_staff)',
+        },
+        {
+          percent: 30,
+          expectedDiscount: 30000n,
+          desc: 'Mốc 30% (trần branch_manager)',
+        },
+        {
+          percent: 50,
+          expectedDiscount: 50000n,
+          desc: 'Mốc 50% (giảm một nửa)',
+        },
+        {
+          percent: 100,
+          expectedDiscount: 100000n,
+          desc: 'Mốc 100% (miễn phí hoàn toàn)',
+        },
+      ])(
+        'Hợp lệ: $desc với percent = $percent% -> discount = $expectedDiscount VND',
+        ({ percent, expectedDiscount }) => {
+          const discount = calculateItemDiscount(lineGross, 'PERCENT', percent);
+          expect(discount).toBe(expectedDiscount);
+        },
+      );
+
+      it.each([
+        { percent: -0.01, desc: 'Biên dưới âm nhỏ nhất (-0.01%)' },
+        { percent: -5, desc: 'Số âm (-5%)' },
+        { percent: 100.01, desc: 'Biên trên vượt quá 100% (100.01%)' },
+        { percent: 105, desc: 'Vượt quá 100% (105%)' },
+        { percent: Number.NaN, desc: 'Giá trị NaN không hợp lệ' },
+        { percent: Number.POSITIVE_INFINITY, desc: 'Dương vô cùng' },
+      ])(
+        'Bất hợp lệ: ném lỗi 422 INVALID_DISCOUNT khi $desc ($percent)',
+        ({ percent }) => {
+          expect(() =>
+            calculateItemDiscount(lineGross, 'PERCENT', percent),
+          ).toThrow(
+            expect.objectContaining({
+              code: SalesDomainErrorCode.INVALID_DISCOUNT,
+              httpStatus: 422,
+            }),
+          );
+        },
+      );
+    });
+
+    describe('UT-DISC-ROLE: Kiểm tra biên trần chiết khấu theo phân quyền RBAC (assertDiscountAuthority)', () => {
+      it.each([
+        { role: 'sales_staff', percent: 0, desc: 'sales_staff tại 0%' },
+        {
+          role: 'sales_staff',
+          percent: 10,
+          desc: 'sales_staff tại đúng trần 10%',
+        },
+        { role: 'branch_manager', percent: 0, desc: 'branch_manager tại 0%' },
+        {
+          role: 'branch_manager',
+          percent: 30,
+          desc: 'branch_manager tại đúng trần 30%',
+        },
+        { role: 'owner', percent: 0, desc: 'owner tại 0%' },
+        { role: 'owner', percent: 100, desc: 'owner tại đúng trần 100%' },
+        {
+          role: 'manager',
+          percent: 30,
+          desc: 'legacy manager tại đúng trần 30%',
+        },
+        {
+          role: 'cashier',
+          percent: 10,
+          desc: 'legacy cashier tại đúng trần 10%',
+        },
+        {
+          role: undefined,
+          percent: 10,
+          desc: 'role không truyền (undefined) mặc định trần 10%',
+        },
+        {
+          role: 'unknown_role',
+          percent: 10,
+          desc: 'role lạ không xác định mặc định trần 10%',
+        },
+      ])(
+        'Hợp lệ không ném lỗi: $desc (role: $role, percent: $percent%)',
+        ({ role, percent }) => {
+          expect(() =>
+            assertDiscountAuthority({
+              role,
+              effectiveDiscountPercent: percent,
+            }),
+          ).not.toThrow();
+        },
+      );
+
+      it.each([
+        {
+          role: 'sales_staff',
+          percent: 10.01,
+          limit: 10,
+          desc: 'sales_staff vượt trần 0.01% (10.01%)',
+        },
+        {
+          role: 'sales_staff',
+          percent: 15,
+          limit: 10,
+          desc: 'sales_staff vượt trần (15%)',
+        },
+        {
+          role: 'branch_manager',
+          percent: 30.01,
+          limit: 30,
+          desc: 'branch_manager vượt trần 0.01% (30.01%)',
+        },
+        {
+          role: 'branch_manager',
+          percent: 35,
+          limit: 30,
+          desc: 'branch_manager vượt trần (35%)',
+        },
+        {
+          role: 'manager',
+          percent: 30.01,
+          limit: 30,
+          desc: 'legacy manager vượt trần 0.01% (30.01%)',
+        },
+        {
+          role: 'cashier',
+          percent: 10.01,
+          limit: 10,
+          desc: 'legacy cashier vượt trần 0.01% (10.01%)',
+        },
+        {
+          role: undefined,
+          percent: 10.01,
+          limit: 10,
+          desc: 'role không truyền vượt trần mặc định 10% (10.01%)',
+        },
+        {
+          role: 'trainee_intern',
+          percent: 10.01,
+          limit: 10,
+          desc: 'role lạ vượt trần mặc định 10% (10.01%)',
+        },
+      ])(
+        'Vượt trần ném lỗi 403 DISCOUNT_APPROVAL_REQUIRED: $desc',
+        ({ role, percent, limit }) => {
+          expect(() =>
+            assertDiscountAuthority({
+              role,
+              effectiveDiscountPercent: percent,
+            }),
+          ).toThrow(
+            expect.objectContaining({
+              code: SalesDomainErrorCode.DISCOUNT_APPROVAL_REQUIRED,
+              httpStatus: 403,
+              details: expect.objectContaining({
+                effectiveDiscountPercent: percent,
+                maxAllowedPercent: limit,
+              }),
+            }),
+          );
+        },
+      );
+
+      it.each([
+        {
+          role: 'sales_staff',
+          percent: 99.99,
+          permissions: ['sales.pos.discount.override'],
+          desc: 'sales_staff với quyền sales.pos.discount.override vượt mức 99.99%',
+        },
+        {
+          role: 'cashier',
+          percent: 50,
+          permissions: ['sales.pos.discount.override'],
+          desc: 'legacy cashier với quyền sales.pos.discount.override áp dụng 50%',
+        },
+        {
+          role: 'unknown_role',
+          percent: 100,
+          permissions: ['*'],
+          desc: 'role không xác định với wildcard (*) áp dụng 100%',
+        },
+      ])(
+        'Phân quyền đặc biệt cho phép vượt trần không lỗi: $desc',
+        ({ role, percent, permissions }) => {
+          expect(() =>
+            assertDiscountAuthority({
+              role,
+              effectiveDiscountPercent: percent,
+              permissions,
+            }),
+          ).not.toThrow();
+        },
+      );
+    });
+
+    describe('UT-DISC-FIXED: Kiểm tra chiết khấu số tiền cố định (FIXED) và làm tròn half-up VND', () => {
+      const lineGross = 150000n;
+
+      it('giảm đúng bằng giá trị món hàng -> thành tiền = 0đ (Hợp lệ)', () => {
+        const discount = calculateItemDiscount(lineGross, 'FIXED', 150000);
+        expect(discount).toBe(150000n);
+        expect(lineGross - discount).toBe(0n);
+      });
+
+      it('giảm cố định đúng bằng tổng đơn trong calculateOrderQuote -> grandTotal = 0đ (Hợp lệ)', () => {
+        const quote = calculateOrderQuote(
+          {
+            lines: [{ variantId: 'var-tshirt-blk-m', qty: 1 }], // 150,000
+            orderDiscountType: 'FIXED',
+            orderDiscountValue: 150000,
+          },
+          catalogVariants,
+        );
+        expect(quote.subtotal).toBe(150000);
+        expect(quote.totalDiscount).toBe(150000);
+        expect(quote.grandTotal).toBe(0);
+      });
+
+      it('giảm cố định lớn hơn giá trị món hàng -> ném lỗi 422 INVALID_DISCOUNT', () => {
+        expect(() => calculateItemDiscount(lineGross, 'FIXED', 150001)).toThrow(
+          expect.objectContaining({
+            code: SalesDomainErrorCode.INVALID_DISCOUNT,
+            httpStatus: 422,
+          }),
+        );
+      });
+
+      it('giảm cố định lớn hơn tổng đơn trong calculateOrderQuote -> ném lỗi 422 INVALID_DISCOUNT', () => {
+        expect(() =>
+          calculateOrderQuote(
+            {
+              lines: [{ variantId: 'var-tshirt-blk-m', qty: 1 }], // 150,000
+              orderDiscountType: 'FIXED',
+              orderDiscountValue: 150001,
+            },
+            catalogVariants,
+          ),
+        ).toThrow(
+          expect.objectContaining({
+            code: SalesDomainErrorCode.INVALID_DISCOUNT,
+            httpStatus: 422,
+          }),
+        );
+      });
+
+      it.each([
+        {
+          gross: 99999n,
+          percent: 12.5,
+          expectedDiscount: 12500n,
+          desc: '12.5% của 99.999đ (12499.875) làm tròn lên 12.500đ',
+        },
+        {
+          gross: 100001n,
+          percent: 12.5,
+          expectedDiscount: 12500n,
+          desc: '12.5% của 100.001đ (12500.125) làm tròn xuống 12.500đ',
+        },
+        {
+          gross: 10n,
+          percent: 5,
+          expectedDiscount: 1n,
+          desc: '5% của 10đ (0.5) làm tròn half-up lên 1đ',
+        },
+        {
+          gross: 10n,
+          percent: 4.9,
+          expectedDiscount: 0n,
+          desc: '4.9% của 10đ (0.49) làm tròn xuống 0đ',
+        },
+      ])(
+        'Làm tròn half-up chính xác theo đơn vị VND: $desc',
+        ({ gross, percent, expectedDiscount }) => {
+          const discount = calculateItemDiscount(gross, 'PERCENT', percent);
+          expect(discount).toBe(expectedDiscount);
+        },
+      );
+    });
+  });
+
+  describe('Chức năng 4 (Hius): Bổ sung kiểm thử giá trị biên & tổ hợp cho Thanh toán kết hợp và tiền thừa (FR-M06-08, BR-02)', () => {
+    describe('UT-PAY-VALID: Thanh toán hợp lệ, kết hợp phương thức và tính tiền thừa', () => {
+      it('kết hợp Tiền mặt + Chuyển khoản (có verified=true và externalRef) -> status: CONFIRMED, allConfirmed: true, paymentStatus: PAID', () => {
+        const summary = validateOrderTenders(500000, [
+          { method: 'CASH', amount: 200000, tenderedCash: 250000 },
+          {
+            method: 'BANK_TRANSFER',
+            amount: 300000,
+            verified: true,
+            externalRef: 'FT26303001',
+          },
+        ]);
+
+        expect(summary).toMatchObject({
+          totalAllocated: 500000,
+          totalConfirmed: 500000,
+          totalCashSales: 200000,
+          totalChangeDue: 50000,
+          allConfirmed: true,
+          paymentStatus: 'PAID',
+        });
+        expect(summary.tenders[0]).toMatchObject({
+          method: 'CASH',
+          amount: 200000,
+          tenderedCash: 250000,
+          changeDue: 50000,
+          status: 'CONFIRMED',
+        });
+        expect(summary.tenders[1]).toMatchObject({
+          method: 'BANK_TRANSFER',
+          amount: 300000,
+          status: 'CONFIRMED',
+          externalRef: 'FT26303001',
+        });
+      });
+
+      it.each([
+        {
+          amount: 200000,
+          tenderedCash: 250000,
+          expectedChange: 50000,
+          desc: 'khách đưa 250.000đ cho khoản 200.000đ -> thối 50.000đ',
+        },
+        {
+          amount: 100000,
+          tenderedCash: 1000000,
+          expectedChange: 900000,
+          desc: 'khách đưa tờ 1.000.000đ lớn hơn nhiều so với 100.000đ -> thối 900.000đ',
+        },
+        {
+          amount: 150000,
+          tenderedCash: 150000,
+          expectedChange: 0,
+          desc: 'khách trả vừa khít tiền mặt (150.000đ) -> thối 0đ',
+        },
+        {
+          amount: 300000,
+          tenderedCash: undefined,
+          expectedChange: 0,
+          desc: 'không truyền tenderedCash (mặc định bằng amount) -> thối 0đ',
+        },
+      ])(
+        'Tính chính xác tiền thừa (changeDue = tenderedCash - amount): $desc',
+        ({ amount, tenderedCash, expectedChange }) => {
+          const summary = validateOrderTenders(amount, [
+            { method: 'CASH', amount, tenderedCash },
+          ]);
+          expect(summary.totalChangeDue).toBe(expectedChange);
+          expect(summary.tenders[0].changeDue).toBe(expectedChange);
+        },
+      );
+
+      it('đơn hàng 0 đồng: thanh toán tiền mặt 0đ -> changeDue = 0, allConfirmed = true, paymentStatus = PAID', () => {
+        const summary = validateOrderTenders(0, [
+          { method: 'CASH', amount: 0, tenderedCash: 0 },
+        ]);
+        expect(summary).toMatchObject({
+          totalAllocated: 0,
+          totalConfirmed: 0,
+          totalCashSales: 0,
+          totalChangeDue: 0,
+          allConfirmed: true,
+          paymentStatus: 'PAID',
+        });
+      });
+
+      it.each([
+        {
+          tenders: [
+            {
+              method: 'BANK_TRANSFER' as const,
+              amount: 300000,
+              verified: false,
+              externalRef: 'TX123',
+            },
+          ],
+          expectedPaymentStatus: 'UNPAID',
+          desc: 'Chuyển khoản có externalRef nhưng verified = false -> PENDING / UNPAID',
+        },
+        {
+          tenders: [
+            {
+              method: 'BANK_TRANSFER' as const,
+              amount: 300000,
+              verified: true,
+              externalRef: undefined,
+            },
+          ],
+          expectedPaymentStatus: 'UNPAID',
+          desc: 'Chuyển khoản có verified = true nhưng thiếu externalRef -> PENDING / UNPAID',
+        },
+        {
+          tenders: [
+            { method: 'CASH' as const, amount: 100000, tenderedCash: 100000 },
+            {
+              method: 'BANK_TRANSFER' as const,
+              amount: 200000,
+              verified: false,
+              externalRef: 'TX123',
+            },
+          ],
+          expectedPaymentStatus: 'PARTIALLY_PAID',
+          desc: 'Kết hợp tiền mặt (xác nhận) + chuyển khoản thiếu verified -> PARTIALLY_PAID',
+        },
+        {
+          tenders: [{ method: 'COD' as const, amount: 300000 }],
+          expectedPaymentStatus: 'UNPAID',
+          desc: 'COD luôn luôn ở trạng thái PENDING -> UNPAID',
+        },
+      ])(
+        'Kiểm tra trạng thái xác nhận và thanh toán tổng: $desc',
+        ({ tenders, expectedPaymentStatus }) => {
+          const total = tenders.reduce((acc, t) => acc + t.amount, 0);
+          const summary = validateOrderTenders(total, tenders);
+          expect(summary.allConfirmed).toBe(false);
+          expect(summary.paymentStatus).toBe(expectedPaymentStatus);
+        },
+      );
+    });
+
+    describe('UT-PAY-ERROR: Trường hợp lỗi biên (ném lỗi 422 PAYMENT_AMOUNT_MISMATCH hoặc VALIDATION_ERROR)', () => {
+      it.each([
+        {
+          amount: 100000,
+          tenderedCash: 99999,
+          desc: 'tiền khách đưa thiếu 1đ (tenderedCash 99.999đ < amount 100.000đ)',
+        },
+        {
+          amount: 50000,
+          tenderedCash: 0,
+          desc: 'khách đưa 0đ cho khoản phân bổ 50.000đ',
+        },
+      ])(
+        'Tiền khách đưa ít hơn phần tiền mặt ném lỗi 422 PAYMENT_AMOUNT_MISMATCH: $desc',
+        ({ amount, tenderedCash }) => {
+          expect(() =>
+            validateOrderTenders(amount, [
+              { method: 'CASH', amount, tenderedCash },
+            ]),
+          ).toThrow(
+            expect.objectContaining({
+              code: SalesDomainErrorCode.PAYMENT_AMOUNT_MISMATCH,
+              httpStatus: 422,
+            }),
+          );
+        },
+      );
+
+      it.each([
+        {
+          grandTotal: 100000,
+          tenders: [{ method: 'CASH' as const, amount: 90000 }],
+          desc: 'tổng phân bổ thiếu 10.000đ (90.000đ vs 100.000đ)',
+        },
+        {
+          grandTotal: 100000,
+          tenders: [{ method: 'CASH' as const, amount: 110000 }],
+          desc: 'tổng phân bổ thừa 10.000đ (110.000đ vs 100.000đ)',
+        },
+        {
+          grandTotal: 500000,
+          tenders: [
+            { method: 'CASH' as const, amount: 200000 },
+            { method: 'BANK_TRANSFER' as const, amount: 250000 },
+          ],
+          desc: 'thanh toán kết hợp phân bổ thiếu (450.000đ vs 500.000đ)',
+        },
+      ])(
+        'Tổng tiền các dòng phân bổ khác tổng tiền đơn hàng ném lỗi 422 PAYMENT_AMOUNT_MISMATCH: $desc',
+        ({ grandTotal, tenders }) => {
+          expect(() => validateOrderTenders(grandTotal, tenders)).toThrow(
+            expect.objectContaining({
+              code: SalesDomainErrorCode.PAYMENT_AMOUNT_MISMATCH,
+              httpStatus: 422,
+            }),
+          );
+        },
+      );
+
+      it('danh sách tenders rỗng ([]) ném lỗi 422 PAYMENT_AMOUNT_MISMATCH', () => {
+        expect(() => validateOrderTenders(100000, [])).toThrow(
+          expect.objectContaining({
+            code: SalesDomainErrorCode.PAYMENT_AMOUNT_MISMATCH,
+            httpStatus: 422,
+          }),
+        );
+      });
+
+      it.each([
+        {
+          tenders: [
+            { method: 'CASH' as const, amount: -50000 },
+            { method: 'CASH' as const, amount: 150000 },
+          ],
+          desc: 'số tiền phân bổ âm (-50.000đ)',
+        },
+        {
+          tenders: [
+            { method: 'CASH' as const, amount: 50000.5 },
+            { method: 'CASH' as const, amount: 49999.5 },
+          ],
+          desc: 'số tiền phân bổ có số thập phân lẻ (50000.5đ)',
+        },
+        {
+          tenders: [
+            { method: 'CASH' as const, amount: 100000, tenderedCash: -10000 },
+          ],
+          desc: 'tiền khách đưa âm (-10.000đ)',
+        },
+        {
+          tenders: [
+            {
+              method: 'CASH' as const,
+              amount: 100000,
+              tenderedCash: 100000.75,
+            },
+          ],
+          desc: 'tiền khách đưa có số thập phân lẻ (100000.75đ)',
+        },
+      ])(
+        'Số tiền âm hoặc có phần lẻ bị từ chối với lỗi 422 (VALIDATION_ERROR): $desc',
+        ({ tenders }) => {
+          expect(() => validateOrderTenders(100000, tenders)).toThrow(
+            expect.objectContaining({
+              code: SalesDomainErrorCode.VALIDATION_ERROR,
+              httpStatus: 422,
+            }),
+          );
+        },
+      );
     });
   });
 });
