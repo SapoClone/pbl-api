@@ -1,0 +1,626 @@
+{
+  "original_evidence_files": [
+    {
+      "file": "CATALOG_FIXTURE_SETUP.json",
+      "bytes": 259144,
+      "sha256": "818463aa7d42368fa054903ee2e185a77d0864d6545b106e3052697a74d59e9e"
+    },
+    {
+      "file": "duy-perf-20261111-final-auth-evidence2.json",
+      "bytes": 4575,
+      "sha256": "3687c064c9d0bfa28b4b677cf50dc58940ced38086b0579210ace86b58693d6a"
+    },
+    {
+      "file": "duy-perf-20261111-final-session-run.json",
+      "bytes": 1099,
+      "sha256": "3ae42ca04f002257dd17aa9b48efc83435d358f383290e67375220f178daa488"
+    },
+    {
+      "file": "duy-perf-20261111-final-session2-run.json",
+      "bytes": 845,
+      "sha256": "1c9e89a6138369e135754418eeaa918d64c62aab0b64ef05d112b28b2ba73c3a"
+    },
+    {
+      "file": "duy-perf-20261111-rbaseline-docker-stats.jsonl",
+      "bytes": 20073,
+      "sha256": "f4c9413bf158e4799a77b7076e5117fd37b66f3e06165dcf819741dc3703787a"
+    },
+    {
+      "file": "duy-perf-20261111-rbaseline-run.json",
+      "bytes": 1290,
+      "sha256": "ea0277acff70c4392632ccf3199e96a321e7685ddaf46745046fd6a049e6cf01"
+    },
+    {
+      "file": "duy-perf-20261111-rbaseline-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rbaseline-stdout.txt",
+      "bytes": 323,
+      "sha256": "b7bc96461d88f9684e6756d9122ee6e032a7754c576f2e8a56bf002c43c0628f"
+    },
+    {
+      "file": "duy-perf-20261111-rload-docker-stats.jsonl",
+      "bytes": 80413,
+      "sha256": "371e93d980ba785f36c08bf290b65e2ab4f3e883a598986f9ae6824189026abd"
+    },
+    {
+      "file": "duy-perf-20261111-rload-run.json",
+      "bytes": 1332,
+      "sha256": "5a66ac63068369721363e0719772fbb96efe8756a48973676f16e14b14250f54"
+    },
+    {
+      "file": "duy-perf-20261111-rload-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rload-stdout.txt",
+      "bytes": 318,
+      "sha256": "bc7b3d372386ff272a48f5237a8ee30a609e377c0d3cb4a814b2eb86317cfaaa"
+    },
+    {
+      "file": "duy-perf-20261111-rpage10-docker-stats.jsonl",
+      "bytes": 20076,
+      "sha256": "1b93611d9bc15fd5a5512647a77c94935d4338003ed60c637e9bfb0c571162f9"
+    },
+    {
+      "file": "duy-perf-20261111-rpage10-run.json",
+      "bytes": 1342,
+      "sha256": "1e9e39c77d96a57779c27d6503a3958f3613d06be8739becb4971d32fb7aa296"
+    },
+    {
+      "file": "duy-perf-20261111-rpage10-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rpage10-stdout.txt",
+      "bytes": 318,
+      "sha256": "58d6b9fd25231c4701ad9a1cdcc7211940de1012fb367b866b7776a10b6d964e"
+    },
+    {
+      "file": "duy-perf-20261111-rpage50-docker-stats.jsonl",
+      "bytes": 22082,
+      "sha256": "9c4248b950ca7449ce35b24e9bdd296521488e35f9a1598ea8ce0953f3e05f33"
+    },
+    {
+      "file": "duy-perf-20261111-rpage50-run.json",
+      "bytes": 1342,
+      "sha256": "b83a3bfd41467823750f775b0993a438808d221327abb0b1bdad39c23c5094ea"
+    },
+    {
+      "file": "duy-perf-20261111-rpage50-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rpage50-stdout.txt",
+      "bytes": 328,
+      "sha256": "a3b36be50b0bc492ce59ea77bc170d0ea4aadb2826f5d77cf5848b86de93ab18"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-empty-docker-stats.jsonl",
+      "bytes": 4013,
+      "sha256": "378fdc75f53c8943be0ea1892bf69bcc9d0cf88347956243a310a806f3faad4f"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-empty-run.json",
+      "bytes": 1255,
+      "sha256": "596f85ef08c9037f0610f4643d80d69d9270278a459a2c8977de923be420d150"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-empty-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-empty-stdout.txt",
+      "bytes": 271,
+      "sha256": "056c1776ea2305fe24f0d5f4b4b867f5dd336022dafa0ed5e7fd0058f311b000"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-resume-docker-stats.jsonl",
+      "bytes": 2011,
+      "sha256": "37917c2ba15e146a9a082c9c394e56248b1bf2bcb44d1c91eeb74fdb56def622"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-resume-k6-metrics.jsonl",
+      "bytes": 12618,
+      "sha256": "7ff1aad3a1b580d3fc5c77b05859b7ba64aab75d33b07be46c97a160ba1311e3"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-resume-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-resume-stdout.txt",
+      "bytes": 1054,
+      "sha256": "6d341328f9e57d38112a2c37c6e159220cf7b335128bf720a0f385637c474ae5"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-resume-verify-r2-run.json",
+      "bytes": 34610,
+      "sha256": "278fca53ad2be97ffbc0aa732067d248192809af4fc432efb53bd85bf256796f"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-resume-verify-r3-run.json",
+      "bytes": 34609,
+      "sha256": "e1284dd4e39e1d0f729670dda94a96991aef51eaf7a4d31da5e7ff6acc391c2c"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-resume-verify-run.json",
+      "bytes": 34610,
+      "sha256": "c4ca2f12bfb5741dfd2d269e44c5d1e96a0d073707d341000d7d1db128d50568"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-resume-write-run.json",
+      "bytes": 8138,
+      "sha256": "a6a6556694763af73a4041caf039ad060709fc3010317d45c0fa812ee58c03da"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-valid-docker-stats.jsonl",
+      "bytes": 4020,
+      "sha256": "bb23d512434c0a7363176f754d99ca17eca38debaff822d140f6e6c5b8d2d4f0"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-valid-run.json",
+      "bytes": 1255,
+      "sha256": "ca4e9f4c942b18951a09984eeb79553487df16addbb756f3d72418a0ad56c09f"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-valid-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rsmoke-valid-stdout.txt",
+      "bytes": 307,
+      "sha256": "a1fa2d794be103dcb29fc20d5ed89d940d05bda1ee71d4769ba63492cb030deb"
+    },
+    {
+      "file": "duy-perf-20261111-rspike-docker-stats.jsonl",
+      "bytes": 54296,
+      "sha256": "6ea35303676c2bfd730e995f453b1474cf2fb95d2b648341220edfed9510b64c"
+    },
+    {
+      "file": "duy-perf-20261111-rspike-run.json",
+      "bytes": 1276,
+      "sha256": "bb48d44b68847564b3db967a7e4109ea0a467cd519f50271216cd5be96d45d02"
+    },
+    {
+      "file": "duy-perf-20261111-rspike-stages1-docker-stats.jsonl",
+      "bytes": 54294,
+      "sha256": "16587ed56043e20bd4d1a464b71badfd0c8aa115d7b42094c3ac253e8e1bd52e"
+    },
+    {
+      "file": "duy-perf-20261111-rspike-stages1-k6-metrics.jsonl",
+      "bytes": 11398697,
+      "sha256": "b1fe09c9b40f59a44321fa9fcdbd917d09335ce7f6674bac665782c0267ce526"
+    },
+    {
+      "file": "duy-perf-20261111-rspike-stages1-run.json",
+      "bytes": 1590,
+      "sha256": "279931af363a26a32148b5281b32b0a08ad4e612f1529de175b357ebc3a72890"
+    },
+    {
+      "file": "duy-perf-20261111-rspike-stages1-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rspike-stages1-stdout.txt",
+      "bytes": 319,
+      "sha256": "f93f5be25c78cfcb2cc16fd45a28cabe9bbb3230ed92cc42a35630364cc6b149"
+    },
+    {
+      "file": "duy-perf-20261111-rspike-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rspike-stdout.txt",
+      "bytes": 297,
+      "sha256": "8916dbdf5d80b38b951106f8cdbd0b639c34e3dd57130082efeaffed4b590892"
+    },
+    {
+      "file": "duy-perf-20261111-rstress-docker-stats.jsonl",
+      "bytes": 176763,
+      "sha256": "281a96372397e9b6acc3666b111dc9a0d10f6d9a6c6c7cedf0b06d069f1bae9d"
+    },
+    {
+      "file": "duy-perf-20261111-rstress-run.json",
+      "bytes": 1282,
+      "sha256": "d9da2698a9f9537a8a30d51c9e1122fb024a28d43d9aa3300cae21549e8a38c7"
+    },
+    {
+      "file": "duy-perf-20261111-rstress-stages1-docker-stats.jsonl",
+      "bytes": 176854,
+      "sha256": "af43e427be18404f2dc5c81095372d3a60a2de3394c87a99f6f6b89c55f5c076"
+    },
+    {
+      "file": "duy-perf-20261111-rstress-stages1-k6-metrics.jsonl",
+      "bytes": 34425293,
+      "sha256": "9990679f7743fcdeca6411ca771cb06c009068abfabacf162128965e246e7f5b"
+    },
+    {
+      "file": "duy-perf-20261111-rstress-stages1-run.json",
+      "bytes": 1537,
+      "sha256": "a8be0c60d360c88c5ebf309c18b16c50483ddaeb568697b02eb5398fbbbbc2b5"
+    },
+    {
+      "file": "duy-perf-20261111-rstress-stages1-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rstress-stages1-stdout.txt",
+      "bytes": 327,
+      "sha256": "e678e5f49ae04ec7f0c3b2f2c92f76d4f3242ba9fff4d5464528284ad40a0755"
+    },
+    {
+      "file": "duy-perf-20261111-rstress-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-rstress-stdout.txt",
+      "bytes": 329,
+      "sha256": "d55b906f13fa01defa79c102f467ab97cc63ee794b621eb7209d04e95f0cd15c"
+    },
+    {
+      "file": "duy-perf-20261111-stockseed-docker-stats.jsonl",
+      "bytes": 4028,
+      "sha256": "a625c764ea0988847f4c3092d2f0deb1ac0ddffffe4682c90102c8a722ff4a53"
+    },
+    {
+      "file": "duy-perf-20261111-stockseed-k6-metrics.jsonl",
+      "bytes": 35017,
+      "sha256": "3c73f5d4885dd10564a01c13dd7dccc98f1e8d8559cd88be005f1bd9af6fe735"
+    },
+    {
+      "file": "duy-perf-20261111-stockseed-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-stockseed-stdout.txt",
+      "bytes": 1334,
+      "sha256": "f87b879eba008366dfe55aeb20617ed7434de77596010c0c5700e038fc353de2"
+    },
+    {
+      "file": "duy-perf-20261111-stockseed-verify-r2-run.json",
+      "bytes": 9860821,
+      "sha256": "013ef9097c817dd00f5086b747a719ed15b27c3eac4e68536143cb97a0471177"
+    },
+    {
+      "file": "duy-perf-20261111-stockseed-verify-run.json",
+      "bytes": 9775168,
+      "sha256": "5aa02c04fec73fe522bea3e7e517ccc0ef9ffb736c6551ded8ce8d75234c4050"
+    },
+    {
+      "file": "duy-perf-20261111-stockseed-write-run.json",
+      "bytes": 11667,
+      "sha256": "2c3e76a532a974c422172ed731257e89a16e95b915cb188fe70c4cef0cb047c2"
+    },
+    {
+      "file": "duy-perf-20261111-wload-docker-stats.jsonl",
+      "bytes": 80366,
+      "sha256": "83813e7a9654e18e092f401426c4d6b5e5810e687833d97fc5b0de4981d20719"
+    },
+    {
+      "file": "duy-perf-20261111-wload-k6-metrics.jsonl",
+      "bytes": 1331850,
+      "sha256": "ab1da70a41a9b7684fe5cf364792667c01283884b89f6a11680f9464d369f90f"
+    },
+    {
+      "file": "duy-perf-20261111-wload-stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "duy-perf-20261111-wload-stdout.txt",
+      "bytes": 16935,
+      "sha256": "88541b055474c20268132780daad99a6efa4a741676b01aaa42534f859f8a143"
+    },
+    {
+      "file": "duy-perf-20261111-wload-verify-cap-review-console.txt",
+      "bytes": 1345794,
+      "sha256": "67d8b7b36c3aba1a5f43513e0bb95cc26f964d4f110c7fbe26d9959053f033c5"
+    },
+    {
+      "file": "duy-perf-20261111-wload-verify-cap-review-run.json",
+      "bytes": 7494473,
+      "sha256": "17ca5871e930e6916723dc196a1c1676b72afe59a536f34a22c51079b08a013f"
+    },
+    {
+      "file": "duy-perf-20261111-wload-verify-run-run.json",
+      "bytes": 7494247,
+      "sha256": "e075fd1fd968a1fb7d12c33dc5a65d2c246d4d87c1e971c2485f26b9aec9a291"
+    },
+    {
+      "file": "duy-perf-20261111-wload-write-run.json",
+      "bytes": 281018,
+      "sha256": "e11517f1a3f82712da3fb12d6490893707df05e34e30d3f04924df08e6f179bc"
+    },
+    {
+      "file": "duy-perf-20261111-wsmoke-write-run.json",
+      "bytes": 4945,
+      "sha256": "8a8e4bc7151b279e7eb9a808e3681505bf3b3e14427c96297e367af20284aa86"
+    },
+    {
+      "file": "K6_SMOKE_METRIC_RECONCILIATION.json",
+      "bytes": 1082,
+      "sha256": "c4e83af95ab60580174ec096dc921e6c2e76e7264f99e1755c7c14e5bdf9a5e2"
+    },
+    {
+      "file": "K6_STATIC_INSPECTION.json",
+      "bytes": 2532,
+      "sha256": "c2a510bc75ed40301cd6a1bff6b0b9571c7347e8a48b19c8f4db04dce1b9e3f7"
+    },
+    {
+      "file": "K6_STATIC_INSPECTION_RESUMED.json",
+      "bytes": 5871,
+      "sha256": "531debb4687fca3777a9e63bf25bf8dee3ed5930dd8d802553b0ec25db9b536e"
+    },
+    {
+      "file": "PERF_CHECKPOINT_CORRECTION_API_DB_V2.json",
+      "bytes": 1180,
+      "sha256": "401ab0703389793b529c3237b2d2b53588a03a061ea9d58bfbfae28566fb21ab"
+    },
+    {
+      "file": "PERF_CHECKPOINT_CORRECTION_READONLY_V2.json",
+      "bytes": 22054,
+      "sha256": "94524c341cd2c1323192856a1018a9f9f18153a28ec9f709b8ba262e323d3a0c"
+    },
+    {
+      "file": "PERF_CHECKPOINT_CORRECTION_SUMMARY_V2.json",
+      "bytes": 2064,
+      "sha256": "cadacb6d9aa9c5e0794b801f2558d14bd71ac3039faf2f2481a41a3d4637549b"
+    },
+    {
+      "file": "PERF_CORRECTION_HANDOFF_VALIDATION_V2.json",
+      "bytes": 5887,
+      "sha256": "3b44b802cdacb94c080dc35f3ffa84193f802697ea7ecf3efee62118b80e3873"
+    },
+    {
+      "file": "PERF_CORRECTION_HARNESS_VALIDATION_FINAL_V2.json",
+      "bytes": 5754,
+      "sha256": "ecbf375b1e549fe1e653ce2a1870d0cf16976401f83697628def16155c8bdde3"
+    },
+    {
+      "file": "PERF_CORRECTION_HARNESS_VALIDATION_REVIEW_V2.json",
+      "bytes": 5754,
+      "sha256": "66177c37d5b3f666864dec1c4b5f93b04028b26fff83119a26dacc74f61002ab"
+    },
+    {
+      "file": "PERF_CORRECTION_HARNESS_VALIDATION_V2.json",
+      "bytes": 5386,
+      "sha256": "140a3e987332e5c119281482e98bda1819e39e3f1ee20536a4f618a1226a67f3"
+    },
+    {
+      "file": "PERF_CORRECTION_RELEASE_VALIDATION_V2.json",
+      "bytes": 5754,
+      "sha256": "da36554029e245f980d3c7abd05a1f49f272f3cc283721ff04f16057c9abdbd2"
+    },
+    {
+      "file": "PERF_EXECUTION_FINAL_SUMMARY.json",
+      "bytes": 18532,
+      "sha256": "4ff0e1e19bcc12bd3ef4d83d0e0949dfc9e9816dc7d1173e8b74d599bddd9511"
+    },
+    {
+      "file": "PERF_EXECUTION_POST_STOP_CHECK.json",
+      "bytes": 2714,
+      "sha256": "74742ca22e499de7d78891dcc664a4804dc5d691d7e6c96767c63e970f2d2b9a"
+    },
+    {
+      "file": "PERF_EXECUTION_PREFLIGHT.json",
+      "bytes": 25932,
+      "sha256": "338571f09b01a29864cce3bd28a32bdef6a4492bd16e90542d5c9d7024c20a7a"
+    },
+    {
+      "file": "PERF_EXECUTION_RESUME_CHECKPOINT.json",
+      "bytes": 2519,
+      "sha256": "d67478d9839e286047195fedbaefa23a9cd57477b066264c977066bd6760ad21"
+    },
+    {
+      "file": "PERF_EXECUTION_RESUME_PREFLIGHT.json",
+      "bytes": 27040,
+      "sha256": "21b75540f3acb2e82ef538f87bee2391470a8e2c554595b417705e02a62c3cbc"
+    },
+    {
+      "file": "PERF_FINAL_COMPLETION_EXECUTION_V2.json",
+      "bytes": 1301,
+      "sha256": "20dc15045565c3739cc0526ea4f883e42b6c70aa562f6b675f300f64bdad8ad6"
+    },
+    {
+      "file": "PERF_FINAL_COMPLETION_PREFLIGHT.json",
+      "bytes": 22054,
+      "sha256": "46d3cf8083ece40f66d126d3358310fcfde78607d9a0ea2703e6f61e13eb6294"
+    },
+    {
+      "file": "PERF_FINAL_COMPLETION_PREFLIGHT_AFTER_LATEST_RESUME.json",
+      "bytes": 22054,
+      "sha256": "fb570a3edd1e6c78e7f678c2a0d171a7bd83923a1d4a5c0a1ad0a00fbbffcffa"
+    },
+    {
+      "file": "PERF_FINAL_COMPLETION_PREFLIGHT_AFTER_STAGE_READS.json",
+      "bytes": 22054,
+      "sha256": "af237ac3996a2cdf017052c04205fd7da8ca1555fc219c724871043d7ef45ceb"
+    },
+    {
+      "file": "PERF_FINAL_COMPLETION_PREFLIGHT_FINAL.json",
+      "bytes": 22054,
+      "sha256": "d4623aa6d669f43132d7daac88765aad2a466602c2f9b37dad97f581c18ecec4"
+    },
+    {
+      "file": "PERF_FINAL_COMPLETION_PREFLIGHT_FINAL_V5.json",
+      "bytes": 22054,
+      "sha256": "4d33e4e84da4680061a9c3d5e8c8aa27237d05518ba280892941b813e8a09231"
+    },
+    {
+      "file": "PERF_FINAL_COMPLETION_PREFLIGHT_POST_VALIDATION.json",
+      "bytes": 22054,
+      "sha256": "8c5ebe5b9e7c549e9609b8647412820647c9d40826598e30e2fafa97f3137c40"
+    },
+    {
+      "file": "PERF_FIXTURE_MANIFEST.json",
+      "bytes": 2821,
+      "sha256": "39b8ca6a1bd146c969e76675c83866e50e9f600303ee5f5b59abe1a835a478d9"
+    },
+    {
+      "file": "PERF_GIT_EXPORT_SCAN_V2.json",
+      "bytes": 795,
+      "sha256": "8c7e055cb843c5d615c390d7c61029cc9e08f21c00c798903559bed8ea25e3d7"
+    },
+    {
+      "file": "PERF_GIT_HANDOFF_AUDIT_V2.json",
+      "bytes": 7015,
+      "sha256": "a588fb13b55fcce89768415c5fcb46ad3d9d281e5bcc214fba19e52b62946b3d"
+    },
+    {
+      "file": "PERF_READ_STAGE_METRICS_AUDIT.json",
+      "bytes": 7830,
+      "sha256": "d224f3f3c45724e8f714d7d43fbaa663521247d2c243871a2ec932f7f630292a"
+    },
+    {
+      "file": "PERF_RECOVERY_ROOT_CAUSE_V2.json",
+      "bytes": 4250,
+      "sha256": "e2e9072cd11d1d5128fe537d8c2dafeb93a64a66500512d427c18cc4385b8abd"
+    },
+    {
+      "file": "PERF_RECOVERY_SYNTHETIC_V2.jsonl",
+      "bytes": 59676,
+      "sha256": "860afdb5bd942de7003e8a7738a86b7b14ee92a3a5e4a9414649b005c935751f"
+    },
+    {
+      "file": "PERF_RESUME_FINAL_SUMMARY.json",
+      "bytes": 7076,
+      "sha256": "071b47463bd5364a485c8546d40668db7bedd1af0d0669269be726e48aca04bb"
+    },
+    {
+      "file": "PERF_SETUP_PREFLIGHT.json",
+      "bytes": 18117,
+      "sha256": "97157caea40a59107204c38f72094395563f3dfd2f5b9c729fa0c145e3eaacf0"
+    },
+    {
+      "file": "PERF_SOURCE_CONTRACT_REVIEW_V2.json",
+      "bytes": 1596,
+      "sha256": "853e92e687e5bd8cded7b094e9ce04d505a34b48383cd0c2405920037bef1276"
+    },
+    {
+      "file": "PERF_STAGE_METRICS.json",
+      "bytes": 21218,
+      "sha256": "e9b5d1d8fd6629b2a4d1f37ebff3db181ddc8e344db11468fd90d71abf025e74"
+    },
+    {
+      "file": "PERF_STAGE_METRICS_FINAL.json",
+      "bytes": 21357,
+      "sha256": "188dd3b9bd9abf7d4ef682fe4da5094765a8bb0b014a227474f8f7e01e336222"
+    },
+    {
+      "file": "PERF_WRITE_SCHEDULER_SYNTHETIC_V2.jsonl",
+      "bytes": 24308,
+      "sha256": "5e9500bb744f5335020dd1c2deecd8d5cccab7f4a8c11eccaa29b53183229ab9"
+    },
+    {
+      "file": "QA_HARNESS_FINAL_COMPLETION_VALIDATION.json",
+      "bytes": 16117,
+      "sha256": "40509d9e64764c68f538f1bc7bd0b87d7f177a936ce4d3f4b8b56e3dfbc86ec1"
+    },
+    {
+      "file": "QA_HARNESS_FINAL_COMPLETION_VALIDATION_V2.json",
+      "bytes": 16488,
+      "sha256": "0d73ea5b6346981b174ca081d4ad800cf0b0373bd3a502452f787d7b64886f83"
+    },
+    {
+      "file": "QA_HARNESS_FINAL_COMPLETION_VALIDATION_V3.json",
+      "bytes": 16849,
+      "sha256": "cb543425560573536594092c693829ceb6d1dd0801302692116235855a5d6381"
+    },
+    {
+      "file": "QA_HARNESS_FINAL_COMPLETION_VALIDATION_V4.json",
+      "bytes": 16849,
+      "sha256": "5be4c9ece10db1993c2e7f65a166414acbe4af65166aa8d533a7578e4aa479c3"
+    },
+    {
+      "file": "QA_HARNESS_FINAL_COMPLETION_VALIDATION_V5.json",
+      "bytes": 16849,
+      "sha256": "824e637809429df07f2b68f9cd6d132b6cb7452da3f508433d1d099aee03e22b"
+    },
+    {
+      "file": "QA_HARNESS_FINAL_COMPLETION_VALIDATION_V6.json",
+      "bytes": 16849,
+      "sha256": "755099eedf980544a2d04c54b207dfe2d990bc590aac97b9c34372c97d0054fc"
+    },
+    {
+      "file": "QA_HARNESS_FINAL_POST_READ_VALIDATION.json",
+      "bytes": 17207,
+      "sha256": "a5b4fb882d6254e47f5ff18d20649c3fa3d744e54198eba328e3ad5def2cc940"
+    },
+    {
+      "file": "QA_HARNESS_RESUME_LATEST_VALIDATION.json",
+      "bytes": 16849,
+      "sha256": "61cb58f6b3988d7a2fa079e7321c29ceb375a7385c7b859b0cf80433d07e05a6"
+    },
+    {
+      "file": "QA_HARNESS_RESUME_VALIDATION.json",
+      "bytes": 12358,
+      "sha256": "5ed91c1312cc2394552b46256c7db4e4008d6ba5ebe70fe8986b7339f08677e3"
+    },
+    {
+      "file": "QA_HARNESS_RESUME_VALIDATION_RESUME.json",
+      "bytes": 12908,
+      "sha256": "804674fc957b9e7052b3b660ed0a9d1ba4d7d6b6a94c6dacdc2aa6bd3dd423aa"
+    },
+    {
+      "file": "QA_HARNESS_VALIDATION.json",
+      "bytes": 1935,
+      "sha256": "5b438480fec92b1bb99eb73e40f089f12504dc32b093242386eefdddbc91ea52"
+    },
+    {
+      "file": "VERIFICATION_GATE_TEMPLATE.json",
+      "bytes": 817,
+      "sha256": "95ce35a6f251ce212fbee0d9016910d977fced71f0cb9b4b0ed1b3c862cc4c7b"
+    },
+    {
+      "file": "VERIFIED-duy-perf-20261111-rsmoke-resume-PRIOR-FAIL-verify-r2.json",
+      "bytes": 2998,
+      "sha256": "14b06dd739bb99fadaffe40f3a7c03567dc4b54fa62137b44cf12e5a4b70a6f5"
+    },
+    {
+      "file": "VERIFIED-duy-perf-20261111-rsmoke-resume-PRIOR-FAIL-verify-r3.json",
+      "bytes": 3001,
+      "sha256": "c8766a9178c4e0b1c2578eb510dcdc528f98abbd9cd41a85a6c7e7162161f34f"
+    },
+    {
+      "file": "VERIFIED-duy-perf-20261111-rsmoke-resume.json",
+      "bytes": 3000,
+      "sha256": "16580bcdca26148b675e968c8a18f766a72b9def5be724a2bad3e6d1e2afe256"
+    },
+    {
+      "file": "VERIFIED-duy-perf-20261111-stockseed-PRIOR-FAIL-verify-r2.json",
+      "bytes": 707507,
+      "sha256": "0a341b45edfb30f0c7d5807d4773045996a0c0cc6df6679e93bf991b59c2dc3f"
+    },
+    {
+      "file": "VERIFIED-duy-perf-20261111-stockseed.json",
+      "bytes": 707509,
+      "sha256": "f4bcd92c3b00d95108e69a85be3088fef6bc451bf295d4739bdcec3e8db70bc2"
+    },
+    {
+      "file": "VERIFIED-duy-perf-20261111-wload-PRIOR-PASS-verify-cap-review.json",
+      "bytes": 672243,
+      "sha256": "85d896f3c882adab249e552e7937578102869b7a0e4932844ed966a12d46c440"
+    },
+    {
+      "file": "VERIFIED-duy-perf-20261111-wload.json",
+      "bytes": 672781,
+      "sha256": "c1b453cc71fc18b89198500187006f2b53fd91d1c6761e10506f507dcca55497"
+    }
+  ],
+  "original_location": "docs/qa/performance/evidence in original workspace",
+  "export_note": "Original evidence untouched; exported JSON copies redact private path metadata. Original/export SHA256 recorded in QA_FILE_INVENTORY.json."
+}

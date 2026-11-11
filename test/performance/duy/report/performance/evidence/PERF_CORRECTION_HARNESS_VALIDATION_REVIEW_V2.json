@@ -1,0 +1,189 @@
+{
+  "observed_at_utc": "2026-11-11T10:37:10.923577+00:00",
+  "status": "PASS",
+  "write_actual_function_mock_tests": {
+    "status": "PASS",
+    "network_requests": 0,
+    "cases": [
+      {
+        "profile": "lines",
+        "lines": 10,
+        "cap": 1,
+        "mocked_posts": 1,
+        "boundary_iterations_skipped": 2,
+        "distinct_request_ids": 1,
+        "timeout_attempts": 1,
+        "failed_response_attempts": 1,
+        "retry": false
+      },
+      {
+        "profile": "lines",
+        "lines": 50,
+        "cap": 1,
+        "mocked_posts": 1,
+        "boundary_iterations_skipped": 2,
+        "distinct_request_ids": 1,
+        "timeout_attempts": 1,
+        "failed_response_attempts": 1,
+        "retry": false
+      },
+      {
+        "profile": "concurrency",
+        "lines": 1,
+        "cap": 25,
+        "mocked_posts": 25,
+        "boundary_iterations_skipped": 2,
+        "distinct_request_ids": 25,
+        "timeout_attempts": 1,
+        "failed_response_attempts": 1,
+        "retry": false
+      },
+      {
+        "profile": "load",
+        "lines": 1,
+        "cap": 240,
+        "mocked_posts": 240,
+        "boundary_iterations_skipped": 2,
+        "distinct_request_ids": 240,
+        "timeout_attempts": 1,
+        "failed_response_attempts": 1,
+        "retry": false
+      }
+    ],
+    "tested_source": "[ORIGINAL_WORKSPACE]\\Duy_Performance_Testing_Package\\scripts\\stock-receipt.k6.js"
+  },
+  "recovery_synthetic": {
+    "attempts": 30,
+    "unique_vus": 1,
+    "sample_span_seconds": 29.018,
+    "configured_window_seconds": 30,
+    "http_requests": 0
+  },
+  "write_scheduler_synthetic": {
+    "vus": 5,
+    "attempted_iterations": 30,
+    "admitted": 25,
+    "unique_ids": 25,
+    "boundary_skipped": 5,
+    "http_requests": 0
+  },
+  "k6_inspect": [
+    {
+      "script": "stock-levels.k6.js",
+      "profile": "smoke",
+      "lines": 1,
+      "exit_code": 0
+    },
+    {
+      "script": "stock-levels.k6.js",
+      "profile": "baseline",
+      "lines": 1,
+      "exit_code": 0
+    },
+    {
+      "script": "stock-levels.k6.js",
+      "profile": "load",
+      "lines": 1,
+      "exit_code": 0
+    },
+    {
+      "script": "stock-levels.k6.js",
+      "profile": "stress",
+      "lines": 1,
+      "exit_code": 0
+    },
+    {
+      "script": "stock-levels-recovery-v2.k6.js",
+      "profile": "spike",
+      "lines": 1,
+      "exit_code": 0
+    },
+    {
+      "script": "stock-receipt.k6.js",
+      "profile": "lines",
+      "lines": 10,
+      "exit_code": 0
+    },
+    {
+      "script": "stock-receipt.k6.js",
+      "profile": "lines",
+      "lines": 50,
+      "exit_code": 0
+    },
+    {
+      "script": "stock-receipt.k6.js",
+      "profile": "concurrency",
+      "lines": 1,
+      "exit_code": 0
+    },
+    {
+      "script": "stock-receipt.k6.js",
+      "profile": "load",
+      "lines": 1,
+      "exit_code": 0
+    }
+  ],
+  "powershell_ast": [
+    {
+      "errors": [],
+      "file": "analyze-stage-metrics.ps1"
+    },
+    {
+      "errors": [],
+      "file": "connect-perf-session.ps1"
+    },
+    {
+      "errors": [],
+      "file": "load-perf-env.ps1"
+    },
+    {
+      "errors": [],
+      "file": "new-independent-tenant.ps1"
+    },
+    {
+      "errors": [],
+      "file": "prepare-independent-fixture.ps1"
+    },
+    {
+      "errors": [],
+      "file": "run-portable-k6.ps1"
+    },
+    {
+      "errors": [],
+      "file": "run-spike-recovery-v2.ps1"
+    },
+    {
+      "errors": [],
+      "file": "verify-portable-checkpoint.ps1"
+    }
+  ],
+  "relocated_directory_with_spaces": "PASS",
+  "personal_absolute_paths": 0,
+  "pending_approval_execution_refused": true,
+  "pending_login_refused": true,
+  "existing_run_id_refused": true,
+  "cumulative_budget_refused": true,
+  "source_sha256": {
+    "stock-levels.k6.js": "24fb4eb09d1a7a0d7fe3926204d15e2fcfe0722bab41a1d4712a4eb396f6eabb",
+    "stock-receipt.k6.js": "4dd036b836ed4cd23ac488a5dff8d98b1e5ecef027a8f74d001c787a1cfc8b50",
+    "stock-levels-recovery-v2.k6.js": "79259e980f95533b630da1617b20885306b0c214cf7472285cd089aa4b24c4ec",
+    "recovery-plan.js": "c1f4631d29354b7dc2cd38ef03822459e94b68957dd6c0b8fc1492c534d2776c",
+    "recovery-synthetic.k6.js": "392e74e8118a44518f32747ebcabf14d94416608e31c671dfe2c9011775eafae",
+    "write-guards.synthetic.cjs": "1485be1107d270da5fb61bb6cbfe1817a3ea3d9e228b12307cbfe8bcb9b4af2c",
+    "run-portable-k6.ps1": "73b9477402dd4580796d33a40d805d99ef2bd996361ec7bbcb91a7a8a3ab7034",
+    "run-spike-recovery-v2.ps1": "4a163ddf04531e73c02fbb37f9120df5d3a28ebb1202915d438883e93e23c347",
+    "connect-perf-session.ps1": "f52aa6707cac65c1e96d548541c3a9d66200eccc3e1c18f07f1460fdf7087285",
+    "new-independent-tenant.ps1": "407358ba1c811ef75179a2032ddf04e7ab8bd7243341d9c7f95d6faaf4b2b3b4",
+    "prepare-independent-fixture.ps1": "9e93fb91e87d6d6b647359389ba6fcc864a44ca292094273f1977e63f4055c24",
+    "load-perf-env.ps1": "1bb655c2359b89604c124aca3d9dd06b0308337b779e391e1b7237b540b2ecbb",
+    "verify-portable-checkpoint.ps1": "01730c11c6d95d11e9b8f96fedb47628ad7b3e71764b00ad3a59bb051cf4d164",
+    "checkpoint.sql": "c37c455849613d4688bb048928669974802af56bc8e5100bc5ff996546e711a5",
+    "queue-attributes.cjs": "2e19fcb5206523c57a392ba27aee0c7c187a72298a49dcbcb92ed7de889ef965",
+    "analyze-stage-metrics.ps1": "a985ab36891e64ad9b2151bf7a31d60e59f2fcac7858edf2a8553ee0faae8686",
+    "write-cap-scheduler.synthetic.k6.js": "53ba6b4006aba0493a8e8f4c084a454cdc381161f3a83375c860248a7c1d4e77"
+  },
+  "live_spike_started": false,
+  "login_posts": 0,
+  "receipt_posts": 0,
+  "independent_member_live_reproduction": "NOT VERIFIED"
+}

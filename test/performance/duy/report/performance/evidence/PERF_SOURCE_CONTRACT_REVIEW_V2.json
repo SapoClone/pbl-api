@@ -1,0 +1,46 @@
+{
+  "scope": "source-only audit; no API POST",
+  "source_files": [
+    {
+      "path": "apps/inventory/src/stock/stock.controller.ts",
+      "sha256": "b033b77c0834941584cb1ce50ffd0065e9b0c8dfd5ddecaa67ef4573b1f25451"
+    },
+    {
+      "path": "apps/inventory/src/modules/receiving/receiving.dto.ts",
+      "sha256": "7230b8237bbc1cb85bafdb6da5b153c9477eb15b2731fcf1939f5497d73b483f"
+    },
+    {
+      "path": "apps/inventory/src/modules/receiving/receiving.controller.ts",
+      "sha256": "c099f062242568bbe281bdaedd6f9a1b5190f883ebda504d2cf19258ad8318f4"
+    },
+    {
+      "path": "krakend/krakend.json",
+      "sha256": "23e5e97e609b8619db305351dba8317eb08c1f5d33e51ae4e10c33e93b51cffe"
+    }
+  ],
+  "contract": {
+    "create": "POST /inventory/api/v1/stock-receipts",
+    "success": 201,
+    "permissions": [
+      "inventory.create",
+      "inventory.approve for autoPost"
+    ],
+    "items_max": 200,
+    "quantity": "positive numeric string, at most3 decimals",
+    "cost": "non-negative integer VND",
+    "factor": "positive numeric string, at most4 decimals",
+    "headers": [
+      "Authorization",
+      "X-Request-Id",
+      "Idempotency-Key"
+    ],
+    "no_retry": true,
+    "request_attempt_metric_before_http": true,
+    "unique_ids_from": "RunId + globally unique scenario.iterationInTest",
+    "run_ids": "new V2 IDs only; prior artifacts refuse replay"
+  },
+  "limitations": [
+    "Source/inspect/synthetic checks do not certify live10/50-line or concurrency behavior.",
+    "Current auth GET refresh awaits approved login."
+  ]
+}

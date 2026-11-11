@@ -1,0 +1,26 @@
+{
+  "observed_at_utc": "2026-11-11T10:43:05.383708+00:00",
+  "status": "PASS",
+  "qa_files": 74,
+  "secret_scan": {
+    "rules": [
+      "jwt",
+      "literal_bearer",
+      "private_key",
+      "literal_secret_json"
+    ],
+    "findings": [],
+    "scanned_export_files": 74,
+    "scanned_raw_artifact_files": 20,
+    "claim": "Pattern scan only; manual staged review still required"
+  },
+  "artifact": {
+    "file": "DUY_PERFORMANCE_RAW_ARTIFACTS_V2.zip",
+    "bytes": 1801255,
+    "sha256": "48493fe5d3670eaa6fa0e5857077d34b75744082349a52633e986fafc0a24651",
+    "location": "Original performance package results directory; distribute as a separate reviewed artifact",
+    "source_files": 20
+  },
+  "git_staging_performed": false,
+  "commit_or_push_performed": false
+}

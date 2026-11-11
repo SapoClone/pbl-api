@@ -1,0 +1,116 @@
+{
+  "assignment_run": "duy-perf-20261111-044409",
+  "fixture_run": "duy-perf-20261111-0522",
+  "observed_at_utc": "2026-11-11T09:59:46.5716841Z",
+  "target": {
+    "database": "pbl",
+    "gateway": "http://localhost:8080",
+    "tenant_id": "a669c566-9bea-44fa-b019-3d41d1d27e2f",
+    "branch_id": "4fa7bc25-b03b-4243-886b-1e0abb28d132",
+    "warehouse_id": "13476daf-8435-4ab8-b34b-02affb316b81",
+    "backend_sha": "9e8044bd7fc16ddc8ec7269a17993ebf07b6d0ff",
+    "m10_tenant_used": false
+  },
+  "approvals": {
+    "checkpoint_approval": "DUY-PERF-APPROVAL-20261111-FINAL-COMPLETION",
+    "latest_user_attachment": "PHÊ DUYỆT RESUME — DUY PERFORMANCE TESTING V2",
+    "latest_attachment_expected_receipts_before_resume": 0,
+    "latest_attachment_expected_receipt_items_before_resume": 0,
+    "latest_attachment_expected_balances_before_resume": 0
+  },
+  "harness": {
+    "validation_file": "QA_HARNESS_RESUME_LATEST_VALIDATION.json",
+    "result": "PASS_HARNESS_READY_FOR_FRESH_READ_ONLY_PREFLIGHT",
+    "powershell_ast": "PASS 8/8",
+    "k6_inspect_profiles": 11,
+    "journal_and_atomic_write": "PASS",
+    "synthetic_no_http": "PASS"
+  },
+  "actual_checkpoint": {
+    "preflight_status": "PASS",
+    "observed_at_utc": "2026-11-11T09:56:30.3428806Z",
+    "receipts": 247,
+    "receipt_items": 1241,
+    "ledger_rows": 1241,
+    "balance_rows": 1000,
+    "on_hand_total": 1.241,
+    "wac_bad_rows": 0,
+    "valuation_total_vnd": 124100,
+    "stock_changed_events": 1241,
+    "stock_received_events": 247,
+    "outbox_inbox_drift": 0,
+    "business_event_queues_empty": true,
+    "dlqs_empty": true,
+    "matches_prior_checkpoint": true
+  },
+  "checkpoint_mismatch_stop": {
+    "latest_attachment_zero_receipt_precondition_met": false,
+    "actual_receipts": 247,
+    "receipt_posts_sent_after_latest_attachment": 0,
+    "decision": "STOP BEFORE ANY NEW RECEIPT POST; preserve existing committed checkpoint",
+    "reason": "Fresh actual state is the previously approved 247-receipt checkpoint, not the zero-receipt state described in the new attachment."
+  },
+  "additional_read_profiles": {
+    "authorization": "Previously approved final-completion read profiles; no business writes",
+    "profile_seconds_total": 350,
+    "max_read_vus": 50,
+    "spike": {
+      "run_id": "duy-perf-20261111-rspike-stages1",
+      "login_request_id": "cb8b894b-5f48-43be-acf8-fb14f3f9e97b",
+      "login_http_status": 200,
+      "business_requests": 1997,
+      "k6_exit_code": 0,
+      "max_vus": 50,
+      "status": "BLOCKED"
+    },
+    "stress": {
+      "run_id": "duy-perf-20261111-rstress-stages1",
+      "business_requests": 6016,
+      "k6_exit_code": 0,
+      "max_vus": 50,
+      "status": "PASS"
+    }
+  },
+  "request_accounting": {
+    "checkpoint_login_posts": 9,
+    "additional_login_posts": 2,
+    "login_posts_after": 11,
+    "checkpoint_receipt_posts": 247,
+    "additional_receipt_posts": 0,
+    "receipt_posts_after": 247,
+    "checkpoint_total_posts": 256,
+    "additional_total_posts": 2,
+    "total_posts_after": 258,
+    "automatic_retry": false,
+    "cleanup": false
+  },
+  "test_cases": {
+    "PERF-DUY-01": "PASS",
+    "PERF-DUY-02": "PASS",
+    "PERF-DUY-03": "PASS",
+    "PERF-DUY-04": "BLOCKED_RECOVERY_STAGE_ZERO_SAMPLES",
+    "PERF-DUY-05": "PASS_STAGE_METRICS",
+    "PERF-DUY-06": "PASS",
+    "PERF-DUY-07": "FAIL_241_OF_240",
+    "PERF-DUY-08": "BLOCKED_CHECKPOINT_APPROVAL_MISMATCH",
+    "PERF-DUY-09": "BLOCKED_CHECKPOINT_APPROVAL_MISMATCH",
+    "PERF-DUY-10": "PASS_CURRENT_COMMITTED_CHECKPOINT_INTEGRITY"
+  },
+  "execution_status": "READ_PROFILES_RECONCILED; ADDITIONAL_WRITE_PROFILES_STOPPED_BEFORE_ANY_RECEIPT_POST",
+  "evidence": [
+    "QA_HARNESS_RESUME_LATEST_VALIDATION.json",
+    "PERF_FINAL_COMPLETION_PREFLIGHT_AFTER_LATEST_RESUME.json",
+    "PERF_STAGE_METRICS_AUDIT.json",
+    "PERF_STAGE_METRICS_FINAL.json",
+    "PERF_FINAL_COMPLETION_PREFLIGHT_AFTER_STAGE_READS.json",
+    "duy-perf-20261111-rspike-stages1-run.json",
+    "duy-perf-20261111-rstress-stages1-run.json",
+    "QA_HARNESS_FINAL_POST_READ_VALIDATION.json"
+  ],
+  "password_or_token_recorded": false,
+  "database_write_outside_api": 0,
+  "receipt_post_sent": false,
+  "queue_body_inspected": false,
+  "queue_receive_or_delete_called": false,
+  "final_harness_validation": "PASS PowerShell AST, k6 inspect, synthetic journal and request-cap tests; no HTTP or DB writes."
+}

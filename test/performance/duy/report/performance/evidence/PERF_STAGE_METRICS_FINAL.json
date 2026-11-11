@@ -1,0 +1,322 @@
+{
+  "observed_at_utc": "2026-11-11T09:56:09.2027359Z",
+  "target_tenant": "a669c566-9bea-44fa-b019-3d41d1d27e2f",
+  "gateway": "http://localhost:8080",
+  "backend_sha": "9e8044bd7fc16ddc8ec7269a17993ebf07b6d0ff",
+  "audit_source": "k6 raw JSONL points and per-second Docker stats; setup tenant GET excluded from business latency and throughput.",
+  "latency_and_error_thresholds": {
+    "p95_ms_lt": 500,
+    "error_rate_lt": 0.01,
+    "response_shape_rate_gt": 0.99
+  },
+  "throughput_method": "stage-tagged business request count / configured stage duration seconds; ramp throughput is averaged across its ramp interval.",
+  "cpu_ram_method": "Docker stats samples assigned by sampled_at_utc to the scenario stage time window; percentages are container-level samples, not host-wide resource utilization.",
+  "runs": [
+    {
+      "run_id": "duy-perf-20261111-rspike-stages1",
+      "profile": "spike",
+      "summary_file": "read-duy-perf-20261111-rspike-stages1-spike-p1-l100.json",
+      "raw_metrics_file": "duy-perf-20261111-rspike-stages1-k6-metrics.jsonl",
+      "docker_stats_file": "duy-perf-20261111-rspike-stages1-docker-stats.jsonl",
+      "start_utc": "2026-11-11T09:43:34.3762108Z",
+      "finish_utc": "2026-11-11T09:44:57.6245312Z",
+      "profile_duration_seconds": 80,
+      "max_vus": 50,
+      "expected_stock_rows": 1000,
+      "actual_stock_rows": 1000,
+      "total_stage_tagged_requests": 1997,
+      "summary_business_request_count": 1997,
+      "setup_gets_excluded": 1,
+      "percentile_method": "Nearest rank: sorted sample at index ceil(p*N)-1; raw http_req_duration points filtered to endpoint=stock-levels and stage.",
+      "stages": [
+        {
+          "stage": "ramp_up",
+          "from_seconds": 0,
+          "to_seconds": 10,
+          "duration_seconds": 10,
+          "configured_vus": "0-to-50",
+          "request_count": 265,
+          "throughput_rps": 26.5,
+          "status_200": 265,
+          "non_200_or_transport_errors": 0,
+          "error_rate": 0,
+          "latency_ms": {
+            "p50": 10.05,
+            "p95": 15.386,
+            "p99": 16.451,
+            "max": 20.364
+          },
+          "response_shape_rate": 1,
+          "docker_stats_sample_count": 36,
+          "docker_cpu_percent": {
+            "avg": 3.046,
+            "max": 24.27
+          },
+          "docker_memory_percent": {
+            "avg": 5.404,
+            "max": 8.99
+          },
+          "status": "PASS"
+        },
+        {
+          "stage": "hold_50_vu",
+          "from_seconds": 10,
+          "to_seconds": 40,
+          "duration_seconds": 30,
+          "configured_vus": "50",
+          "request_count": 1480,
+          "throughput_rps": 49.333,
+          "status_200": 1480,
+          "non_200_or_transport_errors": 0,
+          "error_rate": 0,
+          "latency_ms": {
+            "p50": 12.943,
+            "p95": 21.737,
+            "p99": 28.501,
+            "max": 43.566
+          },
+          "response_shape_rate": 1,
+          "docker_stats_sample_count": 120,
+          "docker_cpu_percent": {
+            "avg": 5.176,
+            "max": 37.2
+          },
+          "docker_memory_percent": {
+            "avg": 5.454,
+            "max": 8.99
+          },
+          "status": "PASS"
+        },
+        {
+          "stage": "ramp_down",
+          "from_seconds": 40,
+          "to_seconds": 50,
+          "duration_seconds": 10,
+          "configured_vus": "50-to-0",
+          "request_count": 252,
+          "throughput_rps": 25.2,
+          "status_200": 252,
+          "non_200_or_transport_errors": 0,
+          "error_rate": 0,
+          "latency_ms": {
+            "p50": 13.242,
+            "p95": 20.08,
+            "p99": 28.814,
+            "max": 31.086
+          },
+          "response_shape_rate": 1,
+          "docker_stats_sample_count": 36,
+          "docker_cpu_percent": {
+            "avg": 3.071,
+            "max": 32.64
+          },
+          "docker_memory_percent": {
+            "avg": 5.485,
+            "max": 8.99
+          },
+          "status": "PASS"
+        },
+        {
+          "stage": "recovery_1_vu",
+          "from_seconds": 50,
+          "to_seconds": 80,
+          "duration_seconds": 30,
+          "configured_vus": "1",
+          "request_count": 0,
+          "throughput_rps": 0,
+          "status_200": 0,
+          "non_200_or_transport_errors": 0,
+          "error_rate": null,
+          "latency_ms": {
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "response_shape_rate": null,
+          "docker_stats_sample_count": 120,
+          "docker_cpu_percent": {
+            "avg": 1.053,
+            "max": 4.67
+          },
+          "docker_memory_percent": {
+            "avg": 5.448,
+            "max": 8.99
+          },
+          "status": "BLOCKED"
+        }
+      ],
+      "status": "BLOCKED",
+      "request_total_matches_summary": true
+    },
+    {
+      "run_id": "duy-perf-20261111-rstress-stages1",
+      "profile": "stress",
+      "summary_file": "read-duy-perf-20261111-rstress-stages1-stress-p1-l100.json",
+      "raw_metrics_file": "duy-perf-20261111-rstress-stages1-k6-metrics.jsonl",
+      "docker_stats_file": "duy-perf-20261111-rstress-stages1-docker-stats.jsonl",
+      "start_utc": "2026-11-11T09:44:57.7180070Z",
+      "finish_utc": "2026-11-11T09:49:30.9190610Z",
+      "profile_duration_seconds": 270,
+      "max_vus": 50,
+      "expected_stock_rows": 1000,
+      "actual_stock_rows": 1000,
+      "total_stage_tagged_requests": 6016,
+      "summary_business_request_count": 6016,
+      "setup_gets_excluded": 1,
+      "percentile_method": "Nearest rank: sorted sample at index ceil(p*N)-1; raw http_req_duration points filtered to endpoint=stock-levels and stage.",
+      "stages": [
+        {
+          "stage": "ramp_to_10",
+          "from_seconds": 0,
+          "to_seconds": 60,
+          "duration_seconds": 60,
+          "configured_vus": "1-to-10",
+          "request_count": 301,
+          "throughput_rps": 5.017,
+          "status_200": 301,
+          "non_200_or_transport_errors": 0,
+          "error_rate": 0,
+          "latency_ms": {
+            "p50": 12.595,
+            "p95": 17.05,
+            "p99": 19.015,
+            "max": 24.835
+          },
+          "response_shape_rate": 1,
+          "docker_stats_sample_count": 228,
+          "docker_cpu_percent": {
+            "avg": 1.551,
+            "max": 8.86
+          },
+          "docker_memory_percent": {
+            "avg": 5.44,
+            "max": 8.99
+          },
+          "status": "PASS"
+        },
+        {
+          "stage": "ramp_to_20",
+          "from_seconds": 60,
+          "to_seconds": 120,
+          "duration_seconds": 60,
+          "configured_vus": "10-to-20",
+          "request_count": 862,
+          "throughput_rps": 14.367,
+          "status_200": 862,
+          "non_200_or_transport_errors": 0,
+          "error_rate": 0,
+          "latency_ms": {
+            "p50": 12.49,
+            "p95": 16.611,
+            "p99": 18.878,
+            "max": 32.143
+          },
+          "response_shape_rate": 1,
+          "docker_stats_sample_count": 228,
+          "docker_cpu_percent": {
+            "avg": 2.083,
+            "max": 14.52
+          },
+          "docker_memory_percent": {
+            "avg": 5.448,
+            "max": 8.99
+          },
+          "status": "PASS"
+        },
+        {
+          "stage": "ramp_to_35",
+          "from_seconds": 120,
+          "to_seconds": 180,
+          "duration_seconds": 60,
+          "configured_vus": "20-to-35",
+          "request_count": 1603,
+          "throughput_rps": 26.717,
+          "status_200": 1603,
+          "non_200_or_transport_errors": 0,
+          "error_rate": 0,
+          "latency_ms": {
+            "p50": 12.461,
+            "p95": 16.884,
+            "p99": 31.136,
+            "max": 65.242
+          },
+          "response_shape_rate": 1,
+          "docker_stats_sample_count": 240,
+          "docker_cpu_percent": {
+            "avg": 2.921,
+            "max": 23
+          },
+          "docker_memory_percent": {
+            "avg": 5.457,
+            "max": 8.99
+          },
+          "status": "PASS"
+        },
+        {
+          "stage": "ramp_to_50",
+          "from_seconds": 180,
+          "to_seconds": 240,
+          "duration_seconds": 60,
+          "configured_vus": "35-to-50",
+          "request_count": 2492,
+          "throughput_rps": 41.533,
+          "status_200": 2492,
+          "non_200_or_transport_errors": 0,
+          "error_rate": 0,
+          "latency_ms": {
+            "p50": 12.473,
+            "p95": 17.813,
+            "p99": 23.053,
+            "max": 37.633
+          },
+          "response_shape_rate": 1,
+          "docker_stats_sample_count": 228,
+          "docker_cpu_percent": {
+            "avg": 4.229,
+            "max": 31.89
+          },
+          "docker_memory_percent": {
+            "avg": 5.465,
+            "max": 8.99
+          },
+          "status": "PASS"
+        },
+        {
+          "stage": "ramp_down",
+          "from_seconds": 240,
+          "to_seconds": 270,
+          "duration_seconds": 30,
+          "configured_vus": "50-to-0",
+          "request_count": 758,
+          "throughput_rps": 25.267,
+          "status_200": 758,
+          "non_200_or_transport_errors": 0,
+          "error_rate": 0,
+          "latency_ms": {
+            "p50": 12.382,
+            "p95": 20.812,
+            "p99": 43.054,
+            "max": 58.678
+          },
+          "response_shape_rate": 1,
+          "docker_stats_sample_count": 120,
+          "docker_cpu_percent": {
+            "avg": 2.8,
+            "max": 29.07
+          },
+          "docker_memory_percent": {
+            "avg": 5.468,
+            "max": 8.99
+          },
+          "status": "PASS"
+        }
+      ],
+      "status": "PASS",
+      "request_total_matches_summary": true
+    }
+  ],
+  "status": "BLOCKED",
+  "business_write_requests_sent": 0,
+  "password_or_token_recorded": false
+}

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="640" viewBox="0 0 980 640">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="24" y="30" font-family="Arial" font-size="20" font-weight="bold">Stock-level GET p95 latency</text>
+<text x="24" y="52" font-family="Arial" font-size="12" fill="#555">Gateway; 1,000 balance-backed rows; threshold 500 ms (plot scale 0–25 ms). Stage values use raw k6 samples.</text>
+<text x="24" y="91" font-family="Arial" font-size="12">Baseline limit100</text><rect x="250" y="77" width="206" height="18" rx="3" fill="#3577b8"/><text x="464" y="91" font-family="Arial" font-size="12">17.16 ms</text>
+<text x="24" y="123" font-family="Arial" font-size="12">Load 10 VU</text><rect x="250" y="109" width="229" height="18" rx="3" fill="#3577b8"/><text x="487" y="123" font-family="Arial" font-size="12">19.06 ms</text>
+<text x="24" y="155" font-family="Arial" font-size="12">Pagination limit10</text><rect x="250" y="141" width="142" height="18" rx="3" fill="#3577b8"/><text x="400" y="155" font-family="Arial" font-size="12">11.86 ms</text>
+<text x="24" y="187" font-family="Arial" font-size="12">Pagination limit50</text><rect x="250" y="173" width="163" height="18" rx="3" fill="#3577b8"/><text x="421" y="187" font-family="Arial" font-size="12">13.55 ms</text>
+<text x="24" y="219" font-family="Arial" font-size="12">Pagination limit100</text><rect x="250" y="205" width="206" height="18" rx="3" fill="#3577b8"/><text x="464" y="219" font-family="Arial" font-size="12">17.16 ms</text>
+<text x="24" y="251" font-family="Arial" font-size="12">Legacy spike aggregate</text><rect x="250" y="237" width="175" height="18" rx="3" fill="#8aa5bf"/><text x="433" y="251" font-family="Arial" font-size="12">14.57 ms; aggregate only</text>
+<text x="24" y="283" font-family="Arial" font-size="12">Legacy stress aggregate</text><rect x="250" y="269" width="200" height="18" rx="3" fill="#8aa5bf"/><text x="458" y="283" font-family="Arial" font-size="12">16.65 ms; aggregate only</text>
+<text x="24" y="315" font-family="Arial" font-size="12">Spike stage: ramp-up</text><rect x="250" y="301" width="185" height="18" rx="3" fill="#3577b8"/><text x="443" y="315" font-family="Arial" font-size="12">15.386 ms</text>
+<text x="24" y="347" font-family="Arial" font-size="12">Spike stage: hold 50 VU</text><rect x="250" y="333" width="261" height="18" rx="3" fill="#3577b8"/><text x="519" y="347" font-family="Arial" font-size="12">21.737 ms</text>
+<text x="24" y="379" font-family="Arial" font-size="12">Spike stage: ramp-down</text><rect x="250" y="365" width="241" height="18" rx="3" fill="#3577b8"/><text x="499" y="379" font-family="Arial" font-size="12">20.080 ms</text>
+<text x="24" y="411" font-family="Arial" font-size="12">Spike stage: recovery 1 VU</text><rect x="250" y="397" width="1" height="18" rx="1" fill="#9ca3af"/><text x="264" y="411" font-family="Arial" font-size="12" fill="#666">Not measured (0 requests)</text>
+<text x="24" y="443" font-family="Arial" font-size="12">Stress stage: 1→10 VU</text><rect x="250" y="429" width="205" height="18" rx="3" fill="#3577b8"/><text x="463" y="443" font-family="Arial" font-size="12">17.050 ms</text>
+<text x="24" y="475" font-family="Arial" font-size="12">Stress stage: 10→20 VU</text><rect x="250" y="461" width="199" height="18" rx="3" fill="#3577b8"/><text x="457" y="475" font-family="Arial" font-size="12">16.611 ms</text>
+<text x="24" y="507" font-family="Arial" font-size="12">Stress stage: 20→35 VU</text><rect x="250" y="493" width="203" height="18" rx="3" fill="#3577b8"/><text x="461" y="507" font-family="Arial" font-size="12">16.884 ms</text>
+<text x="24" y="539" font-family="Arial" font-size="12">Stress stage: 35→50 VU</text><rect x="250" y="525" width="214" height="18" rx="3" fill="#3577b8"/><text x="472" y="539" font-family="Arial" font-size="12">17.813 ms</text>
+<text x="24" y="571" font-family="Arial" font-size="12">Stress stage: ramp-down</text><rect x="250" y="557" width="250" height="18" rx="3" fill="#3577b8"/><text x="508" y="571" font-family="Arial" font-size="12">20.812 ms</text>
+<text x="24" y="614" font-family="Arial" font-size="11" fill="#555">Stage thresholds: p95 &lt;500 ms; all measured stages had 0% errors. Recovery remains unverified.</text>
+</svg>

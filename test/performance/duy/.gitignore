@@ -1,0 +1,12 @@
+# Personal configuration and credentials
+.env
+.env.*
+!.env.example
+*.dpapi
+*.pem
+*.key
+# New local runs are reviewed before publication
+results-local/
+fixtures/*.local.json
+tools/
+*.tmp

@@ -1,0 +1,463 @@
+{
+  "files": [
+    {
+      "file": "test/performance/duy/.env.example",
+      "source_sha256": "2e64dacf5d1d6449cdfd25d4b1199ca4bc67aa52d76567a4f8e0817c979fbe7c",
+      "export_sha256": "5bf4f979193322ae14379d5756ff3445c69bdf07602da1ae0afdd085ddf5c296",
+      "bytes": 411
+    },
+    {
+      "file": "test/performance/duy/.gitattributes",
+      "source_sha256": "d711b6ba64c7208f3059111e2a74a2453348584bef1fec237198ad08befe28b9",
+      "export_sha256": "d60f352d0db1404c70afb4bb8b2ca3fd1c610572aa40720e8a0b7baa7885418c",
+      "bytes": 19
+    },
+    {
+      "file": "test/performance/duy/.gitignore",
+      "source_sha256": "5c2ffae444b655b863b79fb7820b66d0b1374c802b333bb31f69f2060740f995",
+      "export_sha256": "df0e20ebba0aad69c52d462509dc445c5e195f7898e55f52fa9777b3372c5d06",
+      "bytes": 186
+    },
+    {
+      "file": "test/performance/duy/README_PERFORMANCE_TESTING.md",
+      "source_sha256": "09b39b1b8243769a1b65b69c78b699076bb04a14f370f402cb96f963a7610b79",
+      "export_sha256": "9a95b38b69f7f7eb0f6196fcab7f2e910781bba5ecc8a399c125043b9b351bd7",
+      "bytes": 1852,
+      "git_phase_note": "Reviewed clone-portability/documentation correction; historical results unchanged."
+    },
+    {
+      "file": "test/performance/duy/REPRODUCIBILITY_GUIDE.md",
+      "source_sha256": "038521b0da30c39059ce8662cbc233915b58c1b79ecc76d1bdb2fe42f709aec7",
+      "export_sha256": "c6425339d6f61942c0bb28836b6caf73e26dc714ebdb499f01fd5200c95e748d",
+      "bytes": 6771,
+      "git_phase_note": "Reviewed clone-portability/documentation correction; historical results unchanged."
+    },
+    {
+      "file": "test/performance/duy/RUNBOOK_PERFORMANCE_WINDOWS.md",
+      "source_sha256": "fd5864ef672464860b73fa94ef56c561d5df4070c41b9479b2e71803793842d4",
+      "export_sha256": "d57994601d58592230947895c5abf2d00c232ca404bdec37a0091b225548b4f2",
+      "bytes": 5300
+    },
+    {
+      "file": "test/performance/duy/approvals/PERF_FINAL_WRITE_APPROVAL_V2.json",
+      "source_sha256": "374cc3f3553d3cc22a88f6e7239d688fc35c16b6a499b5c27e381d309cb7a633",
+      "export_sha256": "82fffaae224808d6e529e98d2ea43ca03544622c75af1d0115c79bb58c1deabe",
+      "bytes": 3072
+    },
+    {
+      "file": "test/performance/duy/approvals/PERF_READ_RECOVERY_APPROVAL_V2.json",
+      "source_sha256": "595d34ff054343daff7c246619cab599c7de2da5ecb678ca7611609eb7162659",
+      "export_sha256": "48c5199a7131eb05fe502c58bebb9c6b7f5df383bb4e33047b0430b0875aebd1",
+      "bytes": 911
+    },
+    {
+      "file": "test/performance/duy/approvals/independent-fixture.example.json",
+      "source_sha256": "3270b5bff8b0e59001a5b9de50fca8409d36c658521fb49b5872746a8c9fd188",
+      "export_sha256": "6234c79b4d260f2d77ec4820355ca584f18d17e58bea765924774943e394abcd",
+      "bytes": 424
+    },
+    {
+      "file": "test/performance/duy/approvals/independent-suite.example.json",
+      "source_sha256": "26f535abd03f27812cbbc7d81a98bcf8677d1a4fb986d666e61f8d9aad70aead",
+      "export_sha256": "95cd51fe2d6e56bb89dd402d6b3327e531d89dae8eaa906c4503a13707f49a05",
+      "bytes": 3725
+    },
+    {
+      "file": "test/performance/duy/report/DUY_PERFORMANCE_HANDOFF.md",
+      "source_sha256": "2374806ffddd14ab15b0f43a6c12beb56833682b9ad49a0946d4de274711a878",
+      "export_sha256": "4f5915d39254925a2f34bfdc8bc41a2e244bfc6bdc3f0ccbd8d8033088a4ad02",
+      "bytes": 8602
+    },
+    {
+      "file": "test/performance/duy/report/DUY_PERFORMANCE_TEST_REPORT.md",
+      "source_sha256": "aec48a4d54ef21943671607b7a9fae21bff1327e19c6f1c157a453c9f3b3d234",
+      "export_sha256": "22ba77bb1a72a20abcdbf7e2fc79fa87817bf775be5837badd0d715839f4cdac",
+      "bytes": 16477
+    },
+    {
+      "file": "test/performance/duy/report/performance/DUY_PERFORMANCE_HANDOFF_FINAL.md",
+      "source_sha256": "8d7550960fc8bfbd9cc2273938bcf0308812a510b6b2bd888fa088556782d4f3",
+      "export_sha256": "b5037f56b73e20a1a723fb29c7332b09a61e517717d7486225d638b059100003",
+      "bytes": 8388,
+      "git_phase_note": "Reviewed clone-portability/documentation correction; historical results unchanged."
+    },
+    {
+      "file": "test/performance/duy/report/performance/PERF_DEFECT_LOG.md",
+      "source_sha256": "7460d207d0ac3cd5146f7fad794829f4d4ff6bcf1497297dca58fc8f5e0b0b7c",
+      "export_sha256": "9449f1352b3f17d11e184d28a67ea29b680d006e7020887034e715e1e419d65d",
+      "bytes": 4226
+    },
+    {
+      "file": "test/performance/duy/report/performance/PERF_RESULTS.md",
+      "source_sha256": "ab03e8a7ca619bb53590ed18d965bfa9d8b52383212ba9be64d71aac435ec728",
+      "export_sha256": "519b4d3f88d34b4ef8c277802c6df0965e93c729d85ed4622bf067682e6e8bea",
+      "bytes": 12545
+    },
+    {
+      "file": "test/performance/duy/report/performance/PERF_RUNBOOK.md",
+      "source_sha256": "2125a34e123ee461b9c6f0de43adbf5c371e63cf97ec9f6c36accee6c6a2d233",
+      "export_sha256": "21ca3c47aa37fecfc4111efe2203d452466b3f8fa7d1ede304a7b8fa8f61461e",
+      "bytes": 12693
+    },
+    {
+      "file": "test/performance/duy/report/performance/PERF_TEST_CASES.md",
+      "source_sha256": "16db7e790e14e6d19edd520a19e25a41bce4e6b3cddc3c5e7633e361c90de952",
+      "export_sha256": "16b933c2873db4f6e084b1f87d39a89bf59b430c698da43ef61833e31eebc3f9",
+      "bytes": 6732
+    },
+    {
+      "file": "test/performance/duy/report/performance/PERF_TRACEABILITY.md",
+      "source_sha256": "1198a412fb643c3a55d21161ecfadce2308efe0016846b14996df1fdb884ae1b",
+      "export_sha256": "f34e3175e9c3df271b45e8ff6e1663f11209f024ab3d6291c746b9324ea2fe52",
+      "bytes": 3897
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_CHECKPOINT_CORRECTION_API_DB_V2.json",
+      "source_sha256": "401ab0703389793b529c3237b2d2b53588a03a061ea9d58bfbfae28566fb21ab",
+      "export_sha256": "f7e6bbc03029b9e7e3c713bc507f8b43ffc9cc294d7f78bf32524858a676ac1d",
+      "bytes": 813
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_CHECKPOINT_CORRECTION_READONLY_V2.json",
+      "source_sha256": "94524c341cd2c1323192856a1018a9f9f18153a28ec9f709b8ba262e323d3a0c",
+      "export_sha256": "33be17bfae86fb6b25b722456705db709572cd465003ea4011699ea25e2ba1ae",
+      "bytes": 10499
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_CHECKPOINT_CORRECTION_SUMMARY_V2.json",
+      "source_sha256": "cadacb6d9aa9c5e0794b801f2558d14bd71ac3039faf2f2481a41a3d4637549b",
+      "export_sha256": "4423c46d3c57f8b43c519b1e86f7cfcccb9abaf9de252f6b4bcc63f9f0530722",
+      "bytes": 2003
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_CORRECTION_HANDOFF_VALIDATION_V2.json",
+      "source_sha256": "3b44b802cdacb94c080dc35f3ffa84193f802697ea7ecf3efee62118b80e3873",
+      "export_sha256": "b1037177637fd1884a741aae34627b2e73612fa1ec0bfb38dab4ebb636847bae",
+      "bytes": 5702
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_CORRECTION_HARNESS_VALIDATION_FINAL_V2.json",
+      "source_sha256": "ecbf375b1e549fe1e653ce2a1870d0cf16976401f83697628def16155c8bdde3",
+      "export_sha256": "c3731b7e019cd12bcb788c614939b8b049f3642f0966a6ccdbffcc66f0e5ca01",
+      "bytes": 5571
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_CORRECTION_HARNESS_VALIDATION_REVIEW_V2.json",
+      "source_sha256": "66177c37d5b3f666864dec1c4b5f93b04028b26fff83119a26dacc74f61002ab",
+      "export_sha256": "98bcd4171e0162cf9435ad5ba17a7b416d54d6d6e7b23c382f8fce00d237a137",
+      "bytes": 5571
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_CORRECTION_HARNESS_VALIDATION_V2.json",
+      "source_sha256": "140a3e987332e5c119281482e98bda1819e39e3f1ee20536a4f618a1226a67f3",
+      "export_sha256": "6e2cebacea16f73a7340898fad40a4ec0502237b642ca40d2769feddf8648f94",
+      "bytes": 5214
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_CORRECTION_RELEASE_VALIDATION_V2.json",
+      "source_sha256": "da36554029e245f980d3c7abd05a1f49f272f3cc283721ff04f16057c9abdbd2",
+      "export_sha256": "386e89dd8a667974eefc9b5fdefb5ab80ee979451d6431b22bdaf00cbbec0d57",
+      "bytes": 5571
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_EXECUTION_FINAL_SUMMARY.json",
+      "source_sha256": "4ff0e1e19bcc12bd3ef4d83d0e0949dfc9e9816dc7d1173e8b74d599bddd9511",
+      "export_sha256": "ece65b3e094057dfef55f41e96d3e08a33db23ad5ed0f879643788271e8e2258",
+      "bytes": 9818
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_FINAL_COMPLETION_EXECUTION_V2.json",
+      "source_sha256": "20dc15045565c3739cc0526ea4f883e42b6c70aa562f6b675f300f64bdad8ad6",
+      "export_sha256": "d2a15512734e25c2c1791c3dddb6777434778d61fb6b53f4befdaeea7d856079",
+      "bytes": 1135
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_FINAL_COMPLETION_PREFLIGHT_AFTER_STAGE_READS.json",
+      "source_sha256": "af237ac3996a2cdf017052c04205fd7da8ca1555fc219c724871043d7ef45ceb",
+      "export_sha256": "73cf32cf9b6534e7993a79e5b4cc02b0d243345a07f8e31736505aa38fe7a85e",
+      "bytes": 10499
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_RECOVERY_ROOT_CAUSE_V2.json",
+      "source_sha256": "e2e9072cd11d1d5128fe537d8c2dafeb93a64a66500512d427c18cc4385b8abd",
+      "export_sha256": "dfcb559bdf8caad0a4cc7de08f459ae76dda181feaf60da4ee5efb79f90feaaf",
+      "bytes": 4083
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_RESUME_FINAL_SUMMARY.json",
+      "source_sha256": "071b47463bd5364a485c8546d40668db7bedd1af0d0669269be726e48aca04bb",
+      "export_sha256": "7949278760faeaa6aee9fb9afab34369efbb4e9dcb61492b19a40489bd8d2558",
+      "bytes": 4377
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_SOURCE_CONTRACT_REVIEW_V2.json",
+      "source_sha256": "853e92e687e5bd8cded7b094e9ce04d505a34b48383cd0c2405920037bef1276",
+      "export_sha256": "31cdeac7cf5806e75941540488e97116082e5ebd640e77b633b7be2da52af885",
+      "bytes": 1552
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/PERF_STAGE_METRICS_FINAL.json",
+      "source_sha256": "188dd3b9bd9abf7d4ef682fe4da5094765a8bb0b014a227474f8f7e01e336222",
+      "export_sha256": "c9ca87a243ada214df1c79b8d00369bdf4e0d89be76e6f49fe095d3ee5e71327",
+      "bytes": 10009
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/QA_HARNESS_FINAL_POST_READ_VALIDATION.json",
+      "source_sha256": "a5b4fb882d6254e47f5ff18d20649c3fa3d744e54198eba328e3ad5def2cc940",
+      "export_sha256": "845a61280eeaa00ac3d162b6983fb02ab09a54fed230b01b8cc1e48ae655cc32",
+      "bytes": 7169
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/QA_HARNESS_RESUME_LATEST_VALIDATION.json",
+      "source_sha256": "61cb58f6b3988d7a2fa079e7321c29ceb375a7385c7b859b0cf80433d07e05a6",
+      "export_sha256": "1ba55f8b42f5020ddd77d603f725888f014d89f0adf9e82f5de74fa36928092d",
+      "bytes": 7060
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/VERIFIED-duy-perf-20261111-wload-PRIOR-PASS-verify-cap-review.json",
+      "source_sha256": "85d896f3c882adab249e552e7937578102869b7a0e4932844ed966a12d46c440",
+      "export_sha256": "9f45ce9b68be7f3285d8c612f11b824fd5a6d2485ea2b2aec2b2522fd672c90c",
+      "bytes": 230797
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/VERIFIED-duy-perf-20261111-wload.json",
+      "source_sha256": "c1b453cc71fc18b89198500187006f2b53fd91d1c6761e10506f507dcca55497",
+      "export_sha256": "8f04818f174c7d7e46b701143b0005a4b21cb6250430b55d7111b17156534e79",
+      "bytes": 231239
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/duy-perf-20261111-wload-verify-cap-review-run.json",
+      "source_sha256": "17ca5871e930e6916723dc196a1c1676b72afe59a536f34a22c51079b08a013f",
+      "export_sha256": "50557b5732db3b64e909873504cc23cb3f80616159c902ba6b3bd52ab7183486",
+      "bytes": 3879180
+    },
+    {
+      "file": "test/performance/duy/report/performance/evidence/duy-perf-20261111-wload-write-run.json",
+      "source_sha256": "e11517f1a3f82712da3fb12d6490893707df05e34e30d3f04924df08e6f179bc",
+      "export_sha256": "2eb5750a65bb7ae60bccd04440b0b2f2a2b1a1c67b466b48066ffe8eee634c8b",
+      "bytes": 130857
+    },
+    {
+      "file": "test/performance/duy/results/duy-perf-20261111-read-p95.svg",
+      "source_sha256": "2899917bdf8a4821824e5a771d13ba35fc5d56412ca2bc636866b190b8155c11",
+      "export_sha256": "2899917bdf8a4821824e5a771d13ba35fc5d56412ca2bc636866b190b8155c11",
+      "bytes": 4291
+    },
+    {
+      "file": "test/performance/duy/results/duy-perf-20261111-write-p95.svg",
+      "source_sha256": "11a6f9765f3fd37492903f03c81f6a7ea1e870aeba9ffc83532adaed00cd1b85",
+      "export_sha256": "26c2a7dee30b43ddc23697c8316cd8dd0766427720a5017965e0462bb69d707d",
+      "bytes": 911
+    },
+    {
+      "file": "test/performance/duy/results/read-duy-perf-20261111-rbaseline-baseline-p1-l100.json",
+      "source_sha256": "47cc89ea2016950eac5cbdfd8d48bce8126b9e71b374bcc34e914e7ae15e4805",
+      "export_sha256": "110f50ee89de578caad472d9cb6a4566414b69fb1792107ef735f03e3fbc4bcc",
+      "bytes": 7800
+    },
+    {
+      "file": "test/performance/duy/results/read-duy-perf-20261111-rload-load-p1-l100.json",
+      "source_sha256": "b4ff70f8caa9a532c6763d963eaa3393b92cecbc463dbc59079c92d774d3ba10",
+      "export_sha256": "54fd75b1e586f421d4fff8582bdf2e5db25001540cdb756b49b51cbf287f1ebf",
+      "bytes": 7795
+    },
+    {
+      "file": "test/performance/duy/results/read-duy-perf-20261111-rpage10-baseline-p1-l10.json",
+      "source_sha256": "9c2fcc8d27b210592aa01fbc6d68bb49ae41d8dece0be837de32bd1e94c4bbc3",
+      "export_sha256": "3820e26f4450e66a169209a37cd7ea34c81ef676b2035d5abe20ea221f046dc3",
+      "bytes": 7732
+    },
+    {
+      "file": "test/performance/duy/results/read-duy-perf-20261111-rpage50-baseline-p1-l50.json",
+      "source_sha256": "eb12307b948c12ef71d24a15844fc2d381bbcd741c54f511cdc5e254ffad3893",
+      "export_sha256": "2e8519d21176d060aa1ad8285d36b078e30fc988122f37dc95e78bf072a4ff6e",
+      "bytes": 7826
+    },
+    {
+      "file": "test/performance/duy/results/read-duy-perf-20261111-rsmoke-empty-smoke-p1-l100.json",
+      "source_sha256": "bf8b5100f9fac82a1ee896faa04f043a6837d1ba4b340fd0d21ded28b16c7ff8",
+      "export_sha256": "f78dd60e32d8430fdf19aed7d2e398ff9dedccd0d292f5723637e00b9fac0b30",
+      "bytes": 7359
+    },
+    {
+      "file": "test/performance/duy/results/read-duy-perf-20261111-rsmoke-valid-smoke-p1-l100.json",
+      "source_sha256": "ad1a5de586a9288b2b13cf61f4b7deeb1772c685e456fa1a6543c5c8b97ed4b0",
+      "export_sha256": "d1babedc8d473a524cc3a2e0cd21c1ff6b8ffc77b4b3e40b5a4df1a43394df70",
+      "bytes": 7663
+    },
+    {
+      "file": "test/performance/duy/results/read-duy-perf-20261111-rspike-spike-p1-l100.json",
+      "source_sha256": "850bd60a7948c62f77a3523091047b8f19f0e9b4f3abe7ed7699f8394264256e",
+      "export_sha256": "b416a520959b1f9f80897cb05e749959f48d42a5f1389a49c1e0e01f9c529746",
+      "bytes": 7717
+    },
+    {
+      "file": "test/performance/duy/results/read-duy-perf-20261111-rspike-stages1-spike-p1-l100.json",
+      "source_sha256": "16b2c5e1782f30a9ee4b32ff451107845b74c31c66a66378bbd40f37018a4ab7",
+      "export_sha256": "918dbc604298490de34491bb68889db69d2696d5fc22077b35b54b4a836f141b",
+      "bytes": 8249
+    },
+    {
+      "file": "test/performance/duy/results/read-duy-perf-20261111-rstress-stages1-stress-p1-l100.json",
+      "source_sha256": "d9a6b01728a34c32d733599e1e775996f766902720a10b317509de529ab945d0",
+      "export_sha256": "c4684f8094686fa338b958e9931e9b2f1430ad771b49ab9a96292e0f2548b5e5",
+      "bytes": 8366
+    },
+    {
+      "file": "test/performance/duy/results/read-duy-perf-20261111-rstress-stress-p1-l100.json",
+      "source_sha256": "0532b3d659b10f6cf1168666669997d20cce9a3fb8d1735fab00ae8de708344b",
+      "export_sha256": "31eac01579ef65e224f2b263398abae7a337d481c925db0289d1948a3abedf1f",
+      "bytes": 7872
+    },
+    {
+      "file": "test/performance/duy/results/write-duy-perf-20261111-rsmoke-resume-smoke-lines1.json",
+      "source_sha256": "d830e927b9fbf491f3ea4f05d5c94910eaaa49da4ee2e84989ec76f7be8577b6",
+      "export_sha256": "4b29885b626bce17fb148a54a33efe78b418569be078285fb2cfe7b73629a297",
+      "bytes": 7804
+    },
+    {
+      "file": "test/performance/duy/results/write-duy-perf-20261111-stockseed-seed-lines200.json",
+      "source_sha256": "579528d7b58b47dd9f42142917a2bf1e73051d8e56c7acd7299d1917943d8de0",
+      "export_sha256": "b440a56285d3f63285a1e590b6e044876e72407a274665defb9669f634da9cbc",
+      "bytes": 8278
+    },
+    {
+      "file": "test/performance/duy/results/write-duy-perf-20261111-wload-load-lines1.json",
+      "source_sha256": "92bdeaf921d1fe1d1b0d74a250b4d6dffa32a97548dd1e8bc6eff38c588e5741",
+      "export_sha256": "a3c62b45c91021676bdcf082255dca14ded775db470e790c4a8076223d5c10da",
+      "bytes": 8379
+    },
+    {
+      "file": "test/performance/duy/scripts/analyze-stage-metrics.ps1",
+      "source_sha256": "a985ab36891e64ad9b2151bf7a31d60e59f2fcac7858edf2a8553ee0faae8686",
+      "export_sha256": "20f2d29c666ccd2b4547efd99510e40a4c7d70d7b49026a679d6c45f3204e494",
+      "bytes": 10056,
+      "git_phase_note": "Reviewed clone-portability/documentation correction; historical results unchanged."
+    },
+    {
+      "file": "test/performance/duy/scripts/audit-recovery.py",
+      "source_sha256": "9f4bb11bd681afbd4f125d49269bfce042e6d542814b0d7e9608c35396dd1219",
+      "export_sha256": "9f4bb11bd681afbd4f125d49269bfce042e6d542814b0d7e9608c35396dd1219",
+      "bytes": 1812
+    },
+    {
+      "file": "test/performance/duy/scripts/checkpoint.sql",
+      "source_sha256": "c37c455849613d4688bb048928669974802af56bc8e5100bc5ff996546e711a5",
+      "export_sha256": "c37c455849613d4688bb048928669974802af56bc8e5100bc5ff996546e711a5",
+      "bytes": 2052
+    },
+    {
+      "file": "test/performance/duy/scripts/connect-perf-session.ps1",
+      "source_sha256": "4cbbd5216fe340852ea06969eb620340007048c382ef2639174d682485c000b4",
+      "export_sha256": "4cbbd5216fe340852ea06969eb620340007048c382ef2639174d682485c000b4",
+      "bytes": 3276
+    },
+    {
+      "file": "test/performance/duy/scripts/load-perf-env.ps1",
+      "source_sha256": "1bb655c2359b89604c124aca3d9dd06b0308337b779e391e1b7237b540b2ecbb",
+      "export_sha256": "1bb655c2359b89604c124aca3d9dd06b0308337b779e391e1b7237b540b2ecbb",
+      "bytes": 682
+    },
+    {
+      "file": "test/performance/duy/scripts/new-independent-tenant.ps1",
+      "source_sha256": "7faad8a71c45d97013112cd992d172844405244b9df56bf3d9d2cf5ad6def4e0",
+      "export_sha256": "7faad8a71c45d97013112cd992d172844405244b9df56bf3d9d2cf5ad6def4e0",
+      "bytes": 2433
+    },
+    {
+      "file": "test/performance/duy/scripts/prepare-git-handoff.py",
+      "source_sha256": "cd9309f4b1dda184efd8886c9a9b8e7f168b26637e2b4d7e92740edeb912c81c",
+      "export_sha256": "2512717029efaeca335132d98bf4344d67079a319c470e03c3c5298918d05497",
+      "bytes": 8002
+    },
+    {
+      "file": "test/performance/duy/scripts/prepare-independent-fixture.ps1",
+      "source_sha256": "9e93fb91e87d6d6b647359389ba6fcc864a44ca292094273f1977e63f4055c24",
+      "export_sha256": "4264db5192f41de3d62fd22a66e175964dd55ecf0139a57479084fca39f303a6",
+      "bytes": 12151
+    },
+    {
+      "file": "test/performance/duy/scripts/queue-attributes.cjs",
+      "source_sha256": "2e19fcb5206523c57a392ba27aee0c7c187a72298a49dcbcb92ed7de889ef965",
+      "export_sha256": "3a0c666f2e165c890999603117e6bc691befc9c933bc5d12e9ebfaee928e6bca",
+      "bytes": 1125
+    },
+    {
+      "file": "test/performance/duy/scripts/recovery-plan.js",
+      "source_sha256": "c1f4631d29354b7dc2cd38ef03822459e94b68957dd6c0b8fc1492c534d2776c",
+      "export_sha256": "c1f4631d29354b7dc2cd38ef03822459e94b68957dd6c0b8fc1492c534d2776c",
+      "bytes": 895
+    },
+    {
+      "file": "test/performance/duy/scripts/recovery-synthetic.k6.js",
+      "source_sha256": "392e74e8118a44518f32747ebcabf14d94416608e31c671dfe2c9011775eafae",
+      "export_sha256": "392e74e8118a44518f32747ebcabf14d94416608e31c671dfe2c9011775eafae",
+      "bytes": 594
+    },
+    {
+      "file": "test/performance/duy/scripts/run-portable-k6.ps1",
+      "source_sha256": "73b9477402dd4580796d33a40d805d99ef2bd996361ec7bbcb91a7a8a3ab7034",
+      "export_sha256": "44f2ef1307e5a62446986403434296e5b85f90caed8e1985f8a0649c94dd9909",
+      "bytes": 7899
+    },
+    {
+      "file": "test/performance/duy/scripts/run-spike-recovery-v2.ps1",
+      "source_sha256": "4a163ddf04531e73c02fbb37f9120df5d3a28ebb1202915d438883e93e23c347",
+      "export_sha256": "4a163ddf04531e73c02fbb37f9120df5d3a28ebb1202915d438883e93e23c347",
+      "bytes": 330
+    },
+    {
+      "file": "test/performance/duy/scripts/stock-levels-recovery-v2.k6.js",
+      "source_sha256": "79259e980f95533b630da1617b20885306b0c214cf7472285cd089aa4b24c4ec",
+      "export_sha256": "8e3e592c7e8c8ac8918205286274dd706e28467390452b72380cd01d25b70818",
+      "bytes": 8668
+    },
+    {
+      "file": "test/performance/duy/scripts/stock-levels.k6.js",
+      "source_sha256": "24fb4eb09d1a7a0d7fe3926204d15e2fcfe0722bab41a1d4712a4eb396f6eabb",
+      "export_sha256": "24fb4eb09d1a7a0d7fe3926204d15e2fcfe0722bab41a1d4712a4eb396f6eabb",
+      "bytes": 8485
+    },
+    {
+      "file": "test/performance/duy/scripts/stock-receipt.k6.js",
+      "source_sha256": "4dd036b836ed4cd23ac488a5dff8d98b1e5ecef027a8f74d001c787a1cfc8b50",
+      "export_sha256": "2d530fc8a8d7a2b9bd470c44d68b60aaa5cd7b5f8639eaba3858e181c68551c7",
+      "bytes": 12382
+    },
+    {
+      "file": "test/performance/duy/scripts/validate-correction-v2.py",
+      "source_sha256": "47498797d7b55c9efac43b54903547f6184935c893921800c3a72769449c677b",
+      "export_sha256": "bb8718e980099a5e891383028e78a38de14f8946b358cb5812b9d8bfdc3e5450",
+      "bytes": 11059
+    },
+    {
+      "file": "test/performance/duy/scripts/verify-portable-checkpoint.ps1",
+      "source_sha256": "01730c11c6d95d11e9b8f96fedb47628ad7b3e71764b00ad3a59bb051cf4d164",
+      "export_sha256": "01730c11c6d95d11e9b8f96fedb47628ad7b3e71764b00ad3a59bb051cf4d164",
+      "bytes": 7849
+    },
+    {
+      "file": "test/performance/duy/scripts/write-cap-scheduler.synthetic.k6.js",
+      "source_sha256": "53ba6b4006aba0493a8e8f4c084a454cdc381161f3a83375c860248a7c1d4e77",
+      "export_sha256": "53ba6b4006aba0493a8e8f4c084a454cdc381161f3a83375c860248a7c1d4e77",
+      "bytes": 518
+    },
+    {
+      "file": "test/performance/duy/scripts/write-guards.synthetic.cjs",
+      "source_sha256": "1485be1107d270da5fb61bb6cbfe1817a3ea3d9e228b12307cbfe8bcb9b4af2c",
+      "export_sha256": "1485be1107d270da5fb61bb6cbfe1817a3ea3d9e228b12307cbfe8bcb9b4af2c",
+      "bytes": 3501
+    }
+  ],
+  "source_scope": "Portable QA scripts, documentation, pending proposals, selected sanitized historical evidence and results",
+  "excluded": [
+    "backend business changes",
+    "scripts/qa existing untracked work",
+    "personal .env/DPAPI",
+    "tools/binaries",
+    "node_modules"
+  ],
+  "staging_performed_by_exporter": false,
+  "committed": false,
+  "pushed": false
+}

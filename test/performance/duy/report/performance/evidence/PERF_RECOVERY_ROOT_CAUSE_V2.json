@@ -1,0 +1,169 @@
+{
+  "source": "docs\\qa\\performance\\evidence\\duy-perf-20261111-rspike-stages1-k6-metrics.jsonl",
+  "observed_at_utc": "2026-11-11T10:17:51.270602+00:00",
+  "stages": {
+    "ramp_up": {
+      "requests": 265,
+      "first_response": "2026-11-11T16:43:34.7460096+07:00",
+      "last_response": "2026-11-11T16:43:44.4477915+07:00"
+    },
+    "hold_50_vu": {
+      "requests": 1480,
+      "first_response": "2026-11-11T16:43:44.547177+07:00",
+      "last_response": "2026-11-11T16:44:14.432869+07:00"
+    },
+    "ramp_down": {
+      "requests": 252,
+      "first_response": "2026-11-11T16:44:14.6574189+07:00",
+      "last_response": "2026-11-11T16:44:24.3616934+07:00"
+    }
+  },
+  "last_vu_samples": [
+    {
+      "time": "2026-11-11T16:44:20.4990152+07:00",
+      "value": 24
+    },
+    {
+      "time": "2026-11-11T16:44:21.4989858+07:00",
+      "value": 19
+    },
+    {
+      "time": "2026-11-11T16:44:22.4988616+07:00",
+      "value": 13
+    },
+    {
+      "time": "2026-11-11T16:44:23.4993999+07:00",
+      "value": 8
+    },
+    {
+      "time": "2026-11-11T16:44:24.4987489+07:00",
+      "value": 3
+    },
+    {
+      "time": "2026-11-11T16:44:25.4992078+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:26.4988842+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:27.4991917+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:28.4989667+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:29.4989777+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:30.4987992+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:31.4986595+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:32.4987847+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:33.4986924+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:34.4988821+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:35.4987439+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:36.4990445+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:37.4987579+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:38.4987726+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:39.4990334+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:40.4988773+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:41.4991895+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:42.4994728+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:43.4989428+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:44.4993187+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:45.498754+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:46.4988494+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:47.4990666+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:48.498592+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:49.4990076+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:50.4991692+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:51.4987088+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:52.4992462+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:53.4991696+07:00",
+      "value": 0
+    },
+    {
+      "time": "2026-11-11T16:44:54.4988785+07:00",
+      "value": 0
+    }
+  ],
+  "raw_vu_samples_available": true,
+  "finding": "Legacy recovery is a ramp from zero to one over 30 seconds. It is not a constant one-VU recovery window; the raw record has zero recovery HTTP samples.",
+  "cause_confidence": "Configuration defect confirmed. Exact executor rounding/allocation mechanism is not inferred from missing samples.",
+  "fix": "Use an independent constant-vus scenario with one VU for a complete 30 seconds, after the spike scenario and its grace period.",
+  "real_workload_started": false,
+  "http_requests": 0
+}

@@ -1,0 +1,274 @@
+{
+  "run_id": "duy-perf-20261111-final-harness-validation",
+  "phase": "FINAL_COMPLETION_QA_HARNESS_VALIDATION",
+  "observed_at_utc": "2026-11-11T10:06:19.7950888Z",
+  "approval_id": "DUY-PERF-APPROVAL-20261111-FINAL-COMPLETION",
+  "resume_checkpoint_id": "DUY-PERF-FINAL-COMPLETION-20261111",
+  "previous_failed_runner": "duy-perf-20261111-wload",
+  "new_run_ids": [
+    "duy-perf-20261111-rspike-stages1",
+    "duy-perf-20261111-rstress-stages1",
+    "duy-perf-20261111-final-lines10",
+    "duy-perf-20261111-final-lines50",
+    "duy-perf-20261111-final-concurrency"
+  ],
+  "powershell_ast": {
+    "files": [
+      {
+        "file": "analyze-stage-metrics.ps1",
+        "error_count": 0,
+        "errors": []
+      },
+      {
+        "file": "capture-final-completion-preflight.ps1",
+        "error_count": 0,
+        "errors": []
+      },
+      {
+        "file": "capture-prewrite-readonly.ps1",
+        "error_count": 0,
+        "errors": []
+      },
+      {
+        "file": "execute-final-completion.ps1",
+        "error_count": 0,
+        "errors": []
+      },
+      {
+        "file": "prepare-catalog-fixture.ps1",
+        "error_count": 0,
+        "errors": []
+      },
+      {
+        "file": "run-read-k6.ps1",
+        "error_count": 0,
+        "errors": []
+      },
+      {
+        "file": "run-write-k6.ps1",
+        "error_count": 0,
+        "errors": []
+      },
+      {
+        "file": "validate-resume-harness.ps1",
+        "error_count": 0,
+        "errors": []
+      },
+      {
+        "file": "verify-write-run.ps1",
+        "error_count": 0,
+        "errors": []
+      }
+    ],
+    "all_pass": true
+  },
+  "runner_guards": {
+    "required_markers": [
+      {
+        "marker": "ConvertTo-OrderedRecord",
+        "present": true
+      },
+      {
+        "marker": "Write-AtomicText",
+        "present": true
+      },
+      {
+        "marker": "resumeCheckpointId",
+        "present": true
+      },
+      {
+        "marker": "previousAttemptRunId",
+        "present": true
+      },
+      {
+        "marker": "PLANNED_NOT_SENT",
+        "present": true
+      },
+      {
+        "marker": "K6_RESULT_RECONCILIATION_FAILED_STOP_NO_RETRY",
+        "present": true
+      },
+      {
+        "marker": "This RunId already has an evidence artifact",
+        "present": true
+      },
+      {
+        "marker": "automatic_retry",
+        "present": true
+      },
+      {
+        "marker": "UseSessionToken",
+        "present": true
+      },
+      {
+        "marker": "cumulative_login_posts_before",
+        "present": true
+      },
+      {
+        "marker": "new_receipt_posts_max",
+        "present": true
+      },
+      {
+        "marker": "new_k6_profile_time_sum_max_seconds",
+        "present": true
+      },
+      {
+        "marker": "integrityOnlyHistoricalCapFailure",
+        "present": true
+      }
+    ],
+    "exactly_one_k6_post_call": true,
+    "duplicate_run_guard": true,
+    "retry_disabled": true,
+    "cumulative_login_receipt_total_caps": true
+  },
+  "journal_simulation": {
+    "result": "PASS",
+    "fixed_property_deserialized": true,
+    "metadata_fields_added": true,
+    "pre_send_state_persisted": true,
+    "post_response_state_persisted": true,
+    "atomic_replace_twice": true,
+    "synthetic_only_no_api": true
+  },
+  "k6": {
+    "version": "k6.exe v2.3.0 (commit/e088784614, go1.26.8, windows/amd64)",
+    "sha256": "EFEC04C36452CFB9C0EF313082C021E5656CAF5004F922C2D8B807FDF4A0E02F",
+    "inspect_profiles": [
+      {
+        "kind": "READ",
+        "profile": "smoke",
+        "exit_code": 0,
+        "network_requests_sent": false
+      },
+      {
+        "kind": "READ",
+        "profile": "baseline",
+        "exit_code": 0,
+        "network_requests_sent": false
+      },
+      {
+        "kind": "READ",
+        "profile": "load",
+        "exit_code": 0,
+        "network_requests_sent": false
+      },
+      {
+        "kind": "READ",
+        "profile": "spike",
+        "exit_code": 0,
+        "network_requests_sent": false
+      },
+      {
+        "kind": "READ",
+        "profile": "stress",
+        "exit_code": 0,
+        "network_requests_sent": false
+      },
+      {
+        "kind": "WRITE",
+        "profile": "smoke",
+        "item_count": 1,
+        "exit_code": 0,
+        "network_requests_sent": false
+      },
+      {
+        "kind": "WRITE",
+        "profile": "seed",
+        "item_count": 200,
+        "exit_code": 0,
+        "network_requests_sent": false
+      },
+      {
+        "kind": "WRITE",
+        "profile": "load",
+        "item_count": 1,
+        "exit_code": 0,
+        "network_requests_sent": false
+      },
+      {
+        "kind": "WRITE",
+        "profile": "lines",
+        "item_count": 10,
+        "exit_code": 0,
+        "network_requests_sent": false
+      },
+      {
+        "kind": "WRITE",
+        "profile": "lines",
+        "item_count": 50,
+        "exit_code": 0,
+        "network_requests_sent": false
+      },
+      {
+        "kind": "WRITE",
+        "profile": "concurrency",
+        "item_count": 1,
+        "exit_code": 0,
+        "network_requests_sent": false
+      }
+    ],
+    "inspect_count": 11,
+    "synthetic_raw_metric_test": "PASS",
+    "synthetic_request_count": 25,
+    "synthetic_unique_ids": [
+      "duy-perf-synthetic-req000",
+      "duy-perf-synthetic-req001",
+      "duy-perf-synthetic-req002",
+      "duy-perf-synthetic-req003",
+      "duy-perf-synthetic-req004",
+      "duy-perf-synthetic-req005",
+      "duy-perf-synthetic-req006",
+      "duy-perf-synthetic-req007",
+      "duy-perf-synthetic-req008",
+      "duy-perf-synthetic-req009",
+      "duy-perf-synthetic-req010",
+      "duy-perf-synthetic-req011",
+      "duy-perf-synthetic-req012",
+      "duy-perf-synthetic-req013",
+      "duy-perf-synthetic-req014",
+      "duy-perf-synthetic-req015",
+      "duy-perf-synthetic-req016",
+      "duy-perf-synthetic-req017",
+      "duy-perf-synthetic-req018",
+      "duy-perf-synthetic-req019",
+      "duy-perf-synthetic-req020",
+      "duy-perf-synthetic-req021",
+      "duy-perf-synthetic-req022",
+      "duy-perf-synthetic-req023",
+      "duy-perf-synthetic-req024"
+    ],
+    "synthetic_http_requests": 0
+  },
+  "approval_budget": {
+    "login_posts_used_before_resume": 9,
+    "login_posts_remaining_before_resume": 2,
+    "receipt_posts_used_before_resume": 247,
+    "receipt_posts_remaining_before_resume": 27,
+    "total_posts_used_before_resume": 256,
+    "max_read_vus": 50,
+    "max_write_vus": 5,
+    "max_new_profile_seconds": 600,
+    "retry": false,
+    "cleanup": false
+  },
+  "api_source_contract": {
+    "endpoint": "POST /inventory/api/v1/stock-receipts",
+    "http_status": 201,
+    "permission": "inventory.create",
+    "auto_post_also_requires": "inventory.approve",
+    "dto_qty": "positive numeric string, max 3 decimals",
+    "dto_unit_cost": "integer VND",
+    "dto_unit": "PCS",
+    "dto_conversion_factor": "numeric string, max 4 decimals",
+    "gateway_forwards": [
+      "Authorization",
+      "X-Request-Id",
+      "Idempotency-Key"
+    ]
+  },
+  "api_or_database_requests_sent": false,
+  "real_k6_workload_started": false,
+  "password_or_token_recorded": false,
+  "result": "PASS_HARNESS_READY_FOR_FRESH_READ_ONLY_PREFLIGHT"
+}

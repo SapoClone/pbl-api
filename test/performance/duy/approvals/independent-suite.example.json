@@ -1,0 +1,141 @@
+{
+  "approval_id": "REPLACE_WITH_NEW_SUITE_APPROVAL",
+  "approval_status": "PENDING_USER_APPROVAL",
+  "execution_authorized": false,
+  "target": {
+    "gateway": "http://localhost:8080",
+    "database": "pbl",
+    "tenant_id": "REPLACE_WITH_NEW_TENANT_ID",
+    "branch_id": "REPLACE_WITH_NEW_BRANCH_ID",
+    "warehouse_id": "REPLACE_WITH_NEW_WAREHOUSE_ID",
+    "owner_account_id": "REPLACE_WITH_NEW_OWNER_ACCOUNT_ID"
+  },
+  "existing_checkpoint": {
+    "receipts": 0,
+    "receipt_items": 0,
+    "ledger": 0,
+    "balances": 0,
+    "on_hand_total": "0.000",
+    "avg_unit_cost": 100000,
+    "valuation_total": 0,
+    "stock_changed": 0,
+    "stock_received": 0
+  },
+  "existing_login_posts": 0,
+  "existing_overall_posts": 0,
+  "additional_receipt_posts_max": 273,
+  "additional_login_posts_max": 12,
+  "cumulative_receipt_cap": 273,
+  "cumulative_login_cap": 12,
+  "cumulative_total_post_cap": 285,
+  "max_write_vus": 5,
+  "quantity_per_line": "0.001",
+  "unit_cost": 100000,
+  "unit_name": "PCS",
+  "conversion_factor": "1.0000",
+  "allowed_profiles": [
+    {
+      "run_id": "duy-perf-new-smoke",
+      "profile": "smoke",
+      "item_count": 1,
+      "sku_offset": 0,
+      "max_posts": 1,
+      "expected_before_receipts": 0,
+      "expected_before_items": 0
+    },
+    {
+      "run_id": "duy-perf-new-seed",
+      "profile": "seed",
+      "item_count": 200,
+      "sku_offset": 1,
+      "max_posts": 5,
+      "expected_before_receipts": 1,
+      "expected_before_items": 1
+    },
+    {
+      "run_id": "duy-perf-new-load",
+      "profile": "load",
+      "item_count": 1,
+      "sku_offset": 1,
+      "max_posts": 240,
+      "expected_before_receipts": 6,
+      "expected_before_items": 1000
+    },
+    {
+      "run_id": "duy-perf-new-lines10",
+      "profile": "lines",
+      "item_count": 10,
+      "sku_offset": 10,
+      "max_posts": 1,
+      "expected_before_receipts": 246,
+      "expected_before_items": 1240
+    },
+    {
+      "run_id": "duy-perf-new-lines50",
+      "profile": "lines",
+      "item_count": 50,
+      "sku_offset": 20,
+      "max_posts": 1,
+      "expected_before_receipts": 247,
+      "expected_before_items": 1250
+    },
+    {
+      "run_id": "duy-perf-new-concurrency",
+      "profile": "concurrency",
+      "item_count": 1,
+      "sku_offset": 2,
+      "max_posts": 25,
+      "expected_before_receipts": 248,
+      "expected_before_items": 1300
+    }
+  ],
+  "stop_after_each_profile_until_verification_pass": true,
+  "automatic_retry": false,
+  "reset_or_cleanup": false,
+  "historical_PERF_DUY_07": "FAIL_241_OF_240_MUST_BE_PRESERVED",
+  "expected_if_all_27_commit": {
+    "note": "Remove this historical27-write oracle; independent full suite expected273 receipts/1325 items and ledger, qty1.325, valuation132500."
+  },
+  "oracle_is_observed_result": false,
+  "stop_conditions": [
+    "HTTP timeout/error/ambiguous commit",
+    "cardinality or WAC mismatch",
+    "outbox/inbox failure or DLQ",
+    "request/VU/budget breach",
+    "checkpoint drift"
+  ],
+  "pending_file_is_not_execution_authority": true,
+  "allowed_read_profiles": [
+    {
+      "run_id": "duy-perf-new-smoke",
+      "profile": "smoke",
+      "page_limit": 100,
+      "max_vus": 1
+    },
+    {
+      "run_id": "duy-perf-new-baseline",
+      "profile": "baseline",
+      "page_limit": 100,
+      "max_vus": 1
+    },
+    {
+      "run_id": "duy-perf-new-load",
+      "profile": "load",
+      "page_limit": 100,
+      "max_vus": 10
+    },
+    {
+      "run_id": "duy-perf-new-spike",
+      "profile": "spike",
+      "page_limit": 100,
+      "max_vus": 50,
+      "maximum_elapsed_seconds": 90
+    },
+    {
+      "run_id": "duy-perf-new-stress",
+      "profile": "stress",
+      "page_limit": 100,
+      "max_vus": 50
+    }
+  ]
+}

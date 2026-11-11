@@ -1,0 +1,63 @@
+{
+  "observed_at_utc": "2026-11-11T10:30:18.959288+00:00",
+  "task": "FINAL_CHECKPOINT_CORRECTION_AND_HANDOFF",
+  "checkpoint_correction": "247 receipts accepted; zero baseline superseded; historical records retained",
+  "historical_status_counts": {
+    "PASS": 6,
+    "FAIL": 1,
+    "BLOCKED": 3
+  },
+  "case_statuses": {
+    "PERF-DUY-01": "PASS",
+    "PERF-DUY-02": "PASS",
+    "PERF-DUY-03": "PASS",
+    "PERF-DUY-04": "BLOCKED",
+    "PERF-DUY-05": "PASS",
+    "PERF-DUY-06": "PASS",
+    "PERF-DUY-07": "FAIL_241_OF_240",
+    "PERF-DUY-08": "BLOCKED",
+    "PERF-DUY-09": "BLOCKED",
+    "PERF-DUY-10": "PASS_HISTORICAL_CHECKPOINT"
+  },
+  "fresh_database_checkpoint": "PASS_NO_DRIFT",
+  "fresh_authenticated_api_get": "NOT_RUN_NO_IN_MEMORY_TOKEN",
+  "historical_api_get_evidence": "duy-perf-20261111-rstress-stages1-run.json:1000 stock rows; prior write-load API/DB verification",
+  "login_posts_this_task": 0,
+  "receipt_posts_this_task": 0,
+  "live_spike_started": false,
+  "synthetic_recovery": {
+    "attempts": 30,
+    "unique_vus": 1,
+    "window_seconds": 30,
+    "sample_span_seconds": 29.018,
+    "http_requests": 0
+  },
+  "write_approval": "PENDING_USER_APPROVAL",
+  "current_budget": {
+    "login_posts": 11,
+    "receipt_posts": 247,
+    "overall_posts": 258
+  },
+  "proposed_additional": {
+    "login_posts_max": 1,
+    "receipt_posts_max": 27
+  },
+  "proposed_caps": {
+    "login_posts": 12,
+    "receipt_posts": 274,
+    "overall_posts": 286
+  },
+  "git_branch": "test/duy-performance-k6",
+  "committed": false,
+  "pushed": false,
+  "independent_member_live_reproduction": "NOT VERIFIED",
+  "secrets_recorded": false,
+  "final_harness_validation": "PERF_CORRECTION_HANDOFF_VALIDATION_V2.json",
+  "historical_pointer_correction": {
+    "source": "PERF_RESUME_FINAL_SUMMARY.json",
+    "old_pointer": "PERF_STAGE_METRICS_AUDIT.json",
+    "actual_file": "PERF_READ_STAGE_METRICS_AUDIT.json",
+    "original_summary_modified": false
+  },
+  "fresh_api_refresh_pending_login_approval": true
+}

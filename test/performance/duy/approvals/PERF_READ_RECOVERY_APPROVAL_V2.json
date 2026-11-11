@@ -1,0 +1,25 @@
+{
+  "approval_id": "DUY-PERF-READ-RECOVERY-V2",
+  "approval_status": "PENDING_USER_APPROVAL",
+  "execution_authorized": false,
+  "run_id": "duy-perf-20261111-recovery-v2",
+  "target": {
+    "gateway": "http://localhost:8080",
+    "database": "pbl",
+    "tenant_id": "a669c566-9bea-44fa-b019-3d41d1d27e2f",
+    "branch_id": "4fa7bc25-b03b-4243-886b-1e0abb28d132",
+    "warehouse_id": "13476daf-8435-4ab8-b34b-02affb316b81",
+    "owner_account_id": "92e7d48c-4fb7-4bb5-8ce7-b1085285c6b0"
+  },
+  "max_vus": 50,
+  "spike_load_seconds": 50,
+  "grace_gap_seconds": 5,
+  "recovery_executor": "constant-vus",
+  "recovery_vus": 1,
+  "recovery_seconds": 30,
+  "maximum_elapsed_with_grace_seconds": 90,
+  "business_write_posts": 0,
+  "automatic_retry": false,
+  "login_posts_authorized_now": 0,
+  "note": "Requires explicit future read-scope approval and an in-memory token; no live spike execution in correction task."
+}

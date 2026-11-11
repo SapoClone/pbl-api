@@ -1,0 +1,16 @@
+{
+  "approval_status": "PENDING_USER_APPROVAL",
+  "execution_authorized": false,
+  "approval_id": "REPLACE_WITH_APPROVED_SETUP_ID",
+  "target": {
+    "tenant_id": "REPLACE_WITH_NEW_TENANT_UUID"
+  },
+  "max_tenant_posts": 1,
+  "max_catalog_posts": 74,
+  "automatic_retry": false,
+  "cleanup": false,
+  "additional_login_posts_max": 2,
+  "existing_login_posts": 0,
+  "cumulative_login_cap": 2,
+  "allow_account_login": true
+}

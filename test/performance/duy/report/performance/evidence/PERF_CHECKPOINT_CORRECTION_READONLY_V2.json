@@ -1,0 +1,375 @@
+{
+  "run_id": "duy-perf-20261111-final-preflight",
+  "observed_at_utc": "2026-11-11T10:18:30.0849346Z",
+  "phase": "FINAL_COMPLETION_READ_ONLY_PREFLIGHT",
+  "approval_id": "DUY-PERF-APPROVAL-20261111-FINAL-COMPLETION",
+  "target": {
+    "gateway": "http://localhost:8080",
+    "database": "pbl (local Docker Compose)",
+    "tenant_id": "a669c566-9bea-44fa-b019-3d41d1d27e2f",
+    "branch_id": "4fa7bc25-b03b-4243-886b-1e0abb28d132",
+    "warehouse_id": "13476daf-8435-4ab8-b34b-02affb316b81",
+    "owner_account_id": "92e7d48c-4fb7-4bb5-8ce7-b1085285c6b0",
+    "m10_tenant_used": false
+  },
+  "compose": {
+    "total": 12,
+    "running": 12,
+    "services": [
+      {
+        "Service": "catalog",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      },
+      {
+        "Service": "customer",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      },
+      {
+        "Service": "elasticmq",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      },
+      {
+        "Service": "finance",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      },
+      {
+        "Service": "insight",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      },
+      {
+        "Service": "integration",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      },
+      {
+        "Service": "inventory",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      },
+      {
+        "Service": "krakend",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      },
+      {
+        "Service": "platform",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      },
+      {
+        "Service": "postgres",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": "healthy"
+      },
+      {
+        "Service": "redis",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      },
+      {
+        "Service": "sales",
+        "State": "running",
+        "ExitCode": 0,
+        "Health": ""
+      }
+    ]
+  },
+  "health": {
+    "gateway": "ok",
+    "inventory": "ok"
+  },
+  "database": {
+    "owner": {
+      "id": "92e7d48c-4fb7-4bb5-8ce7-b1085285c6b0",
+      "role": "owner",
+      "status": "active",
+      "membership_status": "active",
+      "branch_assignment_count": 0
+    },
+    "branch": {
+      "id": "4fa7bc25-b03b-4243-886b-1e0abb28d132",
+      "code": "CN01",
+      "status": "active",
+      "tenant_id": "a669c566-9bea-44fa-b019-3d41d1d27e2f"
+    },
+    "ledger": 1241,
+    "tenant": {
+      "id": "a669c566-9bea-44fa-b019-3d41d1d27e2f",
+      "status": "active",
+      "subdomain": "duy-perf-20261111-0522"
+    },
+    "balances": 1000,
+    "database": "pbl",
+    "receipts": 247,
+    "warehouse": {
+      "id": "13476daf-8435-4ab8-b34b-02affb316b81",
+      "status": "ACTIVE",
+      "branch_id": "4fa7bc25-b03b-4243-886b-1e0abb28d132",
+      "tenant_id": "a669c566-9bea-44fa-b019-3d41d1d27e2f",
+      "is_default": true
+    },
+    "wac_bad_rows": 0,
+    "on_hand_total": 1.241,
+    "receipt_items": 1241,
+    "sku_projection": {
+      "total": 1000,
+      "active": 1000,
+      "distinct_ids": 1000
+    },
+    "observed_at_utc": "2026-11-11T10:18:29.611Z",
+    "purchase_orders": 0,
+    "valuation_total": 124100,
+    "catalog_variants": {
+      "total": 1000,
+      "active": 1000,
+      "distinct_ids": 1000
+    },
+    "inventory_events": {
+      "stock_changed": 1241,
+      "stock_received": 247,
+      "changed_insight": 1241,
+      "received_finance": 247,
+      "received_insight": 247,
+      "changed_published": 1241,
+      "bad_delivery_state": 0,
+      "received_published": 247,
+      "changed_integration": 1241
+    },
+    "tenant_outbox_health": [
+      {
+        "failed": 0,
+        "pending": 0,
+        "service": "platform"
+      },
+      {
+        "failed": 0,
+        "pending": 0,
+        "service": "catalog"
+      },
+      {
+        "failed": 0,
+        "pending": 0,
+        "service": "inventory"
+      },
+      {
+        "failed": 0,
+        "pending": 0,
+        "service": "finance"
+      },
+      {
+        "failed": 0,
+        "pending": 0,
+        "service": "insight"
+      },
+      {
+        "failed": 0,
+        "pending": 0,
+        "service": "integration"
+      },
+      {
+        "failed": 0,
+        "pending": 0,
+        "service": "sales"
+      },
+      {
+        "failed": 0,
+        "pending": 0,
+        "service": "customer"
+      }
+    ],
+    "transaction_read_only": "on"
+  },
+  "queues": {
+    "queue_count": 17,
+    "queues": [
+      {
+        "name": "catalog-events",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 30,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:catalog-events",
+        "redrive_policy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:elasticmq:000000000000:catalog-events-dlq\",\"maxReceiveCount\":3}"
+      },
+      {
+        "name": "catalog-events-dlq",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 60,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:catalog-events-dlq",
+        "redrive_policy": null
+      },
+      {
+        "name": "customer-events",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 30,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:customer-events",
+        "redrive_policy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:elasticmq:000000000000:customer-events-dlq\",\"maxReceiveCount\":3}"
+      },
+      {
+        "name": "customer-events-dlq",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 60,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:customer-events-dlq",
+        "redrive_policy": null
+      },
+      {
+        "name": "email-verification",
+        "visible": 3,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 60,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:email-verification",
+        "redrive_policy": null
+      },
+      {
+        "name": "finance-events",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 30,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:finance-events",
+        "redrive_policy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:elasticmq:000000000000:finance-events-dlq\",\"maxReceiveCount\":3}"
+      },
+      {
+        "name": "finance-events-dlq",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 60,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:finance-events-dlq",
+        "redrive_policy": null
+      },
+      {
+        "name": "insight-events",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 30,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:insight-events",
+        "redrive_policy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:elasticmq:000000000000:insight-events-dlq\",\"maxReceiveCount\":3}"
+      },
+      {
+        "name": "insight-events-dlq",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 60,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:insight-events-dlq",
+        "redrive_policy": null
+      },
+      {
+        "name": "integration-events",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 30,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:integration-events",
+        "redrive_policy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:elasticmq:000000000000:integration-events-dlq\",\"maxReceiveCount\":3}"
+      },
+      {
+        "name": "integration-events-dlq",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 60,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:integration-events-dlq",
+        "redrive_policy": null
+      },
+      {
+        "name": "inventory-events",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 30,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:inventory-events",
+        "redrive_policy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:elasticmq:000000000000:inventory-events-dlq\",\"maxReceiveCount\":3}"
+      },
+      {
+        "name": "inventory-events-dlq",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 60,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:inventory-events-dlq",
+        "redrive_policy": null
+      },
+      {
+        "name": "platform-events",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 30,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:platform-events",
+        "redrive_policy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:elasticmq:000000000000:platform-events-dlq\",\"maxReceiveCount\":3}"
+      },
+      {
+        "name": "platform-events-dlq",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 30,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:platform-events-dlq",
+        "redrive_policy": null
+      },
+      {
+        "name": "sales-events",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 30,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:sales-events",
+        "redrive_policy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:elasticmq:000000000000:sales-events-dlq\",\"maxReceiveCount\":3}"
+      },
+      {
+        "name": "sales-events-dlq",
+        "visible": 0,
+        "in_flight": 0,
+        "delayed": 0,
+        "visibility_timeout": 60,
+        "queue_arn": "arn:aws:sqs:elasticmq:000000000000:sales-events-dlq",
+        "redrive_policy": null
+      }
+    ],
+    "message_bodies_inspected": false,
+    "receive_or_delete_called": false
+  },
+  "gates": {
+    "compose_12_running": true,
+    "health": true,
+    "target_scope": true,
+    "fixture_1000": true,
+    "checkpoint_matches": true,
+    "no_drift_since_checkpoint": true,
+    "inventory_outbox_inbox": true,
+    "tenant_outboxes_drained": true,
+    "queue_topology_and_dlq": true
+  },
+  "status": "PASS",
+  "login_or_business_post_sent": false,
+  "password_or_token_recorded": false,
+  "database_write": false,
+  "queue_body_inspected": false,
+  "queue_receive_or_delete_called": false
+}
