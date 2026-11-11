@@ -12,13 +12,13 @@ Yêu cầu Docker Desktop/Engine với Compose v2, Node.js 20+, npm và kết n�
 npm --prefix test/api/nguyen run test:api
 ```
 
-Runner gọi `docker compose up -d --build`, chờ gateway, tạo tenant A và người dùng riêng, đọc chi nhánh mặc định (gói Free chỉ cho phép một chi nhánh), tạo warehouse, SKU, nhập 12 đơn vị bằng receipt. Runner còn tạo tenant B, sản phẩm và đơn đầu tiên để TC-NG-26 so sánh mã; sau đó cài Newman 6.2.1 nếu thiếu và chạy collection. Mỗi lần chạy tạo dữ liệu nhận diện duy nhất, không xóa volume hoặc DB. Muốn dùng stack đang bật: `node test/api/nguyen/run.mjs --existing-stack`. Có thể đặt `GATEWAY_URL` (thí dụ `http://localhost:8081`); nếu runner tự khởi động Compose thì cũng đặt `GATEWAY_HOST_PORT=8081`.
+Runner gọi `docker compose up -d --build`, chờ gateway, tạo tenant A và người dùng riêng, đọc chi nhánh mặc định (gói Free chỉ cho phép một chi nhánh), tạo warehouse, SKU, nhập 12 đơn vị bằng receipt. Runner còn tạo tenant B, sản phẩm và đơn đầu tiên để TC-NG-26 so sánh mã; sau đó cài Newman 6.2.1 nếu thiếu, chạy collection, tạo summary và đối chiếu PostgreSQL chỉ đọc. Mỗi lần chạy tạo dữ liệu nhận diện duy nhất, không xóa volume hoặc DB. Muốn dùng stack đang bật: `node test/api/nguyen/run.mjs --existing-stack`. Có thể đặt `GATEWAY_URL` (thí dụ `http://localhost:8081`); nếu runner tự khởi động Compose thì cũng đặt `GATEWAY_HOST_PORT=8081`.
 
 Sau khi sửa generator: `python test/api/nguyen/generate_collection.py`. Có thể import `nguyen.postman_collection.json` vào Postman để xem các bước. Chạy thủ công phải cấp `base`, `token`, `staffToken`, `accountantToken`, `branchId`, `warehouseId`, `variantId`, `tenantBToken`, `tenantBOrderId`, `tenantBCode`, `tenantBId` của hai tenant thử nghiệm mới; lệnh một bước tự cấp các biến này.
 
 ## Kết quả và bằng chứng
 
-`test/api/nguyen/reports/` lưu `.log`, Newman `.json` và `.html` khi tới bước Newman. JSON gốc có thể chứa access token, nên thư mục bị loại khỏi Git. Chỉ đưa bằng chứng đã lọc token vào `docs/testing/evidence/nguyen/`. Khi dừng trước Newman, runner ghi `.blocked.json/.blocked.html` để giải thích trở ngại; chúng **không phải** Newman report hay ca Passed. Mã thoát khác 0 là Failed hoặc Blocked.
+`test/api/nguyen/reports/` lưu `.log`, Newman `.json`/`.html`, `.summary.json` đã lọc token và `.db.json` PostgreSQL khi tới bước Newman. JSON gốc có thể chứa access token, nên thư mục bị loại khỏi Git. Chỉ đưa bằng chứng đã lọc token vào `docs/testing/evidence/nguyen/`. Khi dừng trước Newman, runner ghi `.blocked.json/.blocked.html` để giải thích trở ngại; chúng **không phải** Newman report hay ca Passed. Mã thoát khác 0 là Failed hoặc Blocked.
 
 Tóm tắt Newman JSON thành số ca và response lỗi đã lọc trường nhạy cảm: `node test/api/nguyen/summarize_newman.mjs test/api/nguyen/reports/<timestamp>.json docs/testing/evidence/nguyen/<run>.summary.json`. File `.html` của runner chỉ chứa tên request, HTTP và assertion; kiểm tra lại nội dung trước khi chia sẻ. `package-lock.json` cố định dependency Newman cho lần cài lại.
 

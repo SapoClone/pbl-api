@@ -140,6 +140,11 @@ try {
       jsonPath.replace(/\.json$/, '.summary.json')], { cwd: repo, encoding: 'utf8' });
     log.push(summary.stdout || '', summary.stderr || '');
     if (summary.status !== 0) throw new Error(`Could not summarize Newman report: ${summary.stderr}`);
+    const dbPath = jsonPath.replace(/\.json$/, '.db.json');
+    const dbCheck = spawnSync(process.execPath, [join(here, 'verify_db.mjs'), jsonPath, dbPath],
+      { cwd: repo, encoding: 'utf8' });
+    log.push(`DB verification: ${dbCheck.status === 0 ? dbPath : 'FAILED'}\n`, dbCheck.stderr || '');
+    if (dbCheck.status !== 0) throw new Error(`Could not verify PostgreSQL data: ${dbCheck.stderr?.slice(-1000)}`);
     // Newman exports request Authorization headers. Keep raw evidence local only.
   }
   exit = cmd.status ?? 1;

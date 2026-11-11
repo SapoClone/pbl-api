@@ -24,7 +24,7 @@ Ma trận FR-M07-02/03, FR-M05-08, BR-02/05 và từng ca nằm trong báo cáo 
 
 1. Đối chiếu bằng chứng `attempt-6.db-detail.json` và `DEFECTS-NGUYEN-API.md`: đơn x100 sau 409 đã được xác nhận. Không cần chạy lại truy vấn này để chốt hai defect.
 2. Đối chiếu `GET /sales/api/v1/orders/{id}`, `GET /inventory/api/v1/stock-levels?branchId=...` với DB theo `tenant_id` riêng. Lượt 5/6 được tóm tắt tại `attempt-5/6.summary.json`; không coi 22/23 Passed.
-3. Chạy lệnh đầy đủ `npm --prefix test/api/nguyen run test:api` sau khi thêm TC-NG-26. Lặp lại trên tenant mới, ghi Newman summary/HTML/log và đối chiếu DB; chỉ sau đó cập nhật số liệu 26 ca trong báo cáo Word.
+3. Chạy lệnh đầy đủ `npm --prefix test/api/nguyen run test:api` sau khi thêm TC-NG-26. Runner hiện tự ghi Newman summary/HTML/log và đối chiếu DB; lặp lại trên tenant mới. Chỉ sau đó cập nhật số liệu 26 ca trong báo cáo Word. Chưa có lượt chạy một lệnh sau bản sửa này.
 4. Triage DEF-01/02 với chủ yêu cầu. DEF-03 cần thiết kế API cấu hình format; TC-NG-26 giải quyết phần mã hai tenant nhưng không chứng minh cấu hình được.
 5. Sau khi đối chiếu DB và hoàn chỉnh báo cáo, push branch `test/nguyen-api-order-lifecycle-stock-reservation` khi GitHub truy cập được. Kiểm tra `git log -1 --oneline`, `git status --short`, `git push -u origin test/nguyen-api-order-lifecycle-stock-reservation` và xác nhận remote SHA. Push nhánh có defect Failed là bàn giao bằng chứng, không đồng nghĩa kiểm thử đạt.
 
