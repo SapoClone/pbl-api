@@ -12,6 +12,11 @@ Yêu cầu Docker Desktop/Engine với Compose v2, Node.js 20+, npm và kết n�
 npm --prefix test/api/nguyen run test:api
 ```
 
+Runner uses `test/api/nguyen/compose.override.yml` to load the existing
+`test/performance/k6/elasticmq.conf` for this test stack. The services create
+their own SQS queues, so this avoids startup conflicts on a clean checkout.
+The unrelated local edit to `docker/elasticmq.conf` is not required.
+
 Runner gọi `docker compose up -d --build`, chờ gateway, tạo tenant A và người dùng riêng, đọc chi nhánh mặc định (gói Free chỉ cho phép một chi nhánh), tạo warehouse, SKU, nhập 12 đơn vị bằng receipt. Runner còn tạo tenant B, sản phẩm và đơn đầu tiên để TC-NG-26 so sánh mã; sau đó cài Newman 6.2.1 nếu thiếu, chạy collection, tạo summary và đối chiếu PostgreSQL chỉ đọc. Mỗi lần chạy tạo dữ liệu nhận diện duy nhất, không xóa volume hoặc DB. Muốn dùng stack đang bật: `node test/api/nguyen/run.mjs --existing-stack`. Có thể đặt `GATEWAY_URL` (thí dụ `http://localhost:8081`); nếu runner tự khởi động Compose thì cũng đặt `GATEWAY_HOST_PORT=8081`.
 
 Sau khi sửa generator: `python test/api/nguyen/generate_collection.py`. Có thể import `nguyen.postman_collection.json` vào Postman để xem các bước. Chạy thủ công phải cấp `base`, `token`, `staffToken`, `accountantToken`, `branchId`, `warehouseId`, `variantId`, `tenantBToken`, `tenantBOrderId`, `tenantBCode`, `tenantBId` của hai tenant thử nghiệm mới; lệnh một bước tự cấp các biến này.

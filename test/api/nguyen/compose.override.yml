@@ -1,0 +1,6 @@
+# The API test stack lets services declare their own SQS queues.
+# The base compose file predefines those queues, which conflicts at startup.
+services:
+  elasticmq:
+    volumes:
+      - ./test/performance/k6/elasticmq.conf:/opt/elasticmq.conf:ro

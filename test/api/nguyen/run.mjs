@@ -122,7 +122,7 @@ function escape(s) { return String(s ?? '').replace(/[&<>"']/g, x => ({ '&':'&am
 let exit = 1;
 let newmanRan = false;
 try {
-  if (!process.argv.includes('--existing-stack')) command('docker', ['compose', 'up', '-d', '--build']);
+  if (!process.argv.includes('--existing-stack')) command('docker', ['compose', '-f', 'docker-compose.yml', '-f', 'test/api/nguyen/compose.override.yml', 'up', '-d', '--build']);
   await until('API Gateway health', async () => (await fetch(`${base}/platform/health`)).ok, 90);
   const env = await seed();
   const newman = join(here, 'node_modules', 'newman', 'bin', 'newman.js');
