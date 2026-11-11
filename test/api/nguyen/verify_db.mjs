@@ -24,6 +24,13 @@ SELECT json_build_object(
       'fulfillmentStatus',fulfillment_status,'fulfillmentStage',fulfillment_stage)
       FROM sales.orders WHERE tenant_id='${tenant}' AND id='${earlyId}'),
   'ordersInTenant', (SELECT count(*) FROM sales.orders WHERE tenant_id='${tenant}'),
+  'shortageOrder', (SELECT json_build_object('id',o.id,'code',o.code,
+      'orderStatus',o.order_status,'fulfillmentStatus',o.fulfillment_status,
+      'exceptionCode',o.exception_code,'lineQty',i.base_qty)
+      FROM sales.orders o JOIN sales.order_items i
+        ON i.order_id=o.id AND i.tenant_id=o.tenant_id
+      WHERE o.tenant_id='${tenant}' AND i.variant_id='${variant}' AND i.base_qty=100
+      ORDER BY o.created_at DESC LIMIT 1),
   'duplicateOrderCodes', (SELECT count(*) FROM (SELECT code FROM sales.orders
       WHERE tenant_id='${tenant}' GROUP BY code HAVING count(*)>1) duplicates)
 )::text; COMMIT;`;

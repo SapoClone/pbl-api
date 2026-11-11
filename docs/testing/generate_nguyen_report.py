@@ -76,7 +76,7 @@ p('3. Test Plan',2)
 table(['Mục','Kế hoạch / thực tế'],[
  ['Môi trường','Docker Compose (PostgreSQL, Redis, ElasticMQ, KrakenD và services), Gateway 8080, Node.js, Newman 6.2.1.'],
  ['Entry','Docker/Gateway và seed thành công từ PowerShell người dùng ở lượt 5; Newman thực thi toàn bộ collection.'],
- ['Exit','Hai lượt Newman đã chạy; TC-22/23 vẫn Failed. Chưa truy vấn PostgreSQL trực tiếp hoặc push branch; exit chưa đạt.'],
+ ['Exit','Hai lượt Newman đã chạy; TC-22/23 vẫn Failed. Đã truy vấn PostgreSQL lượt 2; chưa triage sai khác hoặc push branch; exit chưa đạt.'],
  ['Dữ liệu','Tenant riêng, 3 người dùng, chi nhánh mặc định, kho, SKU, nhập 12 đơn vị; stock-levels được đọc sau thao tác.']])
 p('4. Static Testing - Cross-Review Log',2)
 table(['ID','Quan sát tĩnh','Xử lý'],[
@@ -91,7 +91,7 @@ table(['Chỉ số','Giá trị','Bằng chứng'],[
  ['Thiết kế','25 ca, 69 request','Postman collection và generator.'],
  ['Passed / Failed / Blocked','23 / 2 / 0','Lượt 2 lúc 05:19 UTC: TC-22/23 Failed; 01/15 đã Passed.'],
  ['Newman','71 request; 123 assertion; 4 Failed','Lượt 1 có 6 assertion Failed; lượt 2 còn 4. JSON/HTML và summary đã lưu.'],
- ['Đối chiếu API/DB','API có; SQL chưa có','GET order và stock-levels sau thao tác. Chưa truy vấn DB trực tiếp.'],
+ ['Đối chiếu API/DB','Đã có','GET order/stock qua gateway; PostgreSQL tenant lượt 2 có stock 9/0, TC-22 FULFILLED; 10 đơn, 0 mã trùng.'],
  ['Push origin','Chưa có','GitHub không truy cập được từ phiên này.']])
 p('5.2 Danh sách test case',2)
 table(['ID','Kịch bản / dữ liệu','Yêu cầu','Kỳ vọng','Thực tế lượt 2'],[[f'TC-NG-{id}',title,ref,expected,('FAILED: API trả 200/delivered, mong 409' if id == '22' else 'FAILED: API trả 409 INSUFFICIENT_STOCK, mong 201/cờ thiếu tồn' if id == '23' else 'PASSED qua Newman lượt 2')] for id,title,ref,expected in cases])
@@ -107,15 +107,15 @@ table(['ID','Mô tả','Trạng thái'],[
  ['BLOCK-01','Docker permission denied trong phiên agent; Docker chạy từ PowerShell người dùng.','Môi trường agent / Open'],
  ['BLOCK-02','Seed POST /branches nhận 409 Q001 vì tenant Free đã có chi nhánh mặc định. Runner dùng GET /branches; lần 5 seed thành công.','Thiết lập test / Fixed, verified'],
  ['TEST-01','TC-01/15 mong pending nhưng response orderStatus là new; assertion đã sửa theo API.','Test data / Fixed, chờ rerun'],
- ['DEF-01','TC-22 đơn ONLINE complete trước ship trả 200/delivered; kịch bản yêu cầu 409 ORDER_INVALID_STATE.','Nghiệp vụ / Open, cần triage'],
- ['DEF-02','TC-23 autoConfirm đơn ONLINE thiếu tồn trả 409 INSUFFICIENT_STOCK; kịch bản mong 201 và cờ thiếu hàng.','Nghiệp vụ / Open, cần triage'],
+ ['DEF-01','TC-22 đơn ONLINE complete trước ship trả 200/delivered; DB order FULFILLED, stock từ 10 xuống 9, reserved 0. Kịch bản yêu cầu 409 và tồn không đổi.','Nghiệp vụ / Open, cần triage'],
+ ['DEF-02','TC-23 autoConfirm đơn ONLINE thiếu tồn trả 409 INSUFFICIENT_STOCK; kịch bản mong 201 và cờ thiếu hàng. DB có 10 đơn so với 9 lần tạo trước TC-23; cần truy vấn dòng x100 để xác nhận tác dụng phụ.','Nghiệp vụ / Open, cần triage'],
  ['GAP-01','Chưa thử cấu hình mã và hai tenant.','Coverage / Open'],
  ['GAP-02','Hai request gần đồng thời phụ thuộc lịch thực thi thực tế.','Giới hạn ca 25'],
  ['BR-05','Generator sáu chữ số cố định, SRS yêu cầu định dạng cấu hình được; chưa có phép thử cấu hình.','Sai khác tĩnh / cần xác minh']])
-p('DEF-01 tái hiện: tạo đơn ONLINE một SKU x1 trên tenant thử, xác nhận, gọi POST /sales/api/v1/orders/{id}/complete với version hiện hành khi chưa pack/ship. Kỳ vọng theo Testing Scenario v2: 409 ORDER_INVALID_STATE, đơn/tồn không đổi. Hai lượt nhận 200, response fulfillmentStatus=delivered. Xem attempt-5/6.summary.json; cần kiểm tra trực tiếp stock_balance và xác nhận với chủ yêu cầu.')
+p('DEF-01 tái hiện: tạo đơn ONLINE một SKU x1 trên tenant thử, xác nhận, gọi POST /sales/api/v1/orders/{id}/complete với version hiện hành khi chưa pack/ship. Kỳ vọng theo Testing Scenario v2: 409 ORDER_INVALID_STATE, đơn/tồn không đổi. Hai lượt nhận 200/delivered; PostgreSQL lượt 2 xác nhận FULFILLED và stock 9/0/9 sau khi bắt đầu từ 10 và giữ 1. Xem attempt-5/6.summary.json và attempt-6.db.json.')
 p('DEF-02 tái hiện: sau khi nhập 12 và hoàn tất đơn x2, tạo đơn ONLINE x100 với autoConfirm=true qua POST /sales/api/v1/orders/omnichannel. Kỳ vọng theo Testing Scenario v2: 201, đơn có cờ thiếu hàng. Hai lượt nhận 409 INSUFFICIENT_STOCK. Xem attempt-5/6.summary.json; cần thống nhất liệu yêu cầu áp dụng cho public autoConfirm hay chỉ đơn từ webhook.')
 p('5.5 Bằng chứng',2)
-p('docs/testing/evidence/nguyen/: attempt-1..3 Docker permission denied; attempt-4 seed Q001; attempt-5 và attempt-6 gồm log, summary JSON và Newman HTML đã lọc. Lượt 1: 6 assertion Failed; lượt 2: 4. Raw Newman JSON nằm trong test/api/nguyen/reports/ vì chứa token; không commit. Đối chiếu GET order/stock có trong collection; chưa có SQL trực tiếp.')
+p('docs/testing/evidence/nguyen/: attempt-1..3 Docker permission denied; attempt-4 seed Q001; attempt-5/6 gồm log, summary JSON và Newman HTML đã lọc. Lượt 1: 6 assertion Failed; lượt 2: 4. attempt-6.db.json là PostgreSQL chỉ đọc theo tenant, stock 9/0/9, order TC-22 FULFILLED, 10 đơn và 0 mã trùng. Raw Newman JSON nằm trong test/api/nguyen/reports/ vì chứa token; không commit.')
 p('5.6 Chạy lại',2)
 p('Bật Docker Desktop và xác nhận docker info. Tại pbl-api chạy npm --prefix test/api/nguyen run test:api. Xem reports/*.log, *.json, *.html, đối chiếu order/stock bằng API, chạy lại trên tenant mới. Ghi defect từ response; lọc token trước khi chia sẻ. Xem README và HANDOFF-NGUYEN-API-TESTING.md.')
 
