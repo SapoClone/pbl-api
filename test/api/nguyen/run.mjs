@@ -46,9 +46,12 @@ async function seed() {
   const p = '/platform/api/v1', c = '/catalog/api/v1', i = '/inventory/api/v1';
   for (const email of [owner, staff, accountant]) await api('POST', `${p}/auth/email/register`, { email, password, name: email.split('@')[0] }, null);
   token = (await api('POST', `${p}/auth/email/login`, { email: owner, password }, null)).accessToken;
-  const tenant = await api('POST', `${p}/tenants`, { name: `Nguyen API ${unique}`, subdomain: `nguyen-${unique}` });
+  const tenant = await api('POST', `${p}/tenants`, { name: `Nguyen API ${unique}`, subdomain: `nguyen-${unique}`, defaultBranchName: 'Nguyen test branch' });
   token = tenant.auth.accessToken;
-  const branch = await api('POST', `${p}/branches`, { name: 'Test branch', code: 'NG1' });
+  // Tenant creation already provisions one branch. The Free plan allows only one.
+  const branches = await api('GET', `${p}/branches`);
+  const branch = branches.data?.[0];
+  if (!branch?.id) throw new Error('Tenant was created without a readable default branch');
   let warehouse;
   await until('inventory branch projection', async () => {
     try { warehouse = await api('POST', `${i}/warehouses`, { code: 'NG-WH', name: 'Nguyen test warehouse', branchId: branch.id, isDefault: true }); return true; }

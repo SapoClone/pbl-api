@@ -59,7 +59,7 @@ p('MỤC LỤC',1,True)
 for entry in ('I. Record of Changes','II. Testing Documentation','1. Scope of Testing','2. Test Strategy & Approach','3. Test Plan','4. Static Testing - Cross-Review Log','5. Test Cases & Reports','5.1 Kết quả','5.2 Test case','5.3 Ma trận truy vết','5.4 Defect Report','5.5 Bằng chứng','5.6 Chạy lại'):
     p(entry)
 p('I. Record of Changes',1,True)
-table(['Phiên bản','Ngày','Người thực hiện','Thay đổi'],[['0.2','11/11/2026','Nguyên / hỗ trợ kỹ thuật','25 ca, 69 request; thêm thử gần đồng thời, chờ tồn hội tụ; chưa chạy được Newman.']])
+table(['Phiên bản','Ngày','Người thực hiện','Thay đổi'],[['0.3','11/11/2026','Nguyên / hỗ trợ kỹ thuật','25 ca, 69 request; lần thứ tư Docker chạy, seed gặp Q001 do tạo chi nhánh thứ hai; runner đã sửa để dùng chi nhánh mặc định. Newman chưa chạy.']])
 p('II. Testing Documentation',1)
 p('1. Scope of Testing',2)
 p('Phần 3 Testing Scenario v2: Nguyên phụ trách API Chức năng 5 (vòng đời đơn online) và Chức năng 6 (giữ tồn/mã đơn). Dùng Postman + Newman qua API Gateway. Yêu cầu FR-M07-02/03, FR-M05-08, BR-02/05. Ca phân quyền giới hạn ở đơn hàng. Không kiểm UI hoặc hiệu năng.')
@@ -75,9 +75,9 @@ p('Tận dụng seed từ scripts/demo-events.sh và test tích hợp Jest sẵn
 p('3. Test Plan',2)
 table(['Mục','Kế hoạch / thực tế'],[
  ['Môi trường','Docker Compose (PostgreSQL, Redis, ElasticMQ, KrakenD và services), Gateway 8080, Node.js, Newman 6.2.1.'],
- ['Entry','Docker daemon và gateway dùng được; registry npm hoặc Newman cài sẵn. Docker permission denied, entry chưa đạt.'],
+ ['Entry','Docker/Gateway chạy từ PowerShell người dùng ở lượt 4; seed dừng tại quota chi nhánh Free. Runner đã sửa; cần chạy lại để xác minh.'],
  ['Exit','Newman chạy hai lần, có JSON/HTML, response/DB được đối chiếu, push branch. Chưa đạt.'],
- ['Dữ liệu','Seed riêng qua API; chưa tạo được vì preflight.']])
+ ['Dữ liệu','Đã tạo tenant/người dùng ở lượt 4; chưa tạo warehouse/SKU/tồn. Mỗi lần chạy tiếp theo dùng tenant riêng.']])
 p('4. Static Testing - Cross-Review Log',2)
 table(['ID','Quan sát tĩnh','Xử lý'],[
  ['ST-01','SRS tuyến tính, code tách ba trục trạng thái.','Đọc đúng từng trường qua API.'],
@@ -89,8 +89,8 @@ p('5. Test Cases & Reports',1,True)
 p('5.1 Kết quả',2)
 table(['Chỉ số','Giá trị','Bằng chứng'],[
  ['Thiết kế','25 ca, 69 request','Postman collection và generator.'],
- ['Passed / Failed / Blocked','0 / 0 / 25','Docker chặn trước seed và Newman.'],
- ['Newman JSON/HTML','Chưa có','Chỉ có blocked.json/html của preflight; không phải Newman.'],
+ ['Passed / Failed / Blocked','0 / 0 / 25','Lượt 4 dừng trong seed tại Q001; chưa chạy Newman.'],
+ ['Newman JSON/HTML','Chưa có','Chỉ có blocked.json/html của runner; không phải Newman.'],
  ['Đối chiếu API/DB','Chưa có','Không xác nhận defect nghiệp vụ.'],
  ['Push origin','Chưa có','GitHub không truy cập được từ phiên này.']])
 p('5.2 Danh sách test case',2)
@@ -104,12 +104,13 @@ table(['Yêu cầu','Ca','Bao phủ'],[
  ['BR-05','21','Một tenant/regex; chưa kiểm cấu hình và hai tenant']])
 p('5.4 Defect Report',2)
 table(['ID','Mô tả','Trạng thái'],[
- ['BLOCK-01','Docker permission denied tại named pipe dockerDesktopLinuxEngine.','Môi trường / Open'],
+ ['BLOCK-01','Docker permission denied trong phiên agent; Docker chạy từ PowerShell người dùng.','Môi trường agent / Open'],
+ ['BLOCK-02','Seed POST /branches nhận 409 Q001 vì tenant Free đã có chi nhánh mặc định. Đã sửa runner dùng GET /branches; chờ chạy lại.','Thiết lập test / Fixed, unverified'],
  ['GAP-01','Chưa thử cấu hình mã và hai tenant.','Coverage / Open'],
  ['GAP-02','Hai request gần đồng thời phụ thuộc lịch thực thi thực tế.','Giới hạn ca 25'],
  ['Nghiệp vụ','Chưa có defect xác nhận bằng response; ST-03/04/05 chỉ là quan sát tĩnh.','Chưa xác minh']])
 p('5.5 Bằng chứng',2)
-p('docs/testing/evidence/nguyen/: attempt-1/2 và lượt tiếp theo gồm .log, .blocked.json, .blocked.html (newmanExecuted=false, passedCases=0). Không có response API, SQL hay report Newman. Báo cáo Newman trong test/api/nguyen/reports/ có thể chứa token, không commit raw file.')
+p('docs/testing/evidence/nguyen/: attempt-1..3 ghi Docker permission denied; attempt-4 ghi POST /branches 409 Q001 từ API Gateway. Mỗi lượt có .log, .blocked.json và .blocked.html (newmanExecuted=false, passedCases=0). Không có report Newman hoặc đối chiếu DB. Raw Newman JSON tương lai có thể chứa token, không commit.')
 p('5.6 Chạy lại',2)
 p('Bật Docker Desktop và xác nhận docker info. Tại pbl-api chạy npm --prefix test/api/nguyen run test:api. Xem reports/*.log, *.json, *.html, đối chiếu order/stock bằng API, chạy lại trên tenant mới. Ghi defect từ response; lọc token trước khi chia sẻ. Xem README và HANDOFF-NGUYEN-API-TESTING.md.')
 

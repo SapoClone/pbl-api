@@ -12,7 +12,7 @@ Không đưa thay đổi có sẵn tại `docker/elasticmq.conf` vào commit. C�
 
 Từ root `pbl-api`, chạy `npm --prefix test/api/nguyen run test:api`. Lệnh tự bật Compose, seed tenant/chi nhánh/kho/SKU/tồn riêng, cài Newman và chạy collection. `README.md` ghi điều kiện tiên quyết và cách dùng stack đã có.
 
-Đã gọi lệnh runner ba lần. Cả ba đều **BLOCKED trước seed và Newman**: Docker Desktop Linux named pipe trả `permission denied`. `docker --context default info` cũng bị từ chối tại `docker_engine`; cổng Gateway 8080 không lắng nghe. Vì vậy **25/25 ca Blocked, 0 Passed, 0 Failed nghiệp vụ**. Không có response API, truy vấn DB, Newman JSON/HTML hay lượt chạy lặp thành công. Các `attempt-1..3.log`, `.blocked.json`, `.blocked.html` ghi rõ `newmanExecuted=false`, `passedCases=0`; HTML này là báo cáo trở ngại, không phải Newman report.
+Ba lượt đầu **BLOCKED trước seed** vì phiên agent không được truy cập Docker daemon. Ở lượt thứ tư từ PowerShell người dùng, Docker và Gateway đã hoạt động; seed đăng ký ba người dùng, đăng nhập và tạo tenant thành công, nhưng `POST /platform/api/v1/branches` trả **409 Q001** vì tenant Free đã có chi nhánh mặc định và giới hạn một chi nhánh. Runner hiện dùng `GET /branches` để lấy chi nhánh đó; thay đổi **chưa được chạy lại**. Vì Newman vẫn chưa chạy: **25/25 ca Blocked, 0 Passed, 0 Failed nghiệp vụ**. Chưa có truy vấn DB, Newman JSON/HTML hoặc lượt chạy lặp thành công. `attempt-1..4.log`, `.blocked.json`, `.blocked.html` ghi `newmanExecuted=false`, `passedCases=0`; HTML này không phải Newman report.
 
 Collection có 69 request cho TC-NG-01..25, gồm bước đọc lại order/tồn. Ca 25 gửi hai xác nhận gần đồng thời; ca 16 kiểm tranh chấp theo thứ tự. Các script Postman đã parse bằng Node VM; `run.mjs` qua `node --check`; DOCX OpenXML được parse hợp lệ. Những kiểm tra tĩnh này không thay thế cho thực thi API.
 
@@ -22,7 +22,7 @@ Ma trận FR-M07-02/03, FR-M05-08, BR-02/05 và từng ca nằm trong báo cáo 
 
 ## Các bước tiếp tục
 
-1. Cho tài khoản chạy kiểm thử quyền truy cập Docker Desktop daemon; xác nhận `docker info`. Mở DNS/npm registry cho Newman. Kiểm tra Gateway 8080 và chạy lệnh README.
+1. Từ PowerShell người dùng (đã chạy được `docker info`), chạy `node test/api/nguyen/run.mjs --existing-stack` để kiểm tra bản sửa seed mà không build lại Compose. Mở DNS/npm registry cho Newman nếu bước cài đặt lỗi.
 2. Dựa trên log, khắc phục lỗi seed hoặc assertion nếu phát sinh; đối chiếu `GET /sales/api/v1/orders/{id}`, `GET /inventory/api/v1/stock-levels?branchId=...` và SQL theo `tenant_id` riêng. Không đổi trạng thái Blocked thành Passed chỉ dựa trên source.
 3. Chạy lại toàn bộ ít nhất hai lần trên tenant mới. Lưu Newman JSON/HTML và response, lọc bearer token trước khi commit bằng chứng. Lập defect có bước tái hiện và response thực tế; cập nhật số liệu báo cáo Word bằng `generate_nguyen_report.py`.
 4. Bổ sung BR-05 cấu hình và đa tenant nếu API thực tế hỗ trợ; xác minh ca 22/23 với chủ yêu cầu khi hành vi khác kỳ vọng.
@@ -30,4 +30,4 @@ Ma trận FR-M07-02/03, FR-M05-08, BR-02/05 và từng ca nằm trong báo cáo 
 
 ## Commit và push
 
-Commit triển khai cục bộ: `484d472` (`test: add Nguyen gateway order and inventory API suite with blocked evidence`). Lệnh `git push -u origin test/nguyen-api-order-lifecycle-stock-reservation` cũng thất bại với `getaddrinfo() thread failed to start`; push chưa xác nhận. Trạng thái này chỉ thay đổi sau khi lệnh push và đối chiếu remote thành công.
+Commit triển khai cục bộ: `484d472`; commit ghi trạng thái push: `9f18652`. Bản sửa Q001 được commit tiếp sau hai commit này. Lệnh `git push -u origin test/nguyen-api-order-lifecycle-stock-reservation` từng thất bại với `getaddrinfo() thread failed to start` trong phiên agent; push chưa xác nhận. Trạng thái này chỉ thay đổi sau khi lệnh push và đối chiếu remote thành công.

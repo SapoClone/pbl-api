@@ -1,0 +1,354 @@
+$ docker compose up -d --build
+#1 [internal] load local bake definitions
+#1 reading from stdin 4.57kB done
+#1 DONE 0.0s
+
+#2 [platform internal] load build definition from Dockerfile.dev
+#2 transferring dockerfile: 318B 0.0s done
+#2 DONE 0.1s
+
+#3 [krakend internal] load build definition from Dockerfile
+#3 transferring dockerfile: 891B 0.0s done
+#3 DONE 0.1s
+
+#4 [customer internal] load metadata for docker.io/library/node:24-alpine
+#4 ...
+
+#5 [auth] devopsfaith/krakend:pull token for registry-1.docker.io
+#5 DONE 0.0s
+
+#6 [auth] library/node:pull token for registry-1.docker.io
+#6 DONE 0.0s
+
+#7 [auth] krakend/builder:pull token for registry-1.docker.io
+#7 DONE 0.0s
+
+#8 [krakend internal] load metadata for docker.io/devopsfaith/krakend:2.6.3
+#8 ...
+
+#9 [krakend internal] load metadata for docker.io/krakend/builder:2.6.3
+#9 DONE 2.5s
+
+#4 [sales internal] load metadata for docker.io/library/node:24-alpine
+#4 DONE 2.5s
+
+#8 [krakend internal] load metadata for docker.io/devopsfaith/krakend:2.6.3
+#8 DONE 2.5s
+
+#10 [krakend internal] load .dockerignore
+#10 transferring context: 2B 0.0s done
+#10 DONE 0.0s
+
+#11 [catalog internal] load .dockerignore
+#11 transferring context: 108B 0.0s done
+#11 DONE 0.0s
+
+#12 [insight internal] load build context
+#12 ...
+
+#13 [krakend internal] load build context
+#13 transferring context: 241B 0.0s done
+#13 DONE 0.0s
+
+#14 [krakend builder 1/4] FROM docker.io/krakend/builder:2.6.3@sha256:fc579c9630b5248b6e86d9cfb693365faa37e3a413b98b906768f3eeaf788932
+#14 resolve docker.io/krakend/builder:2.6.3@sha256:fc579c9630b5248b6e86d9cfb693365faa37e3a413b98b906768f3eeaf788932 0.1s done
+#14 DONE 0.1s
+
+#15 [customer 1/6] FROM docker.io/library/node:24-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8
+#15 resolve docker.io/library/node:24-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8 0.1s done
+#15 DONE 0.1s
+
+#12 [sales internal] load build context
+#12 ...
+
+#16 [krakend stage-1 1/3] FROM docker.io/devopsfaith/krakend:2.6.3@sha256:4c678c224f6751224b4419ad88310797d5d6c2f896bfb2a69b43c6de697754e1
+#16 resolve docker.io/devopsfaith/krakend:2.6.3@sha256:4c678c224f6751224b4419ad88310797d5d6c2f896bfb2a69b43c6de697754e1 0.1s done
+#16 DONE 0.1s
+
+#17 [krakend builder 2/4] WORKDIR /src
+#17 CACHED
+
+#18 [krakend stage-1 2/3] COPY --from=builder /out/pbl-error-body.so /opt/krakend/plugins/pbl-error-body.so
+#18 CACHED
+
+#19 [krakend builder 3/4] COPY plugins/error-body/ ./
+#19 CACHED
+
+#20 [krakend builder 4/4] RUN go test ./...  && go build -buildmode=plugin -o /out/pbl-error-body.so .
+#20 CACHED
+
+#21 [krakend stage-1 3/3] COPY krakend.json /etc/krakend/krakend.json
+#21 CACHED
+
+#12 [sales internal] load build context
+#12 ...
+
+#22 [krakend] exporting to image
+#22 exporting layers 0.0s done
+#22 exporting manifest sha256:f449c93e2d05e3f8c266b3fa43c71e5fe8f54b7dcf729d1bdee289a9448eb1b4 0.0s done
+#22 exporting config sha256:9e5dccfb460044f07182e5c5d172e5dfd960f421ec3d872586131fab2029ee97 done
+#22 exporting attestation manifest sha256:35d41d3f9e56ddf8562f4a732f6202932e6fbf6b7d7016f19881ce3f8a37acb3 0.0s done
+#22 exporting manifest list sha256:f5deaca804f2b0a7cfdf133b5ce5ede184b76e1c27e817cd6042b01f5ce75943 0.0s done
+#22 naming to docker.io/library/pbl-krakend:2.6.3 done
+#22 unpacking to docker.io/library/pbl-krakend:2.6.3 0.0s done
+#22 DONE 0.4s
+
+#12 [sales internal] load build context
+#12 ...
+
+#23 [krakend] resolving provenance for metadata file
+#23 DONE 0.0s
+
+#12 [sales internal] load build context
+#12 transferring context: 501.54kB 1.5s done
+#12 DONE 1.5s
+
+#24 [catalog 5/6] RUN pnpm install
+#24 CACHED
+
+#25 [integration 5/6] RUN pnpm install
+#25 CACHED
+
+#26 [sales 5/6] RUN pnpm install
+#26 CACHED
+
+#27 [inventory 5/6] RUN pnpm install
+#27 CACHED
+
+#28 [customer 5/6] RUN pnpm install
+#28 CACHED
+
+#29 [insight 5/6] RUN pnpm install
+#29 CACHED
+
+#30 [catalog 4/6] COPY package.json pnpm-lock.yaml ./
+#30 CACHED
+
+#31 [catalog 2/6] RUN corepack enable && corepack prepare pnpm@9.12.3 --activate
+#31 CACHED
+
+#32 [catalog 3/6] WORKDIR /app
+#32 CACHED
+
+#33 [finance 5/6] RUN pnpm install
+#33 CACHED
+
+#34 [platform 5/6] RUN pnpm install
+#34 CACHED
+
+#35 [inventory 6/6] COPY . .
+#35 ...
+
+#36 [insight 6/6] COPY . .
+#36 DONE 2.4s
+
+#37 [platform 6/6] COPY . .
+#37 DONE 2.4s
+
+#38 [finance 6/6] COPY . .
+#38 DONE 2.4s
+
+#39 [integration 6/6] COPY . .
+#39 DONE 2.4s
+
+#40 [sales 6/6] COPY . .
+#40 DONE 2.4s
+
+#41 [customer 6/6] COPY . .
+#41 DONE 2.4s
+
+#35 [inventory 6/6] COPY . .
+#35 DONE 2.4s
+
+#42 [catalog 6/6] COPY . .
+#42 DONE 2.5s
+
+#43 [sales] exporting to image
+#43 exporting layers 2.0s done
+#43 exporting manifest sha256:9bcadf0ead2ec4b79f2a66727ea839e8b1a8cf4728301c5d85810b8ef4f13e09
+#43 exporting manifest sha256:9bcadf0ead2ec4b79f2a66727ea839e8b1a8cf4728301c5d85810b8ef4f13e09 0.1s done
+#43 exporting config sha256:c56204dfc87620168f0ccbeff3215779cfed9a6977fe3114ded64d812523fdaf
+#43 exporting config sha256:c56204dfc87620168f0ccbeff3215779cfed9a6977fe3114ded64d812523fdaf 0.1s done
+#43 exporting attestation manifest sha256:f62ecc7d12b26637cf96e88cd023f6f09f7ad8969121c1c8b9285a2ff62e480f
+#43 exporting attestation manifest sha256:f62ecc7d12b26637cf96e88cd023f6f09f7ad8969121c1c8b9285a2ff62e480f 0.1s done
+#43 exporting manifest list sha256:ecefdb974f48e741914fb3dfd56a9726b7f1a835f2a3a55e7c1fc2cec7265369
+#43 exporting manifest list sha256:ecefdb974f48e741914fb3dfd56a9726b7f1a835f2a3a55e7c1fc2cec7265369 0.1s done
+#43 naming to docker.io/library/pbl-api-sales:latest 0.0s done
+#43 unpacking to docker.io/library/pbl-api-sales:latest
+#43 ...
+
+#44 [platform] exporting to image
+#44 exporting layers 1.9s done
+#44 exporting manifest sha256:e204b2a5e37d30c4c352d15683bc070d164366635e1a701592d056b2f377dc9d 0.0s done
+#44 exporting config sha256:b716d05bb7c77205b1e8ef9322c03889bc95743fce8798b0b15a7faf306954b7 0.1s done
+#44 exporting attestation manifest sha256:d4799655755df60888634c8f9996bf1f376e1eab845b576d6eaa3a40f8e3e714 0.1s done
+#44 exporting manifest list sha256:a3574f6046b3ac9c3e6a6c83b6bdcad0a350ea1908244f847f302dd3702637f8 0.1s done
+#44 naming to docker.io/library/pbl-api-platform:latest 0.0s done
+#44 unpacking to docker.io/library/pbl-api-platform:latest 1.6s done
+#44 DONE 4.2s
+
+#45 [finance] exporting to image
+#45 exporting layers 1.9s done
+#45 exporting manifest sha256:df7c87f84e21d6816a226d7eeb99b1eb2aed2f9150a0191aec03d3deb895847d 0.1s done
+#45 exporting config sha256:549b569ba03ac711e11c6be8103fa5bca1853863f403b060ff6231225248c6b1 0.1s done
+#45 exporting attestation manifest sha256:740c8056ae118e974aa3e87b44bc873519189d22e711e518965c4287a1f05a87 0.1s done
+#45 exporting manifest list sha256:342a6ae4e84fba0f886675ea66f0ce62e784ac3c74bf347de1a1b8439d27ccb5 0.1s done
+#45 naming to docker.io/library/pbl-api-finance:latest 0.0s done
+#45 unpacking to docker.io/library/pbl-api-finance:latest 1.7s done
+#45 DONE 4.2s
+
+#46 [insight] exporting to image
+#46 exporting layers 1.9s done
+#46 exporting manifest sha256:3ca7ab7abb4ef9d4dc92d65a1fcf2b24108a4aa7f92f5d09294fd0151584d209 0.1s done
+#46 exporting config sha256:bd29e145935f1745dfb472af8ef3fc0ca69650586317a8e0cbd9948dce13010b 0.1s done
+#46 exporting attestation manifest sha256:398ccdf6c59bc22d60379025fcb4aa240cff6ff66ea56c3be660bb05a4a2a583 0.1s done
+#46 exporting manifest list sha256:22527352f3d39316b38105be193e12f463ee9ba875022b51615bf25eed7cc577 0.1s done
+#46 naming to docker.io/library/pbl-api-insight:latest 0.0s done
+#46 unpacking to docker.io/library/pbl-api-insight:latest 1.8s done
+#46 DONE 4.3s
+
+#47 [inventory] exporting to image
+#47 exporting layers 1.9s done
+#47 exporting manifest sha256:a59b822a94ba9250752a6f6a915fd1c8043e6ab497c8f84e0d80bad40af07279 0.1s done
+#47 exporting config sha256:6f1fbc7e9eb50653e0d4535b6a8f41322d11466b2f70da6caec0d00081cbe738 0.1s done
+#47 exporting attestation manifest sha256:33bfb2c81ae796e9e503aca2bf8c60d826d0f0bc2aca4b3d93ac38627f09a43c 0.1s done
+#47 exporting manifest list sha256:108314f2e344978c55c0e73161e66be6d7ced24e3585d45a0a696c49e37b5d21 0.1s done
+#47 naming to docker.io/library/pbl-api-inventory:latest 0.0s done
+#47 unpacking to docker.io/library/pbl-api-inventory:latest 1.7s done
+#47 DONE 4.2s
+
+#43 [sales] exporting to image
+#43 unpacking to docker.io/library/pbl-api-sales:latest 1.6s done
+#43 DONE 4.2s
+
+#48 [integration] exporting to image
+#48 exporting layers 2.0s done
+#48 exporting manifest sha256:5377fa0960835aea8ee246f051b2ee9aa7aed77d9a0e0f8d4df3622e8618ef57 0.1s done
+#48 exporting config sha256:d35c2cda511305b7edee3c89ccbaeedd7121a0219f35832f5109f4ae25675de8 0.1s done
+#48 exporting attestation manifest sha256:b1b86208fa67a01ddf5a1425dfd1333beb5623278f8a984476fff073cf18ffdc 0.1s done
+#48 exporting manifest list sha256:def1778e668e8ebbeb2b4a576e5c71caba422709705d30d863b36cdab9a6f240 0.1s done
+#48 naming to docker.io/library/pbl-api-integration:latest 0.0s done
+#48 unpacking to docker.io/library/pbl-api-integration:latest 1.7s done
+#48 DONE 4.3s
+
+#49 [catalog] exporting to image
+#49 exporting layers 2.0s done
+#49 exporting manifest sha256:af3172df614e868e34fbaf96cef6afc5b0b52395ca4b1e46f3cc340ed9f01158 0.1s done
+#49 exporting config sha256:976aaef42281dfe01329ded6be92e5cf1a0a30d2a60615f5453e2ea4e150193b 0.1s done
+#49 exporting attestation manifest sha256:212ac2c9708353ea5be4eb5209883621bcfde10e9890cad93d343e7c3d9872bf 0.1s done
+#49 exporting manifest list sha256:7804478816fe48369a5b06db7852e5f2af1bd64248d01ca0f0ce879be6a6dd0b 0.1s done
+#49 naming to docker.io/library/pbl-api-catalog:latest 0.0s done
+#49 unpacking to docker.io/library/pbl-api-catalog:latest 1.6s done
+#49 DONE 4.2s
+
+#50 [customer] exporting to image
+#50 exporting layers 2.1s done
+#50 exporting manifest sha256:71454a9f9d41bd0360991e82c136658a9aa7bf518bd55f862e2d17b91706421b 0.1s done
+#50 exporting config sha256:d56a14f6067478cf226bc74c54c43cc011d10765c396d5d5c4431678d0979443 0.1s done
+#50 exporting attestation manifest sha256:31c18bd418ee8a2473b1fda3325e2bff1ef45cbe17ae9af1a80bc4b096b72f72 0.1s done
+#50 exporting manifest list sha256:aa8812286c901a729febe7cb04a7ff8800d6b33b2317aab99739cd72671ccfc1 0.1s done
+#50 naming to docker.io/library/pbl-api-customer:latest done
+#50 unpacking to docker.io/library/pbl-api-customer:latest 1.6s done
+#50 DONE 4.2s
+
+#51 [platform] resolving provenance for metadata file
+#51 DONE 0.2s
+
+#52 [sales] resolving provenance for metadata file
+#52 DONE 0.2s
+
+#53 [customer] resolving provenance for metadata file
+#53 DONE 0.3s
+
+#54 [finance] resolving provenance for metadata file
+#54 DONE 0.4s
+
+#55 [catalog] resolving provenance for metadata file
+#55 DONE 0.3s
+
+#56 [integration] resolving provenance for metadata file
+#56 DONE 0.1s
+
+#57 [inventory] resolving provenance for metadata file
+#57 DONE 0.0s
+
+#58 [insight] resolving provenance for metadata file
+#58 DONE 0.1s
+
+ Image pbl-api-insight Building
+ Image pbl-api-customer Building
+ Image pbl-krakend:2.6.3 Building
+ Image pbl-api-integration Building
+ Image pbl-api-platform Building
+ Image pbl-api-catalog Building
+ Image pbl-api-finance Building
+ Image pbl-api-sales Building
+ Image pbl-api-inventory Building
+ Image pbl-api-customer Built
+ Image pbl-api-insight Built
+ Image pbl-api-catalog Built
+ Image pbl-krakend:2.6.3 Built
+ Image pbl-api-integration Built
+ Image pbl-api-inventory Built
+ Image pbl-api-platform Built
+ Image pbl-api-sales Built
+ Image pbl-api-finance Built
+ Container pbl-api-postgres-1 Running
+ Container pbl-api-elasticmq-1 Running
+ Container pbl-api-redis-1 Running
+ Container pbl-api-catalog-1 Recreate
+ Container pbl-api-customer-1 Recreate
+ Container pbl-api-inventory-1 Recreate
+ Container pbl-api-platform-1 Recreate
+ Container pbl-api-sales-1 Recreate
+ Container pbl-api-insight-1 Recreate
+ Container pbl-api-finance-1 Recreate
+ Container pbl-api-integration-1 Recreate
+ Container pbl-api-platform-1 Recreated
+ Container pbl-api-catalog-1 Recreated
+ Container pbl-api-insight-1 Recreated
+ Container pbl-api-customer-1 Recreated
+ Container pbl-api-finance-1 Recreated
+ Container pbl-api-sales-1 Recreated
+ Container pbl-api-integration-1 Recreated
+ Container pbl-api-inventory-1 Recreated
+ Container pbl-api-postgres-1 Waiting
+ Container pbl-api-postgres-1 Healthy
+ Container pbl-api-insight-1 Starting
+ Container pbl-api-inventory-1 Starting
+ Container pbl-api-sales-1 Starting
+ Container pbl-api-platform-1 Starting
+ Container pbl-api-integration-1 Starting
+ Container pbl-api-customer-1 Starting
+ Container pbl-api-finance-1 Starting
+ Container pbl-api-catalog-1 Starting
+ Container pbl-api-insight-1 Started
+ Container pbl-api-inventory-1 Started
+ Container pbl-api-sales-1 Started
+ Container pbl-api-platform-1 Started
+ Container pbl-api-integration-1 Started
+ Container pbl-api-customer-1 Started
+ Container pbl-api-finance-1 Started
+ Container pbl-api-catalog-1 Started
+ Container pbl-api-krakend-1 Starting
+ Container pbl-api-krakend-1 Started
+
+exit=0
+
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/register -> 200
+
+POST /platform/api/v1/auth/email/login -> 200
+
+POST /platform/api/v1/tenants -> 201
+
+POST /platform/api/v1/branches -> 409 {"timestamp":"2026-11-11T05:05:34.235Z","statusCode":409,"error":"Conflict","errorCode":"Q001","message":"Gói Free chỉ cho phép tối đa 1 chi nhánh. Hãy nâng cấp gói để thêm.","details":{"key":"branches","used":1,"limit":1,"planCode":"free"},"stack":"ConflictCodeException: Gói Free chỉ cho phép tối đa 1 chi nhánh. Hãy nâng cấp gói để thêm.\n    at QuotaService.assertCanAdd (/app/apps/platform/src/api/subscription/quota.service.ts:53:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async <anonymous> (/app/apps/platform/src/api/branch/branch.service.
+
+BLOCKED/FAILED: Error: POST /platform/api/v1/branches: 409 {"timestamp":"2026-11-11T05:05:34.235Z","statusCode":409,"error":"Conflict","errorCode":"Q001","message":"Gói Free chỉ cho phép tối đa 1 chi nhánh. Hãy nâng cấp gói để thêm.","details":{"key":"branches","used":1,"limit":1,"planCode":"free"},"stack":"ConflictCodeException: Gói Free chỉ cho phép tối đa 1 chi nhánh. Hãy nâng cấp gói để thêm.\n    at QuotaService.assertCanAdd (/app/apps/platform/src/api/subscription/quota.service.ts:53:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async <anonymous> (/app/apps/platform/src/api/branch/branch.service.
+    at api (file:///D:/BKDN/Nam4/KTPM/KTPM/pbl-api/test/api/nguyen/run.mjs:30:27)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async seed (file:///D:/BKDN/Nam4/KTPM/KTPM/pbl-api/test/api/nguyen/run.mjs:51:18)
+    at async file:///D:/BKDN/Nam4/KTPM/KTPM/pbl-api/test/api/nguyen/run.mjs:100:15

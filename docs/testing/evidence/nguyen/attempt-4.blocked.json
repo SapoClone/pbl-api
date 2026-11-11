@@ -1,0 +1,8 @@
+{
+  "kind": "preflight-or-execution-failure",
+  "timestamp": "2026-11-11T05-03-49-227Z",
+  "result": "BLOCKED",
+  "reason": "POST /platform/api/v1/branches: 409 {\"timestamp\":\"2026-11-11T05:05:34.235Z\",\"statusCode\":409,\"error\":\"Conflict\",\"errorCode\":\"Q001\",\"message\":\"Gói Free chỉ cho phép tối đa 1 chi nhánh. Hãy nâng cấp gói để thêm.\",\"details\":{\"key\":\"branches\",\"used\":1,\"limit\":1,\"planCode\":\"free\"},\"stack\":\"ConflictCodeException: Gói Free chỉ cho phép tối đa 1 chi nhánh. Hãy nâng cấp gói để thêm.\\n    at QuotaService.assertCanAdd (/app/apps/platform/src/api/subscription/quota.service.ts:53:11)\\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\\n    at async <anonymous> (/app/apps/platform/src/api/branch/branch.service.",
+  "newmanExecuted": false,
+  "passedCases": 0
+}
