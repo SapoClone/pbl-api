@@ -819,9 +819,15 @@ export class CreateM5FinanceCore1791900000200 implements MigrationInterface {
     `);
     await enableTenantRlsPolicy(queryRunner, reconIssues);
 
-    // Immutability triggers for financial_journals and financial_journal_lines
+    // Immutability triggers for financial_journals and financial_journal_lines. The function is qualified with the
+    // service schema: unqualified it lands in whatever schema is first on the search path, and parallel migrations of
+    // several schemas then race on the same pg_proc row ("duplicate key ... pg_proc_proname_args_nsp_index").
+    const immutabilityGuard = qualifiedTable(
+      queryRunner,
+      'enforce_financial_journal_immutability',
+    );
     await queryRunner.query(`
-      CREATE OR REPLACE FUNCTION enforce_financial_journal_immutability()
+      CREATE OR REPLACE FUNCTION ${immutabilityGuard}()
       RETURNS TRIGGER AS $$
       BEGIN
         IF TG_OP = 'DELETE' THEN
@@ -846,13 +852,13 @@ export class CreateM5FinanceCore1791900000200 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TRIGGER trg_financial_journals_immutability
       BEFORE UPDATE OR DELETE ON ${financialJournals}
-      FOR EACH ROW EXECUTE FUNCTION enforce_financial_journal_immutability();
+      FOR EACH ROW EXECUTE FUNCTION ${immutabilityGuard}();
     `);
 
     await queryRunner.query(`
       CREATE TRIGGER trg_financial_journal_lines_immutability
       BEFORE UPDATE OR DELETE ON ${financialJournalLines}
-      FOR EACH ROW EXECUTE FUNCTION enforce_financial_journal_immutability();
+      FOR EACH ROW EXECUTE FUNCTION ${immutabilityGuard}();
     `);
   }
 
@@ -886,7 +892,7 @@ export class CreateM5FinanceCore1791900000200 implements MigrationInterface {
       await queryRunner.query(`DROP TABLE IF EXISTS ${t(name)} CASCADE`);
     }
     await queryRunner.query(
-      `DROP FUNCTION IF EXISTS enforce_financial_journal_immutability CASCADE`,
+      `DROP FUNCTION IF EXISTS ${t('enforce_financial_journal_immutability')} CASCADE`,
     );
   }
 }
