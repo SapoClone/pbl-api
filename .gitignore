@@ -77,3 +77,6 @@ docs/superpowers/
 # published-library build output
 /libs/*/dist
 krakend/krakend.prod.json
+
+# local stack against Neon (secrets)
+.env.neon

@@ -1,0 +1,131 @@
+# Runs the local stack against a Neon database instead of the local Postgres container.
+# No secrets here: the values come from .env.neon (copy .env.neon.example; it is git-ignored).
+#
+#   docker --context kiri compose -f docker-compose.yml -f docker-compose.neon.yml --env-file .env.neon up -d --build
+#
+# Redis, ElasticMQ (events) and the gateway stay local. The local `postgres` service moves to the `local-db`
+# profile, so it does not start; depends_on is reset so nothing waits for it.
+# Platform's schema comes from hand-written migrations that nothing runs at start: run them once per database
+# with the `migrate-platform` one-off service. Every other service migrates itself.
+x-neon-db: &neon-db
+  DATABASE_HOST: ${NEON_HOST:?set NEON_HOST in .env.neon}
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: ${NEON_DB:?set NEON_DB in .env.neon}
+  DATABASE_SSL_ENABLED: "true"
+  DATABASE_REJECT_UNAUTHORIZED: "true"
+  DATABASE_SYNCHRONIZE: "false"
+
+services:
+  platform:
+    environment:
+      <<: *neon-db
+      DATABASE_USERNAME: pbl_platform
+      DATABASE_PASSWORD: ${NEON_PW_PLATFORM:?set NEON_PW_PLATFORM in .env.neon}
+      DATABASE_SCHEMA: public
+    depends_on: !override
+      redis:
+        condition: service_started
+      elasticmq:
+        condition: service_started
+  catalog:
+    environment:
+      <<: *neon-db
+      DATABASE_USERNAME: pbl_catalog
+      DATABASE_PASSWORD: ${NEON_PW_CATALOG:?set NEON_PW_CATALOG in .env.neon}
+      DATABASE_SCHEMA: catalog
+    depends_on: !override
+      redis:
+        condition: service_started
+      elasticmq:
+        condition: service_started
+  finance:
+    environment:
+      <<: *neon-db
+      DATABASE_USERNAME: pbl_finance
+      DATABASE_PASSWORD: ${NEON_PW_FINANCE:?set NEON_PW_FINANCE in .env.neon}
+      DATABASE_SCHEMA: finance
+    depends_on: !override
+      redis:
+        condition: service_started
+      elasticmq:
+        condition: service_started
+  integration:
+    environment:
+      <<: *neon-db
+      DATABASE_USERNAME: pbl_integration
+      DATABASE_PASSWORD: ${NEON_PW_INTEGRATION:?set NEON_PW_INTEGRATION in .env.neon}
+      DATABASE_SCHEMA: integration
+    depends_on: !override
+      redis:
+        condition: service_started
+      elasticmq:
+        condition: service_started
+  insight:
+    environment:
+      <<: *neon-db
+      DATABASE_USERNAME: pbl_insight
+      DATABASE_PASSWORD: ${NEON_PW_INSIGHT:?set NEON_PW_INSIGHT in .env.neon}
+      DATABASE_SCHEMA: insight
+    depends_on: !override
+      redis:
+        condition: service_started
+      elasticmq:
+        condition: service_started
+  inventory:
+    environment:
+      <<: *neon-db
+      DATABASE_USERNAME: pbl_inventory
+      DATABASE_PASSWORD: ${NEON_PW_INVENTORY:?set NEON_PW_INVENTORY in .env.neon}
+      DATABASE_SCHEMA: inventory
+    depends_on: !override
+      redis:
+        condition: service_started
+      elasticmq:
+        condition: service_started
+  sales:
+    environment:
+      <<: *neon-db
+      DATABASE_USERNAME: pbl_sales
+      DATABASE_PASSWORD: ${NEON_PW_SALES:?set NEON_PW_SALES in .env.neon}
+      DATABASE_SCHEMA: sales
+    depends_on: !override
+      redis:
+        condition: service_started
+      elasticmq:
+        condition: service_started
+  customer:
+    environment:
+      <<: *neon-db
+      DATABASE_USERNAME: pbl_customer
+      DATABASE_PASSWORD: ${NEON_PW_CUSTOMER:?set NEON_PW_CUSTOMER in .env.neon}
+      DATABASE_SCHEMA: customer
+    depends_on: !override
+      redis:
+        condition: service_started
+      elasticmq:
+        condition: service_started
+
+  # One-off: platform's migrations (db owner role pbl_platform, schema public). Idempotent; run after a new database
+  # is bootstrapped and after pulling platform migrations:
+  #   docker --context kiri compose -f docker-compose.yml -f docker-compose.neon.yml --env-file .env.neon run --rm migrate-platform
+  migrate-platform:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        APP_NAME: platform
+    profiles: ["tools"]
+    working_dir: /app
+    command: ["pnpm", "exec", "typeorm-ts-node-commonjs", "-d", "apps/platform/src/database/data-source.ts", "migration:run"]
+    environment:
+      <<: *neon-db
+      NODE_ENV: development
+      DATABASE_TYPE: postgres
+      DATABASE_USERNAME: pbl_platform
+      DATABASE_PASSWORD: ${NEON_PW_PLATFORM:?set NEON_PW_PLATFORM in .env.neon}
+      DATABASE_SCHEMA: public
+    networks:
+      - pbl-network
+
+  postgres:
+    profiles: ["local-db"]
