@@ -31,6 +31,9 @@ export interface TokenExchangeResult {
   refreshTokenExpiresAt: Date;
   scopes: string[];
   liveMode: boolean;
+  country?: string | null;
+  shortCode?: string | null;
+  sellerAccount?: string | null;
 }
 
 export interface NormalizedWebhookEnvelope {

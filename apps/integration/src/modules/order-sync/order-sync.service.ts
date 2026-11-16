@@ -391,7 +391,11 @@ export class OrderSyncService {
       return prep.result;
     }
 
-    // Phase 2: Invoke canonical Sales order intake with deterministic idempotency key
+    // Phase 2: Invoke canonical Sales order intake with deterministic idempotency key.
+    // Historical orders (SHIPPED, DELIVERED, CANCELLED, RETURN_REQUESTED) and UNPAID orders
+    // must NOT auto-confirm / deduct or reserve current Inventory warehouse stock again.
+    const shouldAutoConfirm =
+      normalizedOrder.normalizedStatus === 'READY_TO_SHIP';
     const salesResult =
       await this.salesOrderClient.createOrRecoverOmnichannelOrder({
         tenantId,
@@ -406,7 +410,7 @@ export class OrderSyncService {
         shippingFee: normalizedOrder.shippingFee,
         paymentMethod: normalizedOrder.paymentMethod,
         normalizedStatus: normalizedOrder.normalizedStatus,
-        autoConfirm: normalizedOrder.normalizedStatus !== 'UNPAID',
+        autoConfirm: shouldAutoConfirm,
         lines: prep.resolvedLines.map((l) => ({
           variantId: l.internalVariantId,
           skuCode: l.internalSkuCode,
@@ -535,6 +539,18 @@ export class OrderSyncService {
     replayedCount: number;
     conflictCount: number;
     cursorUpdatedTo: string;
+    orders: Array<{
+      externalOrderId: string;
+      internalOrderId: string | null;
+      internalOrderCode: string | null;
+      externalStatus: string;
+      normalizedStatus: string;
+      syncStatus: string;
+      statusOutcome: string;
+      buyerName: string | null;
+      totalAmount: string;
+      conflictId?: string;
+    }>;
   }> {
     const creds =
       await this.connectionsService.getDecryptedCredentialsForWorker(
@@ -557,9 +573,14 @@ export class OrderSyncService {
     });
 
     const now = new Date();
+    const initialLookbackMs =
+      creds.connection.provider === 'LAZADA' &&
+      process.env.LAZADA_LIVE_ENABLED === 'true'
+        ? 14 * 24 * 3600 * 1000
+        : 24 * 3600 * 1000;
     const defaultStart = cursorInfo?.windowEnd
       ? new Date(cursorInfo.windowEnd.getTime() - 5 * 60 * 1000) // 5-minute safety overlap
-      : new Date(now.getTime() - 24 * 3600 * 1000);
+      : new Date(now.getTime() - initialLookbackMs);
     const windowStart = params.windowStart ?? defaultStart;
     const windowEnd = params.windowEnd ?? now;
 
@@ -569,7 +590,7 @@ export class OrderSyncService {
       externalShopId: creds.connection.externalShopId,
       windowStart,
       windowEnd,
-      cursor: cursorInfo?.cursorValue ?? null,
+      cursor: params.windowStart ? null : (cursorInfo?.cursorValue ?? null),
       accessToken: creds.accessToken,
       partnerSecret: creds.webhookSecret,
       partnerId: creds.partnerId,
@@ -578,6 +599,18 @@ export class OrderSyncService {
     let importedCount = 0;
     let replayedCount = 0;
     let conflictCount = 0;
+    const syncedOrdersSummary: Array<{
+      externalOrderId: string;
+      internalOrderId: string | null;
+      internalOrderCode: string | null;
+      externalStatus: string;
+      normalizedStatus: string;
+      syncStatus: string;
+      statusOutcome: string;
+      buyerName: string | null;
+      totalAmount: string;
+      conflictId?: string;
+    }> = [];
 
     for (const order of polled.orders) {
       const res = await this.importNormalizedOrder(
@@ -596,6 +629,18 @@ export class OrderSyncService {
       } else {
         importedCount += 1;
       }
+      syncedOrdersSummary.push({
+        externalOrderId: res.orderRef.externalOrderId,
+        internalOrderId: res.orderRef.internalOrderId,
+        internalOrderCode: res.orderRef.internalOrderCode,
+        externalStatus: res.orderRef.externalStatus,
+        normalizedStatus: res.orderRef.normalizedStatus,
+        syncStatus: res.orderRef.syncStatus,
+        statusOutcome: res.statusOutcome,
+        buyerName: res.orderRef.buyerName,
+        totalAmount: String(res.orderRef.totalAmount),
+        ...(res.conflictId ? { conflictId: res.conflictId } : {}),
+      });
     }
 
     // Advance durable cursor only after all orders in window are processed
@@ -638,6 +683,7 @@ export class OrderSyncService {
       replayedCount,
       conflictCount,
       cursorUpdatedTo: windowEnd.toISOString(),
+      orders: syncedOrdersSummary,
     };
   }
 

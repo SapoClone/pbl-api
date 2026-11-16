@@ -12,7 +12,10 @@ import { DataSource } from 'typeorm';
 import { BranchScopeService } from './modules/branch-scope/branch-scope.service';
 import { ConflictsController } from './modules/conflicts/conflicts.controller';
 import { ConflictsService } from './modules/conflicts/conflicts.service';
-import { ConnectionsController } from './modules/connections/connections.controller';
+import {
+  ConnectionsController,
+  LazadaOAuthCallbackController,
+} from './modules/connections/connections.controller';
 import { ConnectionsService } from './modules/connections/connections.service';
 import { ReconciliationController } from './modules/reconciliation/reconciliation.controller';
 import { ReconciliationService } from './modules/reconciliation/reconciliation.service';
@@ -125,6 +128,28 @@ const mockConnectionsService = {
     mode: 'OAUTH_COMPLETED',
     connection: { id: CONN_ID, status: 'CONNECTED' },
   })),
+  handleLazadaPublicCallback: jest.fn(async (query: any) => ({
+    mode: 'OAUTH_COMPLETED',
+    provider: 'LAZADA',
+    status: 'CONNECTED',
+    tenantId: TENANT_ID,
+    connectionId: CONN_ID,
+    externalShopId: 'VN-LAZADA-01',
+    shopName: 'Lazada Seller VN-LAZADA-01',
+    redirectUrl:
+      query.state === 'with_redirect'
+        ? `https://app.sai.makeasy.id.vn/settings/integrations?provider=lazada&status=connected&connectionId=${CONN_ID}`
+        : null,
+    connection: {
+      id: CONN_ID,
+      status: 'CONNECTED',
+      credentialSummary: {
+        credentialVersion: 2,
+        hasAccessToken: true,
+        hasRefreshToken: true,
+      },
+    },
+  })),
   refreshCredentials: jest.fn(async () => ({
     id: CONN_ID,
     status: 'CONNECTED',
@@ -225,6 +250,7 @@ const mockWebhooksService = {
   ],
   controllers: [
     ConnectionsController,
+    LazadaOAuthCallbackController,
     SkuMappingController,
     SyncJobsController,
     ConflictsController,
@@ -690,6 +716,37 @@ describe('M6 Integration HTTP Controllers, RBAC & Webhook Ingress E2E', () => {
         {},
         withPermissions(['channels.update']),
       ).expect(201);
+    });
+  });
+
+  describe('Public Lazada OAuth Callback (GET /api/v1/integrations/lazada/callback)', () => {
+    it('accepts Lazada browser redirect callback without Platform JWT and returns sanitized JSON or 302 redirect', async () => {
+      const jsonRes = await request(app.getHttpServer())
+        .get('/api/v1/integrations/lazada/callback')
+        .query({ code: '0_128901_auth_code', state: 'signed_state_token' })
+        .expect(200);
+
+      expect(jsonRes.body.status).toBe('CONNECTED');
+      expect(jsonRes.body.provider).toBe('LAZADA');
+      expect(jsonRes.body.connection.encryptedAccessToken).toBeUndefined();
+      expect(
+        mockConnectionsService.handleLazadaPublicCallback,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: '0_128901_auth_code',
+          state: 'signed_state_token',
+        }),
+      );
+
+      const redirectRes = await request(app.getHttpServer())
+        .get('/api/v1/integrations/lazada/callback')
+        .query({ code: '0_128901_auth_code', state: 'with_redirect' })
+        .expect(302);
+
+      expect(redirectRes.headers.location).toContain(
+        `https://app.sai.makeasy.id.vn/settings/integrations?provider=lazada&status=connected&connectionId=${CONN_ID}`,
+      );
+      expect(redirectRes.headers.location).not.toContain('access_token');
     });
   });
 });

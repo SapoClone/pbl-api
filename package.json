@@ -63,7 +63,9 @@
     "test:arch": "jest scripts/openapi/openapi-drift.spec.ts libs/common/src/bootstrap/ddd-architecture-fitness.spec.ts apps/platform/src/platform-architecture.spec.ts apps/catalog/src/catalog-architecture.spec.ts apps/inventory/src/inventory-architecture.spec.ts apps/sales/src/sales-architecture.spec.ts apps/customer/src/customer-architecture.spec.ts apps/finance/src/finance-architecture.spec.ts apps/integration/src/integration-architecture.spec.ts apps/insight/src/insight-architecture.spec.ts",
     "test:int": "jest --config libs/events/test/jest-int.json",
     "verify:m8": "node scripts/m8-verify-system.mjs",
-    "redrive:dlq": "node scripts/redrive-dlq.js"
+    "redrive:dlq": "node scripts/redrive-dlq.js",
+    "seed:neon": "ts-node -r tsconfig-paths/register --transpile-only scripts/seed-neon-vn.ts",
+    "seed:neon:verify": "ts-node -r tsconfig-paths/register --transpile-only scripts/seed-neon-vn.ts --verify-only"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1129.0",

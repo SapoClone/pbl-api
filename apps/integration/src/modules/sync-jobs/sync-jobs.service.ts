@@ -267,10 +267,26 @@ export class SyncJobsService {
           replayed: importRes.replayed,
         };
       } else if (job.jobType === 'ORDER_POLL') {
+        const windowStart =
+          typeof payload.windowStart === 'string' && payload.windowStart
+            ? new Date(payload.windowStart)
+            : undefined;
+        const windowEnd =
+          typeof payload.windowEnd === 'string' && payload.windowEnd
+            ? new Date(payload.windowEnd)
+            : undefined;
         resultSummary =
           await this.orderSyncService.pollUpdatedOrdersForConnection({
             tenantId: job.tenantId,
             connectionId: job.connectionId!,
+            windowStart:
+              windowStart && !Number.isNaN(windowStart.getTime())
+                ? windowStart
+                : undefined,
+            windowEnd:
+              windowEnd && !Number.isNaN(windowEnd.getTime())
+                ? windowEnd
+                : undefined,
           });
       } else if (job.jobType === 'INVENTORY_PUBLICATION') {
         if (payload.internalVariantId) {

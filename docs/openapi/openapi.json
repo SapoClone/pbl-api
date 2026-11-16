@@ -201,6 +201,9 @@
       "name": "integration / integration-connections"
     },
     {
+      "name": "integration / integration-lazada-oauth"
+    },
+    {
       "name": "integration / integration-sku-mappings"
     },
     {
@@ -19004,6 +19007,65 @@
         ]
       }
     },
+    "/api/v1/integrations/lazada/callback": {
+      "get": {
+        "operationId": "integration_LazadaOAuthCallbackController_handleLazadaCallback",
+        "parameters": [
+          {
+            "name": "code",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 512,
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 512,
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 256,
+              "type": "string"
+            }
+          },
+          {
+            "name": "error_description",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 512,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Public Lazada Seller In-house App OAuth callback with HMAC-SHA256 state verification and encrypted token exchange",
+        "tags": [
+          "integration / integration-lazada-oauth"
+        ]
+      }
+    },
     "/integration/api/v1/integrations/sku-mappings": {
       "get": {
         "operationId": "integration_SkuMappingController_listMappings",
@@ -30716,10 +30778,7 @@
         },
         "required": [
           "provider",
-          "externalShopId",
-          "shopName",
-          "branchId",
-          "webhookSecret"
+          "branchId"
         ]
       },
       "AuthorizeChannelConnectionDto": {
@@ -30735,7 +30794,7 @@
           },
           "stateNonce": {
             "type": "string",
-            "maxLength": 128
+            "maxLength": 512
           },
           "externalShopId": {
             "type": "string",
@@ -30842,6 +30901,12 @@
           "externalOrderId": {
             "type": "string",
             "maxLength": 128
+          },
+          "windowStart": {
+            "type": "string"
+          },
+          "windowEnd": {
+            "type": "string"
           },
           "executeImmediately": {
             "type": "boolean"

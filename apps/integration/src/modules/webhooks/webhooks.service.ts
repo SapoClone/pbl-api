@@ -196,7 +196,15 @@ export class WebhooksService {
     }
 
     // Step 3: Validate shop identity matches connection
-    if (envelope.externalShopId !== resolved.conn.externalShopId) {
+    // Note: On Lazada Open Platform, a connection may store the Seller Center `short_code` (e.g. `VN33WH4M4S`)
+    // while Lazada Push Mechanism payloads carry the numeric `seller_id` (e.g. `200171001234` or `9999` verification ping).
+    const isLazadaShortCodeToNumericSellerId =
+      normalizedProvider === 'LAZADA' &&
+      /^(VN|TH|MY|SG|PH|ID)[A-Z0-9]+$/i.test(resolved.conn.externalShopId) &&
+      /^\d+$/.test(envelope.externalShopId);
+    if (isLazadaShortCodeToNumericSellerId) {
+      envelope.externalShopId = resolved.conn.externalShopId;
+    } else if (envelope.externalShopId !== resolved.conn.externalShopId) {
       throw new IntegrationDomainError(
         IntegrationDomainErrorCode.INVALID_WEBHOOK_SIGNATURE,
         `Webhook shop identity (${envelope.externalShopId}) does not match connection shop (${resolved.conn.externalShopId})`,

@@ -468,6 +468,20 @@ export class InventorySyncService {
     examinedListings: number;
     syncedExistingMappings: number;
     autoMappedCount: number;
+    unmappedCount: number;
+    listings: Array<{
+      externalItemId: string;
+      externalSkuId: string;
+      externalSkuCode: string | null;
+      externalProductName: string;
+      price: number;
+      stock: number;
+      status: string;
+      mapped: boolean;
+      mappingId: string | null;
+      internalVariantId: string | null;
+      internalSkuCode: string | null;
+    }>;
   }> {
     const creds =
       await this.connectionsService.getDecryptedCredentialsForWorker(
@@ -492,7 +506,21 @@ export class InventorySyncService {
 
       let syncedExistingMappings = 0;
       let autoMappedCount = 0;
+      let unmappedCount = 0;
       const now = new Date();
+      const detailedListings: Array<{
+        externalItemId: string;
+        externalSkuId: string;
+        externalSkuCode: string | null;
+        externalProductName: string;
+        price: number;
+        stock: number;
+        status: string;
+        mapped: boolean;
+        mappingId: string | null;
+        internalVariantId: string | null;
+        internalSkuCode: string | null;
+      }> = [];
 
       for (const item of listings) {
         const existing = await em.getRepository(SkuMappingEntity).findOne({
@@ -512,10 +540,24 @@ export class InventorySyncService {
           existing.lastSyncedAt = now;
           await em.save(SkuMappingEntity, existing);
           syncedExistingMappings += 1;
+          detailedListings.push({
+            externalItemId: item.externalItemId,
+            externalSkuId: item.externalSkuId,
+            externalSkuCode: item.externalSkuCode,
+            externalProductName: item.externalProductName,
+            price: roundVnd(item.price),
+            stock: item.stock,
+            status: item.status,
+            mapped: true,
+            mappingId: existing.id,
+            internalVariantId: existing.internalVariantId,
+            internalSkuCode: existing.internalSkuCode,
+          });
           continue;
         }
 
         // Strict exact-SKU auto-mapping rule (never fuzzy-match product names)
+        let matchedMapping: SkuMappingEntity | null = null;
         if (item.externalSkuCode) {
           const catalogVariant = await em
             .getRepository(IntegrationCatalogVariantEntity)
@@ -550,14 +592,35 @@ export class InventorySyncService {
             });
             await em.save(SkuMappingEntity, autoMapped);
             autoMappedCount += 1;
+            matchedMapping = autoMapped;
           }
         }
+
+        if (!matchedMapping) {
+          unmappedCount += 1;
+        }
+
+        detailedListings.push({
+          externalItemId: item.externalItemId,
+          externalSkuId: item.externalSkuId,
+          externalSkuCode: item.externalSkuCode,
+          externalProductName: item.externalProductName,
+          price: roundVnd(item.price),
+          stock: item.stock,
+          status: item.status,
+          mapped: Boolean(matchedMapping),
+          mappingId: matchedMapping?.id ?? null,
+          internalVariantId: matchedMapping?.internalVariantId ?? null,
+          internalSkuCode: matchedMapping?.internalSkuCode ?? null,
+        });
       }
 
       return {
         examinedListings: listings.length,
         syncedExistingMappings,
         autoMappedCount,
+        unmappedCount,
+        listings: detailedListings,
       };
     });
   }
