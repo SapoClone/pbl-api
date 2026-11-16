@@ -116,35 +116,37 @@ export class InMemorySalesOrderClient extends SalesOrderClient {
     // Sales/Inventory owns actual reservation; if projection indicates shortage, Sales
     // retains the order in PENDING / UNFULFILLED state with shortage details per SRS FR-M07-06)
     const shortages: CanonicalSalesOrderResult['shortages'] = [];
-    await this.dataSource.transaction(async (em) => {
-      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
-        cmd.tenantId,
-      ]);
-      for (const line of cmd.lines) {
-        const projections = await em
-          .getRepository(IntegrationStockProjectionEntity)
-          .find({
-            where: [
-              { tenantId: cmd.tenantId, skuId: line.variantId },
-              { tenantId: cmd.tenantId, skuId: line.skuCode },
-            ],
-          });
-        if (projections.length > 0) {
-          const totalAvail = projections.reduce(
-            (sum, p) => sum + Number(p.availableQty),
-            0,
-          );
-          if (totalAvail < line.quantity) {
-            shortages.push({
-              variantId: line.variantId,
-              skuCode: line.skuCode,
-              requestedQty: line.quantity,
-              availableQty: Math.max(0, totalAvail),
+    if (cmd.autoConfirm) {
+      await this.dataSource.transaction(async (em) => {
+        await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+          cmd.tenantId,
+        ]);
+        for (const line of cmd.lines) {
+          const projections = await em
+            .getRepository(IntegrationStockProjectionEntity)
+            .find({
+              where: [
+                { tenantId: cmd.tenantId, skuId: line.variantId },
+                { tenantId: cmd.tenantId, skuId: line.skuCode },
+              ],
             });
+          if (projections.length > 0) {
+            const totalAvail = projections.reduce(
+              (sum, p) => sum + Number(p.availableQty),
+              0,
+            );
+            if (totalAvail < line.quantity) {
+              shortages.push({
+                variantId: line.variantId,
+                skuCode: line.skuCode,
+                requestedQty: line.quantity,
+                availableQty: Math.max(0, totalAvail),
+              });
+            }
           }
         }
-      }
-    });
+      });
+    }
 
     const shortageDetected = shortages.length > 0;
     const internalOrderId = deterministicUuid(`sales-order:${key}`);

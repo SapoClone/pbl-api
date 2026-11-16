@@ -15,15 +15,17 @@ export class CreateChannelConnectionDto {
   @IsIn(['SHOPEE', 'LAZADA'])
   provider!: MarketplaceProvider;
 
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(128)
-  externalShopId!: string;
+  externalShopId?: string;
 
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(160)
-  shopName!: string;
+  shopName?: string;
 
   @IsUUID()
   branchId!: string;
@@ -43,10 +45,11 @@ export class CreateChannelConnectionDto {
   @Max(100)
   stockAllocationPercent?: number;
 
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(256)
-  webhookSecret!: string;
+  webhookSecret?: string;
 
   @IsOptional()
   @IsString()
@@ -77,13 +80,35 @@ export class AuthorizeChannelConnectionDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(128)
+  @MaxLength(512)
   stateNonce?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(128)
   externalShopId?: string;
+}
+
+export class LazadaOAuthCallbackQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  code?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  state?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  error?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  error_description?: string;
 }
 
 export class RefreshConnectionTokenDto {

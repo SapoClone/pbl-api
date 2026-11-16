@@ -181,11 +181,16 @@ export function mergeDocuments(input: MergeInput): {
 
     for (const [servicePath, item] of Object.entries(doc.paths)) {
       if (isHealthPath(servicePath) || isInternalPath(servicePath)) continue;
-      const target = gatewayPath(service, servicePath);
+      const prefixedTarget = gatewayPath(service, servicePath);
       for (const method of HTTP_METHODS) {
         const op = (item as Json)[method];
         if (!op) continue;
-        if (!input.exposed.has(routeKey(method, target))) {
+        const target = input.exposed.has(routeKey(method, prefixedTarget))
+          ? prefixedTarget
+          : input.exposed.has(routeKey(method, servicePath))
+            ? servicePath
+            : null;
+        if (!target) {
           unexposed.push({
             service,
             method,

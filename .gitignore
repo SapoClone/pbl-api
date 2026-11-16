@@ -41,6 +41,7 @@ lerna-debug.log*
 
 # dotenv environment variable files
 .env
+.env.neon
 .env.local
 .env.test
 .env.test.local

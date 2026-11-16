@@ -8,19 +8,24 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
+  Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   AllowedBranches,
   AuthenticatedContext,
   CurrentContext,
+  Public,
   RequirePermission,
 } from '@pbl/auth';
+import type { Response } from 'express';
 import { rethrowIntegrationHttpError } from '../../presentation/integration-http-error';
 import { BranchScopeService } from '../branch-scope/branch-scope.service';
 import {
   AuthorizeChannelConnectionDto,
   CreateChannelConnectionDto,
+  LazadaOAuthCallbackQueryDto,
   RefreshConnectionTokenDto,
 } from './connections.dto';
 import { ConnectionsService } from './connections.service';
@@ -201,6 +206,35 @@ export class ConnectionsController {
     try {
       await this.scope.assertConnection(branches, id);
       return await this.connectionsService.disconnectConnection(id, ctx.userId);
+    } catch (error) {
+      rethrowIntegrationHttpError(error);
+    }
+  }
+}
+
+@ApiTags('integration-lazada-oauth')
+@Controller('api/v1/integrations/lazada')
+export class LazadaOAuthCallbackController {
+  constructor(private readonly connectionsService: ConnectionsService) {}
+
+  @Get('callback')
+  @Public()
+  @ApiOperation({
+    summary:
+      'Public Lazada Seller In-house App OAuth callback with HMAC-SHA256 state verification and encrypted token exchange',
+  })
+  async handleLazadaCallback(
+    @Query() query: LazadaOAuthCallbackQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    try {
+      const result =
+        await this.connectionsService.handleLazadaPublicCallback(query);
+      if (result.redirectUrl) {
+        res.status(HttpStatus.FOUND);
+        res.setHeader('Location', result.redirectUrl);
+      }
+      return result;
     } catch (error) {
       rethrowIntegrationHttpError(error);
     }

@@ -1,4 +1,10 @@
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class TriggerConnectionSyncDto {
   @IsOptional()
@@ -10,6 +16,14 @@ export class TriggerConnectionSyncDto {
   @IsString()
   @MaxLength(128)
   externalOrderId?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  windowStart?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  windowEnd?: string;
 
   @IsOptional()
   @IsBoolean()

@@ -54,7 +54,10 @@ export class SyncJobsController {
           `manual-ord-sync:${connectionId}:${dto.externalOrderId ?? randomUUID()}`,
         payload: dto.externalOrderId
           ? { externalOrderId: dto.externalOrderId }
-          : {},
+          : {
+              ...(dto.windowStart ? { windowStart: dto.windowStart } : {}),
+              ...(dto.windowEnd ? { windowEnd: dto.windowEnd } : {}),
+            },
       });
       if (dto.executeImmediately) {
         const executed = await this.syncJobsService.executeJobById(

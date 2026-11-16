@@ -9,14 +9,17 @@ import {
 import { EventOutbox } from '@pbl/events';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { DataSource, QueryFailedError } from 'typeorm';
+import { readLazadaConfig } from '../../config/integration.config';
 import {
   ConnectionStatus,
   IntegrationDomainError,
   IntegrationDomainErrorCode,
   MarketplaceProvider,
   assertValidConnectionTransition,
+  createOAuthStateToken,
   decryptCredentialSecret,
   encryptCredentialSecret,
+  verifyOAuthStateToken,
 } from '../../domain/integration-domain';
 import { nextIntegrationCode } from '../../infrastructure/persistence/integration-code.generator';
 import {
@@ -25,10 +28,12 @@ import {
   IntegrationAuditLogEntity,
 } from '../../infrastructure/persistence/integration.entities';
 import { ProviderRateLimiterService } from '../../infrastructure/rate-limiting/provider-rate-limiter.service';
+import type { TokenExchangeResult } from '../../providers/contracts/provider.contracts';
 import { ProviderRegistryService } from '../../providers/provider-registry.service';
 import {
   AuthorizeChannelConnectionDto,
   CreateChannelConnectionDto,
+  LazadaOAuthCallbackQueryDto,
   RefreshConnectionTokenDto,
 } from './connections.dto';
 
@@ -72,6 +77,18 @@ export interface DecryptedConnectionCredentials {
   partnerId: string | null;
 }
 
+export interface LazadaPublicCallbackResult {
+  mode: 'OAUTH_COMPLETED';
+  provider: 'LAZADA';
+  status: 'CONNECTED';
+  tenantId: string;
+  connectionId: string;
+  externalShopId: string;
+  shopName: string;
+  redirectUrl: string | null;
+  connection: SanitizedChannelConnectionView;
+}
+
 @Injectable()
 export class ConnectionsService {
   constructor(
@@ -86,9 +103,26 @@ export class ConnectionsService {
     dto: CreateChannelConnectionDto,
   ): Promise<SanitizedChannelConnectionView> {
     const tenantId = TenantContext.require();
+    if (
+      dto.provider === 'SHOPEE' &&
+      (!dto.externalShopId?.trim() ||
+        !dto.shopName?.trim() ||
+        !dto.webhookSecret?.trim())
+    ) {
+      throw new IntegrationDomainError(
+        IntegrationDomainErrorCode.VALIDATION_ERROR,
+        'externalShopId, shopName, and webhookSecret are required for SHOPEE connections',
+        400,
+      );
+    }
+
     const initialStatus: ConnectionStatus = dto.accessToken
       ? 'CONNECTED'
       : 'PENDING_AUTH';
+    const connId = randomUUID();
+    const resolvedExternalShopId =
+      dto.externalShopId?.trim() || `pending_lazada_${connId}`;
+    const resolvedShopName = dto.shopName?.trim() || 'Pending Lazada Seller';
 
     try {
       return await this.dataSource.transaction(async (em) => {
@@ -101,13 +135,13 @@ export class ConnectionsService {
         const now = new Date();
 
         const conn = em.create(ChannelConnectionEntity, {
-          id: randomUUID(),
+          id: connId,
           tenantId,
           code,
           provider: dto.provider,
           connectionKey,
-          externalShopId: dto.externalShopId.trim(),
-          shopName: dto.shopName.trim(),
+          externalShopId: resolvedExternalShopId,
+          shopName: resolvedShopName,
           branchId: dto.branchId,
           warehouseId: dto.warehouseId ?? null,
           status: initialStatus,
@@ -127,6 +161,19 @@ export class ConnectionsService {
         });
         await em.save(ChannelConnectionEntity, conn);
 
+        const resolvedPartnerId =
+          dto.partnerId?.trim() ||
+          (dto.provider === 'LAZADA'
+            ? process.env.LAZADA_APP_KEY?.trim()
+            : undefined) ||
+          `${dto.provider.toLowerCase()}-partner`;
+        const resolvedWebhookSecret =
+          dto.webhookSecret && dto.webhookSecret.trim() !== 'configured-via-env'
+            ? dto.webhookSecret.trim()
+            : dto.provider === 'LAZADA' && process.env.LAZADA_APP_SECRET?.trim()
+              ? process.env.LAZADA_APP_SECRET.trim()
+              : dto.webhookSecret?.trim() || 'configured-via-env';
+
         const cred = em.create(ConnectionCredentialEntity, {
           id: randomUUID(),
           tenantId,
@@ -138,8 +185,10 @@ export class ConnectionsService {
           encryptedRefreshToken: dto.refreshToken
             ? encryptCredentialSecret(dto.refreshToken)
             : null,
-          encryptedWebhookSecret: encryptCredentialSecret(dto.webhookSecret),
-          partnerId: dto.partnerId ?? `${dto.provider.toLowerCase()}-partner`,
+          encryptedWebhookSecret: encryptCredentialSecret(
+            resolvedWebhookSecret,
+          ),
+          partnerId: resolvedPartnerId,
           keyVersion: 1,
           accessTokenExpiresAt: dto.accessToken
             ? new Date(now.getTime() + 4 * 3600 * 1000)
@@ -198,7 +247,7 @@ export class ConnectionsService {
       ) {
         throw new IntegrationDomainError(
           IntegrationDomainErrorCode.CHANNEL_CONNECTION_CONFLICT,
-          `Shop ${dto.externalShopId} on ${dto.provider} is already connected`,
+          `Shop ${resolvedExternalShopId} on ${dto.provider} is already connected`,
           409,
         );
       }
@@ -255,42 +304,86 @@ export class ConnectionsService {
     dto: AuthorizeChannelConnectionDto,
   ) {
     const tenantId = TenantContext.require();
-    return this.dataSource.transaction(async (em) => {
-      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
-        tenantId,
-      ]);
-      const conn = await em.getRepository(ChannelConnectionEntity).findOne({
-        where: { id: connectionId, tenantId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!conn) {
-        throw new IntegrationDomainError(
-          IntegrationDomainErrorCode.CHANNEL_CONNECTION_NOT_FOUND,
-          `Channel connection ${connectionId} not found`,
-          404,
-        );
-      }
-      const cred = await em.getRepository(ConnectionCredentialEntity).findOne({
-        where: { connectionId, tenantId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!cred) {
-        throw new IntegrationDomainError(
-          IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
-          `Credentials record missing for connection ${connectionId}`,
-          500,
-        );
-      }
 
-      const adapter = this.providerRegistry.getAdapter(conn.provider);
-      const partnerSecret = decryptCredentialSecret(
-        cred.encryptedWebhookSecret,
-      );
-      const partnerId =
-        cred.partnerId ?? `${conn.provider.toLowerCase()}-partner`;
+    // Mode 1: Initiate OAuth redirect flow in a short transaction
+    if (!dto.authorizationCode) {
+      return this.dataSource.transaction(async (em) => {
+        await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+          tenantId,
+        ]);
+        const conn = await em.getRepository(ChannelConnectionEntity).findOne({
+          where: { id: connectionId, tenantId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!conn) {
+          throw new IntegrationDomainError(
+            IntegrationDomainErrorCode.CHANNEL_CONNECTION_NOT_FOUND,
+            `Channel connection ${connectionId} not found`,
+            404,
+          );
+        }
+        const cred = await em
+          .getRepository(ConnectionCredentialEntity)
+          .findOne({
+            where: { connectionId, tenantId },
+            lock: { mode: 'pessimistic_write' },
+          });
+        if (!cred) {
+          throw new IntegrationDomainError(
+            IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+            `Credentials record missing for connection ${connectionId}`,
+            500,
+          );
+        }
 
-      // Mode 1: Initiate OAuth redirect flow
-      if (!dto.authorizationCode) {
+        const adapter = this.providerRegistry.getAdapter(conn.provider);
+        const partnerSecret = decryptCredentialSecret(
+          cred.encryptedWebhookSecret,
+        );
+        const partnerId =
+          cred.partnerId ?? `${conn.provider.toLowerCase()}-partner`;
+
+        if (conn.provider === 'LAZADA') {
+          const lazadaConfig = readLazadaConfig();
+          const serverCallbackUrl = lazadaConfig.callbackUrl;
+          if (
+            dto.redirectUri &&
+            dto.redirectUri.trim().replace(/\/+$/, '') !== serverCallbackUrl
+          ) {
+            throw new IntegrationDomainError(
+              IntegrationDomainErrorCode.VALIDATION_ERROR,
+              `Lazada redirectUri cannot be overridden by client; must match server-configured LAZADA_CALLBACK_URL (${serverCallbackUrl})`,
+              400,
+              { configuredCallbackUrl: serverCallbackUrl },
+            );
+          }
+
+          const signedState = createOAuthStateToken({
+            tenantId,
+            connectionId: conn.id,
+            actorId,
+          });
+          conn.oauthStateNonce = signedState.stateHash;
+          conn.oauthRedirectUri = serverCallbackUrl;
+          conn.oauthInitiatedBy = actorId;
+          await em.save(ChannelConnectionEntity, conn);
+
+          const authUrl = adapter.buildAuthorizationUrl({
+            connectionId: conn.id,
+            externalShopId: conn.externalShopId,
+            redirectUri: serverCallbackUrl,
+            stateNonce: signedState.stateToken,
+            partnerId,
+            partnerSecret,
+          });
+          return {
+            mode: 'OAUTH_INITIATED' as const,
+            connectionId: conn.id,
+            provider: conn.provider,
+            ...authUrl,
+          };
+        }
+
         const stateNonce = `st_${conn.id.slice(0, 8)}_${randomBytes(12).toString('hex')}`;
         const redirectUri =
           dto.redirectUri ??
@@ -309,24 +402,69 @@ export class ConnectionsService {
           partnerSecret,
         });
         return {
-          mode: 'OAUTH_INITIATED',
+          mode: 'OAUTH_INITIATED' as const,
           connectionId: conn.id,
           provider: conn.provider,
           ...authUrl,
         };
-      }
+      });
+    }
 
-      // Mode 2: Complete OAuth callback
-      if (conn.oauthStateNonce && dto.stateNonce !== conn.oauthStateNonce) {
+    // Mode 2: Complete OAuth callback using 2 short transactions (never hold DB lock during provider HTTP call)
+    const claim = await this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      const conn = await em.getRepository(ChannelConnectionEntity).findOne({
+        where: { id: connectionId, tenantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!conn) {
+        throw new IntegrationDomainError(
+          IntegrationDomainErrorCode.CHANNEL_CONNECTION_NOT_FOUND,
+          `Channel connection ${connectionId} not found`,
+          404,
+        );
+      }
+      const cred = await em.getRepository(ConnectionCredentialEntity).findOne({
+        where: { connectionId, tenantId },
+      });
+      if (!cred) {
         throw new IntegrationDomainError(
           IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
-          'OAuth callback state nonce mismatch (CSRF protection rejected callback)',
-          401,
+          `Credentials record missing for connection ${connectionId}`,
+          500,
         );
+      }
+
+      if (conn.oauthStateNonce) {
+        if (conn.oauthStateNonce.startsWith('sha256:')) {
+          const verified = verifyOAuthStateToken({
+            stateToken: dto.stateNonce,
+          });
+          if (
+            verified.payload.tenantId !== tenantId ||
+            verified.payload.connectionId !== conn.id ||
+            verified.stateHash !== conn.oauthStateNonce
+          ) {
+            throw new IntegrationDomainError(
+              IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+              'OAuth callback state nonce mismatch (CSRF protection rejected callback)',
+              401,
+            );
+          }
+        } else if (dto.stateNonce !== conn.oauthStateNonce) {
+          throw new IntegrationDomainError(
+            IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+            'OAuth callback state nonce mismatch (CSRF protection rejected callback)',
+            401,
+          );
+        }
       }
 
       if (
         dto.externalShopId &&
+        !conn.externalShopId.startsWith('pending_') &&
         dto.externalShopId.trim() !== conn.externalShopId
       ) {
         throw new IntegrationDomainError(
@@ -337,75 +475,397 @@ export class ConnectionsService {
       }
 
       assertValidConnectionTransition(conn.status, 'CONNECTED');
-      const exchanged = await adapter.exchangeAuthorizationCode({
-        connectionId: conn.id,
-        code: dto.authorizationCode,
-        externalShopId: conn.externalShopId,
-        partnerId,
-        partnerSecret,
-      });
 
-      const now = new Date();
-      cred.encryptedAccessToken = encryptCredentialSecret(
-        exchanged.accessToken,
-      );
-      cred.encryptedRefreshToken = encryptCredentialSecret(
-        exchanged.refreshToken,
-      );
-      cred.accessTokenExpiresAt = exchanged.accessTokenExpiresAt;
-      cred.refreshTokenExpiresAt = exchanged.refreshTokenExpiresAt;
-      cred.scopes = exchanged.scopes.join(',');
-      cred.credentialVersion += 1;
-      cred.lastRefreshedAt = now;
-      await em.save(ConnectionCredentialEntity, cred);
-
-      conn.status = 'CONNECTED';
+      // Atomically consume oauthStateNonce in Transaction 1
       conn.oauthStateNonce = null;
-      conn.lastSyncAt = now;
-      conn.lastErrorCode = null;
-      conn.lastErrorMessage = null;
-      conn.consecutiveFailures = 0;
-      conn.version += 1;
       await em.save(ChannelConnectionEntity, conn);
 
-      await em.save(
-        IntegrationAuditLogEntity,
-        em.create(IntegrationAuditLogEntity, {
-          tenantId,
-          connectionId: conn.id,
-          actorId,
-          action: 'CONNECTION_AUTHORIZED',
-          targetType: 'CHANNEL_CONNECTION',
-          targetId: conn.id,
-          metadata: {
-            provider: conn.provider,
-            externalShopId: conn.externalShopId,
-            credentialVersion: cred.credentialVersion,
-          },
-        }),
-      );
-
-      await this.outbox.enqueue(em, INTEGRATION_CONNECTION_CONNECTED, {
-        tenantId,
-        aggregateId: conn.id,
-        actor: { id: actorId, type: 'account' },
-        payload: {
-          connectionId: conn.id,
-          provider: conn.provider,
-          externalShopId: conn.externalShopId,
-          shopName: conn.shopName,
-          branchId: conn.branchId,
-          warehouseId: conn.warehouseId,
-          status: conn.status,
-          occurredAt: now.toISOString(),
-        } satisfies IntegrationConnectionEventPayload,
-      });
-
       return {
-        mode: 'OAUTH_COMPLETED',
-        connection: this.toSanitizedView(conn, cred),
+        provider: conn.provider,
+        externalShopId: conn.externalShopId,
+        partnerId: cred.partnerId ?? `${conn.provider.toLowerCase()}-partner`,
+        partnerSecret: decryptCredentialSecret(cred.encryptedWebhookSecret),
       };
     });
+
+    const adapter = this.providerRegistry.getAdapter(claim.provider);
+    let exchanged: TokenExchangeResult;
+    try {
+      exchanged = await adapter.exchangeAuthorizationCode({
+        connectionId,
+        code: dto.authorizationCode,
+        externalShopId: claim.externalShopId,
+        partnerId: claim.partnerId,
+        partnerSecret: claim.partnerSecret,
+      });
+    } catch (err) {
+      await this.recordAuthorizationFailure(tenantId, connectionId, err);
+      throw err;
+    }
+
+    const updatedView = await this.finalizeAuthorizedConnection({
+      tenantId,
+      connectionId,
+      actorId,
+      exchanged,
+    });
+
+    return {
+      mode: 'OAUTH_COMPLETED' as const,
+      connection: updatedView,
+    };
+  }
+
+  /**
+   * Public Lazada OAuth callback handler (`GET /api/v1/integrations/lazada/callback`).
+   * Does not rely on Platform JWT; recovers `tenantId` and `connectionId` exclusively
+   * from the HMAC-SHA256 verified `state` token and uses 2 short PostgreSQL transactions
+   * around the external Lazada `/auth/token/create` API call.
+   */
+  async handleLazadaPublicCallback(
+    query: LazadaOAuthCallbackQueryDto,
+  ): Promise<LazadaPublicCallbackResult> {
+    if (query.error) {
+      const errorDesc = query.error_description
+        ? `${query.error}: ${query.error_description}`
+        : query.error;
+      if (query.state) {
+        try {
+          const verified = verifyOAuthStateToken({
+            stateToken: query.state,
+          });
+          await this.recordAuthorizationFailure(
+            verified.payload.tenantId,
+            verified.payload.connectionId,
+            new IntegrationDomainError(
+              IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+              `Lazada seller denied or failed authorization (${errorDesc})`,
+              400,
+            ),
+            true,
+          );
+        } catch {
+          // Ignore state verification error when reporting provider error
+        }
+      }
+      throw new IntegrationDomainError(
+        IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+        `Lazada OAuth callback returned provider error: ${errorDesc}`,
+        400,
+        { providerError: query.error },
+      );
+    }
+
+    // 1. Verify HMAC-SHA256 signed state token before touching DB
+    const { payload, stateHash } = verifyOAuthStateToken({
+      stateToken: query.state,
+    });
+
+    const code = query.code?.trim() ?? '';
+    if (!code) {
+      throw new IntegrationDomainError(
+        IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+        'Lazada OAuth callback is missing authorization code',
+        400,
+      );
+    }
+
+    // 2. Short Transaction 1: Lock connection, verify & atomically consume oauthStateNonce
+    const claim = await this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        payload.tenantId,
+      ]);
+      const conn = await em.getRepository(ChannelConnectionEntity).findOne({
+        where: { id: payload.connectionId, tenantId: payload.tenantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!conn) {
+        throw new IntegrationDomainError(
+          IntegrationDomainErrorCode.CHANNEL_CONNECTION_NOT_FOUND,
+          `Channel connection ${payload.connectionId} not found`,
+          404,
+        );
+      }
+      if (conn.provider !== 'LAZADA') {
+        throw new IntegrationDomainError(
+          IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+          `Connection ${conn.id} is not a LAZADA connection`,
+          400,
+        );
+      }
+      if (!conn.oauthStateNonce) {
+        throw new IntegrationDomainError(
+          IntegrationDomainErrorCode.OAUTH_STATE_REPLAYED,
+          'OAuth state token has already been used or no authorization is pending',
+          409,
+        );
+      }
+      if (conn.oauthStateNonce !== stateHash) {
+        throw new IntegrationDomainError(
+          IntegrationDomainErrorCode.OAUTH_STATE_INVALID,
+          'OAuth state token does not match the active authorization attempt for this connection',
+          401,
+        );
+      }
+
+      assertValidConnectionTransition(conn.status, 'CONNECTED');
+
+      const cred = await em.getRepository(ConnectionCredentialEntity).findOne({
+        where: { connectionId: conn.id, tenantId: payload.tenantId },
+      });
+      if (!cred) {
+        throw new IntegrationDomainError(
+          IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+          `Credentials record missing for connection ${conn.id}`,
+          500,
+        );
+      }
+
+      // Consume state nonce immediately so parallel/replay callbacks are rejected
+      conn.oauthStateNonce = null;
+      await em.save(ChannelConnectionEntity, conn);
+
+      return {
+        externalShopId: conn.externalShopId,
+        partnerId: cred.partnerId ?? 'lazada-partner',
+        partnerSecret: decryptCredentialSecret(cred.encryptedWebhookSecret),
+      };
+    });
+
+    // 3. Outside DB Transaction: Exchange authorization code with Lazada Open Platform
+    const adapter = this.providerRegistry.getAdapter('LAZADA');
+    let exchanged: TokenExchangeResult;
+    try {
+      exchanged = await adapter.exchangeAuthorizationCode({
+        connectionId: payload.connectionId,
+        code,
+        externalShopId: claim.externalShopId,
+        partnerId: claim.partnerId,
+        partnerSecret: claim.partnerSecret,
+      });
+    } catch (err) {
+      await this.recordAuthorizationFailure(
+        payload.tenantId,
+        payload.connectionId,
+        err,
+      );
+      throw err;
+    }
+
+    // 4. Short Transaction 2: Validate seller identity & market, bind shop ID, encrypt tokens, mark CONNECTED
+    const connectionView = await this.finalizeAuthorizedConnection({
+      tenantId: payload.tenantId,
+      connectionId: payload.connectionId,
+      actorId: payload.actorId,
+      exchanged,
+    });
+
+    const lazadaConfig = readLazadaConfig();
+    let redirectUrl: string | null = null;
+    if (lazadaConfig.frontendRedirectUrl) {
+      const target = new URL(lazadaConfig.frontendRedirectUrl);
+      target.searchParams.set('provider', 'lazada');
+      target.searchParams.set('status', 'connected');
+      target.searchParams.set('connectionId', connectionView.id);
+      target.searchParams.set('externalShopId', connectionView.externalShopId);
+      redirectUrl = target.toString();
+    }
+
+    return {
+      mode: 'OAUTH_COMPLETED',
+      provider: 'LAZADA',
+      status: 'CONNECTED',
+      tenantId: payload.tenantId,
+      connectionId: connectionView.id,
+      externalShopId: connectionView.externalShopId,
+      shopName: connectionView.shopName,
+      redirectUrl,
+      connection: connectionView,
+    };
+  }
+
+  private async finalizeAuthorizedConnection(params: {
+    tenantId: string;
+    connectionId: string;
+    actorId: string;
+    exchanged: TokenExchangeResult;
+  }): Promise<SanitizedChannelConnectionView> {
+    const { tenantId, connectionId, actorId, exchanged } = params;
+    try {
+      return await this.dataSource.transaction(async (em) => {
+        await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+          tenantId,
+        ]);
+        const conn = await em.getRepository(ChannelConnectionEntity).findOne({
+          where: { id: connectionId, tenantId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!conn) {
+          throw new IntegrationDomainError(
+            IntegrationDomainErrorCode.CHANNEL_CONNECTION_NOT_FOUND,
+            `Channel connection ${connectionId} not found`,
+            404,
+          );
+        }
+        const cred = await em
+          .getRepository(ConnectionCredentialEntity)
+          .findOne({
+            where: { connectionId, tenantId },
+            lock: { mode: 'pessimistic_write' },
+          });
+        if (!cred) {
+          throw new IntegrationDomainError(
+            IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+            `Credentials record missing for connection ${connectionId}`,
+            500,
+          );
+        }
+
+        if (conn.provider === 'LAZADA' && exchanged.country) {
+          const expectedRegion = readLazadaConfig().region.toUpperCase();
+          const actualCountry = exchanged.country.trim().toUpperCase();
+          if (actualCountry && actualCountry !== expectedRegion) {
+            throw new IntegrationDomainError(
+              IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+              `Lazada seller country (${actualCountry}) does not match configured region (${expectedRegion})`,
+              422,
+              { expectedRegion, actualCountry },
+            );
+          }
+        }
+
+        const wasPendingShop = conn.externalShopId.startsWith('pending_');
+        if (
+          !wasPendingShop &&
+          exchanged.externalShopId &&
+          exchanged.externalShopId !== conn.externalShopId
+        ) {
+          throw new IntegrationDomainError(
+            IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED,
+            `Authorized seller shop ID (${exchanged.externalShopId}) does not match connection externalShopId (${conn.externalShopId})`,
+            409,
+          );
+        }
+
+        assertValidConnectionTransition(conn.status, 'CONNECTED');
+
+        if (exchanged.externalShopId) {
+          conn.externalShopId = exchanged.externalShopId;
+        }
+        if (
+          (wasPendingShop || conn.shopName === 'Pending Lazada Seller') &&
+          exchanged.shopName
+        ) {
+          conn.shopName = exchanged.shopName;
+        }
+
+        const now = new Date();
+        cred.encryptedAccessToken = encryptCredentialSecret(
+          exchanged.accessToken,
+        );
+        cred.encryptedRefreshToken = encryptCredentialSecret(
+          exchanged.refreshToken,
+        );
+        cred.accessTokenExpiresAt = exchanged.accessTokenExpiresAt;
+        cred.refreshTokenExpiresAt = exchanged.refreshTokenExpiresAt;
+        cred.scopes = exchanged.scopes.join(',');
+        cred.credentialVersion += 1;
+        cred.lastRefreshedAt = now;
+        await em.save(ConnectionCredentialEntity, cred);
+
+        conn.status = 'CONNECTED';
+        conn.oauthStateNonce = null;
+        conn.lastSyncAt = now;
+        conn.lastErrorCode = null;
+        conn.lastErrorMessage = null;
+        conn.consecutiveFailures = 0;
+        conn.version += 1;
+        await em.save(ChannelConnectionEntity, conn);
+
+        await em.save(
+          IntegrationAuditLogEntity,
+          em.create(IntegrationAuditLogEntity, {
+            tenantId,
+            connectionId: conn.id,
+            actorId,
+            action: 'CONNECTION_AUTHORIZED',
+            targetType: 'CHANNEL_CONNECTION',
+            targetId: conn.id,
+            metadata: {
+              provider: conn.provider,
+              externalShopId: conn.externalShopId,
+              credentialVersion: cred.credentialVersion,
+              country: exchanged.country ?? null,
+              shortCode: exchanged.shortCode ?? null,
+              liveMode: exchanged.liveMode,
+            },
+          }),
+        );
+
+        await this.outbox.enqueue(em, INTEGRATION_CONNECTION_CONNECTED, {
+          tenantId,
+          aggregateId: conn.id,
+          actor: { id: actorId, type: 'account' },
+          payload: {
+            connectionId: conn.id,
+            provider: conn.provider,
+            externalShopId: conn.externalShopId,
+            shopName: conn.shopName,
+            branchId: conn.branchId,
+            warehouseId: conn.warehouseId,
+            status: conn.status,
+            occurredAt: now.toISOString(),
+          } satisfies IntegrationConnectionEventPayload,
+        });
+
+        return this.toSanitizedView(conn, cred);
+      });
+    } catch (err) {
+      if (
+        err instanceof QueryFailedError &&
+        String((err as any).code) === '23505'
+      ) {
+        throw new IntegrationDomainError(
+          IntegrationDomainErrorCode.CHANNEL_CONNECTION_CONFLICT,
+          `Shop ${exchanged.externalShopId} on LAZADA is already connected to another channel connection`,
+          409,
+        );
+      }
+      throw err;
+    }
+  }
+
+  private async recordAuthorizationFailure(
+    tenantId: string,
+    connectionId: string,
+    error: unknown,
+    clearStateNonce = false,
+  ): Promise<void> {
+    try {
+      await this.dataSource.transaction(async (em) => {
+        await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+          tenantId,
+        ]);
+        const conn = await em.getRepository(ChannelConnectionEntity).findOne({
+          where: { id: connectionId, tenantId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!conn) return;
+        conn.lastErrorCode =
+          error instanceof IntegrationDomainError
+            ? error.code
+            : IntegrationDomainErrorCode.CHANNEL_AUTHORIZATION_FAILED;
+        conn.lastErrorMessage =
+          error instanceof Error ? error.message.slice(0, 500) : String(error);
+        conn.consecutiveFailures += 1;
+        if (clearStateNonce) {
+          conn.oauthStateNonce = null;
+        }
+        await em.save(ChannelConnectionEntity, conn);
+      });
+    } catch {
+      // Never mask the original authorization error
+    }
   }
 
   /**

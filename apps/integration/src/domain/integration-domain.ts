@@ -6,7 +6,10 @@ import {
   randomBytes,
   timingSafeEqual,
 } from 'node:crypto';
-import { readCredentialMasterKey } from '../config/integration.config';
+import {
+  readCredentialMasterKey,
+  readLazadaOAuthStateSecret,
+} from '../config/integration.config';
 
 export type MarketplaceProvider = 'SHOPEE' | 'LAZADA';
 
@@ -108,6 +111,11 @@ export enum IntegrationDomainErrorCode {
   CHANNEL_TOKEN_EXPIRED = 'CHANNEL_TOKEN_EXPIRED',
   CHANNEL_REAUTH_REQUIRED = 'CHANNEL_REAUTH_REQUIRED',
   INVALID_CONNECTION_TRANSITION = 'INVALID_CONNECTION_TRANSITION',
+
+  OAUTH_STATE_MISSING = 'OAUTH_STATE_MISSING',
+  OAUTH_STATE_INVALID = 'OAUTH_STATE_INVALID',
+  OAUTH_STATE_EXPIRED = 'OAUTH_STATE_EXPIRED',
+  OAUTH_STATE_REPLAYED = 'OAUTH_STATE_REPLAYED',
 
   INVALID_WEBHOOK_SIGNATURE = 'INVALID_WEBHOOK_SIGNATURE',
   WEBHOOK_REPLAY_REJECTED = 'WEBHOOK_REPLAY_REJECTED',
@@ -391,13 +399,18 @@ export function computeLazadaApiSignature(params: {
 
 /**
  * Lazada Open Platform Webhook Signature:
- * hex(HMAC_SHA256(appSecret, rawBody))
+ * Official Lazada Push Mechanism signs `HMAC_SHA256(appSecret, appKey + rawBody)`
+ * (or `HMAC_SHA256(appSecret, rawBody)` when `appKey` is omitted).
  */
 export function computeLazadaWebhookSignature(
   rawBody: Buffer | string,
   appSecret: string,
+  appKey?: string,
 ): string {
   const mac = createHmac('sha256', appSecret);
+  if (appKey) {
+    mac.update(appKey, 'utf8');
+  }
   if (Buffer.isBuffer(rawBody)) {
     mac.update(rawBody);
   } else {
@@ -410,21 +423,45 @@ export function verifyLazadaWebhookSignature(params: {
   rawBody: Buffer | string;
   appSecret: string;
   providedSignature: string;
+  appKey?: string;
 }): boolean {
   if (!params.providedSignature || !params.appSecret) {
     return false;
   }
-  const expected = computeLazadaWebhookSignature(
-    params.rawBody,
-    params.appSecret,
-  ).toLowerCase();
   const provided = params.providedSignature.trim().toLowerCase();
-  const expectedBuf = Buffer.from(expected, 'utf8');
   const providedBuf = Buffer.from(provided, 'utf8');
-  if (expectedBuf.length !== providedBuf.length) {
-    return false;
+
+  const candidates = [
+    computeLazadaWebhookSignature(
+      params.rawBody,
+      params.appSecret,
+    ).toLowerCase(),
+  ];
+  const resolvedAppKey = (
+    params.appKey ??
+    process.env.LAZADA_APP_KEY ??
+    ''
+  ).trim();
+  if (resolvedAppKey) {
+    candidates.unshift(
+      computeLazadaWebhookSignature(
+        params.rawBody,
+        params.appSecret,
+        resolvedAppKey,
+      ).toLowerCase(),
+    );
   }
-  return timingSafeEqual(expectedBuf, providedBuf);
+
+  for (const expected of candidates) {
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    if (
+      expectedBuf.length === providedBuf.length &&
+      timingSafeEqual(expectedBuf, providedBuf)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function assertWebhookTimestampFreshness(
@@ -451,6 +488,165 @@ export function assertWebhookTimestampFreshness(
   }
 }
 
+export interface LazadaOAuthStatePayload {
+  v: 'v1';
+  tenantId: string;
+  connectionId: string;
+  actorId: string;
+  iatMs: number;
+  expMs: number;
+  nonce: string;
+}
+
+export const DEFAULT_LAZADA_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+export function hashOAuthStateToken(stateToken: string): string {
+  const digest = createHash('sha256')
+    .update(stateToken.trim(), 'utf8')
+    .digest('hex');
+  return `sha256:${digest}`;
+}
+
+export function createLazadaOAuthStateToken(params: {
+  tenantId: string;
+  connectionId: string;
+  actorId?: string | null;
+  nowMs?: number;
+  ttlMs?: number;
+  nonce?: string;
+  secret?: string;
+}): {
+  stateToken: string;
+  stateHash: string;
+  payload: LazadaOAuthStatePayload;
+} {
+  const signingSecret = params.secret || readLazadaOAuthStateSecret();
+  const iatMs = params.nowMs ?? Date.now();
+  const ttlMs = params.ttlMs ?? DEFAULT_LAZADA_OAUTH_STATE_TTL_MS;
+  const payload: LazadaOAuthStatePayload = {
+    v: 'v1',
+    tenantId: params.tenantId,
+    connectionId: params.connectionId,
+    actorId: params.actorId || 'system',
+    iatMs,
+    expMs: iatMs + ttlMs,
+    nonce: params.nonce?.trim() || randomBytes(16).toString('hex'),
+  };
+  const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString(
+    'base64url',
+  );
+  const signatureB64 = createHmac('sha256', signingSecret)
+    .update(payloadB64, 'utf8')
+    .digest('base64url');
+  const stateToken = `${payloadB64}.${signatureB64}`;
+  return {
+    stateToken,
+    stateHash: hashOAuthStateToken(stateToken),
+    payload,
+  };
+}
+
+export function verifyLazadaOAuthStateToken(params: {
+  stateToken?: string | null;
+  nowMs?: number;
+  secret?: string;
+}): {
+  payload: LazadaOAuthStatePayload;
+  stateHash: string;
+} {
+  const raw = params.stateToken?.trim() ?? '';
+  if (!raw) {
+    throw new IntegrationDomainError(
+      IntegrationDomainErrorCode.OAUTH_STATE_MISSING,
+      'OAuth state parameter is missing',
+      400,
+    );
+  }
+  const parts = raw.split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new IntegrationDomainError(
+      IntegrationDomainErrorCode.OAUTH_STATE_INVALID,
+      'OAuth state parameter is malformed or unsigned',
+      400,
+    );
+  }
+  const [payloadB64, providedSig] = parts;
+  const signingSecret = params.secret || readLazadaOAuthStateSecret();
+  const expectedSig = createHmac('sha256', signingSecret)
+    .update(payloadB64, 'utf8')
+    .digest('base64url');
+
+  const expectedBuf = Buffer.from(expectedSig, 'utf8');
+  const providedBuf = Buffer.from(providedSig, 'utf8');
+  if (
+    expectedBuf.length !== providedBuf.length ||
+    !timingSafeEqual(expectedBuf, providedBuf)
+  ) {
+    throw new IntegrationDomainError(
+      IntegrationDomainErrorCode.OAUTH_STATE_INVALID,
+      'OAuth state signature verification failed',
+      400,
+    );
+  }
+
+  let parsed: Partial<LazadaOAuthStatePayload>;
+  try {
+    parsed = JSON.parse(
+      Buffer.from(payloadB64, 'base64url').toString('utf8'),
+    ) as Partial<LazadaOAuthStatePayload>;
+  } catch {
+    throw new IntegrationDomainError(
+      IntegrationDomainErrorCode.OAUTH_STATE_INVALID,
+      'OAuth state payload could not be decoded',
+      400,
+    );
+  }
+
+  if (
+    parsed.v !== 'v1' ||
+    typeof parsed.tenantId !== 'string' ||
+    !parsed.tenantId ||
+    typeof parsed.connectionId !== 'string' ||
+    !parsed.connectionId ||
+    typeof parsed.iatMs !== 'number' ||
+    typeof parsed.expMs !== 'number' ||
+    typeof parsed.nonce !== 'string' ||
+    !parsed.nonce
+  ) {
+    throw new IntegrationDomainError(
+      IntegrationDomainErrorCode.OAUTH_STATE_INVALID,
+      'OAuth state payload is missing required claims',
+      400,
+    );
+  }
+
+  const nowMs = params.nowMs ?? Date.now();
+  if (nowMs > parsed.expMs) {
+    throw new IntegrationDomainError(
+      IntegrationDomainErrorCode.OAUTH_STATE_EXPIRED,
+      'OAuth state token has expired; please restart Lazada authorization',
+      400,
+      { expMs: parsed.expMs, nowMs },
+    );
+  }
+
+  return {
+    payload: {
+      v: 'v1',
+      tenantId: parsed.tenantId,
+      connectionId: parsed.connectionId,
+      actorId: typeof parsed.actorId === 'string' ? parsed.actorId : 'system',
+      iatMs: parsed.iatMs,
+      expMs: parsed.expMs,
+      nonce: parsed.nonce,
+    },
+    stateHash: hashOAuthStateToken(raw),
+  };
+}
+
+export const createOAuthStateToken = createLazadaOAuthStateToken;
+export const verifyOAuthStateToken = verifyLazadaOAuthStateToken;
+
 // ============================================================================
 // 4. ORDER STATUS NORMALIZATION & MONOTONIC OUT-OF-ORDER PROTECTION
 // ============================================================================
@@ -470,13 +666,29 @@ const SHOPEE_STATUS_MAP: Record<string, NormalizedExternalOrderStatus> = {
 const LAZADA_STATUS_MAP: Record<string, NormalizedExternalOrderStatus> = {
   unpaid: 'UNPAID',
   pending: 'READY_TO_SHIP',
+  confirmed: 'READY_TO_SHIP',
+  topack: 'READY_TO_SHIP',
+  to_pack: 'READY_TO_SHIP',
+  toship: 'READY_TO_SHIP',
+  to_ship: 'READY_TO_SHIP',
   packed: 'READY_TO_SHIP',
+  repacked: 'READY_TO_SHIP',
   ready_to_ship: 'READY_TO_SHIP',
+  ready_to_ship_pending: 'READY_TO_SHIP',
   shipped: 'SHIPPED',
+  shipping: 'SHIPPED',
   delivered: 'DELIVERED',
   canceled: 'CANCELLED',
   cancelled: 'CANCELLED',
+  failed: 'CANCELLED',
+  failed_delivery: 'CANCELLED',
+  lost_by_3pl: 'CANCELLED',
+  damaged_by_3pl: 'CANCELLED',
+  package_scrapped: 'CANCELLED',
   returned: 'RETURN_REQUESTED',
+  shipped_back: 'RETURN_REQUESTED',
+  shipped_back_success: 'RETURN_REQUESTED',
+  shipped_back_failed: 'RETURN_REQUESTED',
 };
 
 const STATUS_PROGRESSION_RANK: Record<NormalizedExternalOrderStatus, number> = {

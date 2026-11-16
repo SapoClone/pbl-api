@@ -5,6 +5,7 @@ import { ProviderRateLimiterService } from '../infrastructure/rate-limiting/prov
 import { SalesOrderClient } from '../infrastructure/sales-client/sales-order.client';
 import { BranchBlockersController } from '../internal/branch-blockers.controller';
 import { BranchBlockersService } from '../internal/branch-blockers.service';
+import { LazadaHttpClient } from '../providers/lazada/lazada-http.client';
 import { LazadaProviderAdapter } from '../providers/lazada/lazada.adapter';
 import { ProviderRegistryService } from '../providers/provider-registry.service';
 import { ShopeeProviderAdapter } from '../providers/shopee/shopee.adapter';
@@ -12,7 +13,10 @@ import { TenantStatusHandler } from '../tenant-status/tenant-status.handler';
 import { BranchScopeService } from './branch-scope/branch-scope.service';
 import { ConflictsController } from './conflicts/conflicts.controller';
 import { ConflictsService } from './conflicts/conflicts.service';
-import { ConnectionsController } from './connections/connections.controller';
+import {
+  ConnectionsController,
+  LazadaOAuthCallbackController,
+} from './connections/connections.controller';
 import { ConnectionsService } from './connections/connections.service';
 import { InventorySyncService } from './inventory-sync/inventory-sync.service';
 import { OrderSyncService } from './order-sync/order-sync.service';
@@ -32,6 +36,7 @@ import { WebhooksService } from './webhooks/webhooks.service';
   ],
   controllers: [
     ConnectionsController,
+    LazadaOAuthCallbackController,
     SkuMappingController,
     SyncJobsController,
     ConflictsController,
@@ -42,6 +47,7 @@ import { WebhooksService } from './webhooks/webhooks.service';
   providers: [
     BranchBlockersService,
     ProviderRateLimiterService,
+    LazadaHttpClient,
     ShopeeProviderAdapter,
     LazadaProviderAdapter,
     ProviderRegistryService,
@@ -60,6 +66,8 @@ import { WebhooksService } from './webhooks/webhooks.service';
   ],
   exports: [
     ProviderRateLimiterService,
+    LazadaHttpClient,
+    LazadaProviderAdapter,
     ProviderRegistryService,
     SalesOrderClient,
     ConnectionsService,

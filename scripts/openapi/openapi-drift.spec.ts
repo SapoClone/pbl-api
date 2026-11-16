@@ -153,7 +153,11 @@ describe('OpenAPI drift guard', () => {
   it('lists the bearer scheme on protected operations and on no public one', () => {
     const problems: string[] = [];
     for (const { method, path, op } of merged) {
-      const service = path.split('/')[1];
+      const pathFirstSegment = path.split('/')[1];
+      const service =
+        pathFirstSegment in meta.access
+          ? pathFirstSegment
+          : String(op.operationId).split('_')[0];
       const key = String(op.operationId)
         .slice(service.length + 1)
         .replace(/\[\d+\]$/, '')
