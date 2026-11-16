@@ -1011,7 +1011,7 @@ describe('Lazada Sandbox Order Synchronization Vertical Slice (Real PostgreSQL +
       );
       expect(initiated.authorizationUrl).toContain(
         encodeURIComponent(
-          'https://api.sai.makeasy.id.vn/api/v1/integrations/lazada/callback',
+          'https://api.sapo.makeasy.id.vn/api/v1/integrations/lazada/callback',
         ),
       );
       expect(initiated.authorizationUrl).toContain(

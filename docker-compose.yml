@@ -122,7 +122,7 @@ services:
       LAZADA_AUTH_URL: ${LAZADA_AUTH_URL:-https://auth.lazada.com/oauth/authorize}
       LAZADA_AUTH_API_BASE_URL: ${LAZADA_AUTH_API_BASE_URL:-https://auth.lazada.com/rest}
       LAZADA_AUTH_TOKEN_URL: ${LAZADA_AUTH_TOKEN_URL:-https://auth.lazada.com/rest}
-      LAZADA_CALLBACK_URL: ${LAZADA_CALLBACK_URL:-https://api.sai.makeasy.id.vn/api/v1/integrations/lazada/callback}
+      LAZADA_CALLBACK_URL: ${LAZADA_CALLBACK_URL:-https://api.sapo.makeasy.id.vn/api/v1/integrations/lazada/callback}
       LAZADA_OAUTH_STATE_SECRET: ${LAZADA_OAUTH_STATE_SECRET:-local-dev-lazada-oauth-state-secret-0123456789}
       LAZADA_FRONTEND_REDIRECT_URL: ${LAZADA_FRONTEND_REDIRECT_URL:-}
       LAZADA_HTTP_TIMEOUT_MS: ${LAZADA_HTTP_TIMEOUT_MS:-10000}

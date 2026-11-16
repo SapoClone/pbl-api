@@ -138,7 +138,7 @@ const mockConnectionsService = {
     shopName: 'Lazada Seller VN-LAZADA-01',
     redirectUrl:
       query.state === 'with_redirect'
-        ? `https://app.sai.makeasy.id.vn/settings/integrations?provider=lazada&status=connected&connectionId=${CONN_ID}`
+        ? `https://app.sapo.makeasy.id.vn/settings/integrations?provider=lazada&status=connected&connectionId=${CONN_ID}`
         : null,
     connection: {
       id: CONN_ID,
@@ -744,7 +744,7 @@ describe('M6 Integration HTTP Controllers, RBAC & Webhook Ingress E2E', () => {
         .expect(302);
 
       expect(redirectRes.headers.location).toContain(
-        `https://app.sai.makeasy.id.vn/settings/integrations?provider=lazada&status=connected&connectionId=${CONN_ID}`,
+        `https://app.sapo.makeasy.id.vn/settings/integrations?provider=lazada&status=connected&connectionId=${CONN_ID}`,
       );
       expect(redirectRes.headers.location).not.toContain('access_token');
     });
