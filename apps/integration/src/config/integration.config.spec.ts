@@ -82,7 +82,7 @@ describe('integration config (fail closed)', () => {
         LAZADA_APP_SECRET: 'app_secret_placeholder',
         LAZADA_OAUTH_STATE_SECRET: 'state_secret_at_least_16_chars_long',
         LAZADA_CALLBACK_URL:
-          'http://api.sai.makeasy.id.vn/api/v1/integrations/lazada/callback',
+          'http://api.sapo.makeasy.id.vn/api/v1/integrations/lazada/callback',
       }),
     ).toThrow(/LAZADA_CALLBACK_URL must use https/);
 
@@ -111,7 +111,7 @@ describe('integration config (fail closed)', () => {
       authApiBaseUrl: 'https://auth.lazada.com/rest',
       authTokenUrl: 'https://auth.lazada.com/rest',
       callbackUrl:
-        'https://api.sai.makeasy.id.vn/api/v1/integrations/lazada/callback',
+        'https://api.sapo.makeasy.id.vn/api/v1/integrations/lazada/callback',
       oauthStateSecret: null,
       frontendRedirectUrl: null,
       httpTimeoutMs: 10_000,

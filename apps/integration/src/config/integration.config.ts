@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 export const INTERNAL_TOKEN_HEADER = 'x-internal-token';
 
 export const DEFAULT_LAZADA_CALLBACK_URL =
-  'https://api.sai.makeasy.id.vn/api/v1/integrations/lazada/callback';
+  'https://api.sapo.makeasy.id.vn/api/v1/integrations/lazada/callback';
 
 export interface LazadaProviderConfig {
   liveEnabled: boolean;
