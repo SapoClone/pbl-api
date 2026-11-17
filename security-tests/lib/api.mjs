@@ -24,6 +24,7 @@ export function basesFor(gateway) {
     inventory: `${root}/inventory/api/v1`,
     sales: `${root}/sales/api/v1`,
     customer: `${root}/customer/api/v1`,
+    gatewayRoot: root,
     health: {
       platform: `${root}/platform/health`,
       catalog: `${root}/catalog/health`,
@@ -76,17 +77,22 @@ export async function waitForHealth(bases, attempts = 30) {
       targets.map(async ([name, url]) => {
         try {
           const r = await http('GET', url);
-          return { name, ok: r.status === 200, status: r.status };
+          return { name, url, ok: r.status === 200, status: r.status };
         } catch (error) {
-          return { name, ok: false, status: error.message };
+          return { name, url, ok: false, status: error.message };
         }
       }),
     );
     if (results.every((r) => r.ok)) return results;
     if (i === attempts) {
-      throw new Error(
-        `Stack chưa sẵn sàng: ${results.map((r) => `${r.name}=${r.status}`).join(', ')}`,
-      );
+      const detail = results
+        .map((r) => `${r.name} (${r.url}): ${r.status}`)
+        .join(', ');
+      const hint =
+        bases.mode === 'gateway'
+          ? `\nGợi ý: gateway ${bases.gatewayRoot} chưa sẵn sàng. Hãy bật Docker Desktop, chờ engine "running", rồi chạy "docker compose up -d --build" trong pbl-api. Nếu không dùng Docker, bỏ cờ "--gateway" để chạy direct (5 service cổng 3000-3004).`
+          : `\nGợi ý: bật PostgreSQL/Redis/ElasticMQ và 5 service (platform 3000, catalog 3001, inventory 3002, sales 3003, customer 3004), hoặc dùng Docker + "--gateway http://localhost:8080".`;
+      throw new Error(`Stack chưa sẵn sàng: ${detail}${hint}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }

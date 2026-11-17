@@ -145,6 +145,8 @@ npm test
 | Lệnh | Ý nghĩa |
 |---|---|
 | `npm test -- --skip-provision` | Dùng lại `results/security-environment.json` (token còn hạn); không tạo dữ liệu mới |
+| `npm run test:gateway` | Chạy qua KrakenD `http://localhost:8080` (tương đương `npm test -- --gateway ...`) |
+| `npm run test:direct` | Chạy direct mode, tên lệnh rõ ràng (tương đương `npm test`) |
 | `npm test -- --strict` | Trả mã lỗi 1 nếu còn bất kỳ test case Failed (dùng cho CI) |
 | `npm test -- --no-html` | Không sinh HTML, chỉ JSON + CLI |
 | `npm run build` | Chỉ sinh lại collection + environment example |
@@ -304,6 +306,7 @@ Chi tiết và phân tích: `BAO_CAO_KIEM_THU_LUONG1.md`.
 
 | Triệu chứng | Nguyên nhân thường gặp | Cách xử lý |
 |---|---|---|
+| `Stack chưa sẵn sàng: platform (...) fetch failed, catalog (...) fetch failed, ...` | Không có gì lắng nghe ở base URL; Docker Desktop/KrakenD chưa chạy | Kiểm tra `docker info`. Bật Docker Desktop, chờ **Running**, chạy `docker compose up -d --build`. Không có Docker thì bỏ `--gateway`, chạy `npm test` (direct) |
 | `409 Q001` khi tạo chi nhánh/thành viên | Gói Free còn 1/3 | Chạy lại `npm test` để provision nâng quota; hoặc chạy SQL mục 4 |
 | `401` toàn bộ sau khi chạy lại | Token trong environment cũ đã hết hạn/khác tenant | `npm test` (provision mới), đừng `--skip-provision` |
 | `404` mọi route qua gateway | KrakenD chưa nạp `krakend.json` hoặc thiếu route | `docker compose restart krakend`; kiểm tra route trong `krakend/krakend.json` |

@@ -1,9 +1,9 @@
-# Kết quả chạy bộ kiểm thử bảo mật — secmwc1avod307c
+# Kết quả chạy bộ kiểm thử bảo mật — secmwjfi30x1c1f
 
-- Thời điểm: 2026-11-11T11:27:16.239Z
+- Thời điểm: 2026-11-16T15:39:12.478Z
 - Chế độ: direct (http://127.0.0.1:3000/api/v1)
 - Tổng test case: **118** — Passed **116**, Failed **2** (known defects: 2), Unexpected: **0**
-- Assertion: 353 (failed: 3) — Requests: 118 — Thời gian: 7.30s
+- Assertion: 353 (failed: 3) — Requests: 118 — Thời gian: 9.46s
 
 | Nhóm | Tổng | Passed | Failed |
 | --- | ---: | ---: | ---: |

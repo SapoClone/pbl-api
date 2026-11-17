@@ -8,6 +8,8 @@
     "build": "node build-collection.mjs",
     "provision": "node provision.mjs",
     "test": "node run.mjs",
+    "test:direct": "node run.mjs",
+    "test:gateway": "node run.mjs --gateway http://localhost:8080",
     "test:strict": "node run.mjs --strict"
   },
   "dependencies": {
