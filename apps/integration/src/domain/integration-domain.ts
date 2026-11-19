@@ -437,11 +437,8 @@ export function verifyLazadaWebhookSignature(params: {
       params.appSecret,
     ).toLowerCase(),
   ];
-  const resolvedAppKey = (
-    params.appKey ??
-    process.env.LAZADA_APP_KEY ??
-    ''
-  ).trim();
+  // the caller passes the app key: the domain layer never reads the environment (Rule B of the fitness suite)
+  const resolvedAppKey = (params.appKey ?? '').trim();
   if (resolvedAppKey) {
     candidates.unshift(
       computeLazadaWebhookSignature(
