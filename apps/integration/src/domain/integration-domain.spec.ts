@@ -165,6 +165,30 @@ describe('M6 Integration Domain Model Unit Tests', () => {
         }),
       ).toBe(true);
 
+      // a signature made with the app key is accepted when the caller passes that key, and the domain does not look
+      // the key up in the environment itself
+      const keyed = computeLazadaWebhookSignature(rawBody, secret, 'app-key-1');
+      expect(
+        verifyLazadaWebhookSignature({
+          rawBody,
+          appSecret: secret,
+          providedSignature: keyed,
+          appKey: 'app-key-1',
+        }),
+      ).toBe(true);
+      process.env.LAZADA_APP_KEY = 'app-key-1';
+      try {
+        expect(
+          verifyLazadaWebhookSignature({
+            rawBody,
+            appSecret: secret,
+            providedSignature: keyed,
+          }),
+        ).toBe(false);
+      } finally {
+        delete process.env.LAZADA_APP_KEY;
+      }
+
       expect(() =>
         assertWebhookTimestampFreshness(1700000000, 1700000100 * 1000, 300),
       ).not.toThrow();

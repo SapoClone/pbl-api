@@ -342,6 +342,7 @@ export class LazadaProviderAdapter implements MarketplaceProviderAdapter {
       rawBody: params.rawBody,
       appSecret: params.webhookSecret,
       providedSignature: providedSignature ?? '',
+      appKey: process.env.LAZADA_APP_KEY,
     });
 
     if (!valid) {
