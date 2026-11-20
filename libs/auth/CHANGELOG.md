@@ -4,6 +4,24 @@ All notable changes to `@sapoclone/pbl-auth` are recorded here.
 The project follows [Semantic Versioning](https://semver.org): a removed or
 renamed export, or any other breaking change, bumps the major version.
 
+## [1.4.0] - 2026-11-20
+
+### Added
+
+- Support-session tokens (ADR-0025, ADR-0004 §3): the verifier reads the `act` (`{ sub, ssn }`) and `read_only` claims
+  into the new optional `AuthUser.readOnly` and `AuthUser.actor` fields (`act` alone or `read_only` alone is enough; a
+  malformed `act` is a 401).
+- `AuthGuard` refuses every request of a read-only token that is not GET, HEAD or OPTIONS with 403 and error code
+  `AUTH_READ_ONLY`, before the handler runs, and refuses `/internal/...` routes outright. A POST that only reads is
+  refused too. Such a token is neither a platform admin (403 on `@RequirePlatformAdmin` routes) nor a member.
+- `@AllowSupportToken()`: lets a read-only token reach one route (platform's "end support session"); the handler must
+  check `user.actor`.
+- `AUTH_READ_ONLY` constant; `createTestAuth().supportBearer(tid)` and a `support` option for `token()`.
+
+### Changed
+
+- Nothing breaks: tokens without `act`/`read_only` behave as before.
+
 ## [1.3.0] - 2026-11-03
 
 ### Added

@@ -4,7 +4,11 @@ import {
   NotFoundCodeException,
 } from '@/exceptions/coded.exception';
 import { ValidationException } from '@/exceptions/validation.exception';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { GlobalExceptionFilter } from './global-exception.filter';
 
 describe('GlobalExceptionFilter (errors with a code)', () => {
@@ -54,6 +58,18 @@ describe('GlobalExceptionFilter (errors with a code)', () => {
 
     expect(status).toBe(400);
     expect(body).toMatchObject({ errorCode: 'R001' });
+  });
+
+  it('keeps the AUTH_READ_ONLY code the @pbl/auth guard sends for a support token', () => {
+    const { status, body } = run(
+      new ForbiddenException({ statusCode: 403, errorCode: 'AUTH_READ_ONLY' }),
+    );
+
+    expect(status).toBe(403);
+    expect(body).toMatchObject({
+      errorCode: 'AUTH_READ_ONLY',
+      message: 'translated:support_session.error.read_only',
+    });
   });
 
   it('leaves plain 404 and 409 exceptions as they were', () => {

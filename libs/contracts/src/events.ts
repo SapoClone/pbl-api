@@ -52,6 +52,39 @@ export const PLATFORM_SUBSCRIPTION_CHANGED = {
   type: 'platform.subscription.changed',
   version: 1,
 } as const satisfies EventDefinition;
+export const PLATFORM_SUPPORT_SESSION_STARTED = {
+  type: 'platform.support_session.started',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_SUPPORT_SESSION_ENDED = {
+  type: 'platform.support_session.ended',
+  version: 1,
+} as const satisfies EventDefinition;
+
+/** `platform.support_session.started` (tenant-scoped: `tenantId` of the envelope is the store) */
+export interface SupportSessionStartedPayload {
+  sessionId: string;
+  code: string;
+  tenantId: string;
+  tenantName: string;
+  adminId: string;
+  adminName: string;
+  reason: string;
+  /** ISO 8601 */
+  expiresAt: string;
+}
+
+/** `platform.support_session.ended`; `endedBy` is `expiry` when the job closed it */
+export interface SupportSessionEndedPayload {
+  sessionId: string;
+  code: string;
+  tenantId: string;
+  adminId: string;
+  adminName: string;
+  endedBy: 'admin' | 'expiry';
+  /** ISO 8601; for `expiry`, the session's `expiresAt` */
+  endedAt: string;
+}
 
 /** The actor of an admin write; `platform_admin` for the admin area, `account` for a store owner, `system` for a job */
 export interface PlatformActor {

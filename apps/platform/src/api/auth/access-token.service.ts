@@ -111,6 +111,43 @@ export class AccessTokenService implements KeyResolver {
     );
   }
 
+  /**
+   * The read-only token of a support session (ADR-0025): `sub` and `act.sub` are the platform admin, `sid` and
+   * `act.ssn` the session, `tid` the store, `perms` only `<module>.view` codes (explicit, never `*`), no roles, every
+   * branch, and it expires with the session. There is no refresh token for it.
+   */
+  async signSupport(data: {
+    adminId: string;
+    sessionId: string;
+    tenantId: string;
+    permissions: string[];
+    expiresAt: Date;
+  }): Promise<string> {
+    const seconds = Math.floor((data.expiresAt.getTime() - Date.now()) / 1000);
+    if (seconds <= 0) throw new Error('The support session has expired');
+    return this.jwtService.signAsync(
+      {
+        sub: data.adminId,
+        sid: data.sessionId,
+        sub_type: 'platform_admin' satisfies AccessTokenSubjectType,
+        tid: data.tenantId,
+        roles: [],
+        perms: data.permissions,
+        branches: [WILDCARD_PERMISSION],
+        act: { sub: data.adminId, ssn: data.sessionId },
+        read_only: true,
+      },
+      {
+        privateKey: this.privateKeyPem,
+        algorithm: ALGORITHM,
+        keyid: this.keyId,
+        issuer: this.issuer,
+        audience: this.audience,
+        expiresIn: seconds,
+      },
+    );
+  }
+
   async getPublicKey(kid: string): Promise<string> {
     if (kid !== this.keyId) {
       throw new Error(`Unknown key id "${kid}"`);
