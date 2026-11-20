@@ -31,6 +31,9 @@ export interface AdminAuditEntry {
   data?: Record<string, unknown>;
 }
 
+/** Alias used by the announcements branch */
+export type AuditEntry = AdminAuditEntry;
+
 const clip = (value: string | null | undefined, max: number) =>
   value === undefined || value === null ? null : value.slice(0, max);
 

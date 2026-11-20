@@ -52,6 +52,39 @@ export const PLATFORM_SUBSCRIPTION_CHANGED = {
   type: 'platform.subscription.changed',
   version: 1,
 } as const satisfies EventDefinition;
+export const PLATFORM_SUPPORT_SESSION_STARTED = {
+  type: 'platform.support_session.started',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_SUPPORT_SESSION_ENDED = {
+  type: 'platform.support_session.ended',
+  version: 1,
+} as const satisfies EventDefinition;
+
+/** `platform.support_session.started` (tenant-scoped: `tenantId` of the envelope is the store) */
+export interface SupportSessionStartedPayload {
+  sessionId: string;
+  code: string;
+  tenantId: string;
+  tenantName: string;
+  adminId: string;
+  adminName: string;
+  reason: string;
+  /** ISO 8601 */
+  expiresAt: string;
+}
+
+/** `platform.support_session.ended`; `endedBy` is `expiry` when the job closed it */
+export interface SupportSessionEndedPayload {
+  sessionId: string;
+  code: string;
+  tenantId: string;
+  adminId: string;
+  adminName: string;
+  endedBy: 'admin' | 'expiry';
+  /** ISO 8601; for `expiry`, the session's `expiresAt` */
+  endedAt: string;
+}
 
 export const PLATFORM_ADMIN_CREATED = {
   type: 'platform.admin.created',
@@ -69,16 +102,6 @@ export const PLATFORM_ACCOUNT_SESSIONS_REVOKED = {
   type: 'platform.account.sessions_revoked',
   version: 1,
 } as const satisfies EventDefinition;
-/** Tenant-scoped (`tenantId` = the store the session looks at) */
-export const PLATFORM_SUPPORT_SESSION_STARTED = {
-  type: 'platform.support_session.started',
-  version: 1,
-} as const satisfies EventDefinition;
-export const PLATFORM_SUPPORT_SESSION_ENDED = {
-  type: 'platform.support_session.ended',
-  version: 1,
-} as const satisfies EventDefinition;
-
 /**
  * The actor of an admin write; `platform_admin` for the admin area, `account` for a store owner, `system` for a job.
  * `name` and `role` are the admin's display name and role at the time (audit rows keep them).
@@ -131,31 +154,6 @@ export interface AccountSessionsRevokedPayload {
   actor: PlatformAdminActor;
   target: { type: 'account'; id: string; name: string; email: string };
   revokedCount: number;
-}
-
-/** `platform.support_session.started` (tenant-scoped: `tenantId` = the store) */
-export interface SupportSessionStartedPayload {
-  sessionId: string;
-  code: string;
-  tenantId: string;
-  tenantName: string;
-  adminId: string;
-  adminName: string;
-  reason: string;
-  /** ISO 8601 */
-  expiresAt: string;
-}
-
-/** `platform.support_session.ended` (tenant-scoped) */
-export interface SupportSessionEndedPayload {
-  sessionId: string;
-  code: string;
-  tenantId: string;
-  adminId: string;
-  adminName: string;
-  endedBy: 'admin' | 'expiry';
-  /** ISO 8601 */
-  endedAt: string;
 }
 
 export interface TenantEventPayload {
@@ -1182,8 +1180,8 @@ export interface IntegrationConnectionEventPayload {
   status: string;
   reason?: string | null;
   occurredAt: string;
-  /** `integration.connection.disconnected` by an admin: who did it (the audit row's actor) */
-  actor?: { type: string; id: string; name: string };
+  /** Who did it when a platform admin disconnected the connection (absent for a store member's own action) */
+  actor?: { type: string; id: string; name: string | null };
 }
 
 export interface IntegrationSkuMappingEventPayload {
