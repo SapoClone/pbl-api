@@ -8,6 +8,8 @@ import {
 } from '@pbl/common';
 import { AddressInfo } from 'net';
 import request from 'supertest';
+import { AdminAuditQueryService } from './audit/admin-audit-query.service';
+import { AdminAuditController } from './audit/admin-audit.controller';
 import { AuditQueryService } from './audit/audit-query.service';
 import { InsightExportService } from './modules/export/insight-export.service';
 import { InsightAnalyticsController } from './modules/insight-analytics.controller';
@@ -29,6 +31,11 @@ const BRANCH_2 = '2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b';
 
 const audit = {
   auditLogs: jest.fn(async () => ({ data: [], pagination: {} })),
+};
+
+const adminAudit = {
+  list: jest.fn(async () => ({ data: [], pagination: {} })),
+  actions: jest.fn(() => ({ data: ['tenant.updated'] })),
 };
 
 const reports = {
@@ -132,9 +139,11 @@ const reconciliationStub = {
     NotificationsController,
     InsightAnalyticsController,
     InsightInternalController,
+    AdminAuditController,
   ],
   providers: [
     { provide: AuditQueryService, useValue: audit },
+    { provide: AdminAuditQueryService, useValue: adminAudit },
     { provide: ScreenReportsService, useValue: reports },
     { provide: ScreenExportService, useValue: exporter },
     { provide: NotificationsService, useValue: notifications },
@@ -598,6 +607,83 @@ describe('Insight service bootstrap & M7 HTTP/RBAC/Branch-Scope E2E', () => {
         .set('Authorization', as(['sales_staff']))
         .expect(204);
       expect(devices.remove).toHaveBeenCalledWith(expect.any(String), 'fcm-1');
+    });
+  });
+
+  describe('admin audit log (platform admin only)', () => {
+    it('serves both admin roles, passing the admin and the query to the service', async () => {
+      for (const role of ['super_admin', 'admin'] as const) {
+        await request(url())
+          .get(
+            '/api/v1/admin/audit-logs?scope=platform&result=failed&from=2026-11-01&to=2026-11-20&page=2&limit=5',
+          )
+          .set('Authorization', auth.adminBearer(role))
+          .expect(200);
+      }
+      expect(adminAudit.list).toHaveBeenCalledWith(
+        expect.objectContaining({ subjectType: 'platform_admin' }),
+        expect.objectContaining({
+          scope: 'platform',
+          result: 'failed',
+          from: '2026-11-01',
+          to: '2026-11-20',
+          page: 2,
+          limit: 5,
+        }),
+      );
+      const res = await request(url())
+        .get('/api/v1/admin/audit-logs/actions')
+        .set('Authorization', auth.adminBearer('admin'))
+        .expect(200);
+      expect(res.body).toEqual({ data: ['tenant.updated'] });
+    });
+
+    it('refuses a store token (403), even an owner, and no token (401)', async () => {
+      for (const path of [
+        '/api/v1/admin/audit-logs',
+        '/api/v1/admin/audit-logs/actions',
+      ]) {
+        await request(url())
+          .get(path)
+          .set('Authorization', as(['owner']))
+          .expect(403);
+        await request(url())
+          .get(path)
+          .set('Authorization', withPerms(['reports.view']))
+          .expect(403);
+        await request(url()).get(path).expect(401);
+      }
+      expect(adminAudit.list).not.toHaveBeenCalled();
+    });
+
+    it('refuses an admin token on the store route (403) and has no write route', async () => {
+      await request(url())
+        .get('/api/v1/audit-logs')
+        .set('Authorization', auth.adminBearer('super_admin'))
+        .expect(403);
+      for (const method of ['post', 'patch', 'put', 'delete'] as const) {
+        await request(url())
+          [method]('/api/v1/admin/audit-logs')
+          .set('Authorization', auth.adminBearer('super_admin'))
+          .expect(404);
+      }
+    });
+
+    it('validates the filters (422)', async () => {
+      for (const query of [
+        'scope=everything',
+        'result=maybe',
+        'tenantId=nope',
+        'actorId=nope',
+        'from=yesterday',
+        'limit=101',
+        'order=SIDEWAYS',
+      ]) {
+        await request(url())
+          .get(`/api/v1/admin/audit-logs?${query}`)
+          .set('Authorization', auth.adminBearer('admin'))
+          .expect(422);
+      }
     });
   });
 });

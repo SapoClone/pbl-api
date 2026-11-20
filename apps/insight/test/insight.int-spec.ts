@@ -19,6 +19,7 @@ import { DataSource } from 'typeorm';
 import { uniqueSchema, useDatabase } from '../../../libs/events/test/it-env';
 import { AuditLogEntity } from '../src/audit/audit-log.entity';
 import { AuditQueryService } from '../src/audit/audit-query.service';
+import { AuditWriter } from '../src/audit/audit-writer.service';
 import { AuditHandler } from '../src/audit/audit.handler';
 import { resolveScope } from '../src/common/branch-scope';
 import { InsightEventsConsumer } from '../src/consumers/insight-events.consumer';
@@ -108,7 +109,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
   let rebuildService: InsightRebuildService;
   let reconciliationService: InsightReconciliationService;
   let exportService: InsightExportService;
-  const auditHandler = new AuditHandler();
+  let auditHandler: AuditHandler;
 
   const as = <T>(tenantId: string, work: () => Promise<T>) =>
     RequestContext.run({ tenantId, requestId: 'it' }, work);
@@ -145,6 +146,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
     );
 
     const outbox = new EventOutbox();
+    auditHandler = new AuditHandler(new AuditWriter(dataSource));
     audit = new AuditQueryService(
       TenantScopedRepository.forEntity(dataSource, AuditLogEntity),
     );
