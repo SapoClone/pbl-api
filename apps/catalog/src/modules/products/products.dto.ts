@@ -61,6 +61,27 @@ export class VariantAttributeInputDto {
   attributeValueId!: string;
 }
 
+export class ComboItemInputDto {
+  @ApiProperty({ format: 'uuid', description: 'Child sellable variant UUID' })
+  @IsUUID()
+  childVariantId!: string;
+
+  @ApiProperty({ example: 1, minimum: 1, maximum: 1000 })
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  quantity!: number;
+}
+
+export class UpsertComboItemsReqDto {
+  @ApiProperty({ type: [ComboItemInputDto], maxItems: 50 })
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => ComboItemInputDto)
+  items!: ComboItemInputDto[];
+}
+
 export class CreateProductReqDto {
   @ApiProperty({ example: 'Áo thun cotton nam', maxLength: 200 })
   @IsString()
@@ -92,6 +113,19 @@ export class CreateProductReqDto {
   @IsString()
   @MaxLength(40)
   baseUnit?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isCombo?: boolean;
+
+  @ApiPropertyOptional({ type: [ComboItemInputDto], maxItems: 50 })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => ComboItemInputDto)
+  comboItems?: ComboItemInputDto[];
 
   @ApiPropertyOptional({
     enum: ['DRAFT', 'ACTIVE', 'INACTIVE'],
@@ -551,6 +585,20 @@ export interface UnitConversionRes {
   updatedAt: string;
 }
 
+export interface ComboItemRes {
+  id: string;
+  comboProductId: string;
+  childVariantId: string;
+  childProductId: string;
+  skuCode: string;
+  variantName: string;
+  basePrice: number;
+  imageUrl: string | null;
+  quantity: number;
+  lineTotal: number;
+  sortOrder: number;
+}
+
 export interface ProductRes {
   id: string;
   categoryId: string | null;
@@ -564,6 +612,7 @@ export interface ProductRes {
   version: number;
   variants?: VariantRes[];
   unitConversions?: UnitConversionRes[];
+  comboItems?: ComboItemRes[];
   createdAt: string;
   updatedAt: string;
 }

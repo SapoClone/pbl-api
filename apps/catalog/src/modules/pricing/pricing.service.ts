@@ -74,6 +74,15 @@ export class PricingService {
     };
   }
 
+  private normalizeChannelTypes(channels?: string[]): string[] {
+    if (!channels) return [];
+    return [
+      ...new Set(
+        channels.map((c) => c.trim().toUpperCase()).filter((c) => c.length > 0),
+      ),
+    ];
+  }
+
   private toPriceListRes(
     entity: PriceListEntity,
     branchIds: string[],
@@ -89,6 +98,7 @@ export class PricingService {
       endDate: entity.endDate,
       version: entity.version,
       branchIds,
+      channelTypes: entity.channelTypes ?? [],
       ...(items ? { items } : {}),
       createdAt: entity.createdAt.toISOString(),
       updatedAt: entity.updatedAt.toISOString(),
@@ -271,6 +281,7 @@ export class PricingService {
             normalizedName: normalized,
             currency: (dto.currency ?? 'VND').trim().toUpperCase(),
             isDefault: dto.isDefault ?? false,
+            channelTypes: this.normalizeChannelTypes(dto.channelTypes),
             status: dto.status ?? 'ACTIVE',
             startDate,
             endDate,
@@ -436,6 +447,9 @@ export class PricingService {
           }
           if (dto.endDate !== undefined) {
             list.endDate = dto.endDate;
+          }
+          if (dto.channelTypes !== undefined) {
+            list.channelTypes = this.normalizeChannelTypes(dto.channelTypes);
           }
           this.validateDateWindow(list.startDate, list.endDate);
 

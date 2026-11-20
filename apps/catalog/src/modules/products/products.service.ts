@@ -40,6 +40,7 @@ import {
   AttributeValueEntity,
   BrandEntity,
   CategoryEntity,
+  ComboItemEntity,
   ProductEntity,
   ProductImageMeta,
   ProductVariantEntity,
@@ -56,6 +57,8 @@ import {
   enableAttributesForNewProduct,
 } from './product-attributes';
 import {
+  ComboItemInputDto,
+  ComboItemRes,
   CreateProductReqDto,
   CreateUnitConversionReqDto,
   CreateVariantReqDto,
@@ -70,6 +73,7 @@ import {
   UpdateProductStatusReqDto,
   UpdateVariantReqDto,
   UpdateVariantStatusReqDto,
+  UpsertComboItemsReqDto,
   VariantAttributeInputDto,
   VariantAttributeRes,
   VariantListRes,
@@ -147,6 +151,7 @@ export class ProductsService {
     entity: ProductEntity,
     variants?: VariantRes[],
     unitConversions?: UnitConversionRes[],
+    comboItems?: ComboItemRes[],
   ): ProductRes {
     return {
       id: entity.id,
@@ -161,6 +166,7 @@ export class ProductsService {
       version: entity.version,
       ...(variants !== undefined ? { variants } : {}),
       ...(unitConversions !== undefined ? { unitConversions } : {}),
+      ...(comboItems !== undefined ? { comboItems } : {}),
       createdAt: entity.createdAt.toISOString(),
       updatedAt: entity.updatedAt.toISOString(),
     };
@@ -642,6 +648,7 @@ export class ProductsService {
           UnitConversionEntity,
         );
 
+        const isCombo = Boolean(dto.isCombo || dto.comboItems?.length);
         const product = await scopedProducts.save({
           name: dto.name.trim(),
           normalizedName,
@@ -649,7 +656,7 @@ export class ProductsService {
           categoryId: dto.categoryId ?? null,
           brandId: dto.brandId ?? null,
           baseUnit,
-          isCombo: false,
+          isCombo,
           status: dto.status ?? 'ACTIVE',
           images: dto.imageIds?.length
             ? await this.resolveImageIds(em, dto.imageIds)
@@ -720,11 +727,20 @@ export class ProductsService {
           createdVariants.push(this.toVariantRes(variant, []));
         }
 
+        const savedCombos = dto.comboItems?.length
+          ? await this.replaceComboItemsTx(em, product, dto.comboItems)
+          : isCombo
+            ? []
+            : undefined;
+
         await this.quota.announceUsage(em);
 
-        return this.toProductRes(product, createdVariants, [
-          this.toUnitRes(baseUnitConv),
-        ]);
+        return this.toProductRes(
+          product,
+          createdVariants,
+          [this.toUnitRes(baseUnitConv)],
+          savedCombos,
+        );
       });
     } catch (error) {
       toCatalogHttpException(error);
@@ -904,7 +920,7 @@ export class ProductsService {
           );
         }
 
-        const [variants, units] = await Promise.all([
+        const [variants, units, comboItems] = await Promise.all([
           TenantScopedRepository.forEntity(em, ProductVariantEntity).find({
             where: { productId: id, deletedAt: IsNull() },
             order: { isDefault: 'DESC', skuCode: 'ASC' },
@@ -913,6 +929,9 @@ export class ProductsService {
             where: { productId: id },
             order: { isBase: 'DESC', unitName: 'ASC' },
           }),
+          product.isCombo
+            ? this.loadComboItemsRes(em, id)
+            : Promise.resolve(undefined),
         ]);
 
         const attrsMap = await this.loadVariantAttributesMap(
@@ -924,6 +943,7 @@ export class ProductsService {
           product,
           variants.map((v) => this.toVariantRes(v, attrsMap.get(v.id) ?? [])),
           units.map((u) => this.toUnitRes(u)),
+          comboItems,
         );
       });
     } catch (error) {
@@ -1725,6 +1745,169 @@ export class ProductsService {
           order: { isBase: 'DESC', unitName: 'ASC' },
         });
         return rows.map((r) => this.toUnitRes(r));
+      });
+    } catch (error) {
+      toCatalogHttpException(error);
+    }
+  }
+
+  private async loadComboItemsRes(
+    em: EntityManager,
+    comboProductId: string,
+  ): Promise<ComboItemRes[]> {
+    const comboRepo = TenantScopedRepository.forEntity(em, ComboItemEntity);
+    const rows = await comboRepo.find({
+      where: { comboProductId },
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
+    });
+    if (rows.length === 0) return [];
+
+    const variantIds = [...new Set(rows.map((r) => r.childVariantId))];
+    const variants = await TenantScopedRepository.forEntity(
+      em,
+      ProductVariantEntity,
+    ).find({
+      where: { id: In(variantIds), deletedAt: IsNull() },
+    });
+    const variantById = new Map(variants.map((v) => [v.id, v]));
+
+    return rows
+      .map((row) => {
+        const variant = variantById.get(row.childVariantId);
+        if (!variant) return null;
+        const unitPrice = parseAndFormatMoney(variant.basePrice ?? 0);
+        return {
+          id: row.id,
+          comboProductId: row.comboProductId,
+          childVariantId: row.childVariantId,
+          childProductId: variant.productId,
+          skuCode: variant.skuCode,
+          variantName: variant.name,
+          basePrice: unitPrice,
+          imageUrl: variant.imageUrl ?? null,
+          quantity: row.quantity,
+          lineTotal: unitPrice * row.quantity,
+          sortOrder: row.sortOrder,
+        } satisfies ComboItemRes;
+      })
+      .filter((item): item is ComboItemRes => item !== null);
+  }
+
+  private async replaceComboItemsTx(
+    em: EntityManager,
+    comboProduct: ProductEntity,
+    items: ComboItemInputDto[],
+  ): Promise<ComboItemRes[]> {
+    const seen = new Set<string>();
+    for (const item of items) {
+      if (seen.has(item.childVariantId)) {
+        throw new CatalogDomainError(
+          CatalogErrorCode.INVALID_PRODUCT_LIFECYCLE,
+          `Duplicate childVariantId ${item.childVariantId} in combo items`,
+          'BAD_REQUEST',
+        );
+      }
+      seen.add(item.childVariantId);
+    }
+
+    if (items.length > 0) {
+      const variants = await TenantScopedRepository.forEntity(
+        em,
+        ProductVariantEntity,
+      ).find({
+        where: {
+          id: In(items.map((i) => i.childVariantId)),
+          deletedAt: IsNull(),
+        },
+      });
+      const byId = new Map(variants.map((v) => [v.id, v]));
+      for (const item of items) {
+        const v = byId.get(item.childVariantId);
+        if (!v) {
+          throw new CatalogDomainError(
+            CatalogErrorCode.VARIANT_NOT_FOUND,
+            `Child variant ${item.childVariantId} not found`,
+            'NOT_FOUND',
+          );
+        }
+        if (v.productId === comboProduct.id) {
+          throw new CatalogDomainError(
+            CatalogErrorCode.INVALID_PRODUCT_LIFECYCLE,
+            'A combo product cannot reference its own variant as a child component',
+            'BAD_REQUEST',
+          );
+        }
+      }
+    }
+
+    const comboRepo = TenantScopedRepository.forEntity(em, ComboItemEntity);
+    await comboRepo.delete({ comboProductId: comboProduct.id });
+
+    if (items.length > 0) {
+      for (let i = 0; i < items.length; i += 1) {
+        await comboRepo.save({
+          comboProductId: comboProduct.id,
+          childVariantId: items[i].childVariantId,
+          quantity: items[i].quantity,
+          sortOrder: i,
+        });
+      }
+    }
+
+    if (!comboProduct.isCombo && items.length > 0) {
+      comboProduct.isCombo = true;
+      comboProduct.version += 1;
+      await TenantScopedRepository.forEntity(em, ProductEntity).save(
+        comboProduct,
+      );
+    }
+
+    return this.loadComboItemsRes(em, comboProduct.id);
+  }
+
+  async listComboItems(productId: string): Promise<ComboItemRes[]> {
+    try {
+      return await runInTenantTransaction(this.dataSource, async (em) => {
+        const product = await TenantScopedRepository.forEntity(
+          em,
+          ProductEntity,
+        ).findOne({
+          where: { id: productId, deletedAt: IsNull() },
+        });
+        if (!product) {
+          throw new CatalogDomainError(
+            CatalogErrorCode.PRODUCT_NOT_FOUND,
+            'Product not found',
+            'NOT_FOUND',
+          );
+        }
+        return this.loadComboItemsRes(em, productId);
+      });
+    } catch (error) {
+      toCatalogHttpException(error);
+    }
+  }
+
+  async upsertComboItems(
+    productId: string,
+    dto: UpsertComboItemsReqDto,
+  ): Promise<ComboItemRes[]> {
+    try {
+      return await runInTenantTransaction(this.dataSource, async (em) => {
+        const product = await TenantScopedRepository.forEntity(
+          em,
+          ProductEntity,
+        ).findOne({
+          where: { id: productId, deletedAt: IsNull() },
+        });
+        if (!product) {
+          throw new CatalogDomainError(
+            CatalogErrorCode.PRODUCT_NOT_FOUND,
+            'Product not found',
+            'NOT_FOUND',
+          );
+        }
+        return this.replaceComboItemsTx(em, product, dto.items);
       });
     } catch (error) {
       toCatalogHttpException(error);

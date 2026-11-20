@@ -346,6 +346,14 @@ export class PriceListEntity {
   @Column({ name: 'is_default', type: 'boolean', default: false })
   isDefault!: boolean;
 
+  @Column({
+    name: 'channel_types',
+    type: 'text',
+    array: true,
+    default: () => "'{}'::text[]",
+  })
+  channelTypes!: string[];
+
   @Column({ type: 'varchar', length: 16, default: 'ACTIVE' })
   status!: PriceListStatus;
 
@@ -553,6 +561,33 @@ export class TenantPlanQuotaEntity {
   sourceChangedAt!: Date;
 }
 
+@Entity('combo_items')
+export class ComboItemEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ name: 'combo_product_id', type: 'uuid' })
+  comboProductId!: string;
+
+  @Column({ name: 'child_variant_id', type: 'uuid' })
+  childVariantId!: string;
+
+  @Column({ type: 'integer', default: 1 })
+  quantity!: number;
+
+  @Column({ name: 'sort_order', type: 'integer', default: 0 })
+  sortOrder!: number;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt!: Date;
+}
+
 export const CATALOG_ENTITIES = [
   CategoryEntity,
   BrandEntity,
@@ -563,6 +598,7 @@ export const CATALOG_ENTITIES = [
   VariantAttributeValueEntity,
   ProductAttributeEntity,
   UnitConversionEntity,
+  ComboItemEntity,
   PriceListEntity,
   PriceListItemEntity,
   PriceListBranchEntity,

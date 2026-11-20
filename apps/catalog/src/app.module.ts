@@ -16,6 +16,7 @@ import { CreateTenantPlanQuota1792800000000 } from './migrations/1792800000000-c
 import { AllowUploadCleanupSelect1793300000000 } from './migrations/1793300000000-allow-upload-cleanup-select';
 import { CreateProductAttributes1793400000000 } from './migrations/1793400000000-create-product-attributes';
 import { CreatePriceListBranches1793500000000 } from './migrations/1793500000000-create-price-list-branches';
+import { AddPricelistChannelsAndComboItems1793600000000 } from './migrations/1793600000000-add-pricelist-channels-and-combo-items';
 import { AttributesController } from './modules/attributes/attributes.controller';
 import { AttributesService } from './modules/attributes/attributes.service';
 import { BrandsController } from './modules/brands/brands.controller';
@@ -65,6 +66,7 @@ import { PlanQuotaService } from './quota/plan-quota.service';
         AllowUploadCleanupSelect1793300000000,
         CreateProductAttributes1793400000000,
         CreatePriceListBranches1793500000000,
+        AddPricelistChannelsAndComboItems1793600000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'catalog' }),

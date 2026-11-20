@@ -75,6 +75,21 @@ export class CreatePriceListReqDto {
   @ArrayUnique()
   @IsUUID('all', { each: true })
   branchIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 10,
+    example: ['LAZADA', 'SHOPEE'],
+    description:
+      'Sales channels this price list applies to (POS, LAZADA, SHOPEE, TIKTOK, WEBSITE). Empty means all channels.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(24, { each: true })
+  channelTypes?: string[];
 }
 
 export class UpdatePriceListReqDto {
@@ -128,6 +143,21 @@ export class UpdatePriceListReqDto {
   @ArrayUnique()
   @IsUUID('all', { each: true })
   branchIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 10,
+    example: ['POS'],
+    description:
+      'Sales channels this price list applies to (POS, LAZADA, SHOPEE, TIKTOK, WEBSITE). Empty means all channels.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(24, { each: true })
+  channelTypes?: string[];
 
   @ApiPropertyOptional({
     description: 'Expected version for optimistic locking',
@@ -206,6 +236,8 @@ export interface PriceListRes {
   version: number;
   /** The branches the list applies to; empty means every branch */
   branchIds: string[];
+  /** Sales channels the list applies to; empty means every channel */
+  channelTypes: string[];
   items?: PriceListItemRes[];
   createdAt: string;
   updatedAt: string;

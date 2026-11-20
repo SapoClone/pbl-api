@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import {
@@ -21,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import { RequirePermission } from '@pbl/auth';
 import {
+  ComboItemRes,
   CreateProductReqDto,
   CreateUnitConversionReqDto,
   CreateVariantReqDto,
@@ -35,6 +37,7 @@ import {
   UpdateProductStatusReqDto,
   UpdateVariantReqDto,
   UpdateVariantStatusReqDto,
+  UpsertComboItemsReqDto,
   VariantListRes,
   VariantRes,
 } from './products.dto';
@@ -306,5 +309,36 @@ export class ProductsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<UnitConversionRes[]> {
     return this.products.listUnitConversions(id);
+  }
+
+  @Get('products/:id/combo-items')
+  @RequirePermission('products.view')
+  @ApiOperation({
+    summary: 'List child SKU components belonging to a combo product',
+  })
+  @ApiParam({ name: 'id', description: 'Combo Product UUID' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Combo child items' })
+  listComboItems(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ComboItemRes[]> {
+    return this.products.listComboItems(id);
+  }
+
+  @Put('products/:id/combo-items')
+  @RequirePermission('products.update')
+  @ApiOperation({
+    summary:
+      'Atomically replace child SKU components and quantities of a combo product',
+  })
+  @ApiParam({ name: 'id', description: 'Combo Product UUID' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Updated combo child items',
+  })
+  upsertComboItems(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpsertComboItemsReqDto,
+  ): Promise<ComboItemRes[]> {
+    return this.products.upsertComboItems(id, dto);
   }
 }
