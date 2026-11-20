@@ -832,6 +832,9 @@ export class PromotionEntity {
   @Column({ name: 'name', type: 'varchar', length: 160 })
   name!: string;
 
+  @Column({ name: 'description', type: 'varchar', length: 500, nullable: true })
+  description!: string | null;
+
   @Column({ name: 'discount_type', type: 'varchar', length: 16 })
   discountType!: string;
 
@@ -864,6 +867,22 @@ export class PromotionEntity {
   @Column({ name: 'branch_id', type: 'uuid', nullable: true })
   branchId!: string | null;
 
+  @Column({
+    name: 'channel_types',
+    type: 'text',
+    array: true,
+    default: () => "'{}'::text[]",
+  })
+  channelTypes!: string[];
+
+  @Column({
+    name: 'customer_group_ids',
+    type: 'uuid',
+    array: true,
+    default: () => "'{}'::uuid[]",
+  })
+  customerGroupIds!: string[];
+
   @Column({ name: 'starts_at', type: 'timestamptz', nullable: true })
   startsAt!: Date | null;
 
@@ -875,6 +894,9 @@ export class PromotionEntity {
 
   @Column({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
+
+  @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
+  updatedAt!: Date;
 }
 
 @Entity({ name: 'coupons' })

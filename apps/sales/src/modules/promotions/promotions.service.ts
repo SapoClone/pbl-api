@@ -21,7 +21,13 @@ import {
   assertBranchAllowed,
   branchAllowed,
 } from '../../presentation/access';
-import { CreateCouponDto, CreatePromotionDto } from './promotions.dto';
+import {
+  CreateCouponDto,
+  CreatePromotionDto,
+  EvaluateCouponDto,
+  UpdateCouponDto,
+  UpdatePromotionDto,
+} from './promotions.dto';
 
 export interface EvaluatedCouponResult {
   couponId: string;
@@ -30,9 +36,49 @@ export interface EvaluatedCouponResult {
   discountAmountVnd: number;
 }
 
+export interface EvaluatedCouponPreviewResult extends EvaluatedCouponResult {
+  promotionCode: string;
+  promotionName: string;
+  discountType: string;
+  discountValue: number;
+  minOrderAmount: number;
+  maxDiscountAmount: number | null;
+  orderAmountVnd: number;
+  finalAmountVnd: number;
+}
+
 @Injectable()
 export class PromotionsService {
   constructor(private readonly dataSource: DataSource) {}
+
+  private normalizeChannels(channels?: string[]): string[] {
+    if (!channels) return [];
+    return [
+      ...new Set(
+        channels.map((c) => c.trim().toUpperCase()).filter((c) => c.length > 0),
+      ),
+    ];
+  }
+
+  private validateDiscountRule(
+    discountType: string,
+    discountValue: number,
+  ): void {
+    if (discountType === 'FIXED' && !Number.isSafeInteger(discountValue)) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.VALIDATION_ERROR,
+        'A fixed promotion discount must be a whole number of VND',
+        422,
+      );
+    }
+    if (discountType === 'PERCENT' && discountValue > 100) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.INVALID_DISCOUNT,
+        'Percentage promotion discount cannot exceed 100%',
+        422,
+      );
+    }
+  }
 
   async createPromotion(
     dto: CreatePromotionDto,
@@ -47,23 +93,7 @@ export class PromotionsService {
       );
     }
     const tenantId = TenantContext.require();
-    if (
-      dto.discountType === 'FIXED' &&
-      !Number.isSafeInteger(dto.discountValue)
-    ) {
-      throw new SalesDomainError(
-        SalesDomainErrorCode.VALIDATION_ERROR,
-        'A fixed promotion discount must be a whole number of VND',
-        422,
-      );
-    }
-    if (dto.discountType === 'PERCENT' && dto.discountValue > 100) {
-      throw new SalesDomainError(
-        SalesDomainErrorCode.INVALID_DISCOUNT,
-        'Percentage promotion discount cannot exceed 100%',
-        422,
-      );
-    }
+    this.validateDiscountRule(dto.discountType, dto.discountValue);
 
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
@@ -81,22 +111,93 @@ export class PromotionsService {
         );
       }
 
+      const now = new Date();
       const promo = em.create(PromotionEntity, {
         id: randomUUID(),
         tenantId,
         code: normalizedCode,
         name: dto.name.trim(),
+        description: dto.description?.trim() || null,
         discountType: dto.discountType,
         discountValue: dto.discountValue,
         minOrderAmount: dto.minOrderAmount ?? 0,
         maxDiscountAmount: dto.maxDiscountAmount ?? null,
         branchId: dto.branchId ?? null,
+        channelTypes: this.normalizeChannels(dto.channelTypes),
+        customerGroupIds: dto.customerGroupIds ?? [],
         startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
         endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
-        status: 'ACTIVE',
-        createdAt: new Date(),
+        status: dto.status ?? 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
       });
       return em.save(PromotionEntity, promo);
+    });
+  }
+
+  async updatePromotion(
+    id: string,
+    dto: UpdatePromotionDto,
+    scope: BranchScope,
+  ): Promise<PromotionEntity> {
+    if (dto.branchId) {
+      assertBranchAllowed(
+        scope,
+        dto.branchId,
+        'VALIDATION_ERROR',
+        'Branch not found',
+      );
+    }
+    const tenantId = TenantContext.require();
+    return this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      const repo = em.getRepository(PromotionEntity);
+      const promo = await repo.findOne({ where: { id, tenantId } });
+      if (!promo || (promo.branchId && !branchAllowed(scope, promo.branchId))) {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.VALIDATION_ERROR,
+          'Promotion not found',
+          404,
+        );
+      }
+
+      const nextType = dto.discountType ?? promo.discountType;
+      const nextValue = dto.discountValue ?? promo.discountValue;
+      this.validateDiscountRule(nextType, nextValue);
+
+      if (dto.name !== undefined) promo.name = dto.name.trim();
+      if (dto.description !== undefined) {
+        promo.description = dto.description?.trim() || null;
+      }
+      if (dto.discountType !== undefined) promo.discountType = dto.discountType;
+      if (dto.discountValue !== undefined) {
+        promo.discountValue = dto.discountValue;
+      }
+      if (dto.minOrderAmount !== undefined) {
+        promo.minOrderAmount = dto.minOrderAmount;
+      }
+      if (dto.maxDiscountAmount !== undefined) {
+        promo.maxDiscountAmount = dto.maxDiscountAmount;
+      }
+      if (dto.branchId !== undefined) promo.branchId = dto.branchId;
+      if (dto.channelTypes !== undefined) {
+        promo.channelTypes = this.normalizeChannels(dto.channelTypes);
+      }
+      if (dto.customerGroupIds !== undefined) {
+        promo.customerGroupIds = dto.customerGroupIds;
+      }
+      if (dto.startsAt !== undefined) {
+        promo.startsAt = dto.startsAt ? new Date(dto.startsAt) : null;
+      }
+      if (dto.endsAt !== undefined) {
+        promo.endsAt = dto.endsAt ? new Date(dto.endsAt) : null;
+      }
+      if (dto.status !== undefined) promo.status = dto.status;
+      promo.updatedAt = new Date();
+
+      return repo.save(promo);
     });
   }
 
@@ -163,10 +264,53 @@ export class PromotionsService {
         maxUses: dto.maxUses ?? null,
         maxUsesPerCustomer: dto.maxUsesPerCustomer ?? null,
         usedCount: 0,
-        status: 'ACTIVE',
+        status: dto.status ?? 'ACTIVE',
         createdAt: new Date(),
       });
       return em.save(CouponEntity, coupon);
+    });
+  }
+
+  async updateCoupon(
+    id: string,
+    dto: UpdateCouponDto,
+    scope: BranchScope,
+  ): Promise<CouponEntity> {
+    const tenantId = TenantContext.require();
+    return this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      const repo = em.getRepository(CouponEntity);
+      const coupon = await repo.findOne({ where: { id, tenantId } });
+      if (!coupon) {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.VALIDATION_ERROR,
+          'Coupon not found',
+          404,
+        );
+      }
+      const promotion = await em.getRepository(PromotionEntity).findOne({
+        where: { id: coupon.promotionId, tenantId },
+      });
+      if (
+        promotion &&
+        promotion.branchId &&
+        !branchAllowed(scope, promotion.branchId)
+      ) {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.VALIDATION_ERROR,
+          'Coupon not found',
+          404,
+        );
+      }
+
+      if (dto.maxUses !== undefined) coupon.maxUses = dto.maxUses;
+      if (dto.maxUsesPerCustomer !== undefined) {
+        coupon.maxUsesPerCustomer = dto.maxUsesPerCustomer;
+      }
+      if (dto.status !== undefined) coupon.status = dto.status;
+      return repo.save(coupon);
     });
   }
 
@@ -180,6 +324,52 @@ export class PromotionsService {
         where: { tenantId },
         order: { createdAt: 'DESC' },
       });
+    });
+  }
+
+  async evaluateCouponPreview(
+    dto: EvaluateCouponDto,
+    scope: BranchScope,
+  ): Promise<EvaluatedCouponPreviewResult> {
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'VALIDATION_ERROR',
+      'Branch not found',
+    );
+    const tenantId = TenantContext.require();
+    return this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      const evaluated = await this.evaluateCoupon(
+        em,
+        tenantId,
+        dto.code,
+        dto.orderAmount,
+        dto.branchId,
+        dto.customerId ?? null,
+        false,
+        dto.channelType,
+        dto.customerGroupId ?? null,
+      );
+      const promo = await em.getRepository(PromotionEntity).findOneOrFail({
+        where: { id: evaluated.promotionId, tenantId },
+      });
+      return {
+        ...evaluated,
+        promotionCode: promo.code,
+        promotionName: promo.name,
+        discountType: promo.discountType,
+        discountValue: promo.discountValue,
+        minOrderAmount: promo.minOrderAmount,
+        maxDiscountAmount: promo.maxDiscountAmount,
+        orderAmountVnd: dto.orderAmount,
+        finalAmountVnd: Math.max(
+          0,
+          dto.orderAmount - evaluated.discountAmountVnd,
+        ),
+      };
     });
   }
 
@@ -298,6 +488,8 @@ export class PromotionsService {
     branchId: string,
     customerId: string | null,
     lockForUpdate: boolean,
+    channelType?: string,
+    customerGroupId?: string | null,
   ): Promise<EvaluatedCouponResult> {
     const prefix = getSchemaPrefix(this.dataSource);
     const normalizedCode = couponCode.trim().toUpperCase();
@@ -376,6 +568,32 @@ export class PromotionsService {
       throw new SalesDomainError(
         SalesDomainErrorCode.COUPON_INVALID,
         `Coupon ${normalizedCode} is not valid for branch ${branchId}`,
+        409,
+      );
+    }
+
+    if (
+      channelType &&
+      Array.isArray(promotion.channelTypes) &&
+      promotion.channelTypes.length > 0 &&
+      !promotion.channelTypes.includes(channelType.trim().toUpperCase())
+    ) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.COUPON_INVALID,
+        `Coupon ${normalizedCode} is not applicable to channel ${channelType}`,
+        409,
+      );
+    }
+
+    if (
+      Array.isArray(promotion.customerGroupIds) &&
+      promotion.customerGroupIds.length > 0 &&
+      (!customerGroupId ||
+        !promotion.customerGroupIds.includes(customerGroupId))
+    ) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.COUPON_INVALID,
+        `Coupon ${normalizedCode} requires an eligible customer group`,
         409,
       );
     }

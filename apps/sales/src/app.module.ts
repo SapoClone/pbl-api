@@ -19,6 +19,7 @@ import { AllowOnAccountTender1792100000100 } from './migrations/1792100000100-al
 import { CashShiftSession1792200000100 } from './migrations/1792200000100-cash-shift-session';
 import { CreateTenantStatus1793100000410 } from './migrations/1793100000410-create-tenant-status';
 import { CreateCatalogBranchPriceProjection1793500000000 } from './migrations/1793500000000-create-catalog-branch-price-projection';
+import { ExtendPromotionsScope1793600000000 } from './migrations/1793600000000-extend-promotions-scope';
 import { OrderItemEntity } from './orders/entities/order-item.entity';
 import {
   CheckoutWorkflowEntity,
@@ -60,6 +61,7 @@ import { TenantStatusEntity } from './tenant-status/tenant-status.entity';
         CashShiftSession1792200000100,
         CreateTenantStatus1793100000410,
         CreateCatalogBranchPriceProjection1793500000000,
+        ExtendPromotionsScope1793600000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'sales' }),
