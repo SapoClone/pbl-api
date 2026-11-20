@@ -37,6 +37,7 @@ Where the built API differs from the sections below (the sections keep the desig
 - **Expiry (D31):** a job in platform moves a paid subscription past `expiresAt` to `past_due` (the grace: the paid plan's limits stay for `billing.graceDays` days, default 7), then closes it (`expired`) and starts a `free` subscription with no end date. Data is kept and nothing is deleted; over-limit adds are refused by the usual `Q001` checks. A payment during the grace renews the same subscription to `active`. The `past_due` and `expired` counters of `GET /admin/subscriptions` work.
 - **Suspension** also stops marketplace webhooks (503 `TENANT_SUSPENDED`, the marketplace retries), the integration sync jobs and the internal order intake (403 `TENANT_SUSPENDED`); other services learn the store status from `platform.tenant.status_changed`.
 - **Accounts** have no verified-email state, so `status=pending_verification` matches nothing and `isEmailVerified` is not returned. `code` (`US00021`) is built.
+- **Overview and announcements (insight)** are built from the v1.2 request, which wins over the first design of those two sections (no failed-jobs field, `content` instead of `body`, `N003`, the cancel and delete routes, `watchlist` with structured fields): see the sections. The `trial` store count is always 0 (D32) and stores that existed before the deploy appear in `tenant_projection` only after their next event (`POST /admin/subscriptions/resync` re-announces the plans; see [the guide](../../guides/admin-dashboard-announcements.md)).
 - **Events** for admin actions (`platform.admin.created`, `.updated`, `.logged_in`, `platform.settings.changed`, `platform.account.sessions_revoked`) are not emitted: events carry a store, and these belong to none. They wait for the platform-scope audit design. `platform.tenant.*`, `platform.plan.changed` (once per store on the plan) and `platform.subscription.changed` are emitted; `catalog.usage.changed` replaces `catalog.product.count_changed` and `catalog.storage.usage_changed` in the table at the end.
 
 ## Screen → endpoints
@@ -121,48 +122,50 @@ Where the built API differs from the sections below (the sections keep the desig
 
 ## Overview (insight)
 
+Built (branch `feat/admin-dashboard-announcements`). Read models in insight, fed by events, platform tables without row-level security: `tenant_projection` (one row per store, from `platform.tenant.*`, `platform.subscription.changed`, `platform.plan.changed`, `catalog.usage.changed`, `integration.connection.connected` and `.disconnected`) and `platform_daily_transactions` (one row per Vietnam day, from `sales.order.completed`). This section follows the v1.2 request (section 7), which wins over the first design: there is no failed-jobs field, a transaction is a completed sales order of any store (not a subscription payment), and the numbers carry no text.
+
 ### GET /insight/api/v1/admin/overview
-- **Status:** new
+- **Status:** built
 - **Screens:** 01 Tổng quan (KPI cards)
-- **Auth:** platform_admin
-- **Query:** `from=2026-10-01&to=2026-10-23`
+- **Auth:** platform_admin (both roles)
+- **Query:** `from`, `to` (`YYYY-MM-DD`, inclusive, Asia/Ho_Chi_Minh; both default to today)
 - **Response:** 200
   ```json
-  { "tenants": { "active": 86, "total": 100, "newInRange": 8 },
-    "subscriptionsExpiringIn7Days": 12,
-    "transactionsToday": { "count": 12840, "changePct": 14.2 },
-    "failedJobs": { "open": 8, "overRetryLimit": 3 } }
+  { "generatedAt": "2026-10-23T03:00:00.000Z", "from": "2026-10-01", "to": "2026-10-23", "timezone": "Asia/Ho_Chi_Minh",
+    "tenants": { "total": 100, "active": 86, "trial": 0, "suspended": 14, "newInRange": 8 },
+    "subscriptions": { "expiringSoon": 12 },
+    "plans": { "inUse": 3 },
+    "transactions": { "count": 12840, "previousCount": 11250, "changePct": 14.1 } }
   ```
-- **Errors:** 422 when `from > to`
-- **Events (read model):**
-  - `platform.tenant.created`, `.status_changed` → `PlatformTenantStats`
-  - `platform.subscription.changed` → expiring count
-  - `sales.order.completed` → `PlatformDailyTransactions`
-  - `integration.sync_job.failed` / `.resolved` and `insight.email.failed` → `FailedJobView`
+  `tenants` is a snapshot of now (`newInRange` follows the range); `expiringSoon` counts subscriptions ending within 7 days (platform's `EXPIRING_SOON_DAYS`), grace ones included; `previousCount` is the adjacent range of the same length and `changePct` is `null` when it is 0.
+- **Errors:** 422 when `from > to` or a date is not `YYYY-MM-DD`
+- **Events (read model):** see above
 
 ### GET /insight/api/v1/admin/transactions/daily
-- **Status:** new
+- **Status:** built
 - **Screens:** 01 chart "Giao dịch toàn nền tảng"
 - **Auth:** platform_admin
-- **Query:** `from=2026-10-17&to=2026-10-23` (the "7 ngày" preset is computed by the client)
-- **Response:** 200 `{ "data": [ { "date": "2026-10-17", "orderCount": 9120, "revenue": 1830000000 } ] }` (not paginated, at most 92 days)
-- **Errors:** 422 if the range is over 92 days
-- **Events:** `sales.order.completed` (all tenants) → `PlatformDailyTransactions(date, order_count, revenue)`
+- **Query:** `from`, `to` as above (the "7 ngày" preset is computed by the client)
+- **Response:** 200 `{ "data": [ { "date": "2026-10-17", "orderCount": 9120, "revenue": 1830000000 } ] }`: one row per day of the range, zero days included, not paginated, integer VND
+- **Errors:** 422 if the range is over 92 days or `from > to`
+- **Events:** `sales.order.completed` (all stores) -> `platform_daily_transactions`, bucketed on the Vietnam day of `completedAt`
 
 ### GET /insight/api/v1/admin/watchlist
-- **Status:** new
+- **Status:** built
 - **Screens:** 01 "Cần theo dõi"
 - **Auth:** platform_admin
-- **Query:** `limit=5`
-- **Response:** 200
+- **Query:** `limit` (default 5, at most 50)
+- **Response:** 200, structured fields and no Vietnamese text; suspended stores are left out
   ```json
   { "data": [
-    { "kind": "subscription_expiring", "tenantId": "uuid", "tenantName": "Mộc Store", "message": "Gói Pro hết hạn ngày 25/10/2026", "severity": "warning", "link": { "type": "subscription", "id": "uuid" } },
-    { "kind": "quota_near_limit", "tenantName": "Nhà Gốm An Nhiên", "message": "Sử dụng 98% dung lượng lưu trữ", "severity": "warning", "link": { "type": "usage", "id": "uuid" } },
-    { "kind": "failed_jobs", "tenantName": "Shopee · Đồng bộ tồn kho", "message": "3 job lỗi cùng mã E_RATE_LIMIT", "severity": "error", "link": { "type": "failed_jobs", "id": null } } ] }
+    { "kind": "subscription_expiring", "tenantId": "uuid", "tenantName": "Mộc Store", "severity": "warning",
+      "link": { "type": "subscription", "id": "uuid" }, "planCode": "pro", "planName": null, "expiresAt": "2026-10-25T00:00:00.000Z" },
+    { "kind": "quota_near_limit", "tenantId": "uuid", "tenantName": "Nhà Gốm An Nhiên", "severity": "warning",
+      "link": { "type": "usage", "id": "tenant uuid" }, "planCode": "pro", "key": "products", "used": 95, "limit": 100 } ] }
   ```
+  `kind`: `subscription_expiring` (ends within 7 days or already ended and in its grace; `critical` when already ended), `quota_near_limit` (90% or more of a limit, `warning`), `quota_at_limit` (100% or more, `critical`); `key`: `branches`, `products`, `storage_mb`. Order: ended subscriptions, limits reached, subscriptions ending soon, limits close, then the most urgent. `severity` is `warning` or `critical` (the notification severities).
 - **Errors:** none
-- **Events:** the same read models as `/admin/overview`, plus `platform.usage.updated`
+- **Events:** the read models of `/admin/overview`; branches in use come from the branch events insight already consumes, products and storage from `catalog.usage.changed`. Members in use are not announced by any event, so `users` is not on the watchlist.
 
 ## Tenants (platform)
 
@@ -676,62 +679,53 @@ The job code (`JOB-00984`) is assigned by the source service. Integration and th
 
 ## Announcements (insight)
 
+Built (branch `feat/admin-dashboard-announcements`), per the v1.2 request sections 3.3, 4, 5 and 6. Tables `announcement` and `announcement_recipient` (platform tables, no row-level security, only ids and the admin's text). Delivery is in-app only: sending writes one `announcement_recipient` row (unique per announcement and store) and one `notification` row (type `announcement`, severity `info`, `refType` `announcement`) for each target store, which the store's bell shows to every member. Stores are resolved when the send happens (for a schedule: when it comes due) from `tenant_projection`; suspended stores are skipped, stores on an expired paid plan still receive. Scheduled sends run from an in-service job (every minute, `FOR UPDATE SKIP LOCKED`; a failed send stays `scheduled` and is retried).
+
+Announcement: `{ id, title, content, type, audience, status, createdAt, updatedAt, scheduledAt, sentAt, recipientCount }`. `type`: `maintenance`, `update`, `guide`. `status`: `draft`, `scheduled`, `sent`. `audience`: `{ type: 'all' }`, `{ type: 'plan', planCodes }`, `{ type: 'integration_provider', providers: ['shopee'|'lazada'] }` or `{ type: 'tenants', tenantIds }` (lists of 1 to 500). The body field is `content` (not `body`) and there is no `summary` or audience `label`: the web words those.
+
 ### GET /insight/api/v1/admin/announcements
-- **Status:** new
+- **Status:** built
 - **Screens:** 20 Thông báo hệ thống
-- **Auth:** platform_admin
-- **Query:** `q` (title), `type=maintenance|update|guide`, `status=draft|scheduled|sent` (tabs "Tất cả" / "Bản nháp" / "Đã gửi")
-- **Response:** 200
-  ```json
-  { "data": [ { "id": "uuid", "title": "Bảo trì hệ thống định kỳ", "summary": "Bảo trì 00:00–00:30 ngày 26/10",
-      "audience": { "type": "all", "label": "Toàn bộ doanh nghiệp" }, "type": "maintenance", "status": "draft",
-      "scheduledAt": "2026-10-23T01:30:00.000Z", "sentAt": null } ],
-    "pagination": { "limit": 20, "currentPage": 1, "totalRecords": 3, "totalPages": 1 } }
-  ```
-- **Errors:** none
-- **Events:** none
+- **Auth:** platform_admin (both roles)
+- **Query:** `q` (part of the title), `type`, `status`, `from`, `to` (Vietnam days, on the creation date), `page`, `limit` (default 20), `order` (`desc` default, by creation)
+- **Response:** 200 `{ data, pagination, counts: { all, draft, scheduled, sent } }`; `counts` follow `q`, `type`, `from` and `to` but not `status`
+- **Errors:** 422
+
+### GET /insight/api/v1/admin/announcements/{id}
+- **Status:** built
+- **Response:** 200 the announcement, with its audience. **Errors:** 404
 
 ### POST /insight/api/v1/admin/announcements
-- **Status:** new
-- **Screens:** 21 Soạn thông báo ("Lưu bản nháp")
-- **Auth:** platform_admin
-- **Body:**
-  ```json
-  { "title": "Bảo trì hệ thống định kỳ", "type": "maintenance",
-    "body": "Hệ thống sẽ bảo trì từ 00:00 đến 00:30 ngày 26/10/2026.\nVui lòng hoàn tất các giao dịch trước thời gian bảo trì.\nCảm ơn quý doanh nghiệp đã đồng hành cùng Omniretail.",
-    "audience": { "type": "all" }, "scheduledAt": null }
-  ```
-  `audience.type` is `all`, `plan` (`{ "planCodes": ["pro"] }`), `integration_provider` (`{ "providers": ["shopee"] }`) or `tenants` (`{ "tenantIds": [...] }`).
-- **Response:** 201, the announcement with `status: "draft"`
-- **Errors:** 422
-- **Events:** none
+- **Status:** built
+- **Body:** `{ title (200), content, type, audience, scheduledAt? }`; `scheduledAt` is only remembered on the draft and must be in the future when given
+- **Response:** 201, the announcement with `status: "draft"`. **Errors:** 422
 
 ### PATCH /insight/api/v1/admin/announcements/{id}
-- **Status:** new
-- **Screens:** 20 "Chỉnh sửa", 21
-- **Auth:** platform_admin
+- **Status:** built
 - **Body:** any field from create
-- **Response:** 200
-- **Errors:** 404; 400 `N001` already sent (read-only)
-- **Events:** none
+- **Response:** 200. **Errors:** 404; 400 `N001` already sent; 400 `N003` while scheduled (cancel first); 422
 
 ### POST /insight/api/v1/admin/announcements/audience-preview
-- **Status:** new
-- **Screens:** 21 "100 doanh nghiệp trong phạm vi nhận" (100 businesses will receive it)
-- **Auth:** platform_admin
+- **Status:** built
 - **Body:** `{ "audience": { "type": "plan", "planCodes": ["pro"] } }`
-- **Response:** 200 `{ "tenantCount": 31 }`. Computed from insight's `TenantProjection`, which holds plan and integration providers, kept up to date from platform and integration events.
-- **Errors:** 422
-- **Events consumed:** `platform.tenant.*`, `platform.subscription.changed`, `integration.connection.status_changed`
+- **Response:** 200 `{ "tenantCount": 31 }`, from `tenant_projection` now (an estimate: the send resolves again). **Errors:** 422
 
 ### POST /insight/api/v1/admin/announcements/{id}/send
-- **Status:** new
-- **Screens:** 21 "Gửi thông báo"
-- **Auth:** platform_admin
-- **Body:** `{ "scheduledAt": null }` (null sends now)
-- **Response:** 200, the announcement with `status: "sent"` or `"scheduled"`. Fan-out writes one `AnnouncementRecipient` per tenant. Tenants read them through the notification bell (section 01).
-- **Errors:** 404; 400 `N001` already sent; 400 `N002` the audience resolves to 0 tenants
-- **Events:** `insight.announcement.sent` `{ announcementId, tenantCount }`
+- **Status:** built
+- **Body:** `{ "scheduledAt": null }` (null or missing sends now; a time in the future schedules)
+- **Response:** 200, the announcement with `status: "sent"` (and `recipientCount`) or `"scheduled"`
+- **Errors:** 404; 400 `N001` already sent; 400 `N002` the audience resolves to no store; 422 `scheduledAt` not in the future
+- **Audit:** `announcement.sent` (delivery, by the admin, or by `system` for a scheduled one), `announcement.scheduled`, `announcement.cancelled`; scope platform, target type `announcement`. No `insight.announcement.sent` event is emitted: nothing consumes it.
+
+### POST /insight/api/v1/admin/announcements/{id}/cancel
+- **Status:** built
+- **Response:** 200, a scheduled announcement goes back to `draft` (schedule cleared); a draft is returned unchanged. **Errors:** 404; 400 `N001` already sent
+
+### DELETE /insight/api/v1/admin/announcements/{id}
+- **Status:** built
+- **Response:** 204, draft only. **Errors:** 404; 400 `N001` sent; 400 `N003` scheduled
+
+`N001` is also the code of a store's missing notification (404, store routes); the status tells them apart.
 
 ## Support sessions (platform)
 

@@ -2154,6 +2154,452 @@
         ]
       }
     },
+    "/api/v1/admin/overview": {
+      "get": {
+        "description": "Stores, expiring subscriptions, plans in use and completed sales of every store for the range (`from`, `to`: YYYY-MM-DD, Asia/Ho_Chi_Minh, inclusive; today when missing), compared with the previous range of the same length.",
+        "operationId": "PlatformOverviewController_getOverview",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 10,
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 10,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Platform KPI cards",
+        "tags": [
+          "insight-admin"
+        ]
+      }
+    },
+    "/api/v1/admin/transactions/daily": {
+      "get": {
+        "description": "One row per day of the range, zero days included; at most 92 days (422 beyond, or when from is after to). Revenue is integer VND.",
+        "operationId": "PlatformOverviewController_daily",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 10,
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 10,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Completed sales per day, platform-wide",
+        "tags": [
+          "insight-admin"
+        ]
+      }
+    },
+    "/api/v1/admin/watchlist": {
+      "get": {
+        "description": "Subscriptions ending soon or ended and plan limits close to or at their maximum, most urgent first. Structured fields, no text.",
+        "operationId": "PlatformOverviewController_watchlist",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 5,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Stores that need attention",
+        "tags": [
+          "insight-admin"
+        ]
+      }
+    },
+    "/api/v1/admin/announcements": {
+      "get": {
+        "description": "Newest first; `q` is part of the title; `counts` gives the tabs (all, draft, scheduled, sent) for the same `q`, `type`, `from` and `to`.",
+        "operationId": "AnnouncementsController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Part of the title",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "maintenance",
+                "update",
+                "guide"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "scheduled",
+                "sent"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Created from this Vietnam day (YYYY-MM-DD), inclusive",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Created up to this Vietnam day (YYYY-MM-DD), inclusive",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "required": true,
+            "in": "query",
+            "description": "Newest first by default",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List announcements",
+        "tags": [
+          "insight-admin"
+        ]
+      },
+      "post": {
+        "operationId": "AnnouncementsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnouncementReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a draft",
+        "tags": [
+          "insight-admin"
+        ]
+      }
+    },
+    "/api/v1/admin/announcements/audience-preview": {
+      "post": {
+        "description": "An estimate: the stores are resolved again when sent.",
+        "operationId": "AnnouncementsController_preview",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudiencePreviewReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "How many stores an audience reaches now",
+        "tags": [
+          "insight-admin"
+        ]
+      }
+    },
+    "/api/v1/admin/announcements/{id}": {
+      "get": {
+        "operationId": "AnnouncementsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "One announcement",
+        "tags": [
+          "insight-admin"
+        ]
+      },
+      "patch": {
+        "description": "400 `N001` when already sent, `N003` while scheduled (cancel first).",
+        "operationId": "AnnouncementsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAnnouncementReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit a draft",
+        "tags": [
+          "insight-admin"
+        ]
+      },
+      "delete": {
+        "operationId": "AnnouncementsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a draft",
+        "tags": [
+          "insight-admin"
+        ]
+      }
+    },
+    "/api/v1/admin/announcements/{id}/send": {
+      "post": {
+        "description": "`scheduledAt` null or missing sends now; a time in the future schedules it (422 otherwise). 400 `N001` already sent, 400 `N002` the audience has no store.",
+        "operationId": "AnnouncementsController_send",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendAnnouncementReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send now or schedule",
+        "tags": [
+          "insight-admin"
+        ]
+      }
+    },
+    "/api/v1/admin/announcements/{id}/cancel": {
+      "post": {
+        "operationId": "AnnouncementsController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Take a scheduled announcement back to a draft",
+        "tags": [
+          "insight-admin"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "PblHealthController_live",
@@ -2391,6 +2837,90 @@
           "token",
           "platform"
         ]
+      },
+      "AudiencePreviewReqDto": {
+        "type": "object",
+        "properties": {
+          "audience": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "audience"
+        ]
+      },
+      "CreateAnnouncementReqDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "maintenance",
+              "update",
+              "guide"
+            ]
+          },
+          "audience": {
+            "type": "object"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "A time to remember on the draft; it is the send call that schedules. Must be in the future when given"
+          }
+        },
+        "required": [
+          "title",
+          "content",
+          "type",
+          "audience"
+        ]
+      },
+      "UpdateAnnouncementReqDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "maintenance",
+              "update",
+              "guide"
+            ]
+          },
+          "audience": {
+            "type": "object"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "SendAnnouncementReqDto": {
+        "type": "object",
+        "properties": {
+          "scheduledAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "Null or missing: send now. A time in the future: send then"
+          }
+        }
       }
     }
   }
