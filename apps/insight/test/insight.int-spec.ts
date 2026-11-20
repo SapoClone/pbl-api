@@ -27,6 +27,7 @@ import { M7_INSIGHT_ENTITIES } from '../src/infrastructure/persistence/insight.e
 import { CreateInsightTables1791800000100 } from '../src/migrations/1791800000100-create-insight-tables';
 import { CreateM7InsightCore1791900000300 } from '../src/migrations/1791900000300-create-m7-insight-core';
 import { CreateNotifications1792000000200 } from '../src/migrations/1792000000200-create-notifications';
+import { AuditLogPlatformScope1793500000000 } from '../src/migrations/1793500000000-audit-log-platform-scope';
 import { InsightExportService } from '../src/modules/export/insight-export.service';
 import { ProjectionsService } from '../src/modules/projections/projections.service';
 import { InsightRebuildService } from '../src/modules/rebuild/insight-rebuild.service';
@@ -141,6 +142,7 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
           CreateInsightTables1791800000100,
           CreateM7InsightCore1791900000300,
           CreateNotifications1792000000200,
+          AuditLogPlatformScope1793500000000,
         ],
       }),
     );
@@ -1139,6 +1141,14 @@ describe('Insight & Analytics Microservice (Real PostgreSQL — M0 + M7 Scenario
         'bigint',
       );
       expect(await money('sales_order_line_facts', 'quantity')).toBe('numeric');
+
+      // the last two migrations are the nullable outbox tenant and the platform-scope audit log: undoing them keeps the
+      // audit table, minus its new columns
+      await dataSource.undoLastMigration();
+      await dataSource.undoLastMigration();
+      expect(await money('audit_log', 'scope')).toBeUndefined();
+      expect(await tables()).toContain('audit_log');
+      expect(await tables()).toContain('notification');
 
       await dataSource.undoLastMigration();
       const after = await tables();
