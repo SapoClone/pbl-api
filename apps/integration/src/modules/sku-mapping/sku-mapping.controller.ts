@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -18,7 +20,11 @@ import {
 } from '@pbl/auth';
 import { rethrowIntegrationHttpError } from '../../presentation/integration-http-error';
 import { BranchScopeService } from '../branch-scope/branch-scope.service';
-import { CreateSkuMappingDto, UpdateSkuMappingDto } from './sku-mapping.dto';
+import {
+  AutoMatchSkuMappingsDto,
+  CreateSkuMappingDto,
+  UpdateSkuMappingDto,
+} from './sku-mapping.dto';
 import { SkuMappingService } from './sku-mapping.service';
 
 @ApiTags('integration-sku-mappings')
@@ -29,6 +35,26 @@ export class SkuMappingController {
     private readonly skuMappingService: SkuMappingService,
     private readonly scope: BranchScopeService,
   ) {}
+
+  @Post('auto-match')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission('channels.create')
+  @ApiOperation({
+    summary:
+      'Preview or execute bulk SKU auto-matching between marketplace listings/conflicts and Catalog variants',
+  })
+  async autoMatchMappings(
+    @AllowedBranches() branches: string[] | null,
+    @CurrentContext() ctx: AuthenticatedContext,
+    @Body() dto: AutoMatchSkuMappingsDto,
+  ) {
+    try {
+      await this.scope.assertConnection(branches, dto.connectionId);
+      return await this.skuMappingService.autoMatchMappings(ctx.userId, dto);
+    } catch (error) {
+      rethrowIntegrationHttpError(error);
+    }
+  }
 
   @Post()
   @RequirePermission('channels.create')

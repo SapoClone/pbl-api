@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Res,
@@ -27,6 +28,7 @@ import {
   CreateChannelConnectionDto,
   LazadaOAuthCallbackQueryDto,
   RefreshConnectionTokenDto,
+  UpdateChannelConnectionDto,
 } from './connections.dto';
 import { ConnectionsService } from './connections.service';
 
@@ -86,6 +88,30 @@ export class ConnectionsController {
     try {
       await this.scope.assertConnection(branches, id);
       return await this.connectionsService.getConnectionById(id);
+    } catch (error) {
+      rethrowIntegrationHttpError(error);
+    }
+  }
+
+  @Patch(':id')
+  @RequirePermission('channels.update')
+  @ApiOperation({
+    summary:
+      'Update channel connection synchronization settings (safetyStockBuffer, stockAllocationPercent, autoSyncInventory)',
+  })
+  async updateConnection(
+    @AllowedBranches() branches: string[] | null,
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentContext() ctx: AuthenticatedContext,
+    @Body() dto: UpdateChannelConnectionDto,
+  ) {
+    try {
+      await this.scope.assertConnection(branches, id);
+      return await this.connectionsService.updateConnection(
+        id,
+        ctx.userId,
+        dto,
+      );
     } catch (error) {
       rethrowIntegrationHttpError(error);
     }

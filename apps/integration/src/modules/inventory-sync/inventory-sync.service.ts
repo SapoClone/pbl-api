@@ -139,7 +139,11 @@ export class InventorySyncService {
         const conn = await em.getRepository(ChannelConnectionEntity).findOne({
           where: { id: mapping.connectionId, tenantId: input.tenantId },
         });
-        if (!conn || conn.status !== 'CONNECTED') {
+        if (
+          !conn ||
+          conn.status !== 'CONNECTED' ||
+          (!input.connectionId && conn.autoSyncInventory === false)
+        ) {
           continue;
         }
 

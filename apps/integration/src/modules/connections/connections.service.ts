@@ -35,6 +35,7 @@ import {
   CreateChannelConnectionDto,
   LazadaOAuthCallbackQueryDto,
   RefreshConnectionTokenDto,
+  UpdateChannelConnectionDto,
 } from './connections.dto';
 
 export interface SanitizedChannelConnectionView {
@@ -50,6 +51,7 @@ export interface SanitizedChannelConnectionView {
   status: ConnectionStatus;
   safetyStockBuffer: number;
   stockAllocationPercent: number;
+  autoSyncInventory: boolean;
   lastSyncAt: string | null;
   lastOrderSyncAt: string | null;
   lastInventorySyncAt: string | null;
@@ -147,6 +149,7 @@ export class ConnectionsService {
           status: initialStatus,
           safetyStockBuffer: dto.safetyStockBuffer ?? 0,
           stockAllocationPercent: dto.stockAllocationPercent ?? 100,
+          autoSyncInventory: dto.autoSyncInventory ?? true,
           oauthStateNonce: null,
           oauthRedirectUri: null,
           oauthInitiatedBy: null,
@@ -1104,6 +1107,72 @@ export class ConnectionsService {
     });
   }
 
+  async updateConnection(
+    connectionId: string,
+    actorId: string,
+    dto: UpdateChannelConnectionDto,
+  ): Promise<SanitizedChannelConnectionView> {
+    const tenantId = TenantContext.require();
+    return this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      const conn = await em.getRepository(ChannelConnectionEntity).findOne({
+        where: { id: connectionId, tenantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!conn) {
+        throw new IntegrationDomainError(
+          IntegrationDomainErrorCode.CHANNEL_CONNECTION_NOT_FOUND,
+          `Channel connection ${connectionId} not found`,
+          404,
+        );
+      }
+
+      if (dto.shopName !== undefined) {
+        conn.shopName = dto.shopName.trim();
+      }
+      if (dto.warehouseId !== undefined) {
+        conn.warehouseId = dto.warehouseId;
+      }
+      if (dto.safetyStockBuffer !== undefined) {
+        conn.safetyStockBuffer = dto.safetyStockBuffer;
+      }
+      if (dto.stockAllocationPercent !== undefined) {
+        conn.stockAllocationPercent = dto.stockAllocationPercent;
+      }
+      if (dto.autoSyncInventory !== undefined) {
+        conn.autoSyncInventory = dto.autoSyncInventory;
+      }
+      conn.version += 1;
+      await em.save(ChannelConnectionEntity, conn);
+
+      const cred = await em.getRepository(ConnectionCredentialEntity).findOne({
+        where: { connectionId, tenantId },
+      });
+
+      await em.save(
+        IntegrationAuditLogEntity,
+        em.create(IntegrationAuditLogEntity, {
+          tenantId,
+          connectionId: conn.id,
+          actorId,
+          action: 'CONNECTION_SYNC_CONFIG_UPDATED',
+          targetType: 'CHANNEL_CONNECTION',
+          targetId: conn.id,
+          metadata: {
+            safetyStockBuffer: conn.safetyStockBuffer,
+            stockAllocationPercent: conn.stockAllocationPercent,
+            autoSyncInventory: conn.autoSyncInventory,
+            warehouseId: conn.warehouseId,
+          },
+        }),
+      );
+
+      return this.toSanitizedView(conn, cred ?? undefined);
+    });
+  }
+
   async pauseConnection(
     connectionId: string,
     actorId: string,
@@ -1307,6 +1376,7 @@ export class ConnectionsService {
       status: conn.status,
       safetyStockBuffer: conn.safetyStockBuffer,
       stockAllocationPercent: conn.stockAllocationPercent,
+      autoSyncInventory: conn.autoSyncInventory ?? true,
       lastSyncAt: conn.lastSyncAt ? conn.lastSyncAt.toISOString() : null,
       lastOrderSyncAt: conn.lastOrderSyncAt
         ? conn.lastOrderSyncAt.toISOString()

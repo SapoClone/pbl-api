@@ -133,6 +133,15 @@ export class ReconciliationService {
 
       if (conn.status === 'CONNECTED') {
         try {
+          await this.inventorySyncService.syncProductListingsForConnection(
+            tenantId,
+            conn.id,
+            actorId,
+          );
+        } catch {
+          // Continue even if remote product listing discovery is unavailable
+        }
+        try {
           const pollSummary =
             await this.orderSyncService.pollUpdatedOrdersForConnection({
               tenantId,

@@ -1,4 +1,8 @@
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -7,6 +11,7 @@ import {
   IsUUID,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import type { SkuMappingStatus } from '../../domain/integration-domain';
 
@@ -70,4 +75,50 @@ export class UpdateSkuMappingDto {
   @IsInt()
   @Min(0)
   externalPrice?: number;
+}
+
+export class AutoMatchSelectedPairDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(128)
+  externalItemId!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(128)
+  externalSkuId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  externalSkuCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  externalProductName?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  externalPrice?: number;
+
+  @IsUUID()
+  internalVariantId!: string;
+}
+
+export class AutoMatchSkuMappingsDto {
+  @IsUUID()
+  connectionId!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => AutoMatchSelectedPairDto)
+  selectedPairs?: AutoMatchSelectedPairDto[];
 }

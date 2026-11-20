@@ -172,6 +172,9 @@ export class ChannelConnectionEntity {
   @Column({ name: 'stock_allocation_percent', type: 'int', default: 100 })
   stockAllocationPercent!: number;
 
+  @Column({ name: 'auto_sync_inventory', type: 'boolean', default: true })
+  autoSyncInventory!: boolean;
+
   @Column({
     name: 'oauth_state_nonce',
     type: 'varchar',

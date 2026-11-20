@@ -275,7 +275,20 @@ export class SyncJobsService {
           typeof payload.windowEnd === 'string' && payload.windowEnd
             ? new Date(payload.windowEnd)
             : undefined;
-        resultSummary =
+        let productSync: Record<string, unknown> | undefined;
+        if (job.provider === 'LAZADA' && payload.skipProductSync !== true) {
+          try {
+            productSync =
+              await this.inventorySyncService.syncProductListingsForConnection(
+                job.tenantId,
+                job.connectionId!,
+                workerId,
+              );
+          } catch {
+            // Non-blocking: proceed with order poll even if product listing sync encounters an issue
+          }
+        }
+        const orderPoll =
           await this.orderSyncService.pollUpdatedOrdersForConnection({
             tenantId: job.tenantId,
             connectionId: job.connectionId!,
@@ -288,6 +301,7 @@ export class SyncJobsService {
                 ? windowEnd
                 : undefined,
           });
+        resultSummary = productSync ? { ...orderPoll, productSync } : orderPoll;
       } else if (job.jobType === 'INVENTORY_PUBLICATION') {
         if (payload.internalVariantId) {
           const pubRes =

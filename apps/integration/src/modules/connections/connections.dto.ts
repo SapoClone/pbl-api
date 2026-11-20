@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -8,6 +9,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import type { MarketplaceProvider } from '../../domain/integration-domain';
 
@@ -46,6 +48,10 @@ export class CreateChannelConnectionDto {
   stockAllocationPercent?: number;
 
   @IsOptional()
+  @IsBoolean()
+  autoSyncInventory?: boolean;
+
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(256)
@@ -65,6 +71,34 @@ export class CreateChannelConnectionDto {
   @IsString()
   @MaxLength(512)
   refreshToken?: string;
+}
+
+export class UpdateChannelConnectionDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(160)
+  shopName?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsUUID()
+  warehouseId?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  safetyStockBuffer?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  stockAllocationPercent?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  autoSyncInventory?: boolean;
 }
 
 export class AuthorizeChannelConnectionDto {
