@@ -16,7 +16,7 @@ import {
   consumeEvent,
   runInTenantTransaction,
 } from '@pbl/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { EventHandlerRegistry } from './event-handler.registry';
 import { EventsConfig } from './events-config';
 import { qualifiedTable } from './migrations';
@@ -74,17 +74,26 @@ export class EventConsumer
    * retried. Public so tests and tools can drive the consumer.
    */
   async handleBody(body: string): Promise<ConsumeResult> {
-    const envelope = JSON.parse(body) as EventEnvelope;
+    const envelope = JSON.parse(body) as EventEnvelope<unknown, string | null>;
     // consumeEvent validates the envelope and restores tenant, trace and actor
-    return consumeEvent(envelope, async (event): Promise<ConsumeResult> => {
+    return consumeEvent(envelope, async (received): Promise<ConsumeResult> => {
+      const event = received as EventEnvelope;
       const handlers = this.registry.handlersFor(event.type);
       if (handlers.length === 0) {
         this.logger.warn(`No handler for ${event.type}; message dropped`);
         return 'processed';
       }
       // the event's tenant is bound to the transaction (`app.tenant_id`): the row-level security policies of the
-      // tables a handler writes evaluate against it, and a role that is not a superuser is subject to them
-      return runInTenantTransaction(this.dataSource, async (manager) => {
+      // tables a handler writes evaluate against it, and a role that is not a superuser is subject to them.
+      // A platform-scope event (`tenantId` null) belongs to no store: no tenant is bound, and its handlers write only
+      // what needs none (platform-scope audit rows).
+      const inTransaction = <R>(
+        work: (manager: EntityManager) => Promise<R>,
+      ) =>
+        received.tenantId === null
+          ? this.dataSource.transaction(work)
+          : runInTenantTransaction(this.dataSource, work);
+      return inTransaction(async (manager) => {
         const inserted = await manager.query(
           `INSERT INTO ${qualifiedTable(this.dataSource, 'inbox_event')} ("event_id", "type")
            VALUES ($1, $2) ON CONFLICT ("event_id") DO NOTHING RETURNING "event_id"`,
