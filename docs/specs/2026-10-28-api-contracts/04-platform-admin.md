@@ -538,52 +538,61 @@ Where the built API differs from the sections below (the sections keep the desig
 
 ## Integrations (integration)
 
+Status: **built** (v1.2 reconciled; guide: [admin-integration.md](../../guides/admin-integration.md)). Every route is `@RequirePlatformAdmin()` (`super_admin` and `admin`); a store token gets 403. Enums are lowercase snake_case. There is no `environment` field and there are no sync on/off flags: neither exists in the data.
+
 ### GET /integration/api/v1/admin/connections
-- **Status:** new
+- **Status:** built
 - **Screens:** 16 Tích hợp (tab "Kết nối")
 - **Auth:** platform_admin
-- **Query:**
-  - `q` searches tenant name and shop name
-  - `provider=shopee|lazada|tiktok_shop|website`
-  - `status=connected|reauth_required|disconnected|error|draft`
-  - `environment=sandbox|production`
+- **Query:** `q` (shop name or store name), `provider=shopee|lazada`, `status=pending_auth|connected|degraded|token_expired|reauth_required|paused|disconnected`, `branchId`, `page`, `limit`, `order`
 - **Response:** 200
   ```json
-  { "data": [ { "id": "uuid", "tenant": { "id": "uuid", "name": "Mộc Store" }, "displayName": "mocstore-sandbox",
-      "provider": "shopee", "environment": "sandbox", "environmentLabel": "Official Sandbox",
+  { "data": [ { "id": "uuid", "code": "CON000001", "tenant": { "id": "uuid", "name": "Mộc Store" },
+      "branch": { "id": "uuid", "name": "Chi nhánh 1" }, "provider": "shopee", "shopId": "123", "shopName": "mocstore",
       "status": "connected", "lastSyncAt": "2026-10-23T01:56:00.000Z" } ],
-    "pagination": { "…": "…" } }
+    "pagination": { "…": "…" },
+    "counts": { "all": 3, "pending_auth": 0, "connected": 1, "degraded": 0, "token_expired": 0, "reauth_required": 1, "paused": 1, "disconnected": 0 } }
   ```
-  - The tenant name is copied from `platform.tenant.*` events into a `TenantProjection`; no join.
-  - `environmentLabel` is the provider's own name for the environment ("Official Sandbox", "Development Shop").
-- **Errors:** none
-- **Events consumed:** `platform.tenant.created`, `.updated` → `TenantProjection`
+  - `counts` follow `q`, `provider` and `branchId` but not `status`, so they feed the tabs.
+  - Store and branch names come from `TenantProjection` / `BranchProjection` (events); a row older than the projection has `name: null`.
+- **Errors:** 422 on a bad filter
+- **Events consumed:** `platform.tenant.created`, `.updated`, `platform.branch.created`, `.updated`
 
 ### GET /integration/api/v1/admin/connections/{id}
-- **Status:** new
-- **Screens:** Integration detail *(missing)*
+- **Status:** built
 - **Auth:** platform_admin
-- **Response:** 200, the list item plus `externalShopId`, `branchId`, `syncProducts`, `syncOrders`, `pushStock`, `syncPrices`, `syncInterval`, `tokenExpiresAt`, `lastError` and `stats: { mappedSkus: 48, totalSkus: 50, jobsToday: 299, jobsFailedToday: 3 }`. Tokens are never returned.
-- **Errors:** 404
-- **Events:** none
+- **Response:** 200, the list item plus `externalShopId`, `scopes: string[]`, `tokenExpiresAt`, `refreshTokenExpiresAt`, `lastOrderSyncAt`, `lastInventorySyncAt`, `lastErrorCode`, `lastErrorMessage`, `consecutiveFailures`, `safetyStockBuffer`, `stockAllocationPercent`, `connectedAt` (the row's `createdAt`) and `stats: { mappedSkus, totalSkus, jobsToday, jobsFailedToday }`. Tokens, secrets, oauth state and webhook secrets are never returned.
+  - `mappedSkus` = active SKU mappings of the connection; `totalSkus` = active catalog variants of the store; `jobsToday` / `jobsFailedToday` count the connection's sync jobs created today (Asia/Ho_Chi_Minh), failed = `failed_permanent` or `dead_lettered`.
+- **Errors:** 404 `CHANNEL_CONNECTION_NOT_FOUND`
 
 ### GET /integration/api/v1/admin/sync-history
-- **Status:** new
-- **Screens:** 16 (tab "Lịch sử đồng bộ")
+- **Status:** built (flat route only; the nested `connections/{id}/sync-logs` form is not built)
 - **Auth:** platform_admin
-- **Query:** `connectionId`, `tenantId`, `status=succeeded|failed|retrying|running`, `jobType`, `from`, `to`
-- **Response:** 200 `{ "data": [ { "id": "uuid", "code": "JOB-00984", "jobType": "stock_push", "status": "failed", "attemptCount": 3, "startedAt": "…", "finishedAt": "…" } ], "pagination": {…} }`
-- **Errors:** none
-- **Events:** none
+- **Query:** `connectionId`, `tenantId`, `status` (the 8 stored values, lowercase: `pending|running|retry_scheduled|completed|failed_permanent|cancelled|needs_review|dead_lettered`), `jobType` (the 9 stored types, lowercase), `from`, `to` (`YYYY-MM-DD`, inclusive, Asia/Ho_Chi_Minh), `page`, `limit`, `order`
+- **Response:** 200 `{ data: [ { id, code, connectionId, jobType, status, attemptCount, errorCode, errorMessage, startedAt, createdAt, finishedAt } ], pagination }`
+- **Errors:** 422 on a bad filter or date
 
 ### GET /integration/api/v1/admin/webhook-events
-- **Status:** new
-- **Screens:** 16 (tab "Webhook")
+- **Status:** built (flat route only)
 - **Auth:** platform_admin
-- **Query:** `provider`, `status=received|processed|failed`, `from`, `to`
-- **Response:** 200 `{ "data": [ { "id": "uuid", "provider": "shopee", "eventType": "order.created", "externalEventId": "…", "status": "processed", "errorMessage": null, "receivedAt": "…" } ], "pagination": {…} }`. Read from the integration `InboxEvent`; the raw payload is not returned.
-- **Errors:** none
-- **Events:** none
+- **Query:** `connectionId`, `provider`, `status` (`received|validated|processing|processed|needs_review|retry_pending|dead_lettered`), `from`, `to`, `page`, `limit`, `order`
+- **Response:** 200 `{ data: [ { id, connectionId, provider, eventType, externalEventId, status, errorMessage, receivedAt } ], pagination }`. Read from `webhook_inbox_events`; the payload (stored encrypted) is never selected.
+- **Errors:** 422 on a bad filter or date
+
+### POST /integration/api/v1/admin/connections/{id}/check
+- **Status:** built
+- **Auth:** platform_admin
+- **Response:** 200 `{ "status": "connected", "checkedAt": "…", "message": "The connection is healthy" }`. `status` is the connection's status; `timeout` if the probe takes longer than 5 s. It is the store-side `GET connections/:id/health` probe (token expiry, circuit breaker, status; in-process, no call to the marketplace) and changes no state.
+- **Errors:** 404
+
+### POST /integration/api/v1/admin/connections/{id}/disconnect
+- **Status:** built
+- **Auth:** platform_admin
+- **Headers:** `Idempotency-Key` (optional): a repeat with the same key returns the connection again (`Idempotency-Replayed: true`) and emits no second event.
+- **Body:** `{ "reason": "1-500 chars, required" }`
+- **Response:** 200 the connection detail (status `disconnected`). Same transition as the store's `DELETE connections/:id` (tokens wiped, sync and webhook handling stop on the status); synced orders and SKU mappings are kept.
+- **Errors:** 400 `CHANNEL_CONNECTION_ALREADY_DISCONNECTED`, 404 `CHANNEL_CONNECTION_NOT_FOUND`, 422 (missing or blank `reason`)
+- **Events:** `integration.connection.disconnected` with the optional `actor: { type: 'platform_admin', id, name }` and `reason` (`name` is `null`: the admin's name is not in the token)
 
 ## Failed jobs (insight read model across services)
 

@@ -1076,6 +1076,8 @@ export interface IntegrationConnectionEventPayload {
   status: string;
   reason?: string | null;
   occurredAt: string;
+  /** Who did it when a platform admin disconnected the connection (absent for a store member's own action) */
+  actor?: { type: string; id: string; name: string | null };
 }
 
 export interface IntegrationSkuMappingEventPayload {
