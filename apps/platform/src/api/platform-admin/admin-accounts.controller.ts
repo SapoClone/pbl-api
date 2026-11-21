@@ -9,7 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiParam, ApiTags } from '@nestjs/swagger';
-import { RequirePlatformAdmin } from '@pbl/auth';
+import { CurrentUser, RequirePlatformAdmin } from '@pbl/auth';
 import {
   AdminAccountDetail,
   AdminAccountsService,
@@ -55,7 +55,10 @@ export class AdminAccountsController {
   })
   @ApiParam({ name: 'id', type: 'String' })
   @Post(':id/revoke-sessions')
-  revokeSessions(@Param('id', ParseUUIDPipe) id: string) {
-    return this.accounts.revokeSessions(id);
+  revokeSessions(
+    @CurrentUser('id') adminId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.accounts.revokeSessions(adminId, id);
   }
 }

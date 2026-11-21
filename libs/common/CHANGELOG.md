@@ -4,6 +4,15 @@ All notable changes to `@sapoclone/pbl-common` are recorded here.
 The project follows [Semantic Versioning](https://semver.org): a removed or
 renamed export, or any other breaking change, bumps the major version.
 
+## [1.2.0] - 2026-11-21
+
+### Added
+
+- Platform-scope events: `EventEnvelope` takes a second type parameter (`tenantId`, default `string`, so existing code
+  is unchanged), `PlatformEventEnvelope` (`tenantId: null`) and `createPlatformEvent`. `consumeEvent` accepts an
+  envelope with `tenantId: null` and enters a context with no tenant for it; `undefined` or an empty `tenantId` is
+  still invalid.
+
 ## [1.1.0] - 2026-10-27
 
 ### Added

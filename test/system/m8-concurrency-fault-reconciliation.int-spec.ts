@@ -98,11 +98,13 @@ import { ReconciliationService as FinanceReconciliationService } from '../../app
 import { RefundsService } from '../../apps/finance/src/modules/refunds/refunds.service';
 import { SettlementsService } from '../../apps/finance/src/modules/settlements/settlements.service';
 import { AuditLogEntity } from '../../apps/insight/src/audit/audit-log.entity';
+import { AuditWriter } from '../../apps/insight/src/audit/audit-writer.service';
 import { AuditHandler } from '../../apps/insight/src/audit/audit.handler';
 import { InsightEventsConsumer } from '../../apps/insight/src/consumers/insight-events.consumer';
 import { M7_INSIGHT_ENTITIES } from '../../apps/insight/src/infrastructure/persistence/insight.entities';
 import { CreateInsightTables1791800000100 } from '../../apps/insight/src/migrations/1791800000100-create-insight-tables';
 import { CreateM7InsightCore1791900000300 } from '../../apps/insight/src/migrations/1791900000300-create-m7-insight-core';
+import { AuditLogPlatformScope1793500000000 } from '../../apps/insight/src/migrations/1793500000000-audit-log-platform-scope';
 import { ProjectionsService } from '../../apps/insight/src/modules/projections/projections.service';
 import { InsightRebuildService } from '../../apps/insight/src/modules/rebuild/insight-rebuild.service';
 import { InsightReconciliationService } from '../../apps/insight/src/modules/reconciliation/insight-reconciliation.service';
@@ -1214,6 +1216,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           ...CONSUMER_MIGRATIONS,
           CreateInsightTables1791800000100,
           CreateM7InsightCore1791900000300,
+          AuditLogPlatformScope1793500000000,
         ],
       }),
     );
@@ -1233,7 +1236,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
       insightProjections,
       outbox,
     );
-    insightAuditHandler = new AuditHandler();
+    insightAuditHandler = new AuditHandler(new AuditWriter(insightDs));
 
     // Seed Branch A (Tenant A) and Branch B (Tenant B)
     for (const [tId, bId, code, name] of [

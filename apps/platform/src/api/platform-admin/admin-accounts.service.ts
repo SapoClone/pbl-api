@@ -2,7 +2,12 @@ import { OffsetPaginationDto } from '@/common/dto/offset-pagination/offset-pagin
 import { Order } from '@/constants/app.constant';
 import { describeDevice } from '@/decorators/client-info.decorator';
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ROLE_CODES } from '@pbl/contracts';
+import {
+  AccountSessionsRevokedPayload,
+  PLATFORM_ACCOUNT_SESSIONS_REVOKED,
+  ROLE_CODES,
+} from '@pbl/contracts';
+import { EventOutbox } from '@pbl/events';
 import { DataSource } from 'typeorm';
 import { AccountEntity } from '../account/entities/account.entity';
 import { RefreshTokenEntity } from '../auth/entities/refresh-token.entity';
@@ -10,6 +15,7 @@ import { SessionService } from '../auth/session.service';
 import { tableOf } from '../subscription/sql';
 import { AccountTenantEntity } from '../tenant/entities/account-tenant.entity';
 import { TenantEntity } from '../tenant/entities/tenant.entity';
+import { loadAdminActor } from './admin-actor';
 import { maskPhone } from './admin-tenants.service';
 import {
   AdminAccountRoleFilter,
@@ -55,6 +61,7 @@ export class AdminAccountsService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly sessions: SessionService,
+    private readonly outbox: EventOutbox,
   ) {}
 
   async list(query: ListAdminAccountsReqDto): Promise<{
@@ -208,10 +215,37 @@ export class AdminAccountsService {
     };
   }
 
-  /** Ends every live session of the account, in every store */
-  async revokeSessions(id: string): Promise<{ revokedCount: number }> {
-    await this.assertExists(id);
-    return { revokedCount: await this.sessions.revokeAll(id) };
+  /**
+   * Ends every live session of the account, in every store, and records `platform.account.sessions_revoked` (platform
+   * scope: the account may belong to several stores). The revocation is the session service's own write (refresh
+   * tokens, then the Redis deny-list), so the event follows it in its own transaction.
+   */
+  async revokeSessions(
+    adminId: string,
+    id: string,
+  ): Promise<{ revokedCount: number }> {
+    const account = await this.dataSource.getRepository(AccountEntity).findOne({
+      where: { id: id as never },
+      select: { id: true, name: true, email: true },
+    });
+    if (!account) throw new NotFoundException();
+    const revokedCount = await this.sessions.revokeAll(id);
+    await this.dataSource.transaction(async (em) => {
+      const payload: AccountSessionsRevokedPayload = {
+        actor: await loadAdminActor(em, adminId),
+        target: {
+          type: 'account',
+          id: account.id,
+          name: account.name,
+          email: account.email,
+        },
+        revokedCount,
+      };
+      await this.outbox.add(em, PLATFORM_ACCOUNT_SESSIONS_REVOKED, payload, {
+        tenantId: null,
+      });
+    });
+    return { revokedCount };
   }
 
   private async assertExists(id: string): Promise<void> {
