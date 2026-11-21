@@ -13,6 +13,7 @@ import { AdminAuditQueryService } from './audit/admin-audit-query.service';
 import { AdminAuditController } from './audit/admin-audit.controller';
 import { AuditLogEntity } from './audit/audit-log.entity';
 import { AuditQueryService } from './audit/audit-query.service';
+import { AuditWriter } from './audit/audit-writer.service';
 import { AuditHandler } from './audit/audit.handler';
 import { AuditModule } from './audit/audit.module';
 import { AdminReadContext } from './common/admin-read-context';
@@ -21,6 +22,8 @@ import { M7_INSIGHT_ENTITIES } from './infrastructure/persistence/insight.entiti
 import { CreateInsightTables1791800000100 } from './migrations/1791800000100-create-insight-tables';
 import { CreateM7InsightCore1791900000300 } from './migrations/1791900000300-create-m7-insight-core';
 import { CreateNotifications1792000000200 } from './migrations/1792000000200-create-notifications';
+import { CreatePlatformReadModels1792100000100 } from './migrations/1792100000100-create-platform-read-models';
+import { CreateAnnouncements1792100000200 } from './migrations/1792100000200-create-announcements';
 import { AuditLogPlatformScope1793500000000 } from './migrations/1793500000000-audit-log-platform-scope';
 import { InsightExportService } from './modules/export/insight-export.service';
 import { InsightAnalyticsController } from './modules/insight-analytics.controller';
@@ -40,6 +43,13 @@ import {
 import { NotificationHandler } from './notifications/notification.handler';
 import { NotificationsController } from './notifications/notifications.controller';
 import { NotificationsService } from './notifications/notifications.service';
+import { AnnouncementDeliveryService } from './platform-admin/announcements/announcement-delivery.service';
+import { AnnouncementSchedulerJob } from './platform-admin/announcements/announcement-scheduler.job';
+import { AnnouncementsController } from './platform-admin/announcements/announcements.controller';
+import { AnnouncementsService } from './platform-admin/announcements/announcements.service';
+import { PlatformOverviewController } from './platform-admin/platform-overview.controller';
+import { PlatformOverviewService } from './platform-admin/platform-overview.service';
+import { PlatformProjectionHandler } from './platform-admin/platform-projection.handler';
 
 @Module({
   // Every route requires a platform-issued access token unless @Public()
@@ -66,6 +76,8 @@ import { NotificationsService } from './notifications/notifications.service';
         CreateInsightTables1791800000100,
         CreateM7InsightCore1791900000300,
         CreateNotifications1792000000200,
+        CreatePlatformReadModels1792100000100,
+        CreateAnnouncements1792100000200,
         AuditLogPlatformScope1793500000000,
       ],
     }),
@@ -82,6 +94,8 @@ import { NotificationsService } from './notifications/notifications.service';
     NotificationsController,
     InsightAnalyticsController,
     InsightInternalController,
+    PlatformOverviewController,
+    AnnouncementsController,
     AdminAuditController,
   ],
   providers: [
@@ -94,6 +108,12 @@ import { NotificationsService } from './notifications/notifications.service';
     DeviceTokensService,
     NotificationHandler,
     AuditHandler,
+    AuditWriter,
+    PlatformProjectionHandler,
+    PlatformOverviewService,
+    AnnouncementDeliveryService,
+    AnnouncementsService,
+    AnnouncementSchedulerJob,
     ProjectionsService,
     InsightEventsConsumer,
     InsightReportingService,
