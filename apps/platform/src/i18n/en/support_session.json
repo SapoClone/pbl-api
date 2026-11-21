@@ -1,0 +1,8 @@
+{
+  "error": {
+    "already_active": "An active support session already exists for this store",
+    "tenant_suspended": "This store is suspended, so a support session cannot be opened",
+    "already_ended": "This support session has already ended",
+    "read_only": "A support session is read-only: this request would change data"
+  }
+}

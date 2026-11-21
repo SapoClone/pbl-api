@@ -262,4 +262,54 @@ describe('AccessTokenVerifier', () => {
       permissions: ['*'],
     });
   });
+  describe('support-session tokens (ADR-0025)', () => {
+    const support = {
+      ...claims,
+      sub_type: 'platform_admin',
+      tid: 't1',
+      roles: [],
+      perms: ['orders.view'],
+      act: { sub: 'user-1', ssn: 'session-1' },
+      read_only: true,
+    };
+
+    it('reads act and read_only into readOnly and actor', async () => {
+      await expect(
+        verifier.verify(await sign({ payload: support })),
+      ).resolves.toMatchObject({
+        subjectType: 'platform_admin',
+        readOnly: true,
+        actor: { adminId: 'user-1', supportSessionId: 'session-1' },
+        permissions: ['orders.view'],
+      });
+    });
+
+    it('fails closed: act alone, or read_only alone, still makes the token read-only', async () => {
+      const { read_only: _ro, ...actOnly } = support;
+      const { act: _act, ...flagOnly } = support;
+      await expect(
+        verifier.verify(await sign({ payload: actOnly })),
+      ).resolves.toMatchObject({ readOnly: true });
+      await expect(
+        verifier.verify(await sign({ payload: flagOnly })),
+      ).resolves.toMatchObject({ readOnly: true });
+    });
+
+    it('refuses a malformed act (401)', async () => {
+      await expect(
+        verifier.verify(await sign({ payload: { ...support, act: 'x' } })),
+      ).rejects.toThrow(UnauthorizedException);
+      await expect(
+        verifier.verify(
+          await sign({ payload: { ...support, act: { sub: 'a' } } }),
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('leaves readOnly and actor off an ordinary token', async () => {
+      const user = await verifier.verify(await sign());
+      expect(user.readOnly).toBeUndefined();
+      expect(user.actor).toBeUndefined();
+    });
+  });
 });

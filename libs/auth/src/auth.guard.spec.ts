@@ -6,6 +6,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { AccessTokenVerifier } from './access-token.verifier';
 import {
+  AllowSupportToken,
   AuthOptional,
   Public,
   RequirePermission,
@@ -26,6 +27,8 @@ class Handlers {
   @RequirePermission('orders.create') createOrder() {}
   @RequirePermission('orders.create', 'pos.create') anyOf() {}
   @RequireRoles('owner') @RequirePermission('orders.create') both() {}
+  @RequirePermission('orders.view') viewOrders() {}
+  @RequirePlatformAdmin() @AllowSupportToken() endSession() {}
 }
 
 @RequirePlatformAdmin()
@@ -309,6 +312,107 @@ describe('AuthGuard', () => {
       await expect(
         guardFor('required').canActivate(adminContext('login', '')),
       ).resolves.toBe(true);
+    });
+  });
+  describe('read-only (support-session) tokens, ADR-0025', () => {
+    const support = (overrides: Partial<AuthUser> = {}) =>
+      user({
+        subjectType: 'platform_admin',
+        tenantId: 't1',
+        permissions: ['orders.view'],
+        readOnly: true,
+        actor: { adminId: 'a1', supportSessionId: 'ss1' },
+        ...overrides,
+      });
+    const run = (
+      handler: keyof Handlers | 'admin',
+      method: string,
+      path = '/api/v1/orders',
+    ) => {
+      const request: Record<string, unknown> = {
+        headers: { authorization: 'Bearer abc' },
+        method,
+        path,
+      };
+      const ctx = {
+        getHandler: () =>
+          handler === 'admin'
+            ? AdminHandlers.prototype.anyAdmin
+            : Handlers.prototype[handler],
+        getClass: () => (handler === 'admin' ? AdminHandlers : Handlers),
+        switchToHttp: () => ({ getRequest: () => request }),
+      } as unknown as ExecutionContext;
+      return guardFor('required').canActivate(ctx);
+    };
+
+    beforeEach(() => verifier.verify.mockResolvedValue(support()));
+
+    it.each(['GET', 'HEAD', 'OPTIONS'])('lets %s through', async (method) => {
+      await expect(run('viewOrders', method)).resolves.toBe(true);
+    });
+
+    it.each(['POST', 'PUT', 'PATCH', 'DELETE'])(
+      'answers 403 AUTH_READ_ONLY to %s before the handler',
+      async (method) => {
+        await expect(run('plain', method)).rejects.toMatchObject({
+          response: { errorCode: 'AUTH_READ_ONLY' },
+          status: 403,
+        });
+      },
+    );
+
+    it('refuses a POST that is only a read (search by POST): accepted', async () => {
+      await expect(run('viewOrders', 'POST')).rejects.toMatchObject({
+        response: { errorCode: 'AUTH_READ_ONLY' },
+      });
+    });
+
+    it('still enforces permissions on a GET', async () => {
+      await expect(run('createOrder', 'GET')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('refuses /internal routes outright, even on GET', async () => {
+      for (const path of [
+        '/internal/v1/branches/x/blockers',
+        '/api/internal/reservations',
+        '/INTERNAL/v1/x',
+      ]) {
+        await expect(run('plain', 'GET', path)).rejects.toThrow(
+          ForbiddenException,
+        );
+      }
+    });
+
+    it('is not a platform admin: refused on a @RequirePlatformAdmin route', async () => {
+      await expect(run('admin', 'GET')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('is not a member: no roles, no role-gated route', async () => {
+      await expect(run('ownerOnly', 'GET')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('needs a store like any store token', async () => {
+      verifier.verify.mockResolvedValue(support({ tenantId: undefined }));
+      await expect(run('plain', 'GET')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('@AllowSupportToken() lets the token reach the handler with POST, but not /internal', async () => {
+      await expect(run('endSession', 'POST')).resolves.toBe(true);
+      await expect(run('endSession', 'POST', '/internal/v1/x')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('does not affect other tokens: an account token POSTs, an admin token reaches admin routes', async () => {
+      verifier.verify.mockResolvedValue(user({ tenantId: 't1' }));
+      await expect(run('plain', 'POST')).resolves.toBe(true);
+      verifier.verify.mockResolvedValue(
+        user({ subjectType: 'platform_admin', roles: ['admin'] }),
+      );
+      await expect(run('admin', 'POST')).resolves.toBe(true);
+      await expect(run('plain', 'GET')).rejects.toThrow(ForbiddenException);
     });
   });
 });

@@ -81,6 +81,13 @@ export class AccessTokenVerifier {
     const perms = stringList(claims.perms);
     const branches = stringList(claims.branches);
 
+    // Fail closed: either claim alone makes the token read-only
+    const act = this.parseActor(claims.act);
+    const readOnly = claims.read_only === true || claims.act !== undefined;
+    if (claims.act !== undefined && !act) {
+      throw new UnauthorizedException();
+    }
+
     return {
       id: claims.sub,
       sessionId: claims.sid,
@@ -90,7 +97,20 @@ export class AccessTokenVerifier {
       permissions: perms ?? (roles.includes(OWNER_ROLE) ? [WILDCARD] : []),
       branches: branches ?? [WILDCARD],
       exp: claims.exp,
+      ...(readOnly ? { readOnly: true } : {}),
+      ...(act ? { actor: act } : {}),
     };
+  }
+
+  /** `act` = { sub: adminId, ssn: sessionId }; anything else is a malformed token */
+  private parseActor(
+    act: unknown,
+  ): { adminId: string; supportSessionId: string } | undefined {
+    if (!act || typeof act !== 'object') return undefined;
+    const { sub, ssn } = act as Record<string, unknown>;
+    return typeof sub === 'string' && sub && typeof ssn === 'string' && ssn
+      ? { adminId: sub, supportSessionId: ssn }
+      : undefined;
   }
 
   private safeDecode(token: string) {

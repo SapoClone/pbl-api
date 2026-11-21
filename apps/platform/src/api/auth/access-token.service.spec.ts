@@ -249,4 +249,64 @@ describe('AccessTokenService', () => {
       await expect(verifier.verify(token)).rejects.toThrow();
     });
   });
+  describe('support-session tokens (ADR-0025)', () => {
+    const data = () => ({
+      adminId: 'admin-1',
+      sessionId: 'ss-1',
+      tenantId: 'tenant-1',
+      permissions: ['orders.view', 'products.view'],
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    it('carries act, read_only, sid, tid, view-only perms and no roles', async () => {
+      const claims = jwtService.decode(await service.signSupport(data()));
+
+      expect(claims).toMatchObject({
+        sub: 'admin-1',
+        sid: 'ss-1',
+        sub_type: 'platform_admin',
+        tid: 'tenant-1',
+        roles: [],
+        perms: ['orders.view', 'products.view'],
+        branches: ['*'],
+        act: { sub: 'admin-1', ssn: 'ss-1' },
+        read_only: true,
+        iss: 'platform',
+        aud: 'pbl6',
+      });
+      expect(claims.perms).not.toContain('*');
+    });
+
+    it('expires with the session, not with the usual access-token TTL', async () => {
+      const claims = jwtService.decode(await service.signSupport(data()));
+
+      expect(claims.exp - claims.iat).toBeGreaterThan(59 * 60);
+      expect(claims.exp - claims.iat).toBeLessThanOrEqual(60 * 60);
+    });
+
+    it('is read-only for @pbl/auth', async () => {
+      const verifier = new AccessTokenVerifier({
+        issuer: 'platform',
+        audience: 'pbl6',
+        keyResolver: service,
+      });
+
+      await expect(
+        verifier.verify(await service.signSupport(data())),
+      ).resolves.toMatchObject({
+        id: 'admin-1',
+        sessionId: 'ss-1',
+        tenantId: 'tenant-1',
+        subjectType: 'platform_admin',
+        readOnly: true,
+        actor: { adminId: 'admin-1', supportSessionId: 'ss-1' },
+      });
+    });
+
+    it('refuses to sign for a session that is over', async () => {
+      await expect(
+        service.signSupport({ ...data(), expiresAt: new Date(Date.now() - 1) }),
+      ).rejects.toThrow(/expired/);
+    });
+  });
 });

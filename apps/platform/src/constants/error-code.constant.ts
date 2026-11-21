@@ -45,6 +45,13 @@ export enum ErrorCode {
   // Plan limit reached (409): the store must move to a bigger plan
   Q001 = 'quota.error.limit_reached',
 
+  // Support sessions (platform admin): SS01 an active one exists, SS02 store locked, SS03 already ended
+  SS01 = 'support_session.error.already_active',
+  SS02 = 'support_session.error.tenant_suspended',
+  SS03 = 'support_session.error.already_ended',
+  // Sent by the @pbl/auth guard (its errorCode is this key); the platform filter translates it
+  AUTH_READ_ONLY = 'support_session.error.read_only',
+
   // Role
   R001 = 'role.error.name_exists',
   R002 = 'role.error.owner_immutable',

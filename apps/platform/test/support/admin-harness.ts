@@ -16,6 +16,7 @@ import { AdminSubscriptionsService } from '../../src/api/platform-admin/admin-su
 import { AdminTenantsService } from '../../src/api/platform-admin/admin-tenants.service';
 import { AdminUsageService } from '../../src/api/platform-admin/admin-usage.service';
 import { PlatformAdminEntity } from '../../src/api/platform-admin/entities/platform-admin.entity';
+import { SupportSessionEntity } from '../../src/api/platform-admin/support-session/support-session.entity';
 import { PlatformSettingEntity } from '../../src/api/platform-setting/entities/platform-setting.entity';
 import { RolePermissionEntity } from '../../src/api/role/entities/role-permission.entity';
 import { RoleEntity } from '../../src/api/role/entities/role.entity';
@@ -97,6 +98,7 @@ export async function startAdminDb(prefix: string) {
       SubscriptionEventEntity,
       SubscriptionPaymentEntity,
       TenantUsageEntity,
+      SupportSessionEntity,
     ],
   });
   await dataSource.initialize();

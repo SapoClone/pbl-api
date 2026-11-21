@@ -15,6 +15,13 @@ export type AccessTokenClaims = {
   perms?: string[];
   /** Branch ids the member may act in; `['*']` = all */
   branches?: string[];
+  /**
+   * Support session (ADR-0004 §3, ADR-0025): the platform admin acting in the store, and the session's id.
+   * A token that carries it is read-only.
+   */
+  act?: { sub: string; ssn: string };
+  /** Explicit read-only marker; set on every support-session token next to `act` */
+  read_only?: boolean;
   iss: string;
   aud: string;
   iat: number;
@@ -36,6 +43,13 @@ export type AuthUser = {
   branches: string[];
   /** Expiry of the access token, seconds since epoch */
   exp: number;
+  /**
+   * True for a support-session token (`read_only` or `act` claim): the guard refuses every request that is not
+   * GET, HEAD or OPTIONS with 403 `AUTH_READ_ONLY` (ADR-0025). Absent or false for every other token.
+   */
+  readOnly?: boolean;
+  /** Who is acting during a support session (`act` claim): the platform admin and the session. */
+  actor?: { adminId: string; supportSessionId: string };
 };
 
 export interface AuthenticatedContext {

@@ -31,5 +31,6 @@ large changes are built on them. Summary rules live in [`/CLAUDE.md`](../../CLAU
 | [0022](0022-platform-admin-identity.md) | Platform admins are a separate identity with store-less tokens | Accepted |
 | [0023](0023-product-attributes.md) | A product chooses the attributes it varies on (`product_attributes`); attributes and values stay shared by the store | Accepted |
 | [0024](0024-branch-pricing.md) | A price list can be limited to branches (`price_list_branches`); a branch has one active price list; `sales` keeps branch prices in its own projection | Accepted |
+| [0025](0025-support-sessions.md) | Support sessions give a platform admin a read-only store token (`act`, `read_only`), enforced by the shared guard with `AUTH_READ_ONLY` | Proposed |
 
 New record: copy [0000-template.md](0000-template.md), take the next number.

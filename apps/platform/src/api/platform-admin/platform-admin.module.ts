@@ -22,6 +22,12 @@ import { AdminUsageController } from './admin-usage.controller';
 import { AdminUsageService } from './admin-usage.service';
 import { PlatformAdminEntity } from './entities/platform-admin.entity';
 import { PlatformAdminAuthService } from './platform-admin-auth.service';
+import { SupportSessionExpiryJob } from './support-session/support-session-expiry.job';
+import { SupportSessionController } from './support-session/support-session.controller';
+import {
+  SUPPORT_SESSION_CLOCK,
+  SupportSessionService,
+} from './support-session/support-session.service';
 
 /** The platform admin: identity (ADR-0022) and the management of stores, plans, subscriptions, usage, accounts, admins and settings. */
 @Module({
@@ -41,6 +47,7 @@ import { PlatformAdminAuthService } from './platform-admin-auth.service';
     AdminAccountsController,
     AdminAdminsController,
     AdminSettingsController,
+    SupportSessionController,
   ],
   providers: [
     PlatformAdminAuthService,
@@ -51,6 +58,9 @@ import { PlatformAdminAuthService } from './platform-admin-auth.service';
     AdminAccountsService,
     AdminAdminsService,
     AdminSettingsService,
+    SupportSessionService,
+    SupportSessionExpiryJob,
+    { provide: SUPPORT_SESSION_CLOCK, useValue: () => new Date() },
   ],
   exports: [PlatformAdminAuthService],
 })
