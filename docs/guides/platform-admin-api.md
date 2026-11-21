@@ -81,12 +81,22 @@ repository's numbering, which differs from contract 04 where an old code was alr
 
 The branch's own pagination type and its `page`/`pageSize` query need the change described under Conventions.
 
+## Built in insight, integration and platform (20 Nov)
+
+Same conventions as above (gateway `/<service>/api/v1/admin/...`, platform admin token, `{ data, pagination, counts? }`, lowercase snake_case enums). The web request these answer is the v1.2 document; each guide lists the shapes, errors and decisions.
+
+| Method and path | Screen | Guide |
+| --- | --- | --- |
+| `GET /insight/api/v1/admin/overview`, `/transactions/daily`, `/watchlist` | 01 Tổng quan | [admin-dashboard-announcements](admin-dashboard-announcements.md) |
+| `GET/POST/PATCH/DELETE /insight/api/v1/admin/announcements`, `.../audience-preview`, `.../{id}/send`, `.../{id}/cancel` | 20, 21 Thông báo | [admin-dashboard-announcements](admin-dashboard-announcements.md) |
+| `GET /insight/api/v1/admin/audit-logs`, `.../actions` | 19 Nhật ký hoạt động | [audit-log](audit-log.md) |
+| `GET /integration/api/v1/admin/connections`, `.../{id}`, `/sync-history`, `/webhook-events`, `POST .../{id}/check`, `POST .../{id}/disconnect` | 16 Tích hợp | [admin-integration](admin-integration.md) |
+| `POST/GET /platform/api/v1/admin/support-sessions`, `GET .../{id}`, `POST .../{id}/end` | 22 Hỗ trợ kỹ thuật | [support-sessions](support-sessions.md) |
+
 ## Not built yet
 
-These are in contract 04 and in the branch, and have no endpoint: the dashboard (`/admin/dashboard`), monitoring,
-failed jobs and their retry, the audit log, announcements (insight); integration connections and their detail
-(integration); support sessions (platform). The branch's mock data covers
-them until their endpoints exist. Other gaps in what is built:
+Monitoring and failed jobs and their retry have no endpoint (both were removed from the admin menu). Everything else the
+branch asked for is built; the table above has the routes that live outside platform. Other gaps in what is built:
 
 - **No invitation email, on purpose.** An owner created by an admin has no password and cannot sign in. The decision
   is that owners sign up themselves and start on `free`; use create-for-owner only with the email of an existing
@@ -117,8 +127,9 @@ them until their endpoints exist. Other gaps in what is built:
   these services were deployed is not known to them until its next status event.
 - **Accounts have no verified-email state yet**, so `status=pending_verification` matches nothing and
   `isEmailVerified` is not in the detail.
-- **No events for admin actions** (`platform.admin.created`, `platform.settings.changed`, `...sessions_revoked`): they
-  belong to no store, and the platform-scope audit below comes first.
+- **Admin actions are audited** (platform scope): tenant update, suspend and reactivate, plan changes and payments, plan
+  edits, session revocation, admin create and update, and settings changes emit events with `tenantId: null` (or the
+  store when they target one) in the same transaction as the write; insight records them with the admin's id, name and
+  role. A refused write (for example `A011`) is not audited yet: `result` is always `success`. There is no purge job
+  for the audit log (retention is documented as at least 12 months, nothing is deleted).
 - **Store `code` is not in the store-facing DTOs** (only the admin ones).
-- **Platform-scope audit.** The tenant events reach insight's audit log, per store; plan edits are told to every store
-  on the plan. Actions that belong to no store need their own design.
