@@ -86,10 +86,74 @@ export interface SupportSessionEndedPayload {
   endedAt: string;
 }
 
-/** The actor of an admin write; `platform_admin` for the admin area, `account` for a store owner, `system` for a job */
+export const PLATFORM_ADMIN_CREATED = {
+  type: 'platform.admin.created',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_ADMIN_UPDATED = {
+  type: 'platform.admin.updated',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_SETTINGS_CHANGED = {
+  type: 'platform.settings.changed',
+  version: 1,
+} as const satisfies EventDefinition;
+export const PLATFORM_ACCOUNT_SESSIONS_REVOKED = {
+  type: 'platform.account.sessions_revoked',
+  version: 1,
+} as const satisfies EventDefinition;
+/**
+ * The actor of an admin write; `platform_admin` for the admin area, `account` for a store owner, `system` for a job.
+ * `name` and `role` are the admin's display name and role at the time (audit rows keep them).
+ */
 export interface PlatformActor {
   type: 'platform_admin' | 'account' | 'system';
   id: string | null;
+  name?: string | null;
+  role?: string | null;
+}
+
+/** The actor of an event of the admin area: always a platform admin, with the name and role at the time */
+export interface PlatformAdminActor {
+  type: 'platform_admin';
+  id: string;
+  name: string;
+  role: string;
+}
+
+/** Before and after of the fields an admin changed; secrets and password hashes never appear here */
+export type FieldChanges = Record<string, { from: unknown; to: unknown }>;
+
+/**
+ * `platform.admin.created` and `platform.admin.updated` (platform scope: the envelope's `tenantId` is null).
+ * `changes` (updates only) lists the changed fields before and after: name, role, status; never the password.
+ */
+export interface PlatformAdminEventPayload {
+  actor: PlatformAdminActor;
+  target: {
+    type: 'admin';
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    status: string;
+  };
+  changes?: FieldChanges;
+}
+
+/** `platform.settings.changed` (platform scope): the changed keys with before and after, secrets left out */
+export interface PlatformSettingsChangedPayload {
+  actor: PlatformAdminActor;
+  /** The changed keys, e.g. `security.lockoutMaxAttempts` */
+  keys: string[];
+  changes: FieldChanges;
+}
+
+/** `platform.account.sessions_revoked` (platform scope; the account may belong to several stores) */
+export interface AccountSessionsRevokedPayload {
+  actor: PlatformAdminActor;
+  target: { type: 'account'; id: string; name: string; email: string };
+  revokedCount: number;
 }
 
 export interface TenantEventPayload {
@@ -102,11 +166,14 @@ export interface TenantEventPayload {
   updatedAt: string;
   actor: PlatformActor;
   /** `platform.tenant.updated`: the fields that changed, before and after */
-  changes?: Record<string, { from: unknown; to: unknown }>;
+  changes?: FieldChanges;
 }
 
 export interface TenantStatusChangedPayload {
   tenantId: string;
+  /** The store's name and code, so the audit log can show them without asking platform */
+  tenantName?: string;
+  tenantCode?: string;
   from: string;
   to: string;
   reason: string | null;
@@ -130,11 +197,15 @@ export interface PlanChangedPayload {
   quotas: PlanQuotas;
   updatedAt: string;
   actor: PlatformActor;
+  /** The fields an admin changed, before and after (absent on a plain re-announcement) */
+  changes?: FieldChanges;
 }
 
 export interface SubscriptionChangedPayload {
   subscriptionId: string;
   tenantId: string;
+  tenantName?: string;
+  tenantCode?: string;
   /**
    * `past_due`: a paid plan ran past its end date and is in grace (limits unchanged); `expired`: the grace ended and the
    * store fell back to `free`; `resync`: the current plan re-announced (backfill, nothing changed).
@@ -1109,6 +1180,8 @@ export interface IntegrationConnectionEventPayload {
   status: string;
   reason?: string | null;
   occurredAt: string;
+  /** Who did it when a platform admin disconnected the connection (absent for a store member's own action) */
+  actor?: { type: string; id: string; name: string | null };
 }
 
 export interface IntegrationSkuMappingEventPayload {

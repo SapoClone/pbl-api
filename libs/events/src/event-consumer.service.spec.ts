@@ -89,6 +89,37 @@ describe('EventConsumer.handleBody', () => {
     );
   });
 
+  it('handles a platform-scope event without a tenant: no tenant context, no app.tenant_id, same inbox', async () => {
+    const { consumer, registry, manager, dataSource } = build([
+      { event_id: 'x' },
+    ]);
+    const seen: string[] = [];
+    (manager.query as jest.Mock).mockImplementation(async (sql: string) => {
+      seen.push(sql.includes('set_config') ? 'set_config' : 'inbox');
+      return [{ event_id: 'x' }];
+    });
+    const handler = jest.fn(async () => {
+      seen.push('handler');
+      expect(TenantContext.current()).toBeNull();
+    });
+    registry.register('platform.settings.changed', handler);
+
+    await expect(
+      consumer.handleBody(
+        JSON.stringify(
+          envelope({ type: 'platform.settings.changed', tenantId: null }),
+        ),
+      ),
+    ).resolves.toBe('processed');
+
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual(['inbox', 'handler']);
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: null }),
+      manager,
+    );
+  });
+
   it('skips a duplicate delivery without running the handler', async () => {
     const { consumer, registry } = build([]);
     const handler = jest.fn();

@@ -494,7 +494,12 @@ describe('platform admin store management (Postgres)', () => {
           from: 'active',
           to: 'suspended',
           reason: 'Vi phạm điều khoản',
-          changedBy: { type: 'platform_admin', id: ADMIN },
+          tenantName: expect.any(String),
+          tenantCode: expect.any(String),
+          changedBy: expect.objectContaining({
+            type: 'platform_admin',
+            id: ADMIN,
+          }),
         }),
         { tenantId: OLD_T2 },
       );

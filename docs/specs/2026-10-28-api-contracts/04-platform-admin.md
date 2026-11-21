@@ -37,7 +37,7 @@ Where the built API differs from the sections below (the sections keep the desig
 - **Expiry (D31):** a job in platform moves a paid subscription past `expiresAt` to `past_due` (the grace: the paid plan's limits stay for `billing.graceDays` days, default 7), then closes it (`expired`) and starts a `free` subscription with no end date. Data is kept and nothing is deleted; over-limit adds are refused by the usual `Q001` checks. A payment during the grace renews the same subscription to `active`. The `past_due` and `expired` counters of `GET /admin/subscriptions` work.
 - **Suspension** also stops marketplace webhooks (503 `TENANT_SUSPENDED`, the marketplace retries), the integration sync jobs and the internal order intake (403 `TENANT_SUSPENDED`); other services learn the store status from `platform.tenant.status_changed`.
 - **Accounts** have no verified-email state, so `status=pending_verification` matches nothing and `isEmailVerified` is not returned. `code` (`US00021`) is built.
-- **Events** for admin actions (`platform.admin.created`, `.updated`, `.logged_in`, `platform.settings.changed`, `platform.account.sessions_revoked`) are not emitted: events carry a store, and these belong to none. They wait for the platform-scope audit design. `platform.tenant.*`, `platform.plan.changed` (once per store on the plan) and `platform.subscription.changed` are emitted; `catalog.usage.changed` replaces `catalog.product.count_changed` and `catalog.storage.usage_changed` in the table at the end.
+- **Events** for admin actions: `platform.admin.created`, `.updated`, `platform.settings.changed` and `platform.account.sessions_revoked` are emitted with `tenantId: null` (platform scope: the envelope carries no store, the consumer enters no tenant context; [audit log guide](../../guides/audit-log.md)); `platform.admin.logged_in` is still not emitted. Every payload has `actor: { type: 'platform_admin', id, name, role }`; updates carry `changes` (before and after, never secrets). `platform.tenant.*`, `platform.plan.changed` (once per store on the plan) and `platform.subscription.changed` are emitted; `catalog.usage.changed` replaces `catalog.product.count_changed` and `catalog.storage.usage_changed` in the table at the end.
 
 ## Screen → endpoints
 
@@ -91,7 +91,7 @@ Where the built API differs from the sections below (the sections keep the desig
   - 400 `A001` wrong email or password; also an unknown email, a disabled admin and an admin with no password yet, so sign-in does not reveal which (ADR-0022)
   - 400 `A002` is not used
   - 400 `A003` locked: after `security.lockoutMaxAttempts` failed attempts (default 5, minimum 3) the admin is locked for `security.lockoutWindowMinutes` (default 15), the same rule as accounts
-- **Events:** `platform.admin.logged_in` → insight audit (not emitted yet: events are tenant-scoped, so a platform-scope audit comes with the first admin write)
+- **Events:** `platform.admin.logged_in` → insight audit (not emitted yet; the platform-scope events exist now, so it only needs emitting)
 
 ### POST /platform/api/v1/admin/auth/refresh
 - **Status:** built. It reuses `RefreshTokenService`, but a refresh token whose subject is a platform admin is only accepted on this path.
@@ -651,26 +651,36 @@ The job code (`JOB-00984`) is assigned by the source service. Integration and th
 ## Audit log (insight)
 
 ### GET /insight/api/v1/admin/audit-logs
-- **Status:** change. Today `/insight/api/v1/audit-logs` is owner/manager only and tenant-scoped. This admin route reads every tenant plus platform-scope rows.
+- **Status:** built. `/insight/api/v1/audit-logs` stays owner/manager only and tenant-scoped (platform-scope rows are never in it). This admin route reads every tenant plus platform-scope rows.
 - **Screens:** 19 Nhật ký hoạt động; 03 (tab "Lịch sử hoạt động", `tenantId=`); 08 (tab "Lịch sử hoạt động", `actorId=`)
 - **Auth:** platform_admin
 - **Query:**
   - `q` searches action, object and actor name
-  - `tenantId` (or `scope=platform` for platform-only rows)
-  - `action` ("Tất cả thao tác" is all actions)
-  - `actorId`, `from`, `to`
+  - `tenantId`, `scope=platform|tenant` (`platform` for platform-only rows)
+  - `result=success|failed`
+  - `action` ("Tất cả thao tác" is all actions; the codes are in `GET /admin/audit-logs/actions`)
+  - `actorId`, `from`, `to` (`YYYY-MM-DD`, inclusive, Asia/Ho_Chi_Minh; 422 when `from` is after `to`), `order` (`DESC` default), `page`, `limit` (20, max 100)
 - **Response:** 200
   ```json
   { "data": [ { "id": "uuid", "occurredAt": "2026-10-23T01:55:00.000Z",
-      "actor": { "type": "platform_admin", "id": "uuid", "label": "Lan Anh", "roleLabel": "Quản trị viên" },
-      "scope": { "type": "platform", "tenantId": null, "tenantName": null },
-      "action": "subscription.plan_changed", "actionLabel": "Đổi gói dịch vụ",
-      "object": { "type": "tenant", "id": "uuid", "label": "TN0008" }, "result": "success" } ],
-    "pagination": { "…": "…" } }
+      "actor": { "type": "platform_admin", "id": "uuid", "name": "Lan Anh" },
+      "scope": { "type": "tenant", "tenantId": "uuid", "tenantName": "Cửa hàng A" },
+      "action": "subscription.plan_changed",
+      "target": { "type": "subscription", "id": "uuid", "name": "TN0008" },
+      "result": "success", "errorCode": null, "errorMessage": null } ],
+    "pagination": { "limit": 20, "currentPage": 1, "totalRecords": 1, "totalPages": 1 } }
   ```
+  - This is the v1.2 shape (`actor.name`, `target`, no labels: the web maps `action` and `actor.type` to text). `tenantName` is the store's name written with the row, taken from the event payload.
   - Rows are read-only: there is no PATCH or DELETE.
-  - Retention is at least 12 months (`AuditLog.result`, nullable `tenantId`).
-  - System rows have `actor.type = system` and `label = "Hệ thống"`.
+  - Retention is at least 12 months (`security.auditRetentionMonths`); no purge job exists yet, nothing is deleted.
+  - System rows have `actor.type = system` (`id` and `name` null). Failed admin actions are not audited yet: `result` is `success` on every row today (the columns exist).
+  - Codes: `tenant.updated`, `tenant.status_changed`, `subscription.plan_changed`, `account.sessions_revoked`, `settings.changed`, `admin.created`, `admin.updated`, `support_session.started`, `support_session.ended`, `announcement.sent`, `integration.disconnected`, and `plan.updated` (an admin's edit of a plan, one row per edit); store-side rows keep `account.logged_in`, `membership.*`, `tenant.created`, `order.completed`, `purchase_order.approved`.
+
+### GET /insight/api/v1/admin/audit-logs/actions
+- **Status:** built
+- **Screens:** 19 (the "Tất cả thao tác" filter)
+- **Auth:** platform_admin
+- **Response:** 200 `{ "data": ["tenant.updated", "…"] }`: the fixed list of action codes, no labels.
 - **Errors:** none
 - **Events:** every `platform.*` admin event above, `platform.account.logged_in`, `platform.tenant.status_changed`, `platform.subscription.changed`, `platform.support_session.*`, and `insight.announcement.sent`
 

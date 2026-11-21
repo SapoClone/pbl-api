@@ -194,12 +194,29 @@ describe('platform admin accounts, admins and settings (Postgres)', () => {
     });
 
     it('ends the sessions of an account through the session service', async () => {
-      expect(await h.services.accounts.revokeSessions(ids.owner)).toEqual({
+      h.outbox.add.mockClear();
+      expect(
+        await h.services.accounts.revokeSessions(SUPER, ids.owner),
+      ).toEqual({
         revokedCount: 2,
       });
       expect(h.sessions.revokeAll).toHaveBeenCalledWith(ids.owner);
+      // a platform-scope event: no store, the admin as actor, the account as target, no secrets
+      const [call] = h.outboxCalls();
+      expect(call[1].type).toBe('platform.account.sessions_revoked');
+      expect(call[3]).toEqual({ tenantId: null });
+      expect(call[2]).toEqual({
+        actor: expect.objectContaining({ type: 'platform_admin', id: SUPER }),
+        target: {
+          type: 'account',
+          id: ids.owner,
+          name: 'Minh Anh',
+          email: 'minhanh@moc.vn',
+        },
+        revokedCount: 2,
+      });
       await expect(
-        h.services.accounts.revokeSessions(randomUUID()),
+        h.services.accounts.revokeSessions(SUPER, randomUUID()),
       ).rejects.toMatchObject({ status: 404 });
     });
   });
@@ -236,6 +253,51 @@ describe('platform admin accounts, admins and settings (Postgres)', () => {
       await expect(add()).rejects.toMatchObject({
         response: { errorCode: 'admin.error.email_taken' },
       });
+    });
+
+    it('emits platform-scope events for a creation and a change, with the actor named and no password', async () => {
+      h.outbox.add.mockClear();
+      const created = await h.services.admins.create(superId, {
+        name: 'Hoa Binh',
+        email: 'hoabinh@omniretail.vn',
+        role: PlatformAdminRole.ADMIN,
+        password: 'Str0ngPassw0rd!',
+      });
+      await h.services.admins.update(superId, created.id, {
+        role: PlatformAdminRole.SUPER_ADMIN,
+      });
+      await h.services.admins.update(superId, created.id, {}); // nothing changed: no event
+      const calls = h.outboxCalls();
+      expect(calls.map((c) => c[1].type)).toEqual([
+        'platform.admin.created',
+        'platform.admin.updated',
+      ]);
+      expect(calls.every((c) => c[3]?.tenantId === null)).toBe(true);
+      const actor = {
+        type: 'platform_admin',
+        id: superId,
+        name: 'Lan Anh',
+        role: 'super_admin',
+      };
+      expect(calls[0][2]).toEqual({
+        actor,
+        target: {
+          type: 'admin',
+          id: created.id,
+          name: 'Hoa Binh',
+          email: 'hoabinh@omniretail.vn',
+          role: 'admin',
+          status: 'active',
+        },
+      });
+      expect(calls[1][2].changes).toEqual({
+        role: { from: 'admin', to: 'super_admin' },
+      });
+      expect(JSON.stringify(calls.map((c) => c[2]))).not.toMatch(
+        /Str0ng|\$argon/,
+      );
+      // leave the other tests' admins as they were
+      await sql(`DELETE FROM "platform_admin" WHERE "id" = $1`, [created.id]);
     });
 
     it('stores a password only as a hash, and an admin with none cannot sign in', async () => {
@@ -386,6 +448,7 @@ describe('platform admin accounts, admins and settings (Postgres)', () => {
     });
 
     it('changes a subset, one row per key, and leaves the rest alone', async () => {
+      h.outbox.add.mockClear();
       const saved = await h.services.settings.update(SUPER, {
         general: { supportEmail: 'help@omniretail.vn' },
         security: { lockoutMaxAttempts: 8, resetLinkSingleUse: false },
@@ -405,6 +468,19 @@ describe('platform admin accounts, admins and settings (Postgres)', () => {
         { key: 'security.lockoutMaxAttempts', updated_by: SUPER },
         { key: 'security.resetLinkSingleUse', updated_by: SUPER },
       ]);
+      // one platform-scope event with the keys that changed, before and after
+      const [call] = h.outboxCalls();
+      expect(call[1].type).toBe('platform.settings.changed');
+      expect(call[3]).toEqual({ tenantId: null });
+      expect(call[2].keys.sort()).toEqual([
+        'general.supportEmail',
+        'security.lockoutMaxAttempts',
+        'security.resetLinkSingleUse',
+      ]);
+      expect(call[2].changes['security.lockoutMaxAttempts']).toEqual({
+        from: 5,
+        to: 8,
+      });
       // a second change of the same key replaces the row
       await h.services.settings.update(SUPER, {
         security: { lockoutMaxAttempts: 4 },

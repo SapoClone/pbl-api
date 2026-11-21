@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import {
+  PLATFORM_SETTINGS_CHANGED,
+  PlatformSettingsChangedPayload,
+} from '@pbl/contracts';
+import { EventOutbox } from '@pbl/events';
 import { DataSource } from 'typeorm';
 import { PlatformSettingEntity } from '../platform-setting/entities/platform-setting.entity';
 import { GRACE_DAYS } from '../subscription/expiry';
+import { diffFields, isSecretKey, loadAdminActor } from './admin-actor';
 import { UpdateSettingsReqDto } from './dto/admin-setting.req.dto';
 
 export type PlatformSettings = {
@@ -24,6 +30,17 @@ export type PlatformSettings = {
   /** `graceDays`: days a paid plan keeps its limits after its end date, before it falls back to `free` */
   billing: { graceDays: number };
 };
+
+/** `{ general: { timezone } }` -> `{ 'general.timezone': ... }`, secret-looking keys left out */
+function flatten(settings: PlatformSettings): Record<string, unknown> {
+  const flat: Record<string, unknown> = {};
+  for (const [group, values] of Object.entries(settings)) {
+    for (const [key, value] of Object.entries(values as object)) {
+      if (!isSecretKey(`${group}.${key}`)) flat[`${group}.${key}`] = value;
+    }
+  }
+  return flat;
+}
 
 /** What a setting is until an admin changes it (contract 04, "System settings") */
 export const DEFAULT_SETTINGS: PlatformSettings = {
@@ -57,7 +74,10 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
  */
 @Injectable()
 export class AdminSettingsService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly outbox: EventOutbox,
+  ) {}
 
   async get(): Promise<PlatformSettings> {
     const rows = await this.dataSource
@@ -96,7 +116,24 @@ export class AdminSettingsService {
       }
     }
     if (changes.length > 0) {
-      await this.dataSource.getRepository(PlatformSettingEntity).save(changes);
+      const before = flatten(await this.get());
+      await this.dataSource.transaction(async (em) => {
+        await em.save(changes);
+        // the keys that really changed, before and after; a secret-looking key is never put in the event
+        const after = { ...before };
+        for (const row of changes) after[row.key] = row.value;
+        const diff = diffFields(before, after);
+        const keys = Object.keys(diff);
+        if (keys.length === 0) return;
+        const payload: PlatformSettingsChangedPayload = {
+          actor: await loadAdminActor(em, adminId),
+          keys,
+          changes: diff,
+        };
+        await this.outbox.add(em, PLATFORM_SETTINGS_CHANGED, payload, {
+          tenantId: null,
+        });
+      });
     }
     return this.get();
   }
