@@ -5,11 +5,14 @@ import { ProviderRateLimiterService } from '../infrastructure/rate-limiting/prov
 import { SalesOrderClient } from '../infrastructure/sales-client/sales-order.client';
 import { BranchBlockersController } from '../internal/branch-blockers.controller';
 import { BranchBlockersService } from '../internal/branch-blockers.service';
+import { NameProjectionHandler } from '../projections/name-projection.handler';
 import { LazadaHttpClient } from '../providers/lazada/lazada-http.client';
 import { LazadaProviderAdapter } from '../providers/lazada/lazada.adapter';
 import { ProviderRegistryService } from '../providers/provider-registry.service';
 import { ShopeeProviderAdapter } from '../providers/shopee/shopee.adapter';
 import { TenantStatusHandler } from '../tenant-status/tenant-status.handler';
+import { AdminIntegrationController } from './admin/admin-integration.controller';
+import { AdminIntegrationService } from './admin/admin-integration.service';
 import { BranchScopeService } from './branch-scope/branch-scope.service';
 import { ConflictsController } from './conflicts/conflicts.controller';
 import { ConflictsService } from './conflicts/conflicts.service';
@@ -43,6 +46,7 @@ import { WebhooksService } from './webhooks/webhooks.service';
     ReconciliationController,
     WebhooksController,
     BranchBlockersController,
+    AdminIntegrationController,
   ],
   providers: [
     BranchBlockersService,
@@ -63,6 +67,8 @@ import { WebhooksService } from './webhooks/webhooks.service';
     ReconciliationService,
     IntegrationEventsConsumer,
     TenantStatusHandler,
+    NameProjectionHandler,
+    AdminIntegrationService,
   ],
   exports: [
     ProviderRateLimiterService,

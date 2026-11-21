@@ -13,8 +13,13 @@ import { M6_INTEGRATION_ENTITIES } from './infrastructure/persistence/integratio
 import { CreateM6IntegrationCore1791900000200 } from './migrations/1791900000200-create-m6-integration-core';
 import { AllowSyncJobSchedulerSelect1792500000000 } from './migrations/1792500000000-allow-sync-job-scheduler-select';
 import { CreateTenantStatus1793100000420 } from './migrations/1793100000420-create-tenant-status';
+import { AddAdminReadAndProjections1793300000000 } from './migrations/1793300000000-add-admin-read-and-projections';
 import { IntegrationCoreModule } from './modules/integration-core.module';
 import { SyncJobWorker } from './modules/sync-jobs/sync-job-worker';
+import {
+  BranchProjectionEntity,
+  TenantProjectionEntity,
+} from './projections/name-projection.entities';
 import { TenantStatusEntity } from './tenant-status/tenant-status.entity';
 
 @Module({
@@ -32,6 +37,8 @@ import { TenantStatusEntity } from './tenant-status/tenant-status.entity';
       entities: [
         ...M6_INTEGRATION_ENTITIES,
         TenantStatusEntity,
+        TenantProjectionEntity,
+        BranchProjectionEntity,
         ...PRODUCER_ENTITIES,
         ...CONSUMER_ENTITIES,
       ],
@@ -41,6 +48,7 @@ import { TenantStatusEntity } from './tenant-status/tenant-status.entity';
         CreateM6IntegrationCore1791900000200,
         AllowSyncJobSchedulerSelect1792500000000,
         CreateTenantStatus1793100000420,
+        AddAdminReadAndProjections1793300000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'integration' }),
