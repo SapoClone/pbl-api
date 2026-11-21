@@ -64,6 +64,39 @@ describe('EventOutbox', () => {
     expect(insert).toHaveBeenCalled();
   });
 
+  it('writes a platform-scope event with a null tenant, in or out of a store context', async () => {
+    const insert = jest.fn();
+    const inStore = await RequestContext.run(
+      {
+        tenantId: 'tenant-a',
+        requestId: 'req-3',
+        actor: { id: 'admin-1', type: 'platform_admin' },
+      },
+      () =>
+        outbox.add(
+          managerWith(insert),
+          PLATFORM_BRANCH_CREATED,
+          { k: 1 },
+          { tenantId: null },
+        ),
+    );
+    const outside = await outbox.add(
+      managerWith(insert),
+      PLATFORM_BRANCH_CREATED,
+      {},
+      { tenantId: null },
+    );
+    expect(inStore.tenantId).toBeNull();
+    expect(inStore).toMatchObject({
+      traceId: 'req-3',
+      actor: { id: 'admin-1', type: 'platform_admin' },
+    });
+    expect(outside.tenantId).toBeNull();
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ id: inStore.id, tenantId: null }),
+    );
+  });
+
   it('does not write the row when the event cannot be built', async () => {
     const insert = jest.fn();
     await expect(

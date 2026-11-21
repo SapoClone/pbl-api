@@ -126,6 +126,24 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   private handleHttpException(exception: HttpException): ErrorDto {
     // a 404/409 raised with an error code (see coded.exception.ts)
     const body = exception.getResponse();
+    // the @pbl/auth guard answers a read-only (support-session) token with the key AUTH_READ_ONLY
+    if (
+      typeof body === 'object' &&
+      body !== null &&
+      'errorCode' in body &&
+      body.errorCode === 'AUTH_READ_ONLY'
+    ) {
+      const statusCode = exception.getStatus();
+      return {
+        timestamp: new Date().toISOString(),
+        statusCode,
+        error: STATUS_CODES[statusCode],
+        errorCode: 'AUTH_READ_ONLY',
+        message: this.i18n.t(
+          ErrorCode.AUTH_READ_ONLY as unknown as keyof I18nTranslations,
+        ),
+      } as ErrorDto;
+    }
     if (
       typeof body === 'object' &&
       body !== null &&

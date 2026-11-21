@@ -1,0 +1,8 @@
+{
+  "error": {
+    "already_active": "Quản trị viên này đã có phiên hỗ trợ đang mở cho cửa hàng này",
+    "tenant_suspended": "Cửa hàng đang bị khóa nên không thể mở phiên hỗ trợ",
+    "already_ended": "Phiên hỗ trợ này đã kết thúc",
+    "read_only": "Phiên hỗ trợ chỉ đọc: yêu cầu này sẽ thay đổi dữ liệu"
+  }
+}

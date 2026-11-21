@@ -22,7 +22,7 @@ Admin roles (`PlatformAdmin.role`) are `super_admin` and `admin`. Only `super_ad
 
 ## Build status
 
-Built so far (pbl-api: #33 merged; #35 to #38 open): **31 of the 52 endpoints** below, marked `built` in their *Status* line: admin identity, stores, accounts, admins, plans, subscriptions, usage and settings, which serve 12 of the 23 screens completely and 2 (03, 08) in part. Not built: the insight endpoints (overview, system health, failed jobs, audit log, announcements), the integration admin endpoints, and support sessions. The how-to and the mapping from the web branch's calls is [the platform admin API guide](../../guides/platform-admin-api.md); the design record is [the platform admin design](../2026-11-02-platform-admin-design.md).
+Built so far (pbl-api: #33 merged; #35 to #38 open): **31 of the 52 endpoints** below, marked `built` in their *Status* line: admin identity, stores, accounts, admins, plans, subscriptions, usage and settings, which serve 12 of the 23 screens completely and 2 (03, 08) in part. Support sessions (4 endpoints) are built too. Not built: the insight endpoints (overview, system health, failed jobs, audit log, announcements) and the integration admin endpoints. The how-to and the mapping from the web branch's calls is [the platform admin API guide](../../guides/platform-admin-api.md); the design record is [the platform admin design](../2026-11-02-platform-admin-design.md).
 
 Where the built API differs from the sections below (the sections keep the design; this list is the truth):
 
@@ -37,7 +37,7 @@ Where the built API differs from the sections below (the sections keep the desig
 - **Expiry (D31):** a job in platform moves a paid subscription past `expiresAt` to `past_due` (the grace: the paid plan's limits stay for `billing.graceDays` days, default 7), then closes it (`expired`) and starts a `free` subscription with no end date. Data is kept and nothing is deleted; over-limit adds are refused by the usual `Q001` checks. A payment during the grace renews the same subscription to `active`. The `past_due` and `expired` counters of `GET /admin/subscriptions` work.
 - **Suspension** also stops marketplace webhooks (503 `TENANT_SUSPENDED`, the marketplace retries), the integration sync jobs and the internal order intake (403 `TENANT_SUSPENDED`); other services learn the store status from `platform.tenant.status_changed`.
 - **Accounts** have no verified-email state, so `status=pending_verification` matches nothing and `isEmailVerified` is not returned. `code` (`US00021`) is built.
-- **Events** for admin actions (`platform.admin.created`, `.updated`, `.logged_in`, `platform.settings.changed`, `platform.account.sessions_revoked`) are not emitted: events carry a store, and these belong to none. They wait for the platform-scope audit design. `platform.tenant.*`, `platform.plan.changed` (once per store on the plan) and `platform.subscription.changed` are emitted; `catalog.usage.changed` replaces `catalog.product.count_changed` and `catalog.storage.usage_changed` in the table at the end.
+- **Events** for admin actions: `platform.admin.created`, `.updated`, `platform.settings.changed` and `platform.account.sessions_revoked` are emitted with `tenantId: null` (platform scope: the envelope carries no store, the consumer enters no tenant context; [audit log guide](../../guides/audit-log.md)); `platform.admin.logged_in` is still not emitted. Every payload has `actor: { type: 'platform_admin', id, name, role }`; updates carry `changes` (before and after, never secrets). `platform.tenant.*`, `platform.plan.changed` (once per store on the plan) and `platform.subscription.changed` are emitted; `catalog.usage.changed` replaces `catalog.product.count_changed` and `catalog.storage.usage_changed` in the table at the end.
 
 ## Screen → endpoints
 
@@ -91,7 +91,7 @@ Where the built API differs from the sections below (the sections keep the desig
   - 400 `A001` wrong email or password; also an unknown email, a disabled admin and an admin with no password yet, so sign-in does not reveal which (ADR-0022)
   - 400 `A002` is not used
   - 400 `A003` locked: after `security.lockoutMaxAttempts` failed attempts (default 5, minimum 3) the admin is locked for `security.lockoutWindowMinutes` (default 15), the same rule as accounts
-- **Events:** `platform.admin.logged_in` → insight audit (not emitted yet: events are tenant-scoped, so a platform-scope audit comes with the first admin write)
+- **Events:** `platform.admin.logged_in` → insight audit (not emitted yet; the platform-scope events exist now, so it only needs emitting)
 
 ### POST /platform/api/v1/admin/auth/refresh
 - **Status:** built. It reuses `RefreshTokenService`, but a refresh token whose subject is a platform admin is only accepted on this path.
@@ -660,26 +660,36 @@ The job code (`JOB-00984`) is assigned by the source service. Integration and th
 ## Audit log (insight)
 
 ### GET /insight/api/v1/admin/audit-logs
-- **Status:** change. Today `/insight/api/v1/audit-logs` is owner/manager only and tenant-scoped. This admin route reads every tenant plus platform-scope rows.
+- **Status:** built. `/insight/api/v1/audit-logs` stays owner/manager only and tenant-scoped (platform-scope rows are never in it). This admin route reads every tenant plus platform-scope rows.
 - **Screens:** 19 Nhật ký hoạt động; 03 (tab "Lịch sử hoạt động", `tenantId=`); 08 (tab "Lịch sử hoạt động", `actorId=`)
 - **Auth:** platform_admin
 - **Query:**
   - `q` searches action, object and actor name
-  - `tenantId` (or `scope=platform` for platform-only rows)
-  - `action` ("Tất cả thao tác" is all actions)
-  - `actorId`, `from`, `to`
+  - `tenantId`, `scope=platform|tenant` (`platform` for platform-only rows)
+  - `result=success|failed`
+  - `action` ("Tất cả thao tác" is all actions; the codes are in `GET /admin/audit-logs/actions`)
+  - `actorId`, `from`, `to` (`YYYY-MM-DD`, inclusive, Asia/Ho_Chi_Minh; 422 when `from` is after `to`), `order` (`DESC` default), `page`, `limit` (20, max 100)
 - **Response:** 200
   ```json
   { "data": [ { "id": "uuid", "occurredAt": "2026-10-23T01:55:00.000Z",
-      "actor": { "type": "platform_admin", "id": "uuid", "label": "Lan Anh", "roleLabel": "Quản trị viên" },
-      "scope": { "type": "platform", "tenantId": null, "tenantName": null },
-      "action": "subscription.plan_changed", "actionLabel": "Đổi gói dịch vụ",
-      "object": { "type": "tenant", "id": "uuid", "label": "TN0008" }, "result": "success" } ],
-    "pagination": { "…": "…" } }
+      "actor": { "type": "platform_admin", "id": "uuid", "name": "Lan Anh" },
+      "scope": { "type": "tenant", "tenantId": "uuid", "tenantName": "Cửa hàng A" },
+      "action": "subscription.plan_changed",
+      "target": { "type": "subscription", "id": "uuid", "name": "TN0008" },
+      "result": "success", "errorCode": null, "errorMessage": null } ],
+    "pagination": { "limit": 20, "currentPage": 1, "totalRecords": 1, "totalPages": 1 } }
   ```
+  - This is the v1.2 shape (`actor.name`, `target`, no labels: the web maps `action` and `actor.type` to text). `tenantName` is the store's name written with the row, taken from the event payload.
   - Rows are read-only: there is no PATCH or DELETE.
-  - Retention is at least 12 months (`AuditLog.result`, nullable `tenantId`).
-  - System rows have `actor.type = system` and `label = "Hệ thống"`.
+  - Retention is at least 12 months (`security.auditRetentionMonths`); no purge job exists yet, nothing is deleted.
+  - System rows have `actor.type = system` (`id` and `name` null). Failed admin actions are not audited yet: `result` is `success` on every row today (the columns exist).
+  - Codes: `tenant.updated`, `tenant.status_changed`, `subscription.plan_changed`, `account.sessions_revoked`, `settings.changed`, `admin.created`, `admin.updated`, `support_session.started`, `support_session.ended`, `announcement.sent`, `integration.disconnected`, and `plan.updated` (an admin's edit of a plan, one row per edit); store-side rows keep `account.logged_in`, `membership.*`, `tenant.created`, `order.completed`, `purchase_order.approved`.
+
+### GET /insight/api/v1/admin/audit-logs/actions
+- **Status:** built
+- **Screens:** 19 (the "Tất cả thao tác" filter)
+- **Auth:** platform_admin
+- **Response:** 200 `{ "data": ["tenant.updated", "…"] }`: the fixed list of action codes, no labels.
 - **Errors:** none
 - **Events:** every `platform.*` admin event above, `platform.account.logged_in`, `platform.tenant.status_changed`, `platform.subscription.changed`, `platform.support_session.*`, and `insight.announcement.sent`
 
@@ -744,41 +754,53 @@ The job code (`JOB-00984`) is assigned by the source service. Integration and th
 
 ## Support sessions (platform)
 
+Built in `apps/platform/src/api/platform-admin/support-session/`; design record [ADR-0025](../../decisions/0025-support-sessions.md), how the web uses it [the guide](../../guides/support-sessions.md). Both `super_admin` and `admin` may use every route. A support token is refused on all of them except the end route of its own session.
+
 ### POST /platform/api/v1/admin/support-sessions
-- **Status:** new
+- **Status:** built
 - **Screens:** 22 "Bắt đầu phiên chỉ đọc", 03 "Bắt đầu phiên hỗ trợ"
 - **Auth:** platform_admin
-- **Body:** `{ "tenantId": "uuid", "reason": "Kiểm tra trạng thái đồng bộ đơn Shopee" }`
-- **Response:** 201
+- **Headers:** optional `Idempotency-Key` (same admin and key return the same session: 200 with `Idempotency-Replayed: true` and a freshly signed token for the rest of its life; `SS03` once it is over)
+- **Body:** `{ "tenantId": "uuid", "reason": "Kiểm tra trạng thái đồng bộ đơn Shopee" }` (`reason` 1 to 500 characters)
+- **Response:** 201, `Cache-Control: no-store`
   ```json
   { "id": "uuid", "code": "SESSION-0031", "tenant": { "id": "uuid", "code": "TN0001", "name": "Mộc Store" },
-    "status": "active", "startedAt": "2026-10-23T01:44:00.000Z", "expiresAt": "2026-10-23T02:44:00.000Z",
+    "admin": { "id": "uuid", "name": "Lan Anh" }, "reason": "Kiểm tra trạng thái đồng bộ đơn Shopee",
+    "accessMode": "read_only", "status": "active",
+    "startedAt": "2026-10-23T01:44:00.000Z", "expiresAt": "2026-10-23T02:44:00.000Z",
     "accessToken": "eyJ…" }
   ```
-  - The access token lasts 60 minutes and carries `sub_type = platform_admin`, `tid = <tenant>`, `perms = ["*.view"]`, and `act = { sub: <adminId>, ssn: <sessionId> }` (ADR-0004 §3 `act`).
-  - Every service rejects non-GET requests made with such a token (403 `AUTH_READ_ONLY`).
+  - `accessToken` appears **only** in this response, never in the list, the detail, an event or a log (it is in the redaction paths).
+  - The token lasts 60 minutes and carries `sub = act.sub = <adminId>`, `sub_type = platform_admin`, `tid = <tenant>`, `roles = []`, `branches = ["*"]`, `sid = act.ssn = <sessionId>`, `read_only = true`, and `perms` = **the explicit list of every `<module>.view` code** (not the wildcard string `*.view` this contract first used; the owner wildcard `*` is never used, so no evaluation rule changed).
+  - Every service answers a non-GET/HEAD/OPTIONS request made with it with **403 `AUTH_READ_ONLY`** (before the handler), refuses it on `/internal/...` and on admin routes. It is a read-only store viewer: not an admin, not a member. A POST that only reads (search by POST) is refused too.
   - There is no refresh token for it.
-  - The tenant web opens with this token and shows the support banner *(missing screen)*.
-- **Errors:** 404 tenant; 400 `SS01` the admin already has an active session for this tenant; 400 `SS02` tenant suspended (only a read-only audit is allowed)
-- **Events:** `platform.support_session.started` → audit (tenant-scoped and platform-scoped rows)
+  - The tenant web opens with this token and shows the support banner *(web work)*.
+- **Errors:** 404 tenant; 422 invalid body; 400 `SS01` the admin already has an active session for this tenant; 400 `SS02` tenant suspended
+- **Events:** `platform.support_session.started` `{ sessionId, code, tenantId, tenantName, adminId, adminName, reason, expiresAt }` (tenant-scoped, outbox, same transaction) → audit
 
 ### GET /platform/api/v1/admin/support-sessions
-- **Status:** new
+- **Status:** built
 - **Screens:** 22 "Lịch sử phiên hỗ trợ"
 - **Auth:** platform_admin
-- **Query:** `tenantId`, `adminId`, `status=active|ended`
-- **Response:** 200 `{ "data": [ { "id": "uuid", "code": "SESSION-0031", "tenant": { "name": "Mộc Store" }, "admin": { "name": "Lan Anh" }, "startedAt": "…", "endedAt": "…", "status": "ended" } ], "pagination": { "totalRecords": 2, "…": "…" } }`
-- **Errors:** none
+- **Query:** `tenantId`, `adminId`, `status=active|ended|expired` (`expired` is derived: past `expiresAt` and not ended by hand, whether or not the job has marked it), `q` (code, store, admin name), `page`, `limit`, `order` (default newest first)
+- **Response:** 200 `{ "data": [ { "id": "uuid", "code": "SESSION-0031", "tenant": { "id": "uuid", "code": "TN0001", "name": "Mộc Store" }, "admin": { "id": "uuid", "name": "Lan Anh" }, "reason": "…", "accessMode": "read_only", "startedAt": "…", "expiresAt": "…", "endedAt": "…", "status": "ended" } ], "pagination": { "totalRecords": 2, "…": "…" }, "counts": { "all": 2, "active": 0, "ended": 1, "expired": 1 } }`; `counts` ignore `status`. For an expired session `endedAt` is its `expiresAt`.
+- **Errors:** 422 invalid query
 - **Events:** none
 
+### GET /platform/api/v1/admin/support-sessions/{id}
+- **Status:** built
+- **Auth:** platform_admin
+- **Response:** 200, one item of the list (never the token)
+- **Errors:** 404
+
 ### POST /platform/api/v1/admin/support-sessions/{id}/end
-- **Status:** new
-- **Screens:** support view banner "Kết thúc phiên" *(missing)*, 22
-- **Auth:** platform_admin. Either the admin token or the session's own token is accepted.
+- **Status:** built
+- **Screens:** support view banner "Kết thúc phiên" *(web work)*, 22
+- **Auth:** platform_admin. Either an admin token or the session's own token is accepted (another session's token: 403).
 - **Body:** none
-- **Response:** 200, the session with `status: "ended"`. Its `sid` goes on the deny-list.
-- **Errors:** 404; 400 `SS03` already ended
-- **Events:** `platform.support_session.ended`
+- **Response:** 200, the session with `status: "ended"` and `endedAt`. Its `sid` goes on the Redis deny-list until `expiresAt`, so the token stops working at once in every service.
+- **Errors:** 404; 400 `SS03` already ended (by hand or by expiry)
+- **Events:** `platform.support_session.ended` `{ sessionId, code, tenantId, adminId, adminName, endedBy: "admin" | "expiry", endedAt }`. A job (every minute) closes sessions past `expiresAt` and emits it with `endedBy: "expiry"` once. Disabling or demoting an admin ends their open sessions.
 
 ## System settings (platform)
 

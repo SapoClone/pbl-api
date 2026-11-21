@@ -3,9 +3,9 @@ import { ValidationException } from '@/exceptions/validation.exception';
 import { isUniqueViolation } from '@/utils/db-errors';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
+  FieldChanges,
   PLATFORM_PLAN_CHANGED,
   PlanChangedPayload,
-  PlatformActor,
 } from '@pbl/contracts';
 import { EventOutbox } from '@pbl/events';
 import { DataSource, EntityManager } from 'typeorm';
@@ -13,11 +13,25 @@ import { PlanEntity, PlanStatus } from '../subscription/entities/plan.entity';
 import { SubscriptionEntity } from '../subscription/entities/subscription.entity';
 import { tableOf } from '../subscription/sql';
 import { gbToMb, mbToGb, usageSql } from '../subscription/usage';
+import { diffFields, loadAdminActor } from './admin-actor';
 import {
   CreateAdminPlanReqDto,
   ListAdminPlansReqDto,
   UpdateAdminPlanReqDto,
 } from './dto/admin-plan.req.dto';
+
+/** The editable fields of a plan, for the before and after of an edit */
+const planFields = (plan: PlanEntity): Record<string, unknown> => ({
+  name: plan.name,
+  description: plan.description,
+  priceMonthly: plan.priceMonthly,
+  status: plan.status,
+  isFeatured: plan.isFeatured,
+  'quotas.branches': plan.quotaBranches,
+  'quotas.users': plan.quotaUsers,
+  'quotas.products': plan.quotaProducts,
+  'quotas.storageMb': plan.quotaStorageMb,
+});
 
 export type AdminPlan = {
   id: string;
@@ -115,6 +129,7 @@ export class AdminPlansService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!plan) throw new NotFoundException();
+      const before = planFields(plan);
       if (dto.name !== undefined) plan.name = dto.name;
       if (dto.description !== undefined) plan.description = dto.description;
       if (dto.priceMonthly !== undefined) plan.priceMonthly = dto.priceMonthly;
@@ -129,7 +144,12 @@ export class AdminPlansService {
         plan.quotaStorageMb = gbToMb(dto.quotas.storageGb);
       plan.updatedBy = adminId;
       await em.save(plan);
-      await this.emitChanged(em, plan, adminId);
+      await this.emitChanged(
+        em,
+        plan,
+        adminId,
+        diffFields(before, planFields(plan)),
+      );
       return plan.id;
     });
     const saved = await this.get(planId);
@@ -192,6 +212,7 @@ export class AdminPlansService {
     em: EntityManager,
     plan: PlanEntity,
     adminId: string,
+    changes: FieldChanges,
   ): Promise<void> {
     const rows: { tenant_id: string }[] = await em.query(
       `SELECT "tenant_id" FROM ${tableOf(em, SubscriptionEntity)}
@@ -211,7 +232,8 @@ export class AdminPlansService {
         storageMb: plan.quotaStorageMb,
       },
       updatedAt: (plan.updatedAt ?? new Date()).toISOString(),
-      actor: { type: 'platform_admin', id: adminId } satisfies PlatformActor,
+      actor: await loadAdminActor(em, adminId),
+      changes,
     };
     for (const row of rows) {
       await this.outbox.add(em, PLATFORM_PLAN_CHANGED, payload, {

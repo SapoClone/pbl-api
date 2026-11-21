@@ -13,6 +13,8 @@ export interface TestTokenClaims {
   permissions?: string[];
   /** Branch ids; default `['*']` (every branch) */
   branches?: string[];
+  /** A support-session token: adds `act` and `read_only` (ADR-0025); the tests pass the admin id as `sub` */
+  support?: { adminId: string; sessionId: string };
 }
 
 /**
@@ -64,17 +66,40 @@ export function createTestAuth() {
     adminBearer(role: 'super_admin' | 'admin' = 'admin'): string {
       return `Bearer ${this.token({ subjectType: 'platform_admin', roles: [role] })}`;
     },
+    /** `Bearer <token>` of a support session on store `tid`: read-only, every `<module>.view` permission, no roles */
+    supportBearer(
+      tid: string,
+      options: { adminId?: string; sessionId?: string } = {},
+    ): string {
+      const adminId = options.adminId ?? 'admin-1';
+      return `Bearer ${this.token({
+        sub: adminId,
+        subjectType: 'platform_admin',
+        tid,
+        permissions: ['dashboard.view', 'products.view', 'orders.view'],
+        support: { adminId, sessionId: options.sessionId ?? 'support-1' },
+      })}`;
+    },
     token(claims: TestTokenClaims = {}): string {
       const roles = claims.roles ?? [];
       return jwt.sign(
         {
           sub: claims.sub ?? 'account-1',
-          sid: 'session-1',
+          sid: claims.support?.sessionId ?? 'session-1',
           sub_type: claims.subjectType ?? 'account',
           ...(claims.tid ? { tid: claims.tid } : {}),
           roles,
           perms: claims.permissions ?? (roles.includes('owner') ? ['*'] : []),
           branches: claims.branches ?? ['*'],
+          ...(claims.support
+            ? {
+                act: {
+                  sub: claims.support.adminId,
+                  ssn: claims.support.sessionId,
+                },
+                read_only: true,
+              }
+            : {}),
         },
         {
           privateKey: privatePem,

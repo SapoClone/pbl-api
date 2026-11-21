@@ -69,7 +69,18 @@ export class SessionService {
       subjectType: 'platform_admin',
     });
     await this.deny(familyIds);
+    // sessions that are not refresh families (support sessions) register here
+    await Promise.all(this.adminRevokedHooks.map((hook) => hook(adminId)));
     return familyIds.length;
+  }
+
+  private readonly adminRevokedHooks: ((
+    adminId: string,
+  ) => Promise<unknown>)[] = [];
+
+  /** Runs `hook` whenever an admin's sessions are revoked (disabled or demoted); for support sessions. */
+  onAdminRevoked(hook: (adminId: string) => Promise<unknown>): void {
+    this.adminRevokedHooks.push(hook);
   }
 
   /** Ends every live session bound to a store, whoever the member is (locking the store); returns how many. */
@@ -78,6 +89,16 @@ export class SessionService {
       await this.refreshTokens.revokeActiveFamiliesOfTenant(tenantId);
     await this.deny(familyIds);
     return familyIds.length;
+  }
+
+  /** Denies one session until `until` (a support-session token outlives the usual access-token TTL). */
+  async denyUntil(sessionId: string, until: Date): Promise<void> {
+    const ttl = Math.max(until.getTime() - Date.now(), 1000);
+    await this.cacheManager.store.set<boolean>(
+      createCacheKey(CacheKey.SESSION_BLACKLIST, sessionId),
+      true,
+      ttl,
+    );
   }
 
   private async deny(sessionIds: string[]): Promise<void> {

@@ -32,6 +32,7 @@ import { tableOf } from '../subscription/sql';
 import { AccountTenantEntity } from '../tenant/entities/account-tenant.entity';
 import { TenantEntity, TenantStatus } from '../tenant/entities/tenant.entity';
 import { TenantService } from '../tenant/tenant.service';
+import { loadAdminActor } from './admin-actor';
 import {
   AdminTenantSort,
   AdminTenantStatus,
@@ -283,9 +284,9 @@ export class AdminTenantsService {
     adminId: string,
     dto: CreateAdminTenantReqDto,
   ): Promise<AdminTenantDetail> {
-    const actor: PlatformActor = { type: 'platform_admin', id: adminId };
     try {
       const tenantId = await this.dataSource.transaction(async (em) => {
+        const actor = await loadAdminActor(em, adminId);
         if (
           await em.exists(TenantEntity, { where: { subdomain: dto.subdomain } })
         ) {
@@ -325,9 +326,9 @@ export class AdminTenantsService {
     id: string,
     dto: UpdateAdminTenantReqDto,
   ): Promise<AdminTenantDetail> {
-    const actor: PlatformActor = { type: 'platform_admin', id: adminId };
     try {
       await this.dataSource.transaction(async (em) => {
+        const actor = await loadAdminActor(em, adminId);
         const tenant = await this.lockTenant(em, id);
         const changes: Record<string, { from: unknown; to: unknown }> = {};
         for (const key of [
@@ -386,7 +387,7 @@ export class AdminTenantsService {
       await em.save(tenant);
       await this.emitStatusChanged(
         em,
-        tenant.id,
+        tenant,
         'active',
         'suspended',
         dto.reason,
@@ -418,7 +419,7 @@ export class AdminTenantsService {
       });
       await this.emitStatusChanged(
         em,
-        tenant.id,
+        tenant,
         'suspended',
         trialing ? 'trial' : 'active',
         dto.note ?? null,
@@ -485,21 +486,23 @@ export class AdminTenantsService {
 
   private async emitStatusChanged(
     em: EntityManager,
-    tenantId: string,
+    tenant: TenantEntity,
     from: string,
     to: string,
     reason: string | null,
     adminId: string,
   ): Promise<void> {
     const payload: TenantStatusChangedPayload = {
-      tenantId,
+      tenantId: tenant.id,
+      tenantName: tenant.name,
+      tenantCode: tenant.code,
       from,
       to,
       reason,
-      changedBy: { type: 'platform_admin', id: adminId },
+      changedBy: await loadAdminActor(em, adminId),
     };
     await this.outbox.add(em, PLATFORM_TENANT_STATUS_CHANGED, payload, {
-      tenantId,
+      tenantId: tenant.id,
     });
   }
 }
