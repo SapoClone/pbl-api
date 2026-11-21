@@ -41,6 +41,7 @@ import {
   usageSql,
 } from '../subscription/usage';
 import { TenantEntity } from '../tenant/entities/tenant.entity';
+import { loadAdminActor } from './admin-actor';
 import {
   ChangePlanCheckReqDto,
   ChangePlanReqDto,
@@ -289,8 +290,8 @@ export class AdminSubscriptionsService {
         'periodEnd must be after periodStart',
       );
     }
-    const actor: PlatformActor = { type: 'platform_admin', id: adminId };
     return this.dataSource.transaction(async (em) => {
+      const actor = await loadAdminActor(em, adminId);
       const sub = await this.lockSubscription(em, id);
       const plan = await em.findOneByOrFail(PlanEntity, {
         id: sub.planId as PlanEntity['id'],
@@ -379,8 +380,8 @@ export class AdminSubscriptionsService {
     dto: ChangePlanReqDto,
   ): Promise<AdminSubscriptionDetail> {
     this.assertDates(dto);
-    const actor: PlatformActor = { type: 'platform_admin', id: adminId };
     const subscriptionId = await this.dataSource.transaction(async (em) => {
+      const actor = await loadAdminActor(em, adminId);
       const plan = await this.activePlan(em, dto.planCode);
       const { check } = await this.evaluate(em, dto.tenantId, plan);
       const [row] = await em.query(
@@ -585,9 +586,15 @@ export class AdminSubscriptionsService {
     plan: PlanEntity,
     actor: PlatformActor,
   ): Promise<void> {
+    const tenant = await em.findOne(TenantEntity, {
+      where: { id: sub.tenantId as TenantEntity['id'] },
+      select: { id: true, name: true, code: true },
+    });
     const payload: SubscriptionChangedPayload = {
       subscriptionId: sub.id,
       tenantId: sub.tenantId,
+      tenantName: tenant?.name,
+      tenantCode: tenant?.code,
       eventType,
       fromPlan,
       toPlan: plan.code,

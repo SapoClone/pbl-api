@@ -5,6 +5,7 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import {
+  ALLOW_SUPPORT_TOKEN,
   IS_AUTH_OPTIONAL,
   IS_PUBLIC,
   IS_TENANT_OPTIONAL,
@@ -45,6 +46,13 @@ export const RequirePermission = (...codes: string[]) =>
  */
 export const RequirePlatformAdmin = (...roles: string[]) =>
   SetMetadata(REQUIRED_PLATFORM_ADMIN, roles);
+
+/**
+ * Lets a support-session token (read-only) reach this route, even with a method that is not GET and on a
+ * @RequirePlatformAdmin route; the guard then checks nothing else, so the handler MUST verify `user.actor`
+ * (for example that the session in the path is the token's own). Only platform's "end support session" uses it.
+ */
+export const AllowSupportToken = () => SetMetadata(ALLOW_SUPPORT_TOKEN, true);
 
 /** The verified caller (AuthUser), or one of its fields: @CurrentUser('id'). */
 export const CurrentUser = createParamDecorator(

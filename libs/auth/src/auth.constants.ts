@@ -4,6 +4,7 @@ export const IS_TENANT_OPTIONAL = 'isTenantOptional';
 export const REQUIRED_ROLES = 'requiredRoles';
 export const REQUIRED_PERMISSIONS = 'requiredPermissions';
 export const REQUIRED_PLATFORM_ADMIN = 'requiredPlatformAdmin';
+export const ALLOW_SUPPORT_TOKEN = 'allowSupportToken';
 export const PBL_AUTH_OPTIONS = Symbol('PBL_AUTH_OPTIONS');
 /** The only algorithm accepted for access tokens — never taken from the token */
 export const ACCESS_TOKEN_ALGORITHM = 'RS256';
@@ -11,3 +12,5 @@ export const ACCESS_TOKEN_ALGORITHM = 'RS256';
 export const SESSION_DENY_LIST_KEY_PREFIX = 'auth:session-blacklist:';
 export const sessionDenyListKey = (sessionId: string) =>
   `${SESSION_DENY_LIST_KEY_PREFIX}${sessionId}`;
+/** Error code of the 403 a read-only (support-session) token gets on a request that could change something */
+export const AUTH_READ_ONLY = 'AUTH_READ_ONLY';

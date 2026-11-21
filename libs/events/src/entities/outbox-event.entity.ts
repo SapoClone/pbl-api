@@ -16,8 +16,9 @@ export class OutboxEventEntity {
   })
   id!: string;
 
-  @Column({ name: 'tenant_id', type: 'uuid' })
-  tenantId!: string;
+  /** Null for a platform-scope event */
+  @Column({ name: 'tenant_id', type: 'uuid', nullable: true })
+  tenantId!: string | null;
 
   @Column({ type: 'varchar', length: 150 })
   type!: string;
@@ -27,7 +28,7 @@ export class OutboxEventEntity {
 
   /** The whole envelope */
   @Column({ type: 'jsonb' })
-  payload!: EventEnvelope;
+  payload!: EventEnvelope<unknown, string | null>;
 
   @Column({ name: 'created_at', type: 'timestamptz', default: () => 'now()' })
   createdAt!: Date;

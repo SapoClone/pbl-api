@@ -165,6 +165,12 @@ describe('platform admin plans, subscriptions and usage (Postgres)', () => {
         code: 'basic',
         quotas: { branches: 0, storageMb: 512 },
         actor: { type: 'platform_admin', id: ADMIN },
+        // before and after of what the admin changed, for the audit log
+        changes: {
+          name: { from: 'Basic', to: 'Basic+' },
+          'quotas.branches': { from: 2, to: 0 },
+          'quotas.storageMb': { from: 10240, to: 512 },
+        },
       });
       // put it back for the tests below
       await h.services.plans.update(ADMIN, basic.id, {
@@ -286,6 +292,9 @@ describe('platform admin plans, subscriptions and usage (Postgres)', () => {
         fromPlan: 'basic',
         toPlan: 'basic',
         expiresAt: '2030-02-01T16:59:59.000Z',
+        tenantName: expect.any(String),
+        tenantCode: expect.any(String),
+        actor: expect.objectContaining({ type: 'platform_admin', id: ADMIN }),
       });
       expect((await listSubs({ q: 'Store B' })).data[0].paymentStatus).toBe(
         'paid',

@@ -6,7 +6,7 @@ import {
   INTEGRATION_CONNECTION_REAUTH_REQUIRED,
   IntegrationConnectionEventPayload,
 } from '@pbl/contracts';
-import { EventOutbox } from '@pbl/events';
+import { EventOutbox, qualifiedTable } from '@pbl/events';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { DataSource, QueryFailedError } from 'typeorm';
 import { readLazadaConfig } from '../../config/integration.config';
@@ -275,8 +275,8 @@ export class ConnectionsService {
 
   async getConnectionById(
     connectionId: string,
+    tenantId: string = TenantContext.require(),
   ): Promise<SanitizedChannelConnectionView> {
-    const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
         tenantId,
@@ -1108,29 +1108,63 @@ export class ConnectionsService {
     connectionId: string,
     actorId: string,
   ): Promise<SanitizedChannelConnectionView> {
-    return this.transitionConnectionState(connectionId, actorId, 'PAUSED');
+    return (
+      await this.transitionConnectionState(connectionId, actorId, 'PAUSED')
+    ).view;
   }
 
   async resumeConnection(
     connectionId: string,
     actorId: string,
   ): Promise<SanitizedChannelConnectionView> {
-    return this.transitionConnectionState(connectionId, actorId, 'CONNECTED');
+    return (
+      await this.transitionConnectionState(connectionId, actorId, 'CONNECTED')
+    ).view;
   }
 
   async disconnectConnection(
     connectionId: string,
     actorId: string,
   ): Promise<SanitizedChannelConnectionView> {
-    return this.transitionConnectionState(
+    const { view } = await this.transitionConnectionState(
       connectionId,
       actorId,
       'DISCONNECTED',
     );
+    return view;
   }
 
-  async getConnectionHealth(connectionId: string) {
-    const view = await this.getConnectionById(connectionId);
+  /**
+   * The disconnect of a platform admin: the same transition, token wipe, audit row and
+   * `integration.connection.disconnected` event as the store's, for the store the connection belongs to (the caller
+   * has found it through the admin read path), plus the admin as event actor and the reason. A repeated
+   * `idempotencyKey` returns the connection again instead of failing with 400.
+   */
+  async disconnectConnectionAsAdmin(params: {
+    tenantId: string;
+    connectionId: string;
+    admin: { id: string; name: string | null };
+    reason: string;
+    idempotencyKey?: string;
+  }): Promise<{ view: SanitizedChannelConnectionView; replayed: boolean }> {
+    return this.transitionConnectionState(
+      params.connectionId,
+      params.admin.id,
+      'DISCONNECTED',
+      {
+        tenantId: params.tenantId,
+        admin: params.admin,
+        reason: params.reason,
+        idempotencyKey: params.idempotencyKey,
+      },
+    );
+  }
+
+  async getConnectionHealth(
+    connectionId: string,
+    tenantId: string = TenantContext.require(),
+  ) {
+    const view = await this.getConnectionById(connectionId, tenantId);
     const circuit = this.rateLimiter.getCircuitState(view.provider, view.id);
     const capabilities = this.providerRegistry
       .getAdapter(view.provider)
@@ -1223,8 +1257,14 @@ export class ConnectionsService {
     connectionId: string,
     actorId: string,
     targetStatus: ConnectionStatus,
-  ): Promise<SanitizedChannelConnectionView> {
-    const tenantId = TenantContext.require();
+    admin?: {
+      tenantId: string;
+      admin: { id: string; name: string | null };
+      reason: string;
+      idempotencyKey?: string;
+    },
+  ): Promise<{ view: SanitizedChannelConnectionView; replayed: boolean }> {
+    const tenantId = admin?.tenantId ?? TenantContext.require();
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
         tenantId,
@@ -1238,6 +1278,32 @@ export class ConnectionsService {
           IntegrationDomainErrorCode.CHANNEL_CONNECTION_NOT_FOUND,
           `Channel connection ${connectionId} not found`,
           404,
+        );
+      }
+
+      if (admin?.idempotencyKey) {
+        // the row lock above makes two calls with one key take turns, so the second sees the first's audit row
+        const seen = await em.query(
+          `SELECT 1 FROM ${qualifiedTable(em.connection, 'integration_audit_logs')}
+           WHERE "tenant_id" = $1 AND "connection_id" = $2 AND "action" = 'CONNECTION_DISCONNECTED'
+             AND "metadata"->>'idempotencyKey' = $3 LIMIT 1`,
+          [tenantId, conn.id, admin.idempotencyKey],
+        );
+        if (seen.length > 0) {
+          const cred = await em
+            .getRepository(ConnectionCredentialEntity)
+            .findOne({ where: { connectionId, tenantId } });
+          return {
+            view: this.toSanitizedView(conn, cred ?? undefined),
+            replayed: true,
+          };
+        }
+      }
+      if (admin && conn.status === 'DISCONNECTED') {
+        throw new IntegrationDomainError(
+          IntegrationDomainErrorCode.CHANNEL_CONNECTION_ALREADY_DISCONNECTED,
+          `Channel connection ${connectionId} is already disconnected`,
+          400,
         );
       }
 
@@ -1259,7 +1325,10 @@ export class ConnectionsService {
         await this.outbox.enqueue(em, INTEGRATION_CONNECTION_DISCONNECTED, {
           tenantId,
           aggregateId: conn.id,
-          actor: { id: actorId, type: 'account' },
+          actor: {
+            id: actorId,
+            type: admin ? 'platform_admin' : 'account',
+          },
           payload: {
             connectionId: conn.id,
             provider: conn.provider,
@@ -1269,6 +1338,16 @@ export class ConnectionsService {
             warehouseId: conn.warehouseId,
             status: conn.status,
             occurredAt: new Date().toISOString(),
+            ...(admin
+              ? {
+                  actor: {
+                    type: 'platform_admin',
+                    id: admin.admin.id,
+                    name: admin.admin.name,
+                  },
+                  reason: admin.reason,
+                }
+              : {}),
           } satisfies IntegrationConnectionEventPayload,
         });
       }
@@ -1282,11 +1361,25 @@ export class ConnectionsService {
           action: `CONNECTION_${targetStatus}`,
           targetType: 'CHANNEL_CONNECTION',
           targetId: conn.id,
-          metadata: { status: targetStatus },
+          metadata: {
+            status: targetStatus,
+            ...(admin
+              ? {
+                  actorType: 'platform_admin',
+                  reason: admin.reason,
+                  ...(admin.idempotencyKey
+                    ? { idempotencyKey: admin.idempotencyKey }
+                    : {}),
+                }
+              : {}),
+          },
         }),
       );
 
-      return this.toSanitizedView(conn, cred ?? undefined);
+      return {
+        view: this.toSanitizedView(conn, cred ?? undefined),
+        replayed: false,
+      };
     });
   }
 

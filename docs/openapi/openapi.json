@@ -84,6 +84,9 @@
       "name": "platform / Home"
     },
     {
+      "name": "platform / admin-support-sessions"
+    },
+    {
       "name": "catalog / categories"
     },
     {
@@ -219,6 +222,9 @@
       "name": "integration / integration-webhooks"
     },
     {
+      "name": "integration / integration-admin"
+    },
+    {
       "name": "insight / insight-screens"
     },
     {
@@ -229,6 +235,9 @@
     },
     {
       "name": "insight / insight-admin"
+    },
+    {
+      "name": "insight / insight-admin-audit"
     },
     {
       "name": "customer / customer-groups"
@@ -8017,6 +8026,450 @@
         "summary": "Change any subset of the settings (super admin)",
         "tags": [
           "platform / admin-settings"
+        ]
+      }
+    },
+    "/platform/api/v1/admin/support-sessions": {
+      "get": {
+        "operationId": "platform_SupportSessionController_list_v1",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "min": 1,
+            "max": 100,
+            "int": true,
+            "schema": {
+              "default": 10,
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "min": 1,
+            "int": true,
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "description": "Newest first unless asked otherwise",
+            "schema": {
+              "$ref": "#/components/schemas/Order"
+            }
+          },
+          {
+            "name": "tenantId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "adminId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/() => SupportSessionStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "paginationType": "offset"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Support sessions with the counts of the tab labels",
+        "tags": [
+          "platform / admin-support-sessions"
+        ]
+      },
+      "post": {
+        "operationId": "platform_SupportSessionController_start_v1",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSupportSessionReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The token lasts 60 minutes, has no refresh and refuses every request that is not GET, HEAD or OPTIONS (403 AUTH_READ_ONLY). It appears only in this response. A retry with the same Idempotency-Key answers the same session (200, Idempotency-Replayed) with a fresh token for the rest of its life.",
+            "paginationType": "offset"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Open a read-only support session on a store; answers the access token once",
+        "tags": [
+          "platform / admin-support-sessions"
+        ]
+      }
+    },
+    "/platform/api/v1/admin/support-sessions/{id}": {
+      "get": {
+        "operationId": "platform_SupportSessionController_get_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "paginationType": "offset"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "One support session (never the token)",
+        "tags": [
+          "platform / admin-support-sessions"
+        ]
+      }
+    },
+    "/platform/api/v1/admin/support-sessions/{id}/end": {
+      "post": {
+        "operationId": "platform_SupportSessionController_end_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "paginationType": "offset"
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "End a support session (admin token, or the session’s own token); its token stops working at once",
+        "tags": [
+          "platform / admin-support-sessions"
         ]
       }
     },
@@ -19815,6 +20268,456 @@
         ]
       }
     },
+    "/integration/api/v1/admin/connections": {
+      "get": {
+        "operationId": "integration_AdminIntegrationController_listConnections",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "shopee",
+                "lazada"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending_auth",
+                "connected",
+                "degraded",
+                "token_expired",
+                "reauth_required",
+                "paused",
+                "disconnected"
+              ]
+            }
+          },
+          {
+            "name": "branchId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "order",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "default": "DESC",
+              "type": "string",
+              "enum": [
+                "ASC",
+                "DESC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List channel connections of every store, with counts by status",
+        "tags": [
+          "integration / integration-admin"
+        ]
+      }
+    },
+    "/integration/api/v1/admin/connections/{id}": {
+      "get": {
+        "operationId": "integration_AdminIntegrationController_getConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Connection detail with stats (never a token)",
+        "tags": [
+          "integration / integration-admin"
+        ]
+      }
+    },
+    "/integration/api/v1/admin/sync-history": {
+      "get": {
+        "operationId": "integration_AdminIntegrationController_listSyncHistory",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "running",
+                "retry_scheduled",
+                "completed",
+                "failed_permanent",
+                "cancelled",
+                "needs_review",
+                "dead_lettered"
+              ]
+            }
+          },
+          {
+            "name": "jobType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "order_import",
+                "order_poll",
+                "order_status_sync",
+                "inventory_publication",
+                "product_mapping_sync",
+                "product_publication",
+                "connection_token_refresh",
+                "full_reconciliation",
+                "incremental_reconciliation"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "order",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "default": "DESC",
+              "type": "string",
+              "enum": [
+                "ASC",
+                "DESC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Sync jobs of every store (flat, filterable)",
+        "tags": [
+          "integration / integration-admin"
+        ]
+      }
+    },
+    "/integration/api/v1/admin/webhook-events": {
+      "get": {
+        "operationId": "integration_AdminIntegrationController_listWebhookEvents",
+        "parameters": [
+          {
+            "name": "connectionId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "shopee",
+                "lazada"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "received",
+                "validated",
+                "processing",
+                "processed",
+                "needs_review",
+                "retry_pending",
+                "dead_lettered"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "order",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "default": "DESC",
+              "type": "string",
+              "enum": [
+                "ASC",
+                "DESC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Received webhook events (never the raw payload)",
+        "tags": [
+          "integration / integration-admin"
+        ]
+      }
+    },
+    "/integration/api/v1/admin/connections/{id}/check": {
+      "post": {
+        "operationId": "integration_AdminIntegrationController_check",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Run the connection health probe now (changes no state)",
+        "tags": [
+          "integration / integration-admin"
+        ]
+      }
+    },
+    "/integration/api/v1/admin/connections/{id}/disconnect": {
+      "post": {
+        "operationId": "integration_AdminIntegrationController_disconnect",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminDisconnectDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Disconnect a connection as a platform admin (reason required; 400 CHANNEL_CONNECTION_ALREADY_DISCONNECTED)",
+        "tags": [
+          "integration / integration-admin"
+        ]
+      }
+    },
     "/insight/api/v1/audit-logs": {
       "get": {
         "description": "Tenant-wide audit trail (no branch scope), filtered and paged. Needs `reports.view`.",
@@ -22217,6 +23120,167 @@
         "summary": "Take a scheduled announcement back to a draft",
         "tags": [
           "insight / insight-admin"
+        ]
+      }
+    },
+    "/insight/api/v1/admin/audit-logs": {
+      "get": {
+        "description": "Every store plus platform-scope rows, newest first. `scope=platform` is the rows that belong to no store.",
+        "operationId": "insight_AdminAuditController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Searches the action code, the target label and the actor name",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "description": "`platform`: rows that belong to no store; `tenant`: store rows",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "platform",
+                "tenant"
+              ]
+            }
+          },
+          {
+            "name": "tenantId",
+            "required": false,
+            "in": "query",
+            "description": "Rows of one store",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "success",
+                "failed"
+              ]
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "description": "One action code (see /admin/audit-logs/actions)",
+            "schema": {
+              "maxLength": 100,
+              "example": "tenant.updated",
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorId",
+            "required": false,
+            "in": "query",
+            "description": "Rows by one actor",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-11-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-11-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "DESC",
+              "type": "string",
+              "enum": [
+                "ASC",
+                "DESC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the audit log (platform admin)",
+        "tags": [
+          "insight / insight-admin-audit"
+        ]
+      }
+    },
+    "/insight/api/v1/admin/audit-logs/actions": {
+      "get": {
+        "description": "Codes only; the web maps them to labels.",
+        "operationId": "insight_AdminAuditController_actions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The fixed list of action codes (platform admin)",
+        "tags": [
+          "insight / insight-admin-audit"
         ]
       }
     },
@@ -26837,6 +27901,32 @@
           }
         }
       },
+      "StartSupportSessionReqDto": {
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "tenantId",
+          "reason"
+        ]
+      },
+      "() => SupportSessionStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "ended",
+          "expired"
+        ]
+      },
       "CreateCategoryReqDto": {
         "type": "object",
         "properties": {
@@ -31446,6 +32536,19 @@
       "IntegrationReconciliationRunEntity": {
         "type": "object",
         "properties": {}
+      },
+      "AdminDisconnectDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "reason"
+        ]
       },
       "RegisterDeviceTokenReqDto": {
         "type": "object",

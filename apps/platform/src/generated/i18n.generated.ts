@@ -75,6 +75,14 @@ export type I18nTranslations = {
             "payment_note_required": string;
         };
     };
+    "support_session": {
+        "error": {
+            "already_active": string;
+            "tenant_suspended": string;
+            "already_ended": string;
+            "read_only": string;
+        };
+    };
     "tenant": {
         "error": {
             "subdomain_exists": string;

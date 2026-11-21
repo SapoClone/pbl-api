@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { EventEnvelope, RequestContext, createEvent } from '@pbl/common';
+import {
+  EventEnvelope,
+  RequestContext,
+  createEvent,
+  createPlatformEvent,
+} from '@pbl/common';
 import { EventDefinition } from '@pbl/contracts';
 import { randomUUID } from 'crypto';
 import { EntityManager } from 'typeorm';
@@ -10,8 +15,10 @@ export interface OutboxAddOptions {
    * The event's tenant when the request has none (a login before a store is
    * selected). It must come from verified data, never from request input.
    * Without it the tenant comes from the request context.
+   * `null` makes a platform-scope event (an admin action that belongs to no store): the envelope and the outbox row
+   * carry no tenant, and consumers enter no tenant context for it.
    */
-  tenantId?: string;
+  tenantId?: string | null;
 }
 
 /**
@@ -27,18 +34,21 @@ export class EventOutbox {
     payload: P,
     options: OutboxAddOptions = {},
   ): Promise<EventEnvelope<P>> {
-    const envelope = options.tenantId
-      ? this.envelopeFor(options.tenantId, event, payload)
-      : createEvent(event.type, event.version, payload);
+    const envelope: EventEnvelope<P, string | null> =
+      options.tenantId === null
+        ? createPlatformEvent(event.type, event.version, payload)
+        : options.tenantId
+          ? this.envelopeFor(options.tenantId, event, payload)
+          : createEvent(event.type, event.version, payload);
 
     await manager.getRepository(OutboxEventEntity).insert({
       id: envelope.id,
       tenantId: envelope.tenantId,
       type: envelope.type,
       version: envelope.version,
-      payload: envelope as EventEnvelope,
+      payload: envelope as EventEnvelope<unknown, string | null>,
     });
-    return envelope;
+    return envelope as EventEnvelope<P>;
   }
 
   async enqueue<P>(

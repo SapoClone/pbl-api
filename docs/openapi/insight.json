@@ -2600,6 +2600,167 @@
         ]
       }
     },
+    "/api/v1/admin/audit-logs": {
+      "get": {
+        "description": "Every store plus platform-scope rows, newest first. `scope=platform` is the rows that belong to no store.",
+        "operationId": "AdminAuditController_list",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Searches the action code, the target label and the actor name",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "description": "`platform`: rows that belong to no store; `tenant`: store rows",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "platform",
+                "tenant"
+              ]
+            }
+          },
+          {
+            "name": "tenantId",
+            "required": false,
+            "in": "query",
+            "description": "Rows of one store",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "success",
+                "failed"
+              ]
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "description": "One action code (see /admin/audit-logs/actions)",
+            "schema": {
+              "maxLength": 100,
+              "example": "tenant.updated",
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorId",
+            "required": false,
+            "in": "query",
+            "description": "Rows by one actor",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-11-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-11-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "DESC",
+              "type": "string",
+              "enum": [
+                "ASC",
+                "DESC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the audit log (platform admin)",
+        "tags": [
+          "insight-admin-audit"
+        ]
+      }
+    },
+    "/api/v1/admin/audit-logs/actions": {
+      "get": {
+        "description": "Codes only; the web maps them to labels.",
+        "operationId": "AdminAuditController_actions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The fixed list of action codes (platform admin)",
+        "tags": [
+          "insight-admin-audit"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "PblHealthController_live",

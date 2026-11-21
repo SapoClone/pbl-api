@@ -15,12 +15,16 @@ export class AuditQueryService {
   ) {}
 
   async auditLogs(query: ListAuditLogsReqDto) {
-    const [rows, total] = await this.audit.findAndCount({
-      where: query.type ? { type: query.type } : {},
-      order: { occurredAt: 'DESC' },
-      take: query.limit,
-      skip: (query.page - 1) * query.limit,
-    });
+    // the table is under forced row-level security: the read runs with the token's store bound (`app.tenant_id`);
+    // platform-scope rows (no store) are never visible here
+    const [rows, total] = await this.audit.transaction((scoped) =>
+      scoped.findAndCount({
+        where: query.type ? { type: query.type } : {},
+        order: { occurredAt: 'DESC' },
+        take: query.limit,
+        skip: (query.page - 1) * query.limit,
+      }),
+    );
     const totalPages = Math.max(1, Math.ceil(total / query.limit));
     return {
       data: rows.map((row) => ({

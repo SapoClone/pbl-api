@@ -27,6 +27,11 @@ export const loggingRedactPaths = [
   'req.body.oldPassword',
   'req.body.currentPassword',
   'req.body.newPassword',
+  // the support-session token appears only in the response of POST /admin/support-sessions
+  'req.body.accessToken',
+  'res.body.accessToken',
+  'accessToken',
+  '*.accessToken',
 ];
 
 export const DEFAULT_PAGE_LIMIT = 10;

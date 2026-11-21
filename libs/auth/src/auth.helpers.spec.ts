@@ -28,4 +28,11 @@ describe('auth helpers', () => {
     expect(result).toEqual(['b1', 'b2']);
     expect(result).not.toBe(branches);
   });
+
+  it('a support token (view codes only) holds no write permission, so customer phones stay masked', () => {
+    const support = { permissions: ['customers.view', 'orders.view'] };
+    expect(hasPermission(support, 'customers.view')).toBe(true);
+    // services unmask phones only for customers.update
+    expect(hasPermission(support, 'customers.update')).toBe(false);
+  });
 });

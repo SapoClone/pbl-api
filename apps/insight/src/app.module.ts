@@ -9,10 +9,14 @@ import {
   PblDatabaseModule,
   PblEventsModule,
 } from '@pbl/events';
+import { AdminAuditQueryService } from './audit/admin-audit-query.service';
+import { AdminAuditController } from './audit/admin-audit.controller';
 import { AuditLogEntity } from './audit/audit-log.entity';
 import { AuditQueryService } from './audit/audit-query.service';
 import { AuditWriter } from './audit/audit-writer.service';
 import { AuditHandler } from './audit/audit.handler';
+import { AuditModule } from './audit/audit.module';
+import { AdminReadContext } from './common/admin-read-context';
 import { InsightEventsConsumer } from './consumers/insight-events.consumer';
 import { M7_INSIGHT_ENTITIES } from './infrastructure/persistence/insight.entities';
 import { CreateInsightTables1791800000100 } from './migrations/1791800000100-create-insight-tables';
@@ -20,6 +24,7 @@ import { CreateM7InsightCore1791900000300 } from './migrations/1791900000300-cre
 import { CreateNotifications1792000000200 } from './migrations/1792000000200-create-notifications';
 import { CreatePlatformReadModels1792100000100 } from './migrations/1792100000100-create-platform-read-models';
 import { CreateAnnouncements1792100000200 } from './migrations/1792100000200-create-announcements';
+import { AuditLogPlatformScope1793500000000 } from './migrations/1793500000000-audit-log-platform-scope';
 import { InsightExportService } from './modules/export/insight-export.service';
 import { InsightAnalyticsController } from './modules/insight-analytics.controller';
 import { InsightInternalController } from './modules/insight-internal.controller';
@@ -73,9 +78,11 @@ import { PlatformProjectionHandler } from './platform-admin/platform-projection.
         CreateNotifications1792000000200,
         CreatePlatformReadModels1792100000100,
         CreateAnnouncements1792100000200,
+        AuditLogPlatformScope1793500000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'insight' }),
+    AuditModule,
     TenancyModule.forFeature([
       AuditLogEntity,
       NotificationEntity,
@@ -89,8 +96,11 @@ import { PlatformProjectionHandler } from './platform-admin/platform-projection.
     InsightInternalController,
     PlatformOverviewController,
     AnnouncementsController,
+    AdminAuditController,
   ],
   providers: [
+    AdminReadContext,
+    AdminAuditQueryService,
     AuditQueryService,
     ScreenReportsService,
     ScreenExportService,
@@ -112,6 +122,7 @@ import { PlatformProjectionHandler } from './platform-admin/platform-projection.
     InsightExportService,
   ],
   exports: [
+    AdminReadContext,
     ProjectionsService,
     InsightReportingService,
     InsightRebuildService,
