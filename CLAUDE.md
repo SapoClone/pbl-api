@@ -56,6 +56,7 @@ scripts/verify-local-stack.sh   end-to-end check (health of all services + regis
 scripts/demo-events.sh          login, permissions and selling travelling as events
 scripts/demo-first-wave.sh      the first-wave screen APIs through the gateway
 scripts/demo-rbac.sh            roles, permissions and branch scope through the gateway
+scripts/admin-smoke.sh          the platform-admin API end to end (dashboard, audit log, announcements, support sessions, integration views); test data in scripts/fixtures/admin-test-data.json
 docs/decisions/        ADRs — add one for every new architectural decision
 ```
 

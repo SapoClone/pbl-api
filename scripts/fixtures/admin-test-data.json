@@ -1,0 +1,43 @@
+{
+  "_comment": "Test data for scripts/admin-smoke.sh. Stable names and emails, so every run reuses the same stores instead of piling up new ones. Everything is created through the APIs; nothing is written to the database directly except the first platform admin.",
+  "stores": [
+    {
+      "key": "a",
+      "name": "SMOKE Store A (expiring soon)",
+      "subdomain": "smoke-a",
+      "email": "contact+a@smoke.example.com",
+      "phone": "0900000001",
+      "address": "1 Smoke Street, Da Nang",
+      "owner": { "name": "Smoke Owner A", "email": "smoke-owner-a@example.com" },
+      "plan": { "code": "pro", "expiresInDays": 5 }
+    },
+    {
+      "key": "b",
+      "name": "SMOKE Store B (paid, not expiring)",
+      "subdomain": "smoke-b",
+      "email": "contact+b@smoke.example.com",
+      "phone": "0900000002",
+      "address": "2 Smoke Street, Da Nang",
+      "owner": { "name": "Smoke Owner B", "email": "smoke-owner-b@example.com" },
+      "plan": { "code": "pro", "expiresInDays": 60 }
+    },
+    {
+      "key": "c",
+      "name": "SMOKE Store C (free, suspended during the run)",
+      "subdomain": "smoke-c",
+      "email": "contact+c@smoke.example.com",
+      "phone": "0900000003",
+      "address": "3 Smoke Street, Da Nang",
+      "owner": { "name": "Smoke Owner C", "email": "smoke-owner-c@example.com" },
+      "plan": { "code": "free" }
+    }
+  ],
+  "announcements": {
+    "toStores": { "title": "SMOKE maintenance notice", "content": "Test announcement from admin-smoke.sh. Ignore.", "type": "maintenance" },
+    "scheduled": { "title": "SMOKE scheduled update", "content": "Scheduled test announcement. Ignore.", "type": "update" },
+    "unknownAudienceTenantId": "00000000-0000-4000-8000-000000000000"
+  },
+  "supportSession": { "reason": "SMOKE: checking the read-only support flow" },
+  "settings": { "supportEmailForTest": "smoke-support@example.com" },
+  "ranges": { "dashboardDays": 7, "tooLongDays": 120 }
+}
