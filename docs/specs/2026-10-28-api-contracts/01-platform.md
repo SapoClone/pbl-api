@@ -257,6 +257,25 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
   ```
   `branches` lists only the branches the caller may act in (D2). `permissions` mirrors the token's claim, so the UI can hide actions the caller can't take.
 
+### GET /platform/api/v1/subscription/current
+- **Status:** built. The plan of the selected store and what it uses, for the Settings page. A store with no subscription row is on `free` (`id`, `code`, `billingCycle`, `startedAt`, `expiresAt` null).
+- **Auth:** tenant, `settings.view`. The store comes from the token.
+- **Response:** 200
+  ```json
+  { "id": "…", "code": "SUB0001", "status": "active", "billingCycle": "monthly",
+    "startedAt": "2026-11-01T00:00:00.000Z", "expiresAt": "2026-12-01T00:00:00.000Z",
+    "plan": { "id": "…", "code": "pro", "name": "Pro", "description": null, "priceMonthly": 299000, "isFeatured": true,
+              "quotas": { "branches": 5, "users": 20, "products": 5000, "storageGb": 10 } },
+    "usage": [ { "key": "branches", "used": 2, "limit": 5, "ok": true }, { "key": "storageGb", "used": 0.3, "limit": 10, "ok": true } ],
+    "warning": "normal" }
+  ```
+  `warning` is `normal`, `near_limit` (90%) or `at_limit`.
+
+### GET /platform/api/v1/plans
+- **Status:** built. Plans a store can choose from (hidden plans are left out), cheapest first.
+- **Auth:** tenant, `settings.view`
+- **Response:** 200 `{ "data": [ { "id", "code", "name", "description", "priceMonthly", "isFeatured", "quotas": { "branches", "users", "products", "storageGb" } } ] }`
+
 ## Branches and branch settings
 
 ### GET /platform/api/v1/branches
