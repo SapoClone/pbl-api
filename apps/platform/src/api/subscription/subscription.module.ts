@@ -8,6 +8,8 @@ import { SubscriptionPaymentEntity } from './entities/subscription-payment.entit
 import { SubscriptionEntity } from './entities/subscription.entity';
 import { TenantUsageEntity } from './entities/tenant-usage.entity';
 import { QuotaService } from './quota.service';
+import { StoreSubscriptionController } from './store-subscription.controller';
+import { StoreSubscriptionService } from './store-subscription.service';
 import { SubscriptionCoreService } from './subscription-core.service';
 import {
   SUBSCRIPTION_CLOCK,
@@ -27,8 +29,10 @@ import { UsageHandler } from './usage.handler';
       PlatformSettingEntity,
     ]),
   ],
+  controllers: [StoreSubscriptionController],
   providers: [
     SubscriptionCoreService,
+    StoreSubscriptionService,
     QuotaService,
     UsageHandler,
     PlatformSettingReader,
