@@ -1,4 +1,5 @@
 import { CreateCatalogBranchPriceProjection1793500000000 } from '../../src/migrations/1793500000000-create-catalog-branch-price-projection';
+import { AddPromotionTargeting1793600000000 } from '../../src/migrations/1793600000000-add-promotion-targeting';
 /**
  * Reproducible Performance, High-Concurrency Contention & EXPLAIN (ANALYZE, BUFFERS)
  * Benchmark Suite for SapoClone M3 Sales & POS Microservice.
@@ -295,6 +296,7 @@ async function main(): Promise<void> {
         CreateCheckoutWorkflow1791800000300,
         CreateM3SalesCore1791900000200,
         CreateCatalogBranchPriceProjection1793500000000,
+        AddPromotionTargeting1793600000000,
       ],
     }),
   });
