@@ -31,6 +31,16 @@ export const CatalogErrorCode = {
   ATTRIBUTE_NOT_ENABLED_FOR_PRODUCT: 'ATTRIBUTE_NOT_ENABLED_FOR_PRODUCT',
   /** An attribute cannot be removed from a product while one of its variants carries a value of it */
   ATTRIBUTE_IN_USE_BY_PRODUCT: 'ATTRIBUTE_IN_USE_BY_PRODUCT',
+  /** `PUT /products/:id/combo-items` on a product that is not a combo */
+  PRODUCT_NOT_COMBO: 'PRODUCT_NOT_COMBO',
+  /** The combo product has no live variant to hang its components on */
+  COMBO_VARIANT_REQUIRED: 'COMBO_VARIANT_REQUIRED',
+  /** A combo lists its own variant as a component */
+  COMBO_SELF_REFERENCE: 'COMBO_SELF_REFERENCE',
+  /** A component is itself a combo (combos do not nest) */
+  COMBO_NESTING_NOT_ALLOWED: 'COMBO_NESTING_NOT_ALLOWED',
+  /** The same variant is listed twice among the components */
+  COMBO_DUPLICATE_ITEM: 'COMBO_DUPLICATE_ITEM',
   VARIANT_GENERATION_LIMIT_EXCEEDED: 'VARIANT_GENERATION_LIMIT_EXCEEDED',
   INVALID_PRODUCT_LIFECYCLE: 'INVALID_PRODUCT_LIFECYCLE',
   INVALID_UNIT_CONVERSION: 'INVALID_UNIT_CONVERSION',

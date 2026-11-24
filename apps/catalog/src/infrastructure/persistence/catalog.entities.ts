@@ -285,6 +285,31 @@ export class ProductAttributeEntity {
   createdAt!: Date;
 }
 
+/**
+ * One component of a combo: `comboVariantId` is the combo product's own (priced) variant, `childVariantId` a
+ * single sellable variant of the same store. Written only by `PUT /products/:id/combo-items`.
+ */
+@Entity('combo_items')
+export class ComboItemEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId!: string;
+
+  @Column({ name: 'combo_variant_id', type: 'uuid' })
+  comboVariantId!: string;
+
+  @Column({ name: 'child_variant_id', type: 'uuid' })
+  childVariantId!: string;
+
+  @Column({ type: 'integer' })
+  quantity!: number;
+
+  @Column({ name: 'sort_order', type: 'integer', default: 0 })
+  sortOrder!: number;
+}
+
 @Entity('unit_conversions')
 export class UnitConversionEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -563,6 +588,7 @@ export const CATALOG_ENTITIES = [
   VariantAttributeValueEntity,
   ProductAttributeEntity,
   UnitConversionEntity,
+  ComboItemEntity,
   PriceListEntity,
   PriceListItemEntity,
   PriceListBranchEntity,
