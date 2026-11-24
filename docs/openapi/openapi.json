@@ -1173,47 +1173,34 @@
       "post": {
         "operationId": "platform_AuthController_forgotPassword_v1",
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordReqDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "OK",
-            "paginationType": "offset"
+            "description": "Always 200 with the same body, whether or not the email has an account",
+            "paginationType": "offset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResDto"
+                }
+              }
+            }
           },
           "201": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
+                  "$ref": "#/components/schemas/MessageResDto"
                 }
               }
             }
@@ -1239,83 +1226,7 @@
             }
           }
         },
-        "summary": "Request a password reset (not implemented yet)",
-        "tags": [
-          "platform / auth"
-        ]
-      }
-    },
-    "/platform/api/v1/auth/verify/forgot-password": {
-      "post": {
-        "operationId": "platform_AuthController_verifyForgotPassword_v1",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "paginationType": "offset"
-          },
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Unprocessable Entity",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Verify a password reset code (not implemented yet)",
+        "summary": "Request a password reset link by email",
         "tags": [
           "platform / auth"
         ]
@@ -1325,43 +1236,40 @@
       "post": {
         "operationId": "platform_AuthController_resetPassword_v1",
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordReqDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "OK",
-            "paginationType": "offset"
+            "description": "An invalid, expired or used token answers 400 E014. Ends every session of the account",
+            "paginationType": "offset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResDto"
+                }
+              }
+            }
           },
           "201": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/MessageResDto"
                 }
               }
             }
           },
           "400": {
             "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1391,7 +1299,7 @@
             }
           }
         },
-        "summary": "Reset the password (not implemented yet)",
+        "summary": "Set a new password with the token from the reset email",
         "tags": [
           "platform / auth"
         ]
@@ -25843,6 +25751,47 @@
         },
         "required": [
           "tenantId"
+        ]
+      },
+      "ForgotPasswordReqDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "toLowerCase": true
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "MessageResDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "ResetPasswordReqDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token from the emailed link (43 URL-safe characters); the cap only bounds junk input",
+            "maxLength": 256
+          },
+          "password": {
+            "type": "string",
+            "minLength": 6
+          }
+        },
+        "required": [
+          "token",
+          "password"
         ]
       },
       "CreateTenantReqDto": {

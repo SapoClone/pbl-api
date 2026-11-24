@@ -404,7 +404,7 @@ document from the controllers into `docs/openapi/` (git-ignored; `test:arch` gua
 
 ## Known open work (don't rediscover, don't depend on)
 
-- Deferred on purpose: staff invitations, forgot/reset/verify email, the rest of the platform admin (stores, plans,
+- Deferred on purpose: staff invitations, verify email, the rest of the platform admin (stores, plans,
   subscriptions, usage, accounts, admins and settings are built: [guide](docs/guides/platform-admin-api.md); the audit log, dashboard,
   announcements, integration connections and support sessions are built too: [ADR-0025](docs/decisions/0025-support-sessions.md),
   [audit log](docs/guides/audit-log.md), [dashboard and announcements](docs/guides/admin-dashboard-announcements.md),
@@ -429,9 +429,8 @@ document from the controllers into `docs/openapi/` (git-ignored; `test:arch` gua
   (ADR-0002 target); today they would share the superuser.
 - Calls made outside a user request (jobs, consumers) have no service token yet
   (ADR-0004 §8).
-- Auth endpoints `forgot-password`, `verify/forgot-password`,
-  `reset-password`, `verify/email`, `verify/email/resend`
-  are placeholders returning a string.
+- Auth endpoints `verify/email` and `verify/email/resend` are placeholders returning a string.
+  Password reset is built (`forgot-password`, `reset-password`; [guide](docs/guides/password-reset.md)).
 - No rate limiting (despite `docs/security.md`).
 - Register saves the account before enqueueing; if SQS fails the account exists
   without a verification email and there is no working resend.

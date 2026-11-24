@@ -22,6 +22,9 @@ export const loggingRedactPaths = [
   'req.headers.authorization',
   'req.body.token',
   'req.body.refreshToken',
+  // password-reset link token (forgot/reset flow); any `token` field, request or response
+  'token',
+  '*.token',
   'req.body.email',
   'req.body.password',
   'req.body.oldPassword',

@@ -2,6 +2,7 @@ import { ApiModule } from '@/api/api.module';
 import authConfig from '@/api/auth/config/auth.config';
 import appConfig from '@/config/app.config';
 import { AllConfigType } from '@/config/config.type';
+import webConfig from '@/config/web.config';
 import { Environment } from '@/constants/app.constant';
 import databaseConfig from '@/database/config/database.config';
 import { TypeOrmConfigService } from '@/database/typeorm-config.service';
@@ -29,7 +30,14 @@ function generateModulesSet() {
   const imports: ModuleMetadata['imports'] = [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, redisConfig, authConfig, queueConfig],
+      load: [
+        appConfig,
+        databaseConfig,
+        redisConfig,
+        authConfig,
+        queueConfig,
+        webConfig,
+      ],
       envFilePath: ['.env'],
     }),
   ];

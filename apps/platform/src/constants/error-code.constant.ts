@@ -11,6 +11,8 @@ export enum ErrorCode {
   E002 = 'user.error.not_found',
   E003 = 'user.error.email_exists',
   E010 = 'user.error.account_locked',
+  // password reset: the link is invalid, expired or already used
+  E014 = 'user.error.reset_token_invalid',
   E015 = 'user.error.current_password_wrong',
 
   // Platform admin (ADR-0022)

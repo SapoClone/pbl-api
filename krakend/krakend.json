@@ -3847,40 +3847,6 @@
       ]
     },
     {
-      "endpoint": "/platform/api/v1/auth/verify/forgot-password",
-      "method": "POST",
-      "output_encoding": "no-op",
-      "input_headers": [
-        "Authorization",
-        "Content-Type",
-        "Accept",
-        "Accept-Language",
-        "x-lang",
-        "X-Request-Id"
-      ],
-      "input_query_strings": [
-        "*"
-      ],
-      "backend": [
-        {
-          "url_pattern": "/api/v1/auth/verify/forgot-password",
-          "encoding": "no-op",
-          "host": [
-            "http://platform:3000"
-          ],
-          "extra_config": {
-            "qos/circuit-breaker": {
-              "name": "platform-cb",
-              "interval": 60,
-              "timeout": 10,
-              "max_errors": 5,
-              "log_status_change": true
-            }
-          }
-        }
-      ]
-    },
-    {
       "endpoint": "/platform/api/v1/auth/reset-password",
       "method": "POST",
       "output_encoding": "no-op",

@@ -13,6 +13,7 @@
     "invalid_password": "Mật khẩu không hợp lệ",
     "invalid_token": "Token không hợp lệ",
     "account_locked": "Đăng nhập sai quá nhiều lần. Tài khoản bị khóa trong 15 phút",
+    "reset_token_invalid": "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn",
     "current_password_wrong": "Mật khẩu hiện tại không đúng"
   }
 }

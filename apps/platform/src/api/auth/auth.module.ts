@@ -17,6 +17,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { JwksController } from './jwks.controller';
+import { PasswordResetService } from './password-reset.service';
 import { RefreshTokenService } from './refresh-token.service';
 import { SessionService } from './session.service';
 
@@ -55,6 +56,7 @@ import { SessionService } from './session.service';
   controllers: [AuthController, JwksController],
   providers: [
     AuthService,
+    PasswordResetService,
     RefreshTokenService,
     SessionService,
     PlatformSettingReader,
