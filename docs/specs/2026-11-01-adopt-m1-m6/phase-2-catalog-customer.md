@@ -10,9 +10,9 @@ Every `@RequireRoles` is now `@RequirePermission` (`@pbl/auth`); `ROLES` imports
 **catalog** (module `products`; verb by meaning)
 | Routes | Permission |
 | --- | --- |
-| GET categories (list, tree, :id), brands, attributes (+values), products (list, :id, variants, units), variants/:id, price-lists (list, :id) | `products.view` |
+| GET categories (list, tree, :id), brands, attributes (+values), products (list, :id, variants, units, combo-items), variants/:id, price-lists (list, :id) | `products.view` |
 | POST categories, brands, attributes, attribute values, products, variants, variants/generate, units, price-lists | `products.create` |
-| PATCH categories/products/variants/attributes/brands/price-lists, `/status`, categories `/reparent`, PUT price-list items | `products.update` |
+| PATCH categories/products/variants/attributes/brands/price-lists, `/status`, categories `/reparent`, PUT price-list items, PUT products/:id/combo-items | `products.update` |
 | DELETE categories, brands, products | `products.delete` |
 | GET products/lookup (SKU/barcode) | `products.view`, `pos.create`, `orders.create`, `inventory.view` |
 | GET variants/:id/price | `products.view`, `pos.create`, `orders.create` |

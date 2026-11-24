@@ -10315,6 +10315,96 @@
         ]
       }
     },
+    "/catalog/api/v1/products/{id}/combo-items": {
+      "get": {
+        "description": "A bare array in display order. Empty for a product that is not a combo or has no components yet; 404 when the product is not in the store.",
+        "operationId": "catalog_ProductComboItemsController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Combo product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComboItemRes"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the components of a combo product",
+        "tags": [
+          "catalog / products"
+        ]
+      },
+      "put": {
+        "description": "Replaces the whole list in one transaction (repeating the same request changes nothing). 422 on: not a combo (PRODUCT_NOT_COMBO), no variant on the combo (COMBO_VARIANT_REQUIRED), the combo inside itself (COMBO_SELF_REFERENCE), a combo as a component (COMBO_NESTING_NOT_ALLOWED), the same variant twice (COMBO_DUPLICATE_ITEM), empty list or a quantity that is not a positive whole number. 404 VARIANT_NOT_FOUND for a variant that is missing, deleted or from another store. The combo price stays on the combo variant (PATCH /variants/{id}).",
+        "operationId": "catalog_ProductComboItemsController_replace",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Combo product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetComboItemsReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComboItemRes"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replace the components of a combo product",
+        "tags": [
+          "catalog / products"
+        ]
+      }
+    },
     "/catalog/api/v1/price-lists": {
       "get": {
         "operationId": "catalog_PricingController_listPriceLists",
@@ -28284,6 +28374,26 @@
           "sortOrder"
         ]
       },
+      "ComboItemInputDto": {
+        "type": "object",
+        "properties": {
+          "childVariantId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "A live variant of this store that is not a combo itself (combos do not nest)"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10000,
+            "example": 2
+          }
+        },
+        "required": [
+          "childVariantId",
+          "quantity"
+        ]
+      },
       "CreateProductReqDto": {
         "type": "object",
         "properties": {
@@ -28371,6 +28481,18 @@
             "minimum": 0,
             "example": 199000,
             "description": "Optional base price (whole VND) for the initial default variant"
+          },
+          "isCombo": {
+            "type": "boolean",
+            "default": false,
+            "description": "Creates a combo product: its price is the one of its own variant, its components are set with `comboItems` or later with PUT /products/:id/combo-items. Cannot be changed afterwards."
+          },
+          "comboItems": {
+            "description": "Components of the new combo (needs `isCombo` and a default variant). Same rules as PUT /products/:id/combo-items.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComboItemInputDto"
+            }
           }
         },
         "required": [
@@ -28758,6 +28880,86 @@
         },
         "required": [
           "attributeIds"
+        ]
+      },
+      "ComboItemRes": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The component row"
+          },
+          "comboProductId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "childVariantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "childProductId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "skuCode": {
+            "type": "string",
+            "example": "TER-500-GRN"
+          },
+          "variantName": {
+            "type": "string",
+            "example": "Bình giữ nhiệt Terra 500ml"
+          },
+          "basePrice": {
+            "type": "number",
+            "description": "Price of one unit of the component, whole VND"
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1
+          },
+          "lineTotal": {
+            "type": "number",
+            "description": "basePrice x quantity, whole VND. The sum of the lines is what the components cost bought separately; the combo price is on the combo variant."
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "Display order, starting at 0"
+          }
+        },
+        "required": [
+          "id",
+          "comboProductId",
+          "childVariantId",
+          "childProductId",
+          "skuCode",
+          "variantName",
+          "basePrice",
+          "imageUrl",
+          "quantity",
+          "lineTotal",
+          "sortOrder"
+        ]
+      },
+      "SetComboItemsReqDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "The whole list of components, in display order. Replaces the current list; the same variant twice is refused.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComboItemInputDto"
+            }
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "CreatePriceListReqDto": {
