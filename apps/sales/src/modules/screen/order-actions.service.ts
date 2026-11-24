@@ -602,6 +602,22 @@ export class OrderActionsService {
     can: { approve: boolean; receive: boolean },
   ) {
     const restock = dto.restock !== false;
+    // The return and its refund are one unit: refuse a cash refund that cannot leave a drawer BEFORE
+    // the return, its restock and its events are written (createRefundRequest re-checks under lock).
+    if (dto.refund && can.approve) {
+      const refundMethod = toStoredMethod(dto.refund.method);
+      if (refundMethod === 'CASH') {
+        await inTenantTx(this.dataSource, async (em, tenantId) => {
+          const order = await em
+            .getRepository(OrderEntity)
+            .findOne({ where: { id, tenantId } });
+          if (!order || !branchAllowed(scope, order.branchId)) {
+            throw notFound(id);
+          }
+          await findCallersOpenShift(em, tenantId, actorId, order.branchId);
+        });
+      }
+    }
     const created = await this.returns.createReturn(actorId, scope, {
       orderId: id,
       note: dto.reason,
