@@ -3,6 +3,7 @@ import { DatabaseConfig } from '@/database/config/database-config.type';
 import { QueueConfig } from '@/queue/config/queue-config.type';
 import { RedisConfig } from '@/redis/config/redis-config.type';
 import { AppConfig } from './app-config.type';
+import { WebConfig } from './web-config.type';
 
 export type AllConfigType = {
   app: AppConfig;
@@ -10,4 +11,5 @@ export type AllConfigType = {
   redis: RedisConfig;
   auth: AuthConfig;
   queue: QueueConfig;
+  web: WebConfig;
 };
