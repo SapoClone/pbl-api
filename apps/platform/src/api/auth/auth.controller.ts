@@ -3,14 +3,19 @@ import { ApiAuth, ApiPublic } from '@/decorators/http.decorators';
 import { Body, Controller, Get, HttpStatus, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthUser, CurrentUser } from '@pbl/auth';
+import { plainToInstance } from 'class-transformer';
 import { AuthService } from './auth.service';
+import { ForgotPasswordReqDto } from './dto/forgot-password.req.dto';
 import { LoginReqDto } from './dto/login.req.dto';
 import { LoginResDto } from './dto/login.res.dto';
+import { MessageResDto } from './dto/message.res.dto';
 import { RefreshReqDto } from './dto/refresh.req.dto';
 import { RefreshResDto } from './dto/refresh.res.dto';
 import { RegisterReqDto } from './dto/register.req.dto';
 import { RegisterResDto } from './dto/register.res.dto';
+import { ResetPasswordReqDto } from './dto/reset-password.req.dto';
 import { SwitchTenantReqDto } from './dto/switch-tenant.req.dto';
+import { PasswordResetService } from './password-reset.service';
 
 @ApiTags('auth')
 @Controller({
@@ -18,7 +23,10 @@ import { SwitchTenantReqDto } from './dto/switch-tenant.req.dto';
   version: '1',
 })
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly passwordResetService: PasswordResetService,
+  ) {}
 
   @ApiPublic({
     type: LoginResDto,
@@ -80,22 +88,39 @@ export class AuthController {
     return await this.authService.switchTenant(user, dto.tenantId, client);
   }
 
-  @ApiPublic({ summary: 'Request a password reset (not implemented yet)' })
+  @ApiPublic({
+    type: MessageResDto,
+    summary: 'Request a password reset link by email',
+    description:
+      'Always 200 with the same body, whether or not the email has an account',
+    errorResponses: [422, 500],
+  })
   @Post('forgot-password')
-  async forgotPassword() {
-    return 'forgot-password';
+  async forgotPassword(
+    @Body() dto: ForgotPasswordReqDto,
+  ): Promise<MessageResDto> {
+    await this.passwordResetService.requestReset(dto.email);
+    return plainToInstance(MessageResDto, {
+      message:
+        'If an account exists for this email, a password reset link has been sent',
+    });
   }
 
-  @ApiPublic({ summary: 'Verify a password reset code (not implemented yet)' })
-  @Post('verify/forgot-password')
-  async verifyForgotPassword() {
-    return 'verify-forgot-password';
-  }
-
-  @ApiPublic({ summary: 'Reset the password (not implemented yet)' })
+  @ApiPublic({
+    type: MessageResDto,
+    summary: 'Set a new password with the token from the reset email',
+    description:
+      'An invalid, expired or used token answers 400 E014. Ends every session of the account',
+    errorResponses: [400, 422, 500],
+  })
   @Post('reset-password')
-  async resetPassword() {
-    return 'reset-password';
+  async resetPassword(
+    @Body() dto: ResetPasswordReqDto,
+  ): Promise<MessageResDto> {
+    await this.passwordResetService.resetPassword(dto.token, dto.password);
+    return plainToInstance(MessageResDto, {
+      message: 'Your password has been reset. Sign in with the new password',
+    });
   }
 
   @ApiPublic({ summary: 'Verify an email address (not implemented yet)' })
