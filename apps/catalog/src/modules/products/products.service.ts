@@ -55,6 +55,7 @@ import {
   assertAttributesEnabledForProduct,
   enableAttributesForNewProduct,
 } from './product-attributes';
+import { replaceComboItems } from './product-combo-items';
 import {
   CreateProductReqDto,
   CreateUnitConversionReqDto,
@@ -625,6 +626,29 @@ export class ProductsService {
         );
       }
 
+      const isCombo = dto.isCombo === true;
+      const wantsDefaultVariant =
+        dto.createDefaultVariant === true ||
+        dto.defaultSkuCode !== undefined ||
+        dto.defaultBarcode !== undefined ||
+        dto.defaultBasePrice !== undefined;
+      if (dto.comboItems && dto.comboItems.length > 0) {
+        if (!isCombo) {
+          throw new CatalogDomainError(
+            CatalogErrorCode.PRODUCT_NOT_COMBO,
+            'comboItems needs isCombo: true',
+            'UNPROCESSABLE',
+          );
+        }
+        if (!wantsDefaultVariant) {
+          throw new CatalogDomainError(
+            CatalogErrorCode.COMBO_VARIANT_REQUIRED,
+            'A combo with components needs its default variant (createDefaultVariant)',
+            'UNPROCESSABLE',
+          );
+        }
+      }
+
       return await runInTenantTransaction(this.dataSource, async (em) => {
         await this.verifyCategoryAndBrand(em, dto.categoryId, dto.brandId);
         await this.quota.assertCanAddProducts(em);
@@ -649,7 +673,7 @@ export class ProductsService {
           categoryId: dto.categoryId ?? null,
           brandId: dto.brandId ?? null,
           baseUnit,
-          isCombo: false,
+          isCombo,
           status: dto.status ?? 'ACTIVE',
           images: dto.imageIds?.length
             ? await this.resolveImageIds(em, dto.imageIds)
@@ -679,11 +703,7 @@ export class ProductsService {
         });
 
         const createdVariants: VariantRes[] = [];
-        const shouldCreateDefault =
-          dto.createDefaultVariant === true ||
-          dto.defaultSkuCode !== undefined ||
-          dto.defaultBarcode !== undefined ||
-          dto.defaultBasePrice !== undefined;
+        const shouldCreateDefault = wantsDefaultVariant;
 
         if (shouldCreateDefault) {
           const skuCode = normalizeSku(
@@ -720,11 +740,19 @@ export class ProductsService {
           createdVariants.push(this.toVariantRes(variant, []));
         }
 
+        const comboItems =
+          isCombo && dto.comboItems && dto.comboItems.length > 0
+            ? await replaceComboItems(em, product, dto.comboItems)
+            : undefined;
+
         await this.quota.announceUsage(em);
 
-        return this.toProductRes(product, createdVariants, [
-          this.toUnitRes(baseUnitConv),
-        ]);
+        return {
+          ...this.toProductRes(product, createdVariants, [
+            this.toUnitRes(baseUnitConv),
+          ]),
+          ...(comboItems ? { comboItems } : {}),
+        };
       });
     } catch (error) {
       toCatalogHttpException(error);

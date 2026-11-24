@@ -18,6 +18,8 @@ import { ImportsController } from './modules/imports/imports.controller';
 import { ImportsService } from './modules/imports/imports.service';
 import { PricingController } from './modules/pricing/pricing.controller';
 import { PricingService } from './modules/pricing/pricing.service';
+import { ProductComboItemsService } from './modules/products/product-combo-items';
+import { ProductComboItemsController } from './modules/products/product-combo-items.controller';
 import { ProductsController } from './modules/products/products.controller';
 import { ProductsService } from './modules/products/products.service';
 import { UploadsController } from './modules/uploads/uploads.controller';
@@ -110,6 +112,11 @@ const productsStub = {
   listUnitConversions: jest.fn(async () => []),
 };
 
+const comboItemsStub = {
+  list: jest.fn(async (_id: string) => []),
+  replace: jest.fn(async (_id: string, _items: unknown) => []),
+};
+
 const uploadsStub = {
   createImageUpload: jest.fn(async () => ({ imageId: SAMPLE_UUID })),
   createImportUpload: jest.fn(async () => ({ uploadId: SAMPLE_UUID })),
@@ -148,6 +155,7 @@ const pricingStub = {
     BrandsController,
     AttributesController,
     ProductsController,
+    ProductComboItemsController,
     PricingController,
     UploadsController,
     ImportsController,
@@ -157,6 +165,7 @@ const pricingStub = {
     { provide: BrandsService, useValue: brandsStub },
     { provide: AttributesService, useValue: attributesStub },
     { provide: ProductsService, useValue: productsStub },
+    { provide: ProductComboItemsService, useValue: comboItemsStub },
     { provide: PricingService, useValue: pricingStub },
     { provide: UploadsService, useValue: uploadsStub },
     { provide: ImportsService, useValue: importsStub },
@@ -305,6 +314,8 @@ describe('Catalog service HTTP & RBAC contract', () => {
       ['patch', `/api/v1/variants/${U}/status`, ['products.update']],
       ['post', `/api/v1/products/${U}/units`, ['products.create']],
       ['get', `/api/v1/products/${U}/units`, ['products.view']],
+      ['get', `/api/v1/products/${U}/combo-items`, ['products.view']],
+      ['put', `/api/v1/products/${U}/combo-items`, ['products.update']],
       ['post', '/api/v1/price-lists', ['products.create']],
       ['get', '/api/v1/price-lists', ['products.view']],
       ['get', `/api/v1/price-lists/${U}`, ['products.view']],
@@ -540,6 +551,107 @@ describe('Catalog service HTTP & RBAC contract', () => {
         .post('/api/v1/products')
         .set('Authorization', owner())
         .send({ name: 'P', imageIds: ['nope'] })
+        .expect(422);
+    });
+  });
+
+  describe('Combo components', () => {
+    const owner = () => as(['owner']);
+    const path = `/api/v1/products/${SAMPLE_UUID}/combo-items`;
+    const OTHER = '33333333-3333-4333-8333-333333333333';
+
+    it('GET returns the bare array from the service for the product id in the path', async () => {
+      comboItemsStub.list.mockResolvedValueOnce([{ id: 'x' }] as never);
+      const res = await request(url())
+        .get(path)
+        .set('Authorization', owner())
+        .expect(200);
+      expect(res.body).toEqual([{ id: 'x' }]);
+      expect(comboItemsStub.list).toHaveBeenCalledWith(SAMPLE_UUID);
+    });
+
+    it('GET and PUT need a uuid product id', async () => {
+      await request(url())
+        .get('/api/v1/products/nope/combo-items')
+        .set('Authorization', owner())
+        .expect(400);
+      await request(url())
+        .put('/api/v1/products/nope/combo-items')
+        .set('Authorization', owner())
+        .send({ items: [{ childVariantId: OTHER, quantity: 1 }] })
+        .expect(400);
+    });
+
+    it('PUT answers 200 and hands the ordered items to the service', async () => {
+      const items = [
+        { childVariantId: OTHER, quantity: 2 },
+        { childVariantId: SAMPLE_UUID, quantity: 1 },
+      ];
+      await request(url())
+        .put(path)
+        .set('Authorization', owner())
+        .send({ items })
+        .expect(200);
+      expect(comboItemsStub.replace).toHaveBeenCalledWith(SAMPLE_UUID, items);
+    });
+
+    it.each([
+      ['no body', {}],
+      ['an empty list', { items: [] }],
+      ['a zero quantity', { items: [{ childVariantId: OTHER, quantity: 0 }] }],
+      [
+        'a negative quantity',
+        { items: [{ childVariantId: OTHER, quantity: -1 }] },
+      ],
+      [
+        'a fractional quantity',
+        { items: [{ childVariantId: OTHER, quantity: 1.5 }] },
+      ],
+      [
+        'a string quantity',
+        { items: [{ childVariantId: OTHER, quantity: '2' }] },
+      ],
+      ['a non-uuid variant', { items: [{ childVariantId: 'x', quantity: 1 }] }],
+      [
+        'more than 50 items',
+        {
+          items: Array.from({ length: 51 }, () => ({
+            childVariantId: OTHER,
+            quantity: 1,
+          })),
+        },
+      ],
+    ])(
+      'PUT rejects %s with 422 and never reaches the service',
+      async (_n, body) => {
+        await request(url())
+          .put(path)
+          .set('Authorization', owner())
+          .send(body)
+          .expect(422);
+        expect(comboItemsStub.replace).not.toHaveBeenCalled();
+      },
+    );
+
+    it('POST /products accepts isCombo and comboItems and validates the items', async () => {
+      await request(url())
+        .post('/api/v1/products')
+        .set('Authorization', owner())
+        .send({
+          name: 'Combo',
+          isCombo: true,
+          createDefaultVariant: true,
+          comboItems: [{ childVariantId: OTHER, quantity: 1 }],
+        })
+        .expect(201);
+      await request(url())
+        .post('/api/v1/products')
+        .set('Authorization', owner())
+        .send({
+          name: 'Combo',
+          isCombo: true,
+          comboItems: [{ childVariantId: OTHER, quantity: 0 }],
+        })
         .expect(422);
     });
   });
