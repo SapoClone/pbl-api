@@ -10,7 +10,7 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
 |---|---|
 | Đăng nhập (13:3) | `POST {p}/auth/email/login`, `POST {p}/auth/refresh` |
 | Register store *(missing screen)* | `POST {p}/auth/email/register`, `GET {p}/auth/verify/email`, `POST {p}/auth/verify/email/resend`, `POST {p}/tenants` |
-| Forgot / reset password *(missing)* | `POST {p}/auth/forgot-password`, `POST {p}/auth/verify/forgot-password`, `POST {p}/auth/reset-password` |
+| Forgot / reset password | `POST {p}/auth/forgot-password`, `POST {p}/auth/reset-password` |
 | Store picker *(missing)* | `GET {p}/tenants`, `POST {p}/auth/switch-tenant` |
 | Accept invitation *(missing)* | `GET {p}/invitations/{token}`, `POST {p}/invitations/{token}/accept` |
 | Top bar + sidebar store card (every tenant screen) | `GET {p}/tenants/current/context`, `GET {i}/notifications/unread-count`, `POST {p}/auth/logout` |
@@ -80,26 +80,25 @@ All paths are gateway paths. `{p}` = `/platform/api/v1`, `{i}` = `/insight/api/v
 - **Response:** 200 `{ "sent": true }`. It always reports success, so the response doesn't reveal whether an account exists.
 
 ### POST /platform/api/v1/auth/forgot-password
-- **Status:** `change`. Placeholder today. Implement it with a reset link valid for 15 minutes, single use (from the platform settings), queued to the mail service.
-- **Screens:** Forgot password (missing)
+- **Status:** `exists`. Built: [guide](../../guides/password-reset.md).
+- **Screens:** Forgot password
 - **Auth:** public
-- **Body:** `{ "identifier": "minhanh@mocstore.vn" }`
-- **Response:** 200 `{ "sent": true }` (always)
-- **Events:** SQS email `password-reset` (a new template in pbl-mail-service)
-
-### POST /platform/api/v1/auth/verify/forgot-password
-- **Status:** `change` (placeholder). Validates the token before the reset form is shown.
-- **Auth:** public
-- **Body:** `{ "token": "…" }`
-- **Response:** 200 `{ "valid": true, "email": "mi•••@mocstore.vn" }`
-- **Errors:** 400 `E014`: token invalid, used or expired.
+- **Body:** `{ "email": "minhanh@mocstore.vn" }`
+- **Response:** 200 `{ "message": "…" }`, always the same body whether or not an account has this email (an unknown, disabled or password-less account sends nothing).
+- **Errors:** 422 when `email` is not an email.
+- **Events:** SQS message `{ "type": "password-reset", "email", "url" }` for pbl-mail-service; `url` is `${WEB_APP_URL}/reset-password?token=<token>`. The token is valid 60 minutes and a new request replaces the previous one.
 
 ### POST /platform/api/v1/auth/reset-password
-- **Status:** `change` (placeholder). It also revokes every refresh-token family for the account.
+- **Status:** `exists`. Built: [guide](../../guides/password-reset.md).
+- **Screens:** Reset password (the email link lands on the web app)
 - **Auth:** public
-- **Body:** `{ "token": "…", "password": "••••••••" }`
-- **Response:** 200 `{ "reset": true }`
-- **Errors:** 400 `E014`
+- **Body:** `{ "token": "…", "password": "••••••••" }` (same password policy as register)
+- **Response:** 200 `{ "message": "…" }`. Sets the password, ends every session of the account (all refresh-token families revoked, access tokens denied) and spends the token.
+- **Errors:**
+  - 400 `E014`: token invalid, expired or already used.
+  - 422: the password breaks the policy.
+
+`POST /auth/verify/forgot-password` (a "check the token before showing the form" step) was dropped: the reset call validates the token itself.
 
 ### POST /platform/api/v1/auth/refresh
 - **Status:** `exists`
