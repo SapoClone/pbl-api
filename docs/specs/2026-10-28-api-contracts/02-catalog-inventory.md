@@ -247,6 +247,17 @@ Today, `stock_item`, `inventory_ledger`, reservations, and order lines are keyed
 - **Response 200 (both):** `{ "productId": "…", "attributes": [ { "attributeId": "…", "name": "Màu sắc", "position": 0, "values": [ { "id": "…", "value": "Xanh", "usedByVariants": 2 } ] } ] }`. `values` are every value of the store for that attribute (the choices for a new variant); `usedByVariants` counts this product's variants.
 - **Errors:** 404 product or attribute not found; 400 duplicate ids; 409 `ATTRIBUTE_IN_USE_BY_PRODUCT` when a variant of the product still carries an attribute you leave out (nothing changes). Creating a variant or generating variants with an attribute the product has not enabled is 400 `ATTRIBUTE_NOT_ENABLED_FOR_PRODUCT`. `POST /products` accepts the same `attributeIds`.
 
+### GET /catalog/api/v1/products/{id}/combo-items · PUT /catalog/api/v1/products/{id}/combo-items
+- **Status:** new. Uses the `combo_items` table of the baseline migration (plus `sort_order`, migration `1793600000000`); no parallel model.
+- **Screens:** the combo builder (Products, Combos tab): list a combo's components and replace them.
+- **Auth:** `products.view` for GET, `products.update` for PUT (same as `PATCH /products/{id}`).
+- **A combo** is a product created with `isCombo: true` in `POST /products` (which also accepts `comboItems`, same rules as PUT, needs the default variant). Its price is the `basePrice` of its own variant (`PATCH /variants/{id}`); components hang on that variant (the default one, else the first live one).
+- **PUT body:** `{ "items": [ { "childVariantId": "…", "quantity": 2 } ] }`. 1 to 50 items, `quantity` a whole number from 1 to 10000, in display order. It replaces the whole list in one transaction; repeating the request changes nothing.
+- **Response 200 (both):** a bare array, in display order: `[ { "id", "comboProductId", "childVariantId", "childProductId", "skuCode", "variantName", "basePrice", "imageUrl", "quantity", "lineTotal", "sortOrder" } ]`. Money is whole VND, `lineTotal = basePrice x quantity`; the saving against buying separately is the sum of `lineTotal` minus the combo variant's price (computed by the client).
+- **GET** answers `[]` for a product that is not a combo, or a combo without components yet.
+- **Errors:** 404 `PRODUCT_NOT_FOUND` (not in the store, or deleted); 404 `VARIANT_NOT_FOUND` for a component that is missing, deleted, archived or from another store; 422 `PRODUCT_NOT_COMBO`, `COMBO_VARIANT_REQUIRED` (the combo has no variant yet), `COMBO_SELF_REFERENCE`, `COMBO_NESTING_NOT_ALLOWED` (a component belongs to a combo), `COMBO_DUPLICATE_ITEM`, and the validation 422 for an empty list or a quantity that is not a positive integer. Nothing changes on any error.
+- **Events:** none. `catalog.product.updated` carries no component data and inventory/sales project nothing about combos yet, so an event would only bump versions for nothing. Add one together with the first consumer.
+
 ### GET /catalog/api/v1/products/export
 - **Status:** new.
 - **Screens:** 13:325, button Xuất file (export file).
