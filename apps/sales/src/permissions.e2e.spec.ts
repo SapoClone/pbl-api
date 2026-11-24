@@ -284,6 +284,24 @@ const ROUTES: Route[] = [
   },
   { method: 'get', path: '/api/v1/coupons', perms: ['orders.view'] },
   {
+    method: 'patch',
+    path: `/api/v1/promotions/${ID}`,
+    perms: ['orders.approve'],
+    body: {},
+  },
+  {
+    method: 'patch',
+    path: `/api/v1/coupons/${ID}`,
+    perms: ['orders.approve'],
+    body: {},
+  },
+  {
+    method: 'post',
+    path: '/api/v1/coupons/evaluate',
+    perms: ['orders.view', 'pos.view', 'pos.create'],
+    body: {},
+  },
+  {
     method: 'post',
     path: '/api/v1/returns',
     perms: ['orders.create'],
@@ -511,7 +529,7 @@ describe('Sales permissions, route by route', () => {
     ].filter((p) => !perms.includes(p));
 
   it('covers every route of the controllers', () => {
-    expect(ROUTES.length).toBe(74);
+    expect(ROUTES.length).toBe(77);
   });
 
   describe.each(
