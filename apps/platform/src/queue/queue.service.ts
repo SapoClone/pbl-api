@@ -28,4 +28,24 @@ export class QueueService {
       }),
     );
   }
+
+  /**
+   * The mail service picks the template from `type`; a body without one is an
+   * email verification. `url` is the full link, built here from `web.appUrl`.
+   */
+  async enqueuePasswordReset(email: string, url: string): Promise<void> {
+    const queueUrl = this.configService.getOrThrow('queue.queueUrl', {
+      infer: true,
+    });
+
+    // the url carries the token: log nothing but the type
+    this.logger.debug('Enqueueing password-reset message');
+
+    await this.client.send(
+      new SendMessageCommand({
+        QueueUrl: queueUrl,
+        MessageBody: JSON.stringify({ type: 'password-reset', email, url }),
+      }),
+    );
+  }
 }

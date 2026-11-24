@@ -13,6 +13,7 @@
     "invalid_password": "無効なパスワード",
     "invalid_token": "無効なトークン",
     "account_locked": "ログインに複数回失敗したため、アカウントは15分間ロックされます",
+    "reset_token_invalid": "パスワード再設定のリンクが無効か、有効期限が切れています",
     "current_password_wrong": "現在のパスワードが正しくありません"
   }
 }
