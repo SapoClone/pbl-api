@@ -22,8 +22,9 @@ survive only as legacy input in the discount table (`manager`, `cashier`).
 | `GET /returns`, `GET /returns/:id` | `orders.view` |
 | `POST /returns/:id/approve`, `/reject`, `/refund-request` | `orders.approve` |
 | `POST /returns/:id/receive` | `orders.update` |
-| `POST /promotions`, `POST /coupons` (writes; no update or delete route exists) | `orders.approve` |
+| `POST /promotions`, `POST /coupons`, `PATCH /promotions/:id`, `PATCH /coupons/:id` (writes; no delete route exists) | `orders.approve` |
 | `GET /promotions`, `GET /coupons` | `orders.view` |
+| `POST /coupons/evaluate` (read-only preview) | `orders.view`, `pos.view` or `pos.create` |
 | `GET /pos/products/lookup`, `POST /pos/quote`, `GET /pos/drafts` | `pos.view` |
 | `POST /pos/drafts` | `pos.create` |
 | `PATCH /pos/drafts/:id`, `DELETE /pos/drafts/:id` | `pos.update` |

@@ -16,6 +16,7 @@ import { CreateTenantPlanQuota1792800000000 } from './migrations/1792800000000-c
 import { AllowUploadCleanupSelect1793300000000 } from './migrations/1793300000000-allow-upload-cleanup-select';
 import { CreateProductAttributes1793400000000 } from './migrations/1793400000000-create-product-attributes';
 import { CreatePriceListBranches1793500000000 } from './migrations/1793500000000-create-price-list-branches';
+import { AddComboItemSortOrder1793600000000 } from './migrations/1793600000000-add-combo-item-sort-order';
 import { AttributesController } from './modules/attributes/attributes.controller';
 import { AttributesService } from './modules/attributes/attributes.service';
 import { BrandsController } from './modules/brands/brands.controller';
@@ -28,6 +29,8 @@ import { PricingController } from './modules/pricing/pricing.controller';
 import { PricingService } from './modules/pricing/pricing.service';
 import { ProductAttributesService } from './modules/products/product-attributes';
 import { ProductAttributesController } from './modules/products/product-attributes.controller';
+import { ProductComboItemsService } from './modules/products/product-combo-items';
+import { ProductComboItemsController } from './modules/products/product-combo-items.controller';
 import { ProductsController } from './modules/products/products.controller';
 import { ProductsService } from './modules/products/products.service';
 import {
@@ -65,6 +68,7 @@ import { PlanQuotaService } from './quota/plan-quota.service';
         AllowUploadCleanupSelect1793300000000,
         CreateProductAttributes1793400000000,
         CreatePriceListBranches1793500000000,
+        AddComboItemSortOrder1793600000000,
       ],
     }),
     PblEventsModule.forRoot({ service: 'catalog' }),
@@ -76,6 +80,7 @@ import { PlanQuotaService } from './quota/plan-quota.service';
     AttributesController,
     ProductsController,
     ProductAttributesController,
+    ProductComboItemsController,
     PricingController,
     UploadsController,
     ImportsController,
@@ -86,6 +91,7 @@ import { PlanQuotaService } from './quota/plan-quota.service';
     AttributesService,
     ProductsService,
     ProductAttributesService,
+    ProductComboItemsService,
     PricingService,
     UploadsService,
     UploadsCleanupJob,

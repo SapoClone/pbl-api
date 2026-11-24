@@ -223,6 +223,7 @@ export class CheckoutService {
       role: primaryRole,
       permissions,
       discountApprovedBy: dto.discountApprovedBy,
+      channelType: 'POS',
     });
 
     const tenderInputs = this.normalizeTenderInputs(dto, rawQuote.grandTotal);
@@ -295,6 +296,7 @@ export class CheckoutService {
             dto.branchId,
             dto.customerId ?? null,
             orderId,
+            { channelType: 'POS' },
           );
         }
 
@@ -1513,6 +1515,7 @@ export class CheckoutService {
           wf.branchId,
           wf.customerId ?? null,
           orderId,
+          { channelType: 'POS' },
         );
       }
 

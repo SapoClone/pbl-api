@@ -25,6 +25,7 @@ import { AddOrderIdempotency1791800000200 } from '../src/migrations/179180000020
 import { CreateCheckoutWorkflow1791800000300 } from '../src/migrations/1791800000300-create-checkout-workflow';
 import { CreateM3SalesCore1791900000200 } from '../src/migrations/1791900000200-create-m3-sales-core';
 import { CreateCatalogBranchPriceProjection1793500000000 } from '../src/migrations/1793500000000-create-catalog-branch-price-projection';
+import { AddPromotionTargeting1793600000000 } from '../src/migrations/1793600000000-add-promotion-targeting';
 import { OrderItemEntity } from '../src/orders/entities/order-item.entity';
 import {
   CheckoutWorkflowEntity,
@@ -148,6 +149,7 @@ describe('branch prices in sales (Postgres)', () => {
           CreateCheckoutWorkflow1791800000300,
           CreateM3SalesCore1791900000200,
           CreateCatalogBranchPriceProjection1793500000000,
+          AddPromotionTargeting1793600000000,
         ],
       }),
     });

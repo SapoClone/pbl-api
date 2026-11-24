@@ -1,4 +1,5 @@
 import { CreateCatalogBranchPriceProjection1793500000000 } from '../src/migrations/1793500000000-create-catalog-branch-price-projection';
+import { AddPromotionTargeting1793600000000 } from '../src/migrations/1793600000000-add-promotion-targeting';
 /**
  * The cash session against a real Postgres (docs/specs/2026-11-06-cash-shift-design.md, section 9):
  * the end-to-end shift (open, sales, a refund, a pay-out, a short count, reason, approval, shortage
@@ -206,6 +207,7 @@ describe('cash session (Postgres)', () => {
           AllowOnAccountTender1792100000100,
           CashShiftSession1792200000100,
           CreateCatalogBranchPriceProjection1793500000000,
+          AddPromotionTargeting1793600000000,
         ],
       }),
     });

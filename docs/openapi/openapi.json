@@ -10223,6 +10223,96 @@
         ]
       }
     },
+    "/catalog/api/v1/products/{id}/combo-items": {
+      "get": {
+        "description": "A bare array in display order. Empty for a product that is not a combo or has no components yet; 404 when the product is not in the store.",
+        "operationId": "catalog_ProductComboItemsController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Combo product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComboItemRes"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the components of a combo product",
+        "tags": [
+          "catalog / products"
+        ]
+      },
+      "put": {
+        "description": "Replaces the whole list in one transaction (repeating the same request changes nothing). 422 on: not a combo (PRODUCT_NOT_COMBO), no variant on the combo (COMBO_VARIANT_REQUIRED), the combo inside itself (COMBO_SELF_REFERENCE), a combo as a component (COMBO_NESTING_NOT_ALLOWED), the same variant twice (COMBO_DUPLICATE_ITEM), empty list or a quantity that is not a positive whole number. 404 VARIANT_NOT_FOUND for a variant that is missing, deleted or from another store. The combo price stays on the combo variant (PATCH /variants/{id}).",
+        "operationId": "catalog_ProductComboItemsController_replace",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Combo product UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetComboItemsReqDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComboItemRes"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replace the components of a combo product",
+        "tags": [
+          "catalog / products"
+        ]
+      }
+    },
     "/catalog/api/v1/price-lists": {
       "get": {
         "operationId": "catalog_PricingController_listPriceLists",
@@ -15996,6 +16086,52 @@
         ]
       }
     },
+    "/sales/api/v1/promotions/{id}": {
+      "patch": {
+        "operationId": "sales_PromotionsController_updatePromotion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePromotionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Edit a promotion (partial update; the code is immutable)",
+        "tags": [
+          "sales / promotions-coupons"
+        ]
+      }
+    },
     "/sales/api/v1/coupons": {
       "get": {
         "operationId": "sales_PromotionsController_listCoupons",
@@ -16056,6 +16192,89 @@
           }
         ],
         "summary": "Create a coupon code linked to a promotion",
+        "tags": [
+          "sales / promotions-coupons"
+        ]
+      }
+    },
+    "/sales/api/v1/coupons/{id}": {
+      "patch": {
+        "operationId": "sales_PromotionsController_updateCoupon",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCouponDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CouponEntity"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Edit a coupon: usage limits and status (the code is immutable)",
+        "tags": [
+          "sales / promotions-coupons"
+        ]
+      }
+    },
+    "/sales/api/v1/coupons/evaluate": {
+      "post": {
+        "operationId": "sales_PromotionsController_evaluateCoupon",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluateCouponDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Preview the discount of a coupon for an order amount (read-only: no use is consumed). Applies the checkout rules; a coupon that does not qualify answers a coded 409",
         "tags": [
           "sales / promotions-coupons"
         ]
@@ -28233,6 +28452,26 @@
           "sortOrder"
         ]
       },
+      "ComboItemInputDto": {
+        "type": "object",
+        "properties": {
+          "childVariantId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "A live variant of this store that is not a combo itself (combos do not nest)"
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10000,
+            "example": 2
+          }
+        },
+        "required": [
+          "childVariantId",
+          "quantity"
+        ]
+      },
       "CreateProductReqDto": {
         "type": "object",
         "properties": {
@@ -28320,6 +28559,18 @@
             "minimum": 0,
             "example": 199000,
             "description": "Optional base price (whole VND) for the initial default variant"
+          },
+          "isCombo": {
+            "type": "boolean",
+            "default": false,
+            "description": "Creates a combo product: its price is the one of its own variant, its components are set with `comboItems` or later with PUT /products/:id/combo-items. Cannot be changed afterwards."
+          },
+          "comboItems": {
+            "description": "Components of the new combo (needs `isCombo` and a default variant). Same rules as PUT /products/:id/combo-items.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComboItemInputDto"
+            }
           }
         },
         "required": [
@@ -28707,6 +28958,86 @@
         },
         "required": [
           "attributeIds"
+        ]
+      },
+      "ComboItemRes": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The component row"
+          },
+          "comboProductId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "childVariantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "childProductId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "skuCode": {
+            "type": "string",
+            "example": "TER-500-GRN"
+          },
+          "variantName": {
+            "type": "string",
+            "example": "Bình giữ nhiệt Terra 500ml"
+          },
+          "basePrice": {
+            "type": "number",
+            "description": "Price of one unit of the component, whole VND"
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "number",
+            "minimum": 1
+          },
+          "lineTotal": {
+            "type": "number",
+            "description": "basePrice x quantity, whole VND. The sum of the lines is what the components cost bought separately; the combo price is on the combo variant."
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "Display order, starting at 0"
+          }
+        },
+        "required": [
+          "id",
+          "comboProductId",
+          "childVariantId",
+          "childProductId",
+          "skuCode",
+          "variantName",
+          "basePrice",
+          "imageUrl",
+          "quantity",
+          "lineTotal",
+          "sortOrder"
+        ]
+      },
+      "SetComboItemsReqDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "The whole list of components, in display order. Replaces the current list; the same variant twice is refused.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComboItemInputDto"
+            }
+          }
+        },
+        "required": [
+          "items"
         ]
       },
       "CreatePriceListReqDto": {
@@ -30888,6 +31219,33 @@
           },
           "endsAt": {
             "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "channelTypes": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 32
+            }
+          },
+          "customerGroupIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
           }
         },
         "required": [
@@ -30900,6 +31258,76 @@
       "PromotionEntity": {
         "type": "object",
         "properties": {}
+      },
+      "UpdatePromotionDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000
+          },
+          "discountType": {
+            "type": "string",
+            "enum": [
+              "FIXED",
+              "PERCENT"
+            ]
+          },
+          "discountValue": {
+            "type": "number",
+            "minimum": 0.01
+          },
+          "minOrderAmount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "maxDiscountAmount": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0
+          },
+          "branchId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "startsAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "endsAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "channelTypes": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 32
+            }
+          },
+          "customerGroupIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          }
+        }
       },
       "CreateCouponDto": {
         "type": "object",
@@ -30919,6 +31347,13 @@
           "maxUsesPerCustomer": {
             "type": "number",
             "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
           }
         },
         "required": [
@@ -30929,6 +31364,65 @@
       "CouponEntity": {
         "type": "object",
         "properties": {}
+      },
+      "UpdateCouponDto": {
+        "type": "object",
+        "properties": {
+          "maxUses": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
+          "maxUsesPerCustomer": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ]
+          }
+        }
+      },
+      "EvaluateCouponDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 48
+          },
+          "orderAmount": {
+            "type": "number",
+            "description": "The order amount after line and order discounts, whole VND",
+            "minimum": 0
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customerId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "channelType": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "customerGroupId": {
+            "type": "string",
+            "nullable": true,
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "code",
+          "orderAmount",
+          "branchId"
+        ]
       },
       "CreateSalesChannelDto": {
         "type": "object",

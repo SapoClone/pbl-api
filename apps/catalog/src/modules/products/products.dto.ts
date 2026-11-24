@@ -24,6 +24,11 @@ import type {
   ProductStatus,
   VariantStatus,
 } from '../../infrastructure/persistence/catalog.entities';
+import {
+  ComboItemInputDto,
+  ComboItemRes,
+  MAX_COMBO_ITEMS,
+} from './product-combo-items.dto';
 
 export class ProductImageDto implements ProductImageMeta {
   @ApiProperty({ example: 'tenants/t1/products/tshirt-front.jpg' })
@@ -172,6 +177,27 @@ export class CreateProductReqDto {
   @IsInt()
   @Min(0)
   defaultBasePrice?: number;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Creates a combo product: its price is the one of its own variant, its components are set with `comboItems` or later with PUT /products/:id/combo-items. Cannot be changed afterwards.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isCombo?: boolean;
+
+  @ApiPropertyOptional({
+    type: [ComboItemInputDto],
+    description:
+      'Components of the new combo (needs `isCombo` and a default variant). Same rules as PUT /products/:id/combo-items.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_COMBO_ITEMS)
+  @ValidateNested({ each: true })
+  @Type(() => ComboItemInputDto)
+  comboItems?: ComboItemInputDto[];
 }
 
 export class UpdateProductReqDto {
@@ -564,6 +590,8 @@ export interface ProductRes {
   version: number;
   variants?: VariantRes[];
   unitConversions?: UnitConversionRes[];
+  /** Only on `POST /products` of a combo created with `comboItems` */
+  comboItems?: ComboItemRes[];
   createdAt: string;
   updatedAt: string;
 }

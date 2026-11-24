@@ -832,6 +832,9 @@ export class PromotionEntity {
   @Column({ name: 'name', type: 'varchar', length: 160 })
   name!: string;
 
+  @Column({ name: 'description', type: 'text', nullable: true })
+  description!: string | null;
+
   @Column({ name: 'discount_type', type: 'varchar', length: 16 })
   discountType!: string;
 
@@ -870,11 +873,27 @@ export class PromotionEntity {
   @Column({ name: 'ends_at', type: 'timestamptz', nullable: true })
   endsAt!: Date | null;
 
+  /** Empty: every channel. Else the channel types (POS, WEBSITE, SHOPEE, ...) the promotion applies to */
+  @Column({ name: 'channel_types', type: 'text', array: true, default: '{}' })
+  channelTypes!: string[];
+
+  /** Empty: every customer. Else only customers of these groups */
+  @Column({
+    name: 'customer_group_ids',
+    type: 'uuid',
+    array: true,
+    default: '{}',
+  })
+  customerGroupIds!: string[];
+
   @Column({ name: 'status', type: 'varchar', length: 16, default: 'ACTIVE' })
   status!: string;
 
   @Column({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
+
+  @Column({ name: 'updated_at', type: 'timestamptz', default: () => 'now()' })
+  updatedAt!: Date;
 }
 
 @Entity({ name: 'coupons' })
