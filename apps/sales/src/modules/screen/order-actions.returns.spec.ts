@@ -80,7 +80,7 @@ describe('OrderActionsService.createReturn: return and refund are atomic', () =>
   it('cash refund with no open shift: 409 SHIFT_REQUIRED and nothing is persisted', async () => {
     await expect(run('cash')).rejects.toMatchObject({
       code: SalesDomainErrorCode.SHIFT_REQUIRED,
-      status: 409,
+      httpStatus: 409,
     });
     expect(returns.createReturn).not.toHaveBeenCalled();
     expect(returns.createRefundRequest).not.toHaveBeenCalled();
