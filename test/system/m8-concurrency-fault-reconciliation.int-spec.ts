@@ -7,6 +7,7 @@ import { DefaultBranchWarehouse1792700000000 } from '../../apps/inventory/src/mi
 import { CashShiftSession1792200000100 } from '../../apps/sales/src/migrations/1792200000100-cash-shift-session';
 import { CreateTenantStatus1793100000410 } from '../../apps/sales/src/migrations/1793100000410-create-tenant-status';
 import { CreateCatalogBranchPriceProjection1793500000000 } from '../../apps/sales/src/migrations/1793500000000-create-catalog-branch-price-projection';
+import { AddPromotionTargeting1793600000000 } from '../../apps/sales/src/migrations/1793600000000-add-promotion-targeting';
 /**
  * Milestone M8 — Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios),
  * Multi-Tenant Isolation Across 7 Schemas, 7 Cross-Service Reconciliation Pairs,
@@ -704,6 +705,7 @@ describe('M8 Concurrency Matrix (20 Scenarios), Fault Injection (10 Scenarios), 
           CashShiftSession1792200000100,
           CreateTenantStatus1793100000410,
           CreateCatalogBranchPriceProjection1793500000000,
+          AddPromotionTargeting1793600000000,
         ],
       }),
     );

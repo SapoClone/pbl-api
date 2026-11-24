@@ -148,6 +148,7 @@ export class M3OrdersService {
       role: discountTierFor(permissions),
       permissions,
       allowPriceOverride: options.allowPriceOverride,
+      channelType: dto.channelType,
     });
 
     // D2: a named warehouse must be a BRANCH warehouse of this branch; none is resolved
@@ -209,6 +210,7 @@ export class M3OrdersService {
             dto.branchId,
             dto.customerId ?? null,
             orderId,
+            { channelType: dto.channelType },
           );
         }
 
@@ -450,6 +452,7 @@ export class M3OrdersService {
           shippingFee: dto.shippingFee ?? Number(current.shippingFee ?? 0),
           role: discountTierFor(permissions),
           permissions,
+          channelType: current.channelType ?? 'MANUAL',
         })
       : null;
 

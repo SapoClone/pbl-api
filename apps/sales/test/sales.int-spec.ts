@@ -1,4 +1,5 @@
 import { CreateCatalogBranchPriceProjection1793500000000 } from '../src/migrations/1793500000000-create-catalog-branch-price-projection';
+import { AddPromotionTargeting1793600000000 } from '../src/migrations/1793600000000-add-promotion-targeting';
 /**
  * Sales against a real Postgres: tenant isolation of orders and of the branch
  * projection, idempotent order creation (including two requests at once), the
@@ -199,6 +200,7 @@ describe('sales (Postgres)', () => {
           CreateM3SalesCore1791900000200,
           CashShiftSession1792200000100,
           CreateCatalogBranchPriceProjection1793500000000,
+          AddPromotionTargeting1793600000000,
         ],
       }),
     });

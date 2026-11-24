@@ -21,7 +21,13 @@ import {
   assertBranchAllowed,
   branchAllowed,
 } from '../../presentation/access';
-import { CreateCouponDto, CreatePromotionDto } from './promotions.dto';
+import {
+  CreateCouponDto,
+  CreatePromotionDto,
+  EvaluateCouponDto,
+  UpdateCouponDto,
+  UpdatePromotionDto,
+} from './promotions.dto';
 
 export interface EvaluatedCouponResult {
   couponId: string;
@@ -29,6 +35,77 @@ export interface EvaluatedCouponResult {
   couponCode: string;
   discountAmountVnd: number;
 }
+
+/** Everything `evaluateCoupon` knows about the coupon, its promotion and the amounts it computed */
+export interface CouponEvaluation extends EvaluatedCouponResult {
+  promotionCode: string;
+  promotionName: string;
+  discountType: string;
+  discountValue: number;
+  minOrderAmount: number;
+  maxDiscountAmount: number | null;
+  orderAmountVnd: number;
+  finalAmountVnd: number;
+}
+
+/** What the order being priced is, for promotions limited to channels or customer groups */
+export interface CouponContext {
+  /** POS, WEBSITE, SHOPEE, ... (compared case-insensitively) */
+  channelType?: string | null;
+  /** The customer's group when the caller knows it (checkout does not resolve groups: see evaluateCoupon) */
+  customerGroupId?: string | null;
+}
+
+interface PromotionRules {
+  discountType: string;
+  discountValue: number;
+  startsAt: Date | null;
+  endsAt: Date | null;
+}
+
+function parseDate(value: string, field: string): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new SalesDomainError(
+      SalesDomainErrorCode.VALIDATION_ERROR,
+      `${field} is not a valid date`,
+      422,
+    );
+  }
+  return date;
+}
+
+/** The rules create and edit share: whole-VND fixed value, percent <= 100, start not after end */
+function assertPromotionRules(rules: PromotionRules): void {
+  if (
+    rules.discountType === 'FIXED' &&
+    !Number.isSafeInteger(rules.discountValue)
+  ) {
+    throw new SalesDomainError(
+      SalesDomainErrorCode.VALIDATION_ERROR,
+      'A fixed promotion discount must be a whole number of VND',
+      422,
+    );
+  }
+  if (rules.discountType === 'PERCENT' && rules.discountValue > 100) {
+    throw new SalesDomainError(
+      SalesDomainErrorCode.INVALID_DISCOUNT,
+      'Percentage promotion discount cannot exceed 100%',
+      422,
+    );
+  }
+  if (rules.startsAt && rules.endsAt && rules.startsAt > rules.endsAt) {
+    throw new SalesDomainError(
+      SalesDomainErrorCode.VALIDATION_ERROR,
+      'A promotion cannot start after it ends',
+      422,
+    );
+  }
+}
+
+const normalizeChannels = (values: string[] | undefined): string[] => [
+  ...new Set((values ?? []).map((v) => v.trim().toUpperCase()).filter(Boolean)),
+];
 
 @Injectable()
 export class PromotionsService {
@@ -47,23 +124,12 @@ export class PromotionsService {
       );
     }
     const tenantId = TenantContext.require();
-    if (
-      dto.discountType === 'FIXED' &&
-      !Number.isSafeInteger(dto.discountValue)
-    ) {
-      throw new SalesDomainError(
-        SalesDomainErrorCode.VALIDATION_ERROR,
-        'A fixed promotion discount must be a whole number of VND',
-        422,
-      );
-    }
-    if (dto.discountType === 'PERCENT' && dto.discountValue > 100) {
-      throw new SalesDomainError(
-        SalesDomainErrorCode.INVALID_DISCOUNT,
-        'Percentage promotion discount cannot exceed 100%',
-        422,
-      );
-    }
+    assertPromotionRules({
+      discountType: dto.discountType,
+      discountValue: dto.discountValue,
+      startsAt: dto.startsAt ? parseDate(dto.startsAt, 'startsAt') : null,
+      endsAt: dto.endsAt ? parseDate(dto.endsAt, 'endsAt') : null,
+    });
 
     return this.dataSource.transaction(async (em) => {
       await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
@@ -93,8 +159,12 @@ export class PromotionsService {
         branchId: dto.branchId ?? null,
         startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
         endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
-        status: 'ACTIVE',
+        description: dto.description?.trim() || null,
+        channelTypes: normalizeChannels(dto.channelTypes),
+        customerGroupIds: dto.customerGroupIds ?? [],
+        status: dto.status ?? 'ACTIVE',
         createdAt: new Date(),
+        updatedAt: new Date(),
       });
       return em.save(PromotionEntity, promo);
     });
@@ -117,6 +187,167 @@ export class PromotionsService {
               ],
         order: { createdAt: 'DESC' },
       });
+    });
+  }
+
+  async updatePromotion(
+    id: string,
+    dto: UpdatePromotionDto,
+    scope: BranchScope,
+  ): Promise<PromotionEntity> {
+    const tenantId = TenantContext.require();
+    if (dto.branchId) {
+      assertBranchAllowed(
+        scope,
+        dto.branchId,
+        'VALIDATION_ERROR',
+        'Branch not found',
+      );
+    }
+    return this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      const promo = await em.getRepository(PromotionEntity).findOne({
+        where: { id, tenantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!promo || (promo.branchId && !branchAllowed(scope, promo.branchId))) {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.PROMOTION_NOT_FOUND,
+          'Promotion not found',
+          404,
+        );
+      }
+
+      const next = {
+        discountType: dto.discountType ?? promo.discountType,
+        discountValue: dto.discountValue ?? promo.discountValue,
+        startsAt:
+          dto.startsAt === undefined
+            ? promo.startsAt
+            : dto.startsAt === null
+              ? null
+              : parseDate(dto.startsAt, 'startsAt'),
+        endsAt:
+          dto.endsAt === undefined
+            ? promo.endsAt
+            : dto.endsAt === null
+              ? null
+              : parseDate(dto.endsAt, 'endsAt'),
+      };
+      assertPromotionRules(next);
+
+      if (dto.name !== undefined) promo.name = dto.name.trim();
+      if (dto.description !== undefined) {
+        promo.description = dto.description?.trim() || null;
+      }
+      promo.discountType = next.discountType;
+      promo.discountValue = next.discountValue;
+      if (dto.minOrderAmount !== undefined) {
+        promo.minOrderAmount = dto.minOrderAmount;
+      }
+      if (dto.maxDiscountAmount !== undefined) {
+        promo.maxDiscountAmount = dto.maxDiscountAmount;
+      }
+      if (dto.branchId !== undefined) promo.branchId = dto.branchId;
+      promo.startsAt = next.startsAt;
+      promo.endsAt = next.endsAt;
+      if (dto.channelTypes !== undefined) {
+        promo.channelTypes = normalizeChannels(dto.channelTypes);
+      }
+      if (dto.customerGroupIds !== undefined) {
+        promo.customerGroupIds = dto.customerGroupIds;
+      }
+      if (dto.status !== undefined) promo.status = dto.status;
+      promo.updatedAt = new Date();
+      return em.save(PromotionEntity, promo);
+    });
+  }
+
+  async updateCoupon(
+    id: string,
+    dto: UpdateCouponDto,
+    scope: BranchScope,
+  ): Promise<CouponEntity> {
+    const tenantId = TenantContext.require();
+    return this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      const coupon = await em.getRepository(CouponEntity).findOne({
+        where: { id, tenantId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const promotion = coupon
+        ? await em.getRepository(PromotionEntity).findOne({
+            where: { id: coupon.promotionId, tenantId },
+          })
+        : null;
+      if (
+        !coupon ||
+        (promotion?.branchId && !branchAllowed(scope, promotion.branchId))
+      ) {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.COUPON_NOT_FOUND,
+          'Coupon not found',
+          404,
+        );
+      }
+      if (
+        dto.maxUses !== undefined &&
+        dto.maxUses !== null &&
+        dto.maxUses < Number(coupon.usedCount)
+      ) {
+        throw new SalesDomainError(
+          SalesDomainErrorCode.COUPON_MAX_USES_BELOW_USED,
+          `Coupon ${coupon.code} was already used ${coupon.usedCount} times: the usage limit cannot be lower`,
+          409,
+          { usedCount: Number(coupon.usedCount), maxUses: dto.maxUses },
+        );
+      }
+      if (dto.maxUses !== undefined) coupon.maxUses = dto.maxUses;
+      if (dto.maxUsesPerCustomer !== undefined) {
+        coupon.maxUsesPerCustomer = dto.maxUsesPerCustomer;
+      }
+      if (dto.status !== undefined) coupon.status = dto.status;
+      return em.save(CouponEntity, coupon);
+    });
+  }
+
+  /**
+   * The read-only preview of a coupon (promotions simulator, POS): the same `evaluateCoupon` the
+   * checkout runs, without the row lock and without consuming a use. A coupon that does not
+   * qualify answers the coded 409 the checkout would answer.
+   */
+  async evaluateCouponPreview(
+    dto: EvaluateCouponDto,
+    scope: BranchScope,
+  ): Promise<CouponEvaluation> {
+    assertBranchAllowed(
+      scope,
+      dto.branchId,
+      'ORDER_NOT_FOUND',
+      'Branch not found',
+    );
+    const tenantId = TenantContext.require();
+    return this.dataSource.transaction(async (em) => {
+      await em.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
+      return this.evaluateCoupon(
+        em,
+        tenantId,
+        dto.code,
+        dto.orderAmount,
+        dto.branchId,
+        dto.customerId ?? null,
+        false,
+        {
+          channelType: dto.channelType ?? null,
+          customerGroupId: dto.customerGroupId ?? null,
+        },
+      );
     });
   }
 
@@ -163,7 +394,7 @@ export class PromotionsService {
         maxUses: dto.maxUses ?? null,
         maxUsesPerCustomer: dto.maxUsesPerCustomer ?? null,
         usedCount: 0,
-        status: 'ACTIVE',
+        status: dto.status ?? 'ACTIVE',
         createdAt: new Date(),
       });
       return em.save(CouponEntity, coupon);
@@ -188,6 +419,7 @@ export class PromotionsService {
     afterOrderDiscountVnd: number,
     branchId: string,
     customerId?: string | null,
+    ctx: CouponContext = {},
   ): Promise<EvaluatedCouponResult> {
     const tenantId = TenantContext.require();
     return this.dataSource.transaction(async (em) => {
@@ -202,6 +434,7 @@ export class PromotionsService {
         branchId,
         customerId ?? null,
         false,
+        ctx,
       );
     });
   }
@@ -214,6 +447,7 @@ export class PromotionsService {
     branchId: string,
     customerId: string | null,
     orderId: string,
+    ctx: CouponContext = {},
   ): Promise<EvaluatedCouponResult> {
     const prefix = getSchemaPrefix(this.dataSource);
     const normalizedCode = couponCode.trim().toUpperCase();
@@ -248,6 +482,7 @@ export class PromotionsService {
       branchId,
       customerId,
       true,
+      ctx,
     );
 
     await em.query(
@@ -298,7 +533,8 @@ export class PromotionsService {
     branchId: string,
     customerId: string | null,
     lockForUpdate: boolean,
-  ): Promise<EvaluatedCouponResult> {
+    ctx: CouponContext = {},
+  ): Promise<CouponEvaluation> {
     const prefix = getSchemaPrefix(this.dataSource);
     const normalizedCode = couponCode.trim().toUpperCase();
     const lockClause = lockForUpdate ? 'FOR UPDATE' : '';
@@ -380,6 +616,33 @@ export class PromotionsService {
       );
     }
 
+    // Channel and customer group: an empty list means everyone. The checkout does not resolve a
+    // customer's group, so a group-limited promotion never applies there (it answers COUPON_INVALID)
+    const channels = promotion.channelTypes ?? [];
+    // an ONLINE order is the WEBSITE channel of the promotion screens
+    const rawChannel = ctx.channelType?.trim().toUpperCase() ?? null;
+    const channel = rawChannel === 'ONLINE' ? 'WEBSITE' : rawChannel;
+    if (channels.length > 0 && (!channel || !channels.includes(channel))) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.COUPON_INVALID,
+        `Coupon ${normalizedCode} only applies to the channels: ${channels.join(', ')}`,
+        409,
+        { couponCode: normalizedCode, channelTypes: channels },
+      );
+    }
+    const groups = promotion.customerGroupIds ?? [];
+    if (
+      groups.length > 0 &&
+      (!ctx.customerGroupId || !groups.includes(ctx.customerGroupId))
+    ) {
+      throw new SalesDomainError(
+        SalesDomainErrorCode.COUPON_INVALID,
+        `Coupon ${normalizedCode} only applies to customers of selected customer groups`,
+        409,
+        { couponCode: normalizedCode },
+      );
+    }
+
     const now = new Date();
     if (promotion.startsAt && now < promotion.startsAt) {
       throw new SalesDomainError(
@@ -432,6 +695,17 @@ export class PromotionsService {
       promotionId: promotion.id,
       couponCode: normalizedCode,
       discountAmountVnd: vndNumber(discountVnd),
+      promotionCode: promotion.code,
+      promotionName: promotion.name,
+      discountType: promotion.discountType,
+      discountValue: promotion.discountValue,
+      minOrderAmount: vndNumber(minOrderVnd),
+      maxDiscountAmount:
+        promotion.maxDiscountAmount === null
+          ? null
+          : toMoney(promotion.maxDiscountAmount),
+      orderAmountVnd: vndNumber(baseVnd),
+      finalAmountVnd: vndNumber(baseVnd - discountVnd),
     };
   }
 }

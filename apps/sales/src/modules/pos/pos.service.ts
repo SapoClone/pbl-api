@@ -106,6 +106,8 @@ export class PosService {
     discountApprovedBy?: string | null;
     /** Only a trusted internal caller: `unitPriceOverride` of a line replaces the catalog price */
     allowPriceOverride?: boolean;
+    /** The channel being sold on: promotions limited to channels need it (POS when omitted) */
+    channelType?: string;
   }): Promise<CalculatedOrderQuote & { couponCode: string | null }> {
     const catalogMap = await this.catalogClient.resolveVariants(
       params.lines.map((line) => ({
@@ -185,6 +187,7 @@ export class PosService {
         afterOrderDiscountVnd,
         params.branchId,
         params.customerId ?? null,
+        { channelType: params.channelType ?? 'POS' },
       );
       couponDiscountVnd = evaluated.discountAmountVnd;
       normalizedCouponCode = evaluated.couponCode;
@@ -232,6 +235,7 @@ export class PosService {
       role: discountTierFor(permissions),
       permissions,
       discountApprovedBy: dto.discountApprovedBy,
+      channelType: 'POS',
     });
   }
 
